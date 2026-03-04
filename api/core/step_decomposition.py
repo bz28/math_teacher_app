@@ -230,6 +230,28 @@ def _fallback_word_problem(problem: str) -> Decomposition:
     )
 
 
+async def generate_similar_word_problem(problem: str) -> str:
+    """Use Claude to generate a similar word problem with different numbers/context."""
+    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=256,
+            system=(
+                "Generate a similar math word problem with the same structure "
+                "but different numbers and context. Respond with ONLY the new "
+                "word problem text, nothing else."
+            ),
+            messages=[{"role": "user", "content": f"Original problem: {problem}"}],
+        )
+        first_block = response.content[0]
+        if isinstance(first_block, TextBlock):
+            return first_block.text.strip()
+    except Exception:
+        logger.warning("Failed to generate similar word problem, returning original")
+    return problem
+
+
 async def decompose_problem(problem: str) -> Decomposition:
     """Generate step-by-step decomposition for a math problem.
 

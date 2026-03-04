@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.math_engine import MathEngine
-from api.core.step_decomposition import Step, decompose_problem
+from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
 from api.core.tutor import evaluate, probe
 from api.models.session import Session
 
@@ -312,7 +312,10 @@ async def respond_to_step(
 
         if session.current_step >= session.total_steps:
             session.status = "completed"
-            similar = MathEngine.generate_similar(session.problem)
+            if session.problem_type == "word_problem":
+                similar = await generate_similar_word_problem(session.problem)
+            else:
+                similar = MathEngine.generate_similar(session.problem)
             feedback = f"{eval_result.feedback} Problem complete!"
             _add_exchange(session, "tutor", feedback)
             await db.commit()
@@ -380,7 +383,10 @@ async def handle_explain_back(
 
         if session.current_step >= session.total_steps:
             session.status = "completed"
-            similar = MathEngine.generate_similar(session.problem)
+            if session.problem_type == "word_problem":
+                similar = await generate_similar_word_problem(session.problem)
+            else:
+                similar = MathEngine.generate_similar(session.problem)
             feedback = "Great explanation! Problem complete!"
             _add_exchange(session, "tutor", feedback)
             await db.commit()
