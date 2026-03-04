@@ -72,11 +72,30 @@ class MathEngine:
             return False
 
     @staticmethod
+    def _strip_variable_assignment(text: str) -> str:
+        """Strip leading variable assignment like 'x = ', 'k = ' from a string."""
+        import re
+
+        # Match patterns like "x = 3", "k = -2", "y = 1/2"
+        m = re.match(r"^[a-zA-Z_]\w*\s*=\s*(.+)$", text.strip())
+        return m.group(1).strip() if m else text.strip()
+
+    @staticmethod
     def are_equivalent(expr1: Expr | str, expr2: Expr | str) -> bool:
-        """Check if two expressions are mathematically equivalent."""
+        """Check if two expressions are mathematically equivalent.
+
+        Handles cases like "x = 3" vs "3" by stripping variable assignments.
+        """
         try:
+            # Strip variable assignments from strings before parsing
+            if isinstance(expr1, str):
+                expr1 = MathEngine._strip_variable_assignment(expr1)
+            if isinstance(expr2, str):
+                expr2 = MathEngine._strip_variable_assignment(expr2)
+
             parsed1 = MathEngine.parse(expr1) if isinstance(expr1, str) else expr1
             parsed2 = MathEngine.parse(expr2) if isinstance(expr2, str) else expr2
+
             diff = simplify(parsed1 - parsed2)
             return bool(diff == 0)
         except Exception:
