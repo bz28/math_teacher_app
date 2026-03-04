@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { KaTeXView } from "./KaTeXView";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
 
@@ -32,7 +31,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   if (!session) return null;
 
-  const currentStep = session.steps[session.current_step];
   const isExplainBack = phase === "explain_back";
   const isCompleted = phase === "completed";
 
@@ -80,13 +78,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         <Text style={styles.problemText}>{session.problem}</Text>
       </View>
 
-      {/* Current step instruction */}
-      {!isCompleted && currentStep && (
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>What to do</Text>
-          <Text style={styles.stepDescription}>{currentStep.description}</Text>
-          <Text style={styles.stepBefore}>Starting from: {currentStep.before}</Text>
-        </View>
+      {/* Student prompt */}
+      {!isCompleted && (
+        <Text style={styles.promptText}>
+          {session.current_step === 0
+            ? "What would you do first?"
+            : "What's your next step?"}
+        </Text>
       )}
 
       {/* Progress bar */}
@@ -210,8 +208,13 @@ const styles = StyleSheet.create({
   },
   cardLabel: { fontSize: 12, fontWeight: "600", color: "#999", marginBottom: 4 },
   problemText: { fontSize: 18, fontWeight: "600" },
-  stepDescription: { fontSize: 16, marginBottom: 4 },
-  stepBefore: { fontSize: 14, color: "#666" },
+  promptText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+    textAlign: "center",
+  },
   progressContainer: {
     height: 4,
     backgroundColor: "#eee",

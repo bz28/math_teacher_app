@@ -9,10 +9,8 @@ import {
   View,
 } from "react-native";
 import { AuthScreen } from "./src/components/AuthScreen";
-import { KaTeXView } from "./src/components/KaTeXView";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { SessionScreen } from "./src/components/SessionScreen";
-import { useProblemStore } from "./src/stores/problem";
 import { useSessionStore } from "./src/stores/session";
 
 type Screen = "auth" | "input" | "session";
@@ -20,19 +18,32 @@ type Screen = "auth" | "input" | "session";
 export default function App() {
   const inputRef = useRef<TextInput>(null);
   const [screen, setScreen] = useState<Screen>("auth");
-  const { input, parsed, loading, error, setInput, submit, clear } =
-    useProblemStore();
-  const { startSession, phase: sessionPhase } = useSessionStore();
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const {
+    startSession,
+    phase: sessionPhase,
+    error: sessionError,
+  } = useSessionStore();
+
+  const isLoading = sessionPhase === "loading";
+  const displayError = error ?? sessionError;
 
   const handleInsert = (value: string) => {
     setInput(input + value);
     inputRef.current?.focus();
   };
 
-  const handleStartSession = async () => {
-    if (!parsed) return;
-    await startSession(parsed.expression);
-    setScreen("session");
+  const handleGo = async () => {
+    const text = input.trim();
+    if (!text) return;
+    setError(null);
+    await startSession(text);
+    // Store sets phase to "awaiting_input" on success, "error" on failure
+    const { phase } = useSessionStore.getState();
+    if (phase !== "error") {
+      setScreen("session");
+    }
   };
 
   if (screen === "auth") {
@@ -47,7 +58,12 @@ export default function App() {
   if (screen === "session") {
     return (
       <>
-        <SessionScreen onBack={() => setScreen("input")} />
+        <SessionScreen
+          onBack={() => {
+            setInput("");
+            setScreen("input");
+          }}
+        />
         <StatusBar style="auto" />
       </>
     );
@@ -61,58 +77,32 @@ export default function App() {
         ref={inputRef}
         style={styles.input}
         value={input}
-        onChangeText={setInput}
+        onChangeText={(text) => {
+          setInput(text);
+          setError(null);
+        }}
         placeholder="Enter a math problem (e.g. 2x + 6 = 12)"
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="go"
-        onSubmitEditing={submit}
+        onSubmitEditing={handleGo}
       />
 
       <MathKeyboard onInsert={handleInsert} />
 
-      <View style={styles.buttons}>
-        <TouchableOpacity
-          style={[styles.button, styles.submitButton]}
-          onPress={submit}
-          disabled={loading || !input.trim()}
-        >
-          <Text style={styles.submitText}>Parse</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, styles.clearButton]}
-          onPress={clear}
-        >
-          <Text style={styles.clearText}>Clear</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={[styles.button, styles.goButton]}
+        onPress={handleGo}
+        disabled={isLoading || !input.trim()}
+      >
+        {isLoading ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.goText}>Go</Text>
+        )}
+      </TouchableOpacity>
 
-      {loading && <ActivityIndicator size="large" style={styles.spinner} />}
-
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {parsed && (
-        <View style={styles.result}>
-          <Text style={styles.resultLabel}>Type: {parsed.problem_type}</Text>
-
-          <Text style={styles.resultLabel}>Solutions</Text>
-          {parsed.solutions_latex.map((sol, i) => (
-            <KaTeXView key={i} latex={sol} displayMode />
-          ))}
-
-          <TouchableOpacity
-            style={[styles.button, styles.startButton]}
-            onPress={handleStartSession}
-            disabled={sessionPhase === "loading"}
-          >
-            {sessionPhase === "loading" ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.submitText}>Start Tutoring Session</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+      {displayError && <Text style={styles.error}>{displayError}</Text>}
 
       <StatusBar style="auto" />
     </View>
@@ -136,30 +126,13 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 18,
   },
-  buttons: { flexDirection: "row", gap: 12, marginTop: 8 },
   button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
-  submitButton: { backgroundColor: "#4A90D9" },
-  submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  clearButton: { backgroundColor: "#eee" },
-  clearText: { color: "#666", fontWeight: "600", fontSize: 16 },
-  startButton: {
-    backgroundColor: "#4caf50",
-    marginTop: 16,
-    alignItems: "center",
+  goButton: {
+    backgroundColor: "#4A90D9",
+    marginTop: 12,
     width: "100%",
+    alignItems: "center",
   },
-  spinner: { marginTop: 16 },
+  goText: { color: "#fff", fontWeight: "600", fontSize: 18 },
   error: { color: "red", marginTop: 12, textAlign: "center" },
-  result: {
-    marginTop: 20,
-    width: "100%",
-    alignItems: "center",
-    gap: 8,
-  },
-  resultLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-    marginTop: 8,
-  },
 });
