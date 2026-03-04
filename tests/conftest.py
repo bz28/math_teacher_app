@@ -15,6 +15,7 @@ from sqlalchemy import text
 
 from api.database import Base, get_engine, get_session_factory
 from api.main import app
+from api.models.session import Session  # noqa: F401 — register models with Base
 from api.models.user import RefreshToken, User  # noqa: F401 — register models with Base
 
 
@@ -25,7 +26,7 @@ async def setup_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with get_session_factory()() as session:
-        await session.execute(text("TRUNCATE TABLE refresh_tokens, users CASCADE"))
+        await session.execute(text("TRUNCATE TABLE sessions, refresh_tokens, users CASCADE"))
         await session.commit()
 
 
