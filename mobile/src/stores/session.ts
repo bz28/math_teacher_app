@@ -1,85 +1,106 @@
 import { create } from "zustand";
+import {
+  createSession,
+  getSession,
+  respondToStep,
+  submitExplainBack,
+  type SessionData,
+  type StepResponse,
+} from "../services/api";
 
-export type SessionStatus =
+type SessionPhase =
   | "idle"
   | "loading"
   | "awaiting_input"
-  | "evaluating"
-  | "streaming"
-  | "complete"
+  | "thinking"
+  | "explain_back"
+  | "completed"
   | "error";
 
-export interface Exchange {
-  role: "student" | "tutor";
-  content: string;
-  timestamp: number;
-}
-
 interface SessionState {
-  sessionId: string | null;
-  status: SessionStatus;
-  currentStep: number;
-  totalSteps: number;
-  exchanges: Exchange[];
-  streamingContent: string;
+  session: SessionData | null;
+  phase: SessionPhase;
+  lastResponse: StepResponse | null;
   error: string | null;
 
-  // Actions
-  startSession: (sessionId: string, totalSteps: number) => void;
-  setStatus: (status: SessionStatus) => void;
-  addExchange: (exchange: Exchange) => void;
-  appendStreaming: (chunk: string) => void;
-  finishStreaming: () => void;
-  advanceStep: () => void;
-  setError: (error: string) => void;
+  startSession: (problem: string) => Promise<void>;
+  submitAnswer: (answer: string) => Promise<void>;
+  requestHint: () => Promise<void>;
+  submitExplanation: (explanation: string) => Promise<void>;
   reset: () => void;
 }
 
 const initialState = {
-  sessionId: null,
-  status: "idle" as SessionStatus,
-  currentStep: 0,
-  totalSteps: 0,
-  exchanges: [] as Exchange[],
-  streamingContent: "",
-  error: null,
+  session: null as SessionData | null,
+  phase: "idle" as SessionPhase,
+  lastResponse: null as StepResponse | null,
+  error: null as string | null,
 };
 
-export const useSessionStore = create<SessionState>((set) => ({
+export const useSessionStore = create<SessionState>((set, get) => ({
   ...initialState,
 
-  startSession: (sessionId, totalSteps) =>
-    set({ ...initialState, sessionId, totalSteps, status: "awaiting_input" }),
+  startSession: async (problem) => {
+    set({ phase: "loading", error: null });
+    try {
+      const session = await createSession(problem);
+      set({ session, phase: "awaiting_input", lastResponse: null });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
 
-  setStatus: (status) => set({ status }),
+  submitAnswer: async (answer) => {
+    const { session } = get();
+    if (!session) return;
 
-  addExchange: (exchange) =>
-    set((state) => ({ exchanges: [...state.exchanges, exchange] })),
+    set({ phase: "thinking", error: null });
+    try {
+      const resp = await respondToStep(session.id, answer);
+      const updated = await getSession(session.id);
 
-  appendStreaming: (chunk) =>
-    set((state) => ({
-      status: "streaming",
-      streamingContent: state.streamingContent + chunk,
-    })),
+      let nextPhase: SessionPhase = "awaiting_input";
+      if (resp.action === "completed") nextPhase = "completed";
+      else if (resp.action === "explain_back") nextPhase = "explain_back";
 
-  finishStreaming: () =>
-    set((state) => ({
-      status: "awaiting_input",
-      exchanges: [
-        ...state.exchanges,
-        {
-          role: "tutor",
-          content: state.streamingContent,
-          timestamp: Date.now(),
-        },
-      ],
-      streamingContent: "",
-    })),
+      set({ session: updated, lastResponse: resp, phase: nextPhase });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
 
-  advanceStep: () =>
-    set((state) => ({ currentStep: state.currentStep + 1 })),
+  requestHint: async () => {
+    const { session } = get();
+    if (!session) return;
 
-  setError: (error) => set({ status: "error", error }),
+    set({ phase: "thinking", error: null });
+    try {
+      const resp = await respondToStep(session.id, "", true);
+      const updated = await getSession(session.id);
+      set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  submitExplanation: async (explanation) => {
+    const { session } = get();
+    if (!session) return;
+
+    set({ phase: "thinking", error: null });
+    try {
+      const resp = await submitExplainBack(session.id, explanation);
+      const updated = await getSession(session.id);
+
+      let nextPhase: SessionPhase = "awaiting_input";
+      if (resp.action === "completed") nextPhase = "completed";
+      else if (resp.action === "explain_back") nextPhase = "explain_back";
+
+      set({ session: updated, lastResponse: resp, phase: nextPhase });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
 
   reset: () => set(initialState),
 }));
