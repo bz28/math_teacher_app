@@ -131,7 +131,8 @@ Rules:
 - If the student describes an operation: check if it matches the expected operation and would produce the correct result
 - If the student gives a result: check if it's mathematically equivalent to the expected result
 - Accept mathematically equivalent answers (e.g., 2/4 and 1/2 are the same)
-- If the student describes the WRONG operation (e.g., "subtract" when they should "add"), mark incorrect and explain what they should do instead — do NOT give away the answer or skip to a later step
+- If the student describes the WRONG operation (e.g., "subtract" when they should
+  "add"), mark incorrect and explain what they should do instead. Never give the answer
 - If partially correct (right approach, arithmetic error), acknowledge the approach
 - Keep feedback concise (1-2 sentences)
 - Be encouraging but honest
