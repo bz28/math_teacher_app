@@ -9,7 +9,7 @@ from starlette.responses import StreamingResponse
 router = APIRouter()
 
 
-async def sse_stream(event_generator: AsyncIterator[dict]) -> StreamingResponse:
+async def sse_stream(event_generator: AsyncIterator[dict[str, str]]) -> StreamingResponse:
     """Wrap an async event generator as an SSE StreamingResponse."""
 
     async def _format() -> AsyncIterator[str]:
@@ -29,7 +29,7 @@ async def sse_stream(event_generator: AsyncIterator[dict]) -> StreamingResponse:
     )
 
 
-async def _demo_events() -> AsyncIterator[dict]:
+async def _demo_events() -> AsyncIterator[dict[str, str]]:
     """Demo event generator for testing SSE infrastructure."""
     import asyncio
 

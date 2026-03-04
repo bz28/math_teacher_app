@@ -39,9 +39,11 @@ app = FastAPI(
 
 # Middleware and routes are wired in after app creation to avoid circular imports
 from api.middleware.setup import configure_middleware  # noqa: E402
+from api.routes.auth import router as auth_router  # noqa: E402
 from api.routes.health import router as health_router  # noqa: E402
 from api.routes.sse import router as sse_router  # noqa: E402
 
 configure_middleware(app)
 app.include_router(health_router, prefix="/v1")
+app.include_router(auth_router, prefix="/v1")
 app.include_router(sse_router, prefix="/v1")

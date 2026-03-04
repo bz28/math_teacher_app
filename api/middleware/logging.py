@@ -3,21 +3,20 @@ import logging
 import sys
 import time
 import uuid
+from collections.abc import MutableMapping
+from typing import Any
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
-from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        log_data = {
+        log_data: dict[str, object] = {
             "timestamp": self.formatTime(record),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
         }
-        # Include extra fields (request_id, session_id, etc.)
         for key in ("request_id", "session_id", "user_id", "method", "path", "status_code", "duration_ms"):
             if hasattr(record, key):
                 log_data[key] = getattr(record, key)
@@ -33,32 +32,52 @@ def setup_logging(level: str = "INFO") -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
-    # Quiet down noisy libraries
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 
-class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-        request.state.request_id = request_id
+class LoggingMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = str(uuid.uuid4())
+        # Check for incoming request ID header
+        for header_name, header_value in scope.get("headers", []):
+            if header_name == b"x-request-id":
+                request_id = header_value.decode()
+                break
+
+        scope["state"] = {**scope.get("state", {}), "request_id": request_id}
         start = time.monotonic()
-        response = await call_next(request)
-        duration_ms = round((time.monotonic() - start) * 1000, 2)
+        status_code = 500
 
+        async def send_wrapper(message: MutableMapping[str, Any]) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = int(message.get("status", 500))
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+        duration_ms = round((time.monotonic() - start) * 1000, 2)
+        method = scope.get("method", "")
+        path = scope.get("path", "")
         logger = logging.getLogger("api.access")
         logger.info(
             "%s %s %s %.2fms",
-            request.method,
-            request.url.path,
-            response.status_code,
+            method,
+            path,
+            status_code,
             duration_ms,
             extra={
                 "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
+                "method": method,
+                "path": path,
+                "status_code": status_code,
                 "duration_ms": duration_ms,
             },
         )
-        return response

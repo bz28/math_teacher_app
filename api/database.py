@@ -27,10 +27,6 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
-# Keep backward-compat property-style access
-engine = property(lambda self: get_engine())  # type: ignore[assignment]
-
-
 class Base(DeclarativeBase):
     pass
 

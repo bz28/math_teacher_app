@@ -9,8 +9,18 @@ os.environ.setdefault("SENTRY_DSN", "")
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
+from api.database import get_session_factory
 from api.main import app
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def clean_db() -> None:
+    """Truncate all app tables before the test session."""
+    async with get_session_factory()() as session:
+        await session.execute(text("TRUNCATE TABLE refresh_tokens, users CASCADE"))
+        await session.commit()
 
 
 @pytest.fixture(scope="session")
