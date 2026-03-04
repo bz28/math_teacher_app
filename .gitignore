@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / React Native
+node_modules/
+mobile/.expo/
+mobile/dist/
+web/node_modules/
+web/dist/
+web/build/
+
+# Docker
+infra/postgres-data/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Alembic
+*.db
+
+# Sentry
+.sentryclirc
