@@ -23,7 +23,7 @@ interface SessionState {
   lastResponse: StepResponse | null;
   error: string | null;
 
-  startSession: (problem: string) => Promise<void>;
+  startSession: (problem: string, mode?: string) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   requestHint: () => Promise<void>;
   submitExplanation: (explanation: string) => Promise<void>;
@@ -40,10 +40,10 @@ const initialState = {
 export const useSessionStore = create<SessionState>((set, get) => ({
   ...initialState,
 
-  startSession: async (problem) => {
+  startSession: async (problem, mode = "learn") => {
     set({ phase: "loading", error: null });
     try {
-      const session = await createSession(problem);
+      const session = await createSession(problem, mode);
       set({ session, phase: "awaiting_input", lastResponse: null });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });

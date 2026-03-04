@@ -25,6 +25,7 @@ export interface SessionData {
   current_step: number;
   total_steps: number;
   status: string;
+  mode: string;
   steps: StepDetail[];
   step_tracking: Record<string, { attempts: number; hints_used: number; explain_back: boolean }>;
 }
@@ -72,8 +73,8 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 // Session API
-export const createSession = (problem: string) =>
-  apiPost<SessionData>("/session", { problem });
+export const createSession = (problem: string, mode: string = "learn") =>
+  apiPost<SessionData>("/session", { problem, mode });
 
 export const getSession = (id: string) =>
   apiGet<SessionData>(`/session/${id}`);

@@ -35,6 +35,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   const isExplainBack = phase === "explain_back";
   const isCompleted = phase === "completed";
   const currentStep = session.steps[session.current_step];
+  const isPractice = session.mode === "practice";
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -58,8 +59,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   };
 
   const handleSimilarProblem = async (problem: string) => {
+    const currentMode = session.mode;
     reset();
-    await startSession(problem);
+    await startSession(problem, currentMode);
   };
 
   const completedSteps = session.steps.slice(0, session.current_step);
@@ -73,8 +75,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>
-            Step {Math.min(session.current_step + 1, session.total_steps)} of{" "}
-            {session.total_steps}
+            {isPractice
+              ? "Practice"
+              : `Step ${Math.min(session.current_step + 1, session.total_steps)} of ${session.total_steps}`}
           </Text>
         </View>
         <View style={styles.problemCard}>
@@ -106,7 +109,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 <Text style={styles.historyCheck}>✓</Text>
                 <View style={styles.historyContent}>
                   <Text style={styles.historyLabel}>Step {i + 1}</Text>
-                  <Text style={styles.historyDesc}>{step.description}</Text>
+                  {!isPractice && (
+                    <Text style={styles.historyDesc}>{step.description}</Text>
+                  )}
                   <Text style={styles.historyResult}>{step.after}</Text>
                 </View>
               </View>
@@ -117,7 +122,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {/* Current step guidance + expression */}
         {!isCompleted && (
           <>
-            {session.current_step > 0 && currentStep && (
+            {!isPractice && session.current_step > 0 && currentStep && (
               <View style={styles.card}>
                 <Text style={styles.cardLabel}>Current expression</Text>
                 <Text style={styles.problemText}>{currentStep.before}</Text>
@@ -125,9 +130,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             )}
 
             <Text style={styles.promptText}>
-              {session.current_step === 0
-                ? "What would you do first?"
-                : "What's your next step?"}
+              {isPractice
+                ? "Show your work"
+                : session.current_step === 0
+                  ? "What would you do first?"
+                  : "What's your next step?"}
             </Text>
           </>
         )}
