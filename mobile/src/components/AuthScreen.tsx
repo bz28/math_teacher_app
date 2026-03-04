@@ -17,7 +17,6 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [gradeLevel, setGradeLevel] = useState("8");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +26,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     try {
       const resp = isLogin
         ? await login(email, password)
-        : await register(email, password, parseInt(gradeLevel, 10));
+        : await register(email, password, 8);
       setAuthToken(resp.access_token);
       onAuth();
     } catch (e) {
@@ -60,16 +59,6 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         placeholder="Password"
         secureTextEntry
       />
-
-      {!isLogin && (
-        <TextInput
-          style={styles.input}
-          value={gradeLevel}
-          onChangeText={setGradeLevel}
-          placeholder="Grade Level (1-12)"
-          keyboardType="number-pad"
-        />
-      )}
 
       {error && <Text style={styles.error}>{error}</Text>}
 

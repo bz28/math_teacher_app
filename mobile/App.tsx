@@ -93,9 +93,6 @@ export default function App() {
 
       {parsed && (
         <View style={styles.result}>
-          <Text style={styles.resultLabel}>Problem</Text>
-          <KaTeXView latex={parsed.latex} displayMode />
-
           <Text style={styles.resultLabel}>Type: {parsed.problem_type}</Text>
 
           <Text style={styles.resultLabel}>Solutions</Text>
