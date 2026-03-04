@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 
 import anthropic
+from anthropic.types import TextBlock
 
 from api.config import settings
 from api.core.math_engine import MathEngine
@@ -131,7 +132,11 @@ async def decompose_problem(problem: str) -> Decomposition:
                 messages=[{"role": "user", "content": prompt}],
             )
 
-            response_text = response.content[0].text
+            first_block = response.content[0]
+            if not isinstance(first_block, TextBlock):
+                last_error = "Unexpected response type from Claude"
+                continue
+            response_text = first_block.text
             steps = _parse_steps(response_text)
 
             if not steps:
