@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.math_engine import MathEngine
 from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
-from api.core.tutor import evaluate, evaluate_practice, probe
+from api.core.tutor import evaluate, probe
 from api.models.session import Session
 
 MAX_ATTEMPTS_PER_STEP = 5
@@ -239,51 +239,13 @@ async def _respond_practice_mode(
             is_correct=True,
         )
 
-    # 2. No symbolic match — use LLM practice evaluator
-    eval_result = await evaluate_practice(
-        problem=session.problem,
-        steps=[dict(s) for s in session.steps],
-        student_response=student_response,
-        session_id=str(session.id),
-    )
-
-    if eval_result.is_correct and eval_result.matched_step is not None:
-        session.current_step = eval_result.matched_step + 1
-
-        if session.current_step >= session.total_steps:
-            session.status = "completed"
-            if session.problem_type == "word_problem":
-                similar = await generate_similar_word_problem(session.problem)
-            else:
-                similar = MathEngine.generate_similar(session.problem)
-            feedback = f"{eval_result.feedback} Problem complete!"
-            _add_exchange(session, "tutor", feedback)
-            await db.commit()
-            return StepResponse(
-                action="completed",
-                feedback=feedback,
-                current_step=session.current_step,
-                total_steps=session.total_steps,
-                is_correct=True,
-                similar_problem=similar,
-            )
-
-        _add_exchange(session, "tutor", eval_result.feedback)
-        await db.commit()
-        return StepResponse(
-            action="advance",
-            feedback=eval_result.feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-            is_correct=True,
-        )
-
-    # 3. Wrong answer
-    _add_exchange(session, "tutor", eval_result.feedback)
+    # 2. No symbolic match — wrong answer
+    feedback = "That doesn't match any step. Try again."
+    _add_exchange(session, "tutor", feedback)
     await db.commit()
     return StepResponse(
         action="error",
-        feedback=eval_result.feedback,
+        feedback=feedback,
         current_step=session.current_step,
         total_steps=session.total_steps,
         is_correct=False,

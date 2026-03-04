@@ -529,17 +529,12 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
         )
     session_id = create_resp.json()["id"]
 
-    # Submit wrong answer — falls through to LLM evaluator
-    with patch("api.core.session.evaluate_practice", new_callable=AsyncMock) as mock_eval:
-        from api.core.tutor import PracticeEvalResult
-        mock_eval.return_value = PracticeEvalResult(
-            is_correct=False, feedback="Not quite. Try again.", matched_step=None
-        )
-        resp = await client.post(
-            f"/v1/session/{session_id}/respond",
-            json={"student_response": "x = 99"},
-            headers=_auth_headers(auth_token),
-        )
+    # Submit wrong answer — no symbolic match, returns error
+    resp = await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "x = 99"},
+        headers=_auth_headers(auth_token),
+    )
     data = resp.json()
     assert data["action"] == "error"
     assert data["is_correct"] is False

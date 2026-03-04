@@ -155,32 +155,6 @@ Rules:
 - Never give away the full answer — guide the student toward understanding
 - Use standard math notation (e.g., x^2 not x²)"""
 
-PRACTICE_EVALUATOR_PROMPT = """You are a math tutor evaluating a student's response in free-practice mode.
-
-The student can submit ANY intermediate step or the final answer — they don't need to go in order.
-
-You will receive:
-- The problem being solved
-- All solution steps (description, operation, before, after) in order
-- The student's response
-
-Determine if the student's response matches ANY step's result (the "after" value) or is mathematically equivalent to one.
-
-Respond with ONLY valid JSON:
-{
-  "is_correct": true/false,
-  "feedback": "Brief feedback",
-  "matched_step": <0-based index of the matched step, or null if no match>
-}
-
-Rules:
-- Check the response against ALL steps, not just the current one
-- Accept mathematically equivalent answers (e.g., 2/4 and 1/2)
-- If the response matches a step, set matched_step to that step's index
-- If multiple steps match, use the FURTHEST (highest index) match
-- If wrong, give encouraging feedback without revealing the answer
-- Keep feedback concise (1-2 sentences)"""
-
 PROBER_PROMPT = """You are a math tutor assessing whether a student truly understands a step.
 
 Given:
@@ -218,13 +192,6 @@ class EvalResult:
 class ProbeResult:
     understanding: str  # "clear" | "partial" | "wrong"
     follow_up: str | None
-
-
-@dataclass
-class PracticeEvalResult:
-    is_correct: bool
-    feedback: str
-    matched_step: int | None
 
 
 @dataclass
@@ -365,34 +332,6 @@ async def evaluate(
     )
     data = await _call_claude_json(EVALUATOR_PROMPT, prompt, "evaluator", session_id, user_id)
     return EvalResult(is_correct=bool(data["is_correct"]), feedback=str(data["feedback"]))
-
-
-async def evaluate_practice(
-    problem: str,
-    steps: list[dict[str, str]],
-    student_response: str,
-    session_id: str | None = None,
-    user_id: str | None = None,
-) -> PracticeEvalResult:
-    """Evaluate a student's response against all solution steps (practice mode)."""
-    steps_text = "\n".join(
-        f"Step {i}: {s['description']} | {s['before']} → {s['after']}"
-        for i, s in enumerate(steps)
-    )
-    prompt = (
-        f"Problem: {problem}\n\n"
-        f"Solution steps:\n{steps_text}\n\n"
-        f"Student's response: {student_response}"
-    )
-    data = await _call_claude_json(
-        PRACTICE_EVALUATOR_PROMPT, prompt, "practice_evaluator", session_id, user_id
-    )
-    matched = data.get("matched_step")
-    return PracticeEvalResult(
-        is_correct=bool(data["is_correct"]),
-        feedback=str(data["feedback"]),
-        matched_step=int(matched) if matched is not None else None,
-    )
 
 
 async def explain(
