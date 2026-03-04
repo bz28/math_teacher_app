@@ -159,36 +159,13 @@ class MathEngine:
 
     @staticmethod
     def is_word_problem(text: str) -> bool:
-        """Detect whether text is a math word problem (vs garbage or pure math).
+        """Detect whether text is a math word problem (vs pure math notation).
 
-        Returns True only if the text looks like narrative math:
-        has digits, >= 4 words, and contains >= 2 math-related keywords.
+        A word problem contains multi-letter words (e.g. "find", "derivative").
+        Pure math has only single-letter variables, numbers, and operators.
         """
-        # If SymPy can parse it directly, it's already math notation
-        try:
-            MathEngine.parse(text)
-            return False
-        except Exception:
-            pass
-
-        words = text.split()
-        if len(words) < 4:
-            return False
-        if not re.search(r"\d", text):
-            return False
-
-        math_keywords = {
-            "how", "many", "much", "total", "sum", "difference", "product",
-            "each", "per", "find", "solve", "calculate", "equal", "equals",
-            "plus", "minus", "times", "divided", "remaining", "left",
-            "more", "less", "twice", "half", "triple", "percent",
-            "cost", "price", "speed", "distance", "rate", "time",
-            "area", "length", "width", "height", "miles", "hours",
-            "meters", "feet", "pounds", "dollars", "gallons", "liters",
-        }
-        text_lower = text.lower()
-        keyword_count = sum(1 for kw in math_keywords if kw in text_lower)
-        return keyword_count >= 2
+        # Any token with 2+ letters is an English word, not a math variable
+        return bool(re.search(r"[a-zA-Z]{2,}", text))
 
     @staticmethod
     def classify_problem(expression: str) -> str:
