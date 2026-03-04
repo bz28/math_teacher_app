@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class CreateSessionRequest(BaseModel):
     problem: str
+    mode: str = "learn"
 
 
 class RespondRequest(BaseModel):
@@ -36,6 +37,7 @@ class SessionResponse(BaseModel):
     current_step: int
     total_steps: int
     status: str
+    mode: str
     steps: list[StepDetail]
     step_tracking: dict[str, StepTrackingInfo]
 

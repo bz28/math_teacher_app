@@ -24,6 +24,7 @@ async def setup_db() -> None:
     """Create tables (if missing) and truncate before the test session."""
     engine = get_engine()
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     async with get_session_factory()() as session:
         await session.execute(text("TRUNCATE TABLE sessions, refresh_tokens, users CASCADE"))

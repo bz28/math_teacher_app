@@ -40,6 +40,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
         current_step=s.current_step,
         total_steps=s.total_steps,
         status=s.status,
+        mode=s.mode,
         steps=[StepDetail(**step) for step in s.steps],
         step_tracking={
             k: StepTrackingInfo(**v) for k, v in s.step_tracking.items()
@@ -55,7 +56,7 @@ async def create(
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
     try:
-        session = await create_session(db, current_user.user_id, body.problem)
+        session = await create_session(db, current_user.user_id, body.problem, body.mode)
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
     except Exception as e:

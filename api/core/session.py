@@ -128,6 +128,7 @@ async def create_session(
     db: AsyncSession,
     user_id: uuid.UUID,
     problem: str,
+    mode: str = "learn",
 ) -> Session:
     """Create a new tutoring session for a problem."""
     await _check_daily_cap(db, user_id)
@@ -153,6 +154,7 @@ async def create_session(
         current_step=0,
         total_steps=len(decomposition.steps),
         status="active",
+        mode=mode,
         step_tracking={},
         exchanges=[],
     )
