@@ -10,8 +10,8 @@ const KATEX_HTML = `
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <style>
-    body { margin: 0; padding: 8px; background: transparent; display: flex; align-items: center; }
-    #math { font-size: 18px; }
+    body { margin: 0; padding: 8px; background: transparent; display: flex; align-items: center; justify-content: center; }
+    #math { font-size: 18px; text-align: center; }
   </style>
 </head>
 <body>
@@ -72,6 +72,6 @@ export const KaTeXView = memo(function KaTeXView({
 });
 
 const styles = StyleSheet.create({
-  container: { overflow: "hidden" },
-  webview: { backgroundColor: "transparent" },
+  container: { overflow: "hidden", width: "100%" },
+  webview: { backgroundColor: "transparent", flex: 1 },
 });
