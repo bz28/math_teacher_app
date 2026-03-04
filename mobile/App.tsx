@@ -8,17 +8,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { AuthScreen } from "./src/components/AuthScreen";
 import { KaTeXView } from "./src/components/KaTeXView";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { useProblemStore } from "./src/stores/problem";
 import { useSessionStore } from "./src/stores/session";
 
-type Screen = "input" | "session";
+type Screen = "auth" | "input" | "session";
 
 export default function App() {
   const inputRef = useRef<TextInput>(null);
-  const [screen, setScreen] = useState<Screen>("input");
+  const [screen, setScreen] = useState<Screen>("auth");
   const { input, parsed, loading, error, setInput, submit, clear } =
     useProblemStore();
   const { startSession, phase: sessionPhase } = useSessionStore();
@@ -33,6 +34,15 @@ export default function App() {
     await startSession(parsed.expression);
     setScreen("session");
   };
+
+  if (screen === "auth") {
+    return (
+      <>
+        <AuthScreen onAuth={() => setScreen("input")} />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
 
   if (screen === "session") {
     return (
