@@ -104,6 +104,37 @@ class TestClassification:
         assert MathEngine.classify_problem("2 + 3") == "arithmetic"
 
 
+class TestWordProblemDetection:
+    def test_detects_word_problem(self) -> None:
+        assert MathEngine.is_word_problem(
+            "A train travels at 60 miles per hour for 3 hours. How far does it go?"
+        ) is True
+
+    def test_detects_word_problem_cost(self) -> None:
+        assert MathEngine.is_word_problem(
+            "If apples cost 3 dollars each, how much do 5 apples cost?"
+        ) is True
+
+    def test_rejects_parseable_math(self) -> None:
+        assert MathEngine.is_word_problem("2*x + 6 = 12") is False
+
+    def test_rejects_garbage(self) -> None:
+        assert MathEngine.is_word_problem("asdfgh jkl qwerty zxcvb") is False
+
+    def test_rejects_no_numbers(self) -> None:
+        assert MathEngine.is_word_problem(
+            "The cat sat on the mat and looked at the dog"
+        ) is False
+
+    def test_rejects_short_text(self) -> None:
+        assert MathEngine.is_word_problem("how much") is False
+
+    def test_classify_returns_word_problem(self) -> None:
+        assert MathEngine.classify_problem(
+            "A train travels at 60 miles per hour for 3 hours. How far does it go?"
+        ) == "word_problem"
+
+
 class TestArithmetic:
     def test_evaluate_addition(self) -> None:
         result = MathEngine.evaluate_arithmetic("2 + 3")

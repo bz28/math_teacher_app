@@ -136,7 +136,9 @@ Rules:
 - If partially correct (right approach, arithmetic error), acknowledge the approach
 - Keep feedback concise (1-2 sentences)
 - Be encouraging but honest
-- NEVER reveal the correct answer or the next step in your feedback"""
+- NEVER reveal the correct answer or the next step in your feedback
+- For "translate" or "set up equation" steps, accept equivalent equation formulations
+  (e.g., "d = 60*3" and "60*3 = d" are both correct)"""
 
 EXPLAINER_PROMPT = """You are a math tutor explaining a concept to a student.
 
