@@ -78,13 +78,23 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         <Text style={styles.problemText}>{session.problem}</Text>
       </View>
 
-      {/* Student prompt */}
+      {/* Current expression + student prompt */}
       {!isCompleted && (
-        <Text style={styles.promptText}>
-          {session.current_step === 0
-            ? "What would you do first?"
-            : "What's your next step?"}
-        </Text>
+        <>
+          {session.current_step > 0 && session.steps[session.current_step] && (
+            <View style={styles.card}>
+              <Text style={styles.cardLabel}>Current expression</Text>
+              <Text style={styles.problemText}>
+                {session.steps[session.current_step].before}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.promptText}>
+            {session.current_step === 0
+              ? "What would you do first?"
+              : "What's your next step?"}
+          </Text>
+        </>
       )}
 
       {/* Progress bar */}
