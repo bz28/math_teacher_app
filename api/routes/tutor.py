@@ -23,7 +23,10 @@ async def tutor_evaluate(body: EvaluateRequest) -> EvaluateResponse:
     """Evaluate a student's response against the correct step."""
     try:
         result = await evaluate(
-            correct_step=body.correct_step,
+            problem=body.problem,
+            step_before=body.step_before,
+            step_operation=body.step_operation,
+            step_after=body.step_after,
             student_response=body.student_response,
             session_id=body.session_id,
         )

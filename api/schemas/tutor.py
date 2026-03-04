@@ -2,7 +2,10 @@ from pydantic import BaseModel
 
 
 class EvaluateRequest(BaseModel):
-    correct_step: str
+    problem: str
+    step_before: str
+    step_operation: str
+    step_after: str
     student_response: str
     session_id: str | None = None
 

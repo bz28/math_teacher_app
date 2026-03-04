@@ -109,9 +109,17 @@ _cost_tracker = CostTracker()
 
 EVALUATOR_PROMPT = """You are a math tutor evaluating a student's response to a step in solving a problem.
 
-Given:
-- The correct step (what the student should produce)
+You will receive full context about the current step:
+- The problem being solved
+- The current expression (what the student is starting from)
+- The expected operation (what they should do)
+- The expected result (what the expression becomes after the operation)
 - The student's response
+
+The student's response may be:
+1. A description of an operation (e.g., "add 12 to both sides")
+2. A mathematical result (e.g., "6x = 16")
+3. A mix of both (e.g., "add 12 to get 6x = 16")
 
 Respond with ONLY valid JSON:
 {
@@ -120,11 +128,15 @@ Respond with ONLY valid JSON:
 }
 
 Rules:
+- If the student describes an operation: check if it matches the expected operation and would produce the correct result
+- If the student gives a result: check if it's mathematically equivalent to the expected result
 - Accept mathematically equivalent answers (e.g., 2/4 and 1/2 are the same)
-- Accept correct answers even if written differently (e.g., "x=3" vs "3")
+- If the student describes the WRONG operation (e.g., "subtract" when they should
+  "add"), mark incorrect and explain what they should do instead. Never give the answer
 - If partially correct (right approach, arithmetic error), acknowledge the approach
 - Keep feedback concise (1-2 sentences)
-- Be encouraging but honest"""
+- Be encouraging but honest
+- NEVER reveal the correct answer or the next step in your feedback"""
 
 EXPLAINER_PROMPT = """You are a math tutor explaining a concept to a student.
 
@@ -300,14 +312,20 @@ async def _call_claude_json(
 # ---------------------------------------------------------------------------
 
 async def evaluate(
-    correct_step: str,
+    problem: str,
+    step_before: str,
+    step_operation: str,
+    step_after: str,
     student_response: str,
     session_id: str | None = None,
     user_id: str | None = None,
 ) -> EvalResult:
     """Evaluate a student's response against the correct step."""
     prompt = (
-        f"Correct step result: {correct_step}\n"
+        f"Problem: {problem}\n"
+        f"Current expression: {step_before}\n"
+        f"Expected operation: {step_operation}\n"
+        f"Expected result: {step_after}\n"
         f"Student's response: {student_response}"
     )
     data = await _call_claude_json(EVALUATOR_PROMPT, prompt, "evaluator", session_id, user_id)

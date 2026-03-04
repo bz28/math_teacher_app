@@ -101,8 +101,11 @@ async def test_evaluate_correct(client: AsyncClient) -> None:
         mock_cls.return_value = mock_instance
 
         resp = await client.post("/v1/tutor/evaluate", json={
-            "correct_step": "x = 3",
-            "student_response": "3",
+            "problem": "2x + 6 = 12",
+            "step_before": "2x + 6 = 12",
+            "step_operation": "Subtract 6 from both sides",
+            "step_after": "2x = 6",
+            "student_response": "subtract 6",
         })
         assert resp.status_code == 200
         data = resp.json()
@@ -120,8 +123,11 @@ async def test_evaluate_incorrect(client: AsyncClient) -> None:
         mock_cls.return_value = mock_instance
 
         resp = await client.post("/v1/tutor/evaluate", json={
-            "correct_step": "x = 3",
-            "student_response": "5",
+            "problem": "2x + 6 = 12",
+            "step_before": "2x + 6 = 12",
+            "step_operation": "Subtract 6 from both sides",
+            "step_after": "2x = 6",
+            "student_response": "add 6",
         })
         assert resp.status_code == 200
         data = resp.json()
@@ -242,7 +248,13 @@ async def test_probe_missing_fields(client: AsyncClient) -> None:
 @pytest.mark.anyio
 async def test_evaluate_real_correct() -> None:
     from api.core.tutor import evaluate
-    result = await evaluate(correct_step="x = 3", student_response="3")
+    result = await evaluate(
+        problem="2x + 6 = 12",
+        step_before="2x + 6 = 12",
+        step_operation="Subtract 6 from both sides",
+        step_after="2x = 6",
+        student_response="subtract 6 from both sides",
+    )
     assert isinstance(result, EvalResult)
     assert result.is_correct is True
 
@@ -251,7 +263,13 @@ async def test_evaluate_real_correct() -> None:
 @pytest.mark.anyio
 async def test_evaluate_real_incorrect() -> None:
     from api.core.tutor import evaluate
-    result = await evaluate(correct_step="x = 3", student_response="5")
+    result = await evaluate(
+        problem="2x + 6 = 12",
+        step_before="2x + 6 = 12",
+        step_operation="Subtract 6 from both sides",
+        step_after="2x = 6",
+        student_response="add 6 to both sides",
+    )
     assert isinstance(result, EvalResult)
     assert result.is_correct is False
 

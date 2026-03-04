@@ -4,7 +4,6 @@ Handles step advancement, hint system, explain-back triggers,
 step-size validation, and per-user daily request caps.
 """
 
-import random
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -21,7 +20,6 @@ from api.models.session import Session
 
 MAX_ATTEMPTS_PER_STEP = 5
 MAX_HINTS_PER_STEP = 3
-EXPLAIN_BACK_PROBABILITY = 0.3
 RECENT_EXCHANGES_LIMIT = 10
 
 
@@ -282,14 +280,17 @@ async def respond_to_step(
 
     # Evaluate the response using LLM
     eval_result = await evaluate(
-        correct_step=step.after,
+        problem=session.problem,
+        step_before=step.before,
+        step_operation=step.operation,
+        step_after=step.after,
         student_response=student_response,
         session_id=str(session.id),
     )
 
     if eval_result.is_correct:
-        # Random explain-back trigger (~30%)
-        if not step_info["explain_back"] and random.random() < EXPLAIN_BACK_PROBABILITY:
+        # Explain-back only after hints were used (not on clean correct answers)
+        if step_info["hints_used"] > 0 and not step_info["explain_back"]:
             step_info["explain_back"] = True
             tracking[step_key] = step_info
             session.step_tracking = tracking

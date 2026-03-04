@@ -206,12 +206,8 @@ async def test_correct_answer_advances(client: AsyncClient, auth_token: str) -> 
         )
     session_id = create_resp.json()["id"]
 
-    with (
-        patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval,
-        patch("api.core.session.random") as mock_random,
-    ):
+    with patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval:
         mock_eval.return_value = _mock_eval_correct()
-        mock_random.random.return_value = 0.99  # Skip explain-back
 
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
@@ -282,12 +278,15 @@ async def test_explain_back_trigger(client: AsyncClient, auth_token: str) -> Non
         )
     session_id = create_resp.json()["id"]
 
-    with (
-        patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval,
-        patch("api.core.session.random") as mock_random,
-    ):
+    # First request a hint so explain-back triggers on next correct answer
+    await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "", "request_hint": True},
+        headers=_auth_headers(auth_token),
+    )
+
+    with patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval:
         mock_eval.return_value = _mock_eval_correct()
-        mock_random.random.return_value = 0.1  # Trigger explain-back (< 0.3)
 
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
@@ -311,13 +310,14 @@ async def test_explain_back_clear_advances(client: AsyncClient, auth_token: str)
         )
     session_id = create_resp.json()["id"]
 
-    # First, trigger explain-back
-    with (
-        patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval,
-        patch("api.core.session.random") as mock_random,
-    ):
+    # Request hint then correct answer to trigger explain-back
+    await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "", "request_hint": True},
+        headers=_auth_headers(auth_token),
+    )
+    with patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval:
         mock_eval.return_value = _mock_eval_correct()
-        mock_random.random.return_value = 0.1
         await client.post(
             f"/v1/session/{session_id}/respond",
             json={"student_response": "2x = 6"},
@@ -349,13 +349,14 @@ async def test_explain_back_partial_asks_followup(client: AsyncClient, auth_toke
         )
     session_id = create_resp.json()["id"]
 
-    # Trigger explain-back
-    with (
-        patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval,
-        patch("api.core.session.random") as mock_random,
-    ):
+    # Request hint then correct answer to trigger explain-back
+    await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "", "request_hint": True},
+        headers=_auth_headers(auth_token),
+    )
+    with patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval:
         mock_eval.return_value = _mock_eval_correct()
-        mock_random.random.return_value = 0.1
         await client.post(
             f"/v1/session/{session_id}/respond",
             json={"student_response": "2x = 6"},
@@ -387,12 +388,8 @@ async def test_session_completion(client: AsyncClient, auth_token: str) -> None:
         )
     session_id = create_resp.json()["id"]
 
-    with (
-        patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval,
-        patch("api.core.session.random") as mock_random,
-    ):
+    with patch("api.core.session.evaluate", new_callable=AsyncMock) as mock_eval:
         mock_eval.return_value = _mock_eval_correct()
-        mock_random.random.return_value = 0.99  # Skip explain-back
 
         # Step 1
         await client.post(
