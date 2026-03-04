@@ -3,7 +3,7 @@ import os
 # Set test environment variables before importing anything else
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test")
 os.environ.setdefault("JWT_SECRET", "test-secret-key")
-os.environ.setdefault("CLAUDE_API_KEY", "sk-ant-test-key")
+# CLAUDE_API_KEY: not set here — reads from .env locally, from env vars in CI
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SENTRY_DSN", "")
 

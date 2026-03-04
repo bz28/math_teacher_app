@@ -47,7 +47,7 @@ jobs:
           CLAUDE_API_KEY: sk-ant-ci-fake-key
           APP_ENV: test
           SENTRY_DSN: ""
-        run: pytest tests/ -v
+        run: pytest tests/ -v -m "not integration"
 
   mobile:
     runs-on: ubuntu-latest
