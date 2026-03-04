@@ -26,6 +26,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     submitAnswer,
     requestHint,
     submitExplanation,
+    startSession,
     reset,
   } = useSessionStore();
 
@@ -53,6 +54,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   const handleBack = () => {
     reset();
     onBack();
+  };
+
+  const handleSimilarProblem = async (problem: string) => {
+    reset();
+    await startSession(problem);
   };
 
   return (
@@ -129,10 +135,14 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         <View style={styles.card}>
           <Text style={styles.completedTitle}>Problem Solved!</Text>
           {lastResponse?.similar_problem && (
-            <>
-              <Text style={styles.cardLabel}>Try a similar problem:</Text>
-              <Text style={styles.problemText}>{lastResponse.similar_problem}</Text>
-            </>
+            <TouchableOpacity
+              style={styles.similarButton}
+              onPress={() => handleSimilarProblem(lastResponse.similar_problem!)}
+            >
+              <Text style={styles.similarText}>
+                Try: {lastResponse.similar_problem}
+              </Text>
+            </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
             <Text style={styles.newProblemText}>New Problem</Text>
@@ -244,11 +254,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
+  similarButton: {
+    backgroundColor: "#4caf50",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    alignItems: "center",
+  },
+  similarText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   newProblemButton: {
     backgroundColor: "#4A90D9",
     borderRadius: 8,
     padding: 12,
-    marginTop: 12,
+    marginTop: 8,
     alignItems: "center",
   },
   newProblemText: { color: "#fff", fontWeight: "600", fontSize: 16 },
