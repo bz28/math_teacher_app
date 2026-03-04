@@ -11,16 +11,16 @@ interface MathKeyboardProps {
 }
 
 const KEYS = [
-  { label: "x", value: "x" },
+  { label: "+", value: "+" },
+  { label: "\u2212", value: "-" },
+  { label: "*", value: "*" },
+  { label: "/", value: "/" },
   { label: "^", value: "^" },
   { label: "(", value: "(" },
   { label: ")", value: ")" },
-  { label: "/", value: "/" },
-  { label: "\u221A", value: "sqrt(" },
   { label: "=", value: "=" },
-  { label: "\u00D7", value: "*" },
-  { label: "+", value: "+" },
-  { label: "\u2212", value: "-" },
+  { label: "\u221A", value: "sqrt(" },
+  { label: "x", value: "x" },
 ];
 
 export function MathKeyboard({ onInsert }: MathKeyboardProps) {
