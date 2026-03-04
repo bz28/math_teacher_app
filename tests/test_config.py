@@ -3,9 +3,11 @@ import pytest
 
 
 def test_settings_loads_from_env() -> None:
+    import os
+
     from api.config import settings
 
-    assert settings.jwt_secret == "test-secret-key"
+    assert settings.jwt_secret == os.environ["JWT_SECRET"]
     assert settings.app_env == "test"
     assert settings.jwt_access_token_expire_minutes == 15
 
