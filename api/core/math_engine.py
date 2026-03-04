@@ -1,6 +1,7 @@
 """Math engine: SymPy-based parsing, verification, equivalence, and problem generation."""
 
 import random
+import re
 
 from sympy import (
     Eq,
@@ -157,8 +158,43 @@ class MathEngine:
         return str(expr)
 
     @staticmethod
+    def is_word_problem(text: str) -> bool:
+        """Detect whether text is a math word problem (vs garbage or pure math).
+
+        Returns True only if the text looks like narrative math:
+        has digits, >= 4 words, and contains >= 2 math-related keywords.
+        """
+        # If SymPy can parse it directly, it's already math notation
+        try:
+            MathEngine.parse(text)
+            return False
+        except Exception:
+            pass
+
+        words = text.split()
+        if len(words) < 4:
+            return False
+        if not re.search(r"\d", text):
+            return False
+
+        math_keywords = {
+            "how", "many", "much", "total", "sum", "difference", "product",
+            "each", "per", "find", "solve", "calculate", "equal", "equals",
+            "plus", "minus", "times", "divided", "remaining", "left",
+            "more", "less", "twice", "half", "triple", "percent",
+            "cost", "price", "speed", "distance", "rate", "time",
+            "area", "length", "width", "height", "miles", "hours",
+            "meters", "feet", "pounds", "dollars", "gallons", "liters",
+        }
+        text_lower = text.lower()
+        keyword_count = sum(1 for kw in math_keywords if kw in text_lower)
+        return keyword_count >= 2
+
+    @staticmethod
     def classify_problem(expression: str) -> str:
         """Classify problem type for few-shot caching."""
+        if MathEngine.is_word_problem(expression):
+            return "word_problem"
         try:
             parsed = MathEngine.parse(expression)
             if isinstance(parsed, Eq):

@@ -8,7 +8,7 @@ import anthropic
 from anthropic.types import TextBlock
 
 from api.config import settings
-from api.core.math_engine import MathEngine
+from api.core.math_engine import MathEngine, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,132 @@ def _parse_steps(response_text: str) -> list[Step]:
     ]
 
 
+EXTRACTION_PROMPT = """You are a math tutor. Extract the math equation from this word problem.
+
+Given a word problem, identify the underlying math equation and solve it.
+
+Respond with ONLY valid JSON:
+{
+  "equation": "the equation using standard notation (e.g., d = 60 * 3)",
+  "simplified_equation": "simplified form if different (e.g., d = 180)",
+  "variable": "the variable being solved for (e.g., d)",
+  "answer": "the numeric answer (e.g., 180)"
+}
+
+Use standard math notation: * for multiplication, / for division, ^ for exponents."""
+
+
+async def _extract_equation(problem: str) -> dict[str, str]:
+    """Call Claude to extract the math equation from a word problem."""
+    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=256,
+        system=EXTRACTION_PROMPT,
+        messages=[{"role": "user", "content": f"Word problem: {problem}"}],
+    )
+    first_block = response.content[0]
+    if not isinstance(first_block, TextBlock):
+        raise ValueError("Unexpected response type from Claude")
+    text = first_block.text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    result: dict[str, str] = json.loads(text)
+    return result
+
+
+async def _decompose_word_problem(problem: str) -> Decomposition:
+    """Decompose a word problem: extract equation, then generate steps."""
+    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+
+    last_error: str | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            # Step 1: Extract the equation
+            extraction = await _extract_equation(problem)
+            equation = extraction.get("equation", "")
+            answer = extraction.get("answer", "")
+
+            # Step 2: Verify with SymPy
+            try:
+                solutions = MathEngine.solve_problem(equation)
+                correct_answer = str(solutions[0]) if solutions else answer
+            except (ParseError, Exception):
+                # Equation may not be directly solvable (e.g., d = 60*3)
+                try:
+                    result = MathEngine.evaluate_arithmetic(answer)
+                    correct_answer = str(result)
+                except Exception:
+                    correct_answer = answer
+
+            # Step 3: Generate step decomposition via Claude
+            prompt = _build_prompt(problem, "word_problem", correct_answer=correct_answer)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            first_block = response.content[0]
+            if not isinstance(first_block, TextBlock):
+                last_error = "Unexpected response type from Claude"
+                continue
+            steps = _parse_steps(first_block.text)
+            if not steps:
+                last_error = "Empty steps returned"
+                continue
+
+            # Step 4: Verify final answer
+            final_after = steps[-1].after
+            if MathEngine.are_equivalent(final_after, correct_answer):
+                decomposition = Decomposition(
+                    problem=problem,
+                    steps=steps,
+                    final_answer=final_after,
+                    problem_type="word_problem",
+                )
+                _cache_decomposition(decomposition)
+                logger.info(
+                    "Word problem decomposition succeeded on attempt %d",
+                    attempt + 1,
+                    extra={"problem": problem, "equation": equation},
+                )
+                return decomposition
+
+            last_error = f"Final answer mismatch: got '{final_after}', expected '{correct_answer}'"
+            logger.warning("Attempt %d: %s", attempt + 1, last_error)
+
+        except json.JSONDecodeError as e:
+            last_error = f"JSON parse error: {e}"
+            logger.warning("Attempt %d: %s", attempt + 1, last_error)
+        except Exception as e:
+            last_error = f"API error: {e}"
+            logger.warning("Attempt %d: %s", attempt + 1, last_error)
+
+    logger.error(
+        "All %d attempts failed for word problem '%s'. Last error: %s. Using fallback.",
+        MAX_RETRIES, problem, last_error,
+    )
+    return _fallback_word_problem(problem)
+
+
+def _fallback_word_problem(problem: str) -> Decomposition:
+    """Minimal fallback for word problems when retries are exhausted."""
+    return Decomposition(
+        problem=problem,
+        steps=[
+            Step("Set up the equation", "translate", problem, "equation"),
+            Step("Solve for the answer", "solve", "equation", "answer"),
+        ],
+        final_answer="answer",
+        problem_type="word_problem",
+    )
+
+
 async def decompose_problem(problem: str) -> Decomposition:
     """Generate step-by-step decomposition for a math problem.
 
@@ -111,6 +237,10 @@ async def decompose_problem(problem: str) -> Decomposition:
     Retries with corrective feedback if the final answer doesn't match.
     """
     problem_type = MathEngine.classify_problem(problem)
+
+    if problem_type == "word_problem":
+        return await _decompose_word_problem(problem)
+
     solutions = MathEngine.solve_problem(problem)
     correct_answer = str(solutions[0]) if solutions else None
 

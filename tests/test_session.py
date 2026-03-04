@@ -26,6 +26,13 @@ MOCK_STEPS = [
 ]
 
 
+WORD_PROBLEM = "A train travels at 60 mph for 3 hours. How far does it go?"
+MOCK_WORD_PROBLEM_STEPS = [
+    Step("Set up the equation", "translate", WORD_PROBLEM, "d = 60 * 3"),
+    Step("Multiply to find the distance", "multiplication", "d = 60 * 3", "d = 180"),
+]
+
+
 def _mock_decomposition():
     from api.core.step_decomposition import Decomposition
     return Decomposition(
@@ -33,6 +40,16 @@ def _mock_decomposition():
         steps=MOCK_STEPS,
         final_answer="x = 3",
         problem_type="linear",
+    )
+
+
+def _mock_word_problem_decomposition():
+    from api.core.step_decomposition import Decomposition
+    return Decomposition(
+        problem=WORD_PROBLEM,
+        steps=MOCK_WORD_PROBLEM_STEPS,
+        final_answer="d = 180",
+        problem_type="word_problem",
     )
 
 
@@ -448,3 +465,21 @@ async def test_step_skip_rejected(client: AsyncClient, auth_token: str) -> None:
     )
     data = resp.json()
     assert data["action"] == "skip_rejected"
+
+
+@pytest.mark.anyio
+async def test_word_problem_session(client: AsyncClient, auth_token: str) -> None:
+    """Test that a word problem creates a session with 'Set up the equation' as step 1."""
+    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
+        mock_decompose.return_value = _mock_word_problem_decomposition()
+        resp = await client.post(
+            "/v1/session",
+            json={"problem": WORD_PROBLEM},
+            headers=_auth_headers(auth_token),
+        )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["problem_type"] == "word_problem"
+    assert data["total_steps"] == 2
+    assert data["current_step"] == 0
+    assert data["status"] == "active"
