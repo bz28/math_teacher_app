@@ -31,7 +31,8 @@ FastAPI (Python) ← SymPy (in-process math engine)
 **Approach:**
 - `.env.example` checked into git with placeholder values (never real keys)
 - `pydantic-settings` loads env vars with validation on startup - app fails fast if a key is missing
-- Production: use platform-native secrets (AWS Secrets Manager, Railway/Fly secrets, etc.) - injected as env vars, same code reads them
+- `SENTRY_DSN` - Sentry error tracking (backend + mobile have separate DSNs)
+- Production: Railway environment variables for secrets — injected as env vars, same code reads them. Migrate to AWS Secrets Manager if/when we move to AWS.
 - Mobile: no secrets stored on device. All API keys live server-side only. Mobile talks to our API, never directly to Claude/Mathpix.
 
 ## Core Tutoring Loop
@@ -123,6 +124,8 @@ Input problem (typed text or word problem) → Parse to structured math (SymPy +
 - **Structured logging & observability**: JSON structured logging with correlation IDs per session/request. Request tracing middleware that tags every log line with a `request_id`. This is essential for debugging LLM-dependent flows later ("why did the tutor say X?").
 - **Mobile state management**: decide and document the approach. For this app's complexity, Zustand or React Context + useReducer is sufficient — Redux is overkill. Tutoring sessions have complex state (current step, history, streaming responses, network status, retry queues) so this decision affects every mobile PR downstream.
 - **Database connection pooling**: SQLAlchemy async engine with connection pool configuration. Important under load — don't leave this to default settings.
+- **Sentry integration (backend)**: error tracking + performance monitoring on FastAPI. Wire up early so every PR from here on has crash reporting. Free tier covers early stage.
+- **Production hosting decision**: Railway. Postgres included, simple deploys from Docker, environment variable injection for secrets. Migrate to AWS (ECS/Fargate) later if scale demands it. No production setup yet — just document the decision so infra choices in later PRs are aligned.
 
 **Structure:**
 ```
@@ -138,7 +141,7 @@ Input problem (typed text or word problem) → Parse to structured math (SymPy +
 /infra           → Docker, deploy configs
 ```
 
-**Tests:** CI runs lint + type check. Smoke test that the API starts and returns health check on `/v1/health`. SSE streaming endpoint proof-of-concept. KaTeX rendering proof-of-concept on mobile (measure render latency). Alembic migration runs cleanly against empty DB. Structured logging outputs valid JSON with correlation IDs. Connection pool initializes correctly.
+**Tests:** CI runs lint + type check. Smoke test that the API starts and returns health check on `/v1/health`. SSE streaming endpoint proof-of-concept. KaTeX rendering proof-of-concept on mobile (measure render latency). Alembic migration runs cleanly against empty DB. Structured logging outputs valid JSON with correlation IDs. Connection pool initializes correctly. Sentry captures a test exception in dev (verify DSN is wired correctly).
 
 ### PR 2: Auth & User Model
 - PostgreSQL schema: users table (includes `grade_level` field, email encrypted at rest)
@@ -245,8 +248,9 @@ Input problem (typed text or word problem) → Parse to structured math (SymPy +
 - Similar problem interstitial (confirm mastery before advancing)
 - Session complete / problem solved screen
 - **Network resilience**: optimistic UI (show student's input immediately, "thinking" state while waiting), retry with exponential backoff on failed requests, graceful degradation on spotty connections (queue the request, show "reconnecting..." rather than error screens). Students on school buses with bad WiFi shouldn't see crashes.
+- **Sentry integration (mobile)**: `@sentry/react-native` for crash reporting, JS error tracking, and performance monitoring. Captures unhandled exceptions, component render errors, and network failures. Pairs with backend Sentry (PR 1) for full-stack error visibility.
 
-**Tests:** Component tests for key UI states (waiting for input, showing feedback, streaming response, hint display, session complete). Test network resilience (simulated timeout → retry succeeds, simulated offline → queued request sent on reconnect). Manual QA walkthrough of full session flow.
+**Tests:** Component tests for key UI states (waiting for input, showing feedback, streaming response, hint display, session complete). Test network resilience (simulated timeout → retry succeeds, simulated offline → queued request sent on reconnect). Sentry captures a test error on mobile (verify DSN wired correctly). Manual QA walkthrough of full session flow.
 
 ### PR 8: Student Progress, History & Adaptive Difficulty
 - DB schema: problem history, session results, mastery scores per topic
@@ -289,8 +293,10 @@ Input problem (typed text or word problem) → Parse to structured math (SymPy +
 - Basic analytics events (session started, completed, step attempts) — no PII in analytics
 - Load testing on API
 - **Per-school usage reports**: aggregate token usage and cost data (from PR 5 logging) into per-school reports. Schools need to know their usage for budgeting.
+- **Railway production deployment**: staging + production environments, Docker-based deploys, environment variable configuration for all secrets, deploy pipeline (push-to-deploy from main branch). Railway's managed Postgres for both environments.
+- **Automated database backups**: enable Railway's automated daily Postgres backups. Document and test the restore procedure (restore runbook). FERPA requires we can recover school data — this must be tested before launch, not just enabled.
 
-**Tests:** Edge case tests (LLM retry exhaustion fallback, malformed data handling, rate limit responses). Security tests: unauthorized access attempts, SQL injection attempts, oversized payloads. End-to-end smoke test of complete user flow. Load test results documented.
+**Tests:** Edge case tests (LLM retry exhaustion fallback, malformed data handling, rate limit responses). Security tests: unauthorized access attempts, SQL injection attempts, oversized payloads. End-to-end smoke test of complete user flow. Load test results documented. Database backup restore tested against staging (restore from backup, verify data integrity).
 
 ---
 
