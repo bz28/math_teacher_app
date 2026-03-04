@@ -7,24 +7,30 @@ os.environ.setdefault("CLAUDE_API_KEY", "sk-ant-test-key")
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SENTRY_DSN", "")
 
+from collections.abc import AsyncIterator
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from api.database import get_session_factory
+from api.database import Base, get_engine, get_session_factory
 from api.main import app
+from api.models.user import RefreshToken, User  # noqa: F401 — register models with Base
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def clean_db() -> None:
-    """Truncate all app tables before the test session."""
+async def setup_db() -> None:
+    """Create tables (if missing) and truncate before the test session."""
+    engine = get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     async with get_session_factory()() as session:
         await session.execute(text("TRUNCATE TABLE refresh_tokens, users CASCADE"))
         await session.commit()
 
 
 @pytest.fixture(scope="session")
-async def client() -> AsyncClient:  # type: ignore[misc]
+async def client() -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
