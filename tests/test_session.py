@@ -309,8 +309,8 @@ async def test_hint_request(client: AsyncClient, auth_token: str) -> None:
 
 
 @pytest.mark.anyio
-async def test_explain_back_trigger(client: AsyncClient, auth_token: str) -> None:
-    """Explain-back triggers after show_step + correct answer."""
+async def test_show_step_then_correct_advances(client: AsyncClient, auth_token: str) -> None:
+    """After show_step, a correct answer advances without explain-back."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
         mock_decompose.return_value = _mock_decomposition()
         create_resp = await client.post(
@@ -329,62 +329,25 @@ async def test_explain_back_trigger(client: AsyncClient, auth_token: str) -> Non
     assert resp.json()["action"] == "show_step"
     assert resp.json()["step_description"] is not None
 
-    # Now submit correct answer — explain-back should trigger
+    # Now submit correct answer — should advance, NOT trigger explain-back
     with patch("api.core.session.converse", new_callable=AsyncMock) as mock_converse:
         mock_converse.return_value = _mock_converse_correct(steps_completed=0)
 
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
             json={"student_response": "2x = 6"},
-            headers=_auth_headers(auth_token),
-        )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["action"] == "explain_back"
-    assert "explain" in data["feedback"].lower()
-
-
-@pytest.mark.anyio
-async def test_explain_back_clear_advances(client: AsyncClient, auth_token: str) -> None:
-    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
-        mock_decompose.return_value = _mock_decomposition()
-        create_resp = await client.post(
-            "/v1/session",
-            json={"problem": "2x + 6 = 12"},
-            headers=_auth_headers(auth_token),
-        )
-    session_id = create_resp.json()["id"]
-
-    # Show step then correct answer to trigger explain-back
-    await client.post(
-        f"/v1/session/{session_id}/respond",
-        json={"student_response": "", "request_show_step": True},
-        headers=_auth_headers(auth_token),
-    )
-    with patch("api.core.session.converse", new_callable=AsyncMock) as mock_converse:
-        mock_converse.return_value = _mock_converse_correct(steps_completed=0)
-        await client.post(
-            f"/v1/session/{session_id}/respond",
-            json={"student_response": "2x = 6"},
-            headers=_auth_headers(auth_token),
-        )
-
-    # Now submit explain-back
-    with patch("api.core.session.probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _mock_probe_clear()
-        resp = await client.post(
-            f"/v1/session/{session_id}/explain-back",
-            json={"student_explanation": "I subtracted 6 to isolate x"},
             headers=_auth_headers(auth_token),
         )
     assert resp.status_code == 200
     data = resp.json()
     assert data["action"] == "advance"
+    assert data["is_correct"] is True
     assert data["current_step"] == 1
 
 
 @pytest.mark.anyio
-async def test_explain_back_partial_asks_followup(client: AsyncClient, auth_token: str) -> None:
+async def test_continue_asking_after_completion(client: AsyncClient, auth_token: str) -> None:
+    """After completing a problem, students can keep asking the tutor questions."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
         mock_decompose.return_value = _mock_decomposition()
         create_resp = await client.post(
@@ -394,12 +357,7 @@ async def test_explain_back_partial_asks_followup(client: AsyncClient, auth_toke
         )
     session_id = create_resp.json()["id"]
 
-    # Show step then correct answer to trigger explain-back
-    await client.post(
-        f"/v1/session/{session_id}/respond",
-        json={"student_response": "", "request_show_step": True},
-        headers=_auth_headers(auth_token),
-    )
+    # Complete all steps
     with patch("api.core.session.converse", new_callable=AsyncMock) as mock_converse:
         mock_converse.return_value = _mock_converse_correct(steps_completed=0)
         await client.post(
@@ -407,57 +365,24 @@ async def test_explain_back_partial_asks_followup(client: AsyncClient, auth_toke
             json={"student_response": "2x = 6"},
             headers=_auth_headers(auth_token),
         )
+        mock_converse.return_value = _mock_converse_correct(steps_completed=1)
+        await client.post(
+            f"/v1/session/{session_id}/respond",
+            json={"student_response": "x = 3"},
+            headers=_auth_headers(auth_token),
+        )
 
-    # Submit weak explain-back
-    with patch("api.core.session.probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _mock_probe_partial()
+    # Now ask a question on the completed session
+    with patch("api.core.session.converse", new_callable=AsyncMock) as mock_converse:
+        mock_converse.return_value = _mock_converse_question()
         resp = await client.post(
-            f"/v1/session/{session_id}/explain-back",
-            json={"student_explanation": "I moved the 6"},
-            headers=_auth_headers(auth_token),
-        )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["action"] == "explain_back"
-    assert "subtract" in data["feedback"].lower()
-
-
-@pytest.mark.anyio
-async def test_skip_explain_back_advances(client: AsyncClient, auth_token: str) -> None:
-    """Skipping explain-back advances without requiring an explanation."""
-    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
-        mock_decompose.return_value = _mock_decomposition()
-        create_resp = await client.post(
-            "/v1/session",
-            json={"problem": "2x + 6 = 12"},
-            headers=_auth_headers(auth_token),
-        )
-    session_id = create_resp.json()["id"]
-
-    # Show step then correct answer to trigger explain-back
-    await client.post(
-        f"/v1/session/{session_id}/respond",
-        json={"student_response": "", "request_show_step": True},
-        headers=_auth_headers(auth_token),
-    )
-    with patch("api.core.session.converse", new_callable=AsyncMock) as mock_converse:
-        mock_converse.return_value = _mock_converse_correct(steps_completed=0)
-        await client.post(
             f"/v1/session/{session_id}/respond",
-            json={"student_response": "2x = 6"},
+            json={"student_response": "why did we subtract 6 first?"},
             headers=_auth_headers(auth_token),
         )
-
-    # Skip explain-back — should advance without calling probe
-    resp = await client.post(
-        f"/v1/session/{session_id}/explain-back",
-        json={"skip_explain_back": True},
-        headers=_auth_headers(auth_token),
-    )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["action"] == "advance"
-    assert data["current_step"] == 1
+    assert data["action"] == "conversation"
 
 
 @pytest.mark.anyio

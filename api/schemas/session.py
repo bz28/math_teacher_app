@@ -15,8 +15,7 @@ class RespondRequest(BaseModel):
 
 
 class ExplainBackRequest(BaseModel):
-    student_explanation: str = ""
-    skip_explain_back: bool = False
+    student_explanation: str
 
 
 class StepDetail(BaseModel):

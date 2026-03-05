@@ -138,7 +138,7 @@ async def explain_back(
 
     try:
         result = await handle_explain_back(
-            db, session, body.student_explanation, body.skip_explain_back
+            db, session, body.student_explanation
         )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

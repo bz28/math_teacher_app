@@ -95,11 +95,9 @@ export const respondToStep = (
 export const submitExplainBack = (
   id: string,
   explanation: string,
-  skipExplainBack = false,
 ) =>
   apiPost<StepResponse>(`/session/${id}/explain-back`, {
     student_explanation: explanation,
-    skip_explain_back: skipExplainBack,
   });
 
 // Auth API
