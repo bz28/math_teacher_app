@@ -25,16 +25,30 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     error,
     submitAnswer,
     requestHint,
+    requestShowStep,
+    skipExplainBack,
     submitExplanation,
+    switchToLearnMode,
     startSession,
     reset,
   } = useSessionStore();
 
-  if (!session) return null;
+  if (!session) {
+    if (phase === "loading") {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4A90D9" />
+          <Text style={styles.loadingText}>Generating problem...</Text>
+        </View>
+      );
+    }
+    return null;
+  }
 
   const isExplainBack = phase === "explain_back";
   const isCompleted = phase === "completed";
   const currentStep = session.steps[session.current_step];
+  const isPractice = session.mode === "practice";
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -58,8 +72,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   };
 
   const handleSimilarProblem = async (problem: string) => {
+    const currentMode = session.mode;
     reset();
-    await startSession(problem);
+    await startSession(problem, currentMode);
   };
 
   const completedSteps = session.steps.slice(0, session.current_step);
@@ -73,8 +88,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>
-            Step {Math.min(session.current_step + 1, session.total_steps)} of{" "}
-            {session.total_steps}
+            {isPractice ? "Practice" : "Learn"}
           </Text>
         </View>
         <View style={styles.problemCard}>
@@ -98,15 +112,17 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps history */}
-        {completedSteps.length > 0 && (
+        {/* Completed steps history (hidden during practice) */}
+        {!isPractice && completedSteps.length > 0 && (
           <View style={styles.historySection}>
             {completedSteps.map((step, i) => (
               <View key={i} style={styles.historyRow}>
                 <Text style={styles.historyCheck}>✓</Text>
                 <View style={styles.historyContent}>
                   <Text style={styles.historyLabel}>Step {i + 1}</Text>
-                  <Text style={styles.historyDesc}>{step.description}</Text>
+                  {!isPractice && (
+                    <Text style={styles.historyDesc}>{step.description}</Text>
+                  )}
                   <Text style={styles.historyResult}>{step.after}</Text>
                 </View>
               </View>
@@ -117,7 +133,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {/* Current step guidance + expression */}
         {!isCompleted && (
           <>
-            {session.current_step > 0 && currentStep && (
+            {!isPractice && session.current_step > 0 && currentStep && (
               <View style={styles.card}>
                 <Text style={styles.cardLabel}>Current expression</Text>
                 <Text style={styles.problemText}>{currentStep.before}</Text>
@@ -125,15 +141,26 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             )}
 
             <Text style={styles.promptText}>
-              {session.current_step === 0
-                ? "What would you do first?"
-                : "What's your next step?"}
+              {isPractice
+                ? "Enter your final answer"
+                : session.current_step === 0
+                  ? "How would you solve this?"
+                  : "Type an answer or ask a question..."}
             </Text>
           </>
         )}
 
+        {/* Step description card (after show_step) */}
+        {lastResponse?.action === "show_step" && lastResponse.step_description && (
+          <View style={styles.stepDescCard}>
+            <Text style={styles.stepDescLabel}>Next step</Text>
+            <Text style={styles.stepDescText}>{lastResponse.step_description}</Text>
+            <Text style={styles.stepDescHint}>Enter the math expression to continue</Text>
+          </View>
+        )}
+
         {/* Feedback */}
-        {lastResponse && (
+        {lastResponse && lastResponse.action !== "show_step" && (
           <View
             style={[
               styles.feedback,
@@ -144,6 +171,16 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
+        {/* Switch to Learn Mode button (practice mode, wrong answer) */}
+        {isPractice && lastResponse && !lastResponse.is_correct && !isCompleted && (
+          <TouchableOpacity
+            style={styles.switchModeButton}
+            onPress={switchToLearnMode}
+          >
+            <Text style={styles.switchModeText}>Switch to Learn Mode</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Error */}
         {error && <Text style={styles.error}>{error}</Text>}
 
@@ -151,6 +188,18 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {isCompleted && (
           <View style={styles.card}>
             <Text style={styles.completedTitle}>Problem Solved!</Text>
+            {isPractice && (
+              <View style={styles.solutionSteps}>
+                <Text style={styles.solutionLabel}>Solution</Text>
+                {session.steps.map((step, i) => (
+                  <View key={i} style={styles.solutionRow}>
+                    <Text style={styles.solutionStepNum}>Step {i + 1}</Text>
+                    <Text style={styles.solutionDesc}>{step.description}</Text>
+                    <Text style={styles.solutionResult}>{step.after}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             {lastResponse?.similar_problem && (
               <TouchableOpacity
                 style={styles.similarButton}
@@ -222,13 +271,21 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 )}
               </TouchableOpacity>
 
-              {!isExplainBack && (
+              {!isExplainBack && !isPractice && (
                 <TouchableOpacity
                   style={[styles.button, styles.hintButton]}
-                  onPress={requestHint}
+                  onPress={requestShowStep}
                   disabled={phase === "thinking"}
                 >
-                  <Text style={styles.hintText}>Hint</Text>
+                  <Text style={styles.hintText}>Show next step</Text>
+                </TouchableOpacity>
+              )}
+              {isExplainBack && !isPractice && (
+                <TouchableOpacity
+                  style={[styles.button, styles.hintButton]}
+                  onPress={skipExplainBack}
+                >
+                  <Text style={styles.hintText}>Skip</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -240,6 +297,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: { marginTop: 12, fontSize: 16, color: "#666" },
   container: { flex: 1, backgroundColor: "#fff" },
   stickyHeader: { paddingHorizontal: 20, paddingTop: 60, backgroundColor: "#fff" },
   content: { padding: 20, paddingTop: 8 },
@@ -295,6 +359,18 @@ const styles = StyleSheet.create({
   historyLabel: { fontSize: 11, fontWeight: "600", color: "#999" },
   historyDesc: { fontSize: 14, color: "#666" },
   historyResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
+  // Step description card
+  stepDescCard: {
+    backgroundColor: "#e3f2fd",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#90caf9",
+  },
+  stepDescLabel: { fontSize: 12, fontWeight: "600", color: "#1565c0", marginBottom: 4 },
+  stepDescText: { fontSize: 16, fontWeight: "600", color: "#1a237e", marginBottom: 8 },
+  stepDescHint: { fontSize: 13, color: "#42a5f5", fontStyle: "italic" },
   // Feedback
   feedback: { borderRadius: 8, padding: 12, marginBottom: 12 },
   feedbackCorrect: { backgroundColor: "#e8f5e9" },
@@ -361,4 +437,28 @@ const styles = StyleSheet.create({
   submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   hintButton: { backgroundColor: "#fff3e0" },
   hintText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
+  // Switch to Learn Mode
+  switchModeButton: {
+    backgroundColor: "#e3f2fd",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#90caf9",
+  },
+  switchModeText: { color: "#1565c0", fontWeight: "600", fontSize: 16 },
+  // Solution steps (shown on practice completion)
+  solutionSteps: { marginBottom: 12 },
+  solutionLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 8 },
+  solutionRow: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "#f6faf6",
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  solutionStepNum: { fontSize: 11, fontWeight: "600", color: "#999" },
+  solutionDesc: { fontSize: 14, color: "#666" },
+  solutionResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
 });

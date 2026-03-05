@@ -28,6 +28,7 @@ class Session(Base):
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active, completed, abandoned
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="learn")
 
     # Per-step tracking (JSON: {step_index: {attempts: int, hints_used: int, explain_back: bool}})
     step_tracking: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)

@@ -40,6 +40,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
         current_step=s.current_step,
         total_steps=s.total_steps,
         status=s.status,
+        mode=s.mode,
         steps=[StepDetail(**step) for step in s.steps],
         step_tracking={
             k: StepTrackingInfo(**v) for k, v in s.step_tracking.items()
@@ -55,7 +56,7 @@ async def create(
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
     try:
-        session = await create_session(db, current_user.user_id, body.problem)
+        session = await create_session(db, current_user.user_id, body.problem, body.mode)
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
     except Exception as e:
@@ -99,7 +100,9 @@ async def respond(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     try:
-        result = await respond_to_step(db, session, body.student_response, body.request_hint)
+        result = await respond_to_step(
+            db, session, body.student_response, body.request_hint, body.request_show_step
+        )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -113,6 +116,7 @@ async def respond(
         total_steps=result.total_steps,
         is_correct=result.is_correct,
         similar_problem=result.similar_problem,
+        step_description=result.step_description,
     )
 
 
@@ -133,7 +137,9 @@ async def explain_back(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     try:
-        result = await handle_explain_back(db, session, body.student_explanation)
+        result = await handle_explain_back(
+            db, session, body.student_explanation, body.skip_explain_back
+        )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

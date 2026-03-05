@@ -23,10 +23,13 @@ interface SessionState {
   lastResponse: StepResponse | null;
   error: string | null;
 
-  startSession: (problem: string) => Promise<void>;
+  startSession: (problem: string, mode?: string) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   requestHint: () => Promise<void>;
+  requestShowStep: () => Promise<void>;
+  skipExplainBack: () => Promise<void>;
   submitExplanation: (explanation: string) => Promise<void>;
+  switchToLearnMode: () => Promise<void>;
   reset: () => void;
 }
 
@@ -40,10 +43,10 @@ const initialState = {
 export const useSessionStore = create<SessionState>((set, get) => ({
   ...initialState,
 
-  startSession: async (problem) => {
+  startSession: async (problem, mode = "learn") => {
     set({ phase: "loading", error: null });
     try {
-      const session = await createSession(problem);
+      const session = await createSession(problem, mode);
       set({ session, phase: "awaiting_input", lastResponse: null });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
@@ -62,6 +65,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       let nextPhase: SessionPhase = "awaiting_input";
       if (resp.action === "completed") nextPhase = "completed";
       else if (resp.action === "explain_back") nextPhase = "explain_back";
+      // "conversation" and "show_step" stay on awaiting_input
 
       set({ session: updated, lastResponse: resp, phase: nextPhase });
     } catch (e) {
@@ -83,6 +87,38 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  requestShowStep: async () => {
+    const { session } = get();
+    if (!session) return;
+
+    set({ phase: "thinking", error: null });
+    try {
+      const resp = await respondToStep(session.id, "", false, true);
+      const updated = await getSession(session.id);
+      set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  skipExplainBack: async () => {
+    const { session } = get();
+    if (!session) return;
+
+    set({ phase: "thinking", error: null });
+    try {
+      const resp = await submitExplainBack(session.id, "", true);
+      const updated = await getSession(session.id);
+
+      let nextPhase: SessionPhase = "awaiting_input";
+      if (resp.action === "completed") nextPhase = "completed";
+
+      set({ session: updated, lastResponse: resp, phase: nextPhase });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
   submitExplanation: async (explanation) => {
     const { session } = get();
     if (!session) return;
@@ -97,6 +133,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       else if (resp.action === "explain_back") nextPhase = "explain_back";
 
       set({ session: updated, lastResponse: resp, phase: nextPhase });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  switchToLearnMode: async () => {
+    const { session } = get();
+    if (!session) return;
+
+    const problem = session.problem;
+    set({ ...initialState, phase: "loading" });
+    try {
+      const newSession = await createSession(problem, "learn");
+      set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }

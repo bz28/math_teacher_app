@@ -19,6 +19,7 @@ export default function App() {
   const inputRef = useRef<TextInput>(null);
   const [screen, setScreen] = useState<Screen>("auth");
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState<"practice" | "learn">("practice");
   const [error, setError] = useState<string | null>(null);
   const {
     startSession,
@@ -38,7 +39,7 @@ export default function App() {
     const text = input.trim();
     if (!text) return;
     setError(null);
-    await startSession(text);
+    await startSession(text, mode);
     // Store sets phase to "awaiting_input" on success, "error" on failure
     const { phase } = useSessionStore.getState();
     if (phase !== "error") {
@@ -88,6 +89,25 @@ export default function App() {
         onSubmitEditing={handleGo}
       />
 
+      <View style={styles.modeToggle}>
+        <TouchableOpacity
+          style={[styles.modeButton, mode === "practice" && styles.modeButtonActive]}
+          onPress={() => setMode("practice")}
+        >
+          <Text style={[styles.modeText, mode === "practice" && styles.modeTextActive]}>
+            Practice
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeButton, mode === "learn" && styles.modeButtonActive]}
+          onPress={() => setMode("learn")}
+        >
+          <Text style={[styles.modeText, mode === "learn" && styles.modeTextActive]}>
+            Learn
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <MathKeyboard onInsert={handleInsert} />
 
       <TouchableOpacity
@@ -126,6 +146,23 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 18,
   },
+  modeToggle: {
+    flexDirection: "row",
+    width: "100%",
+    backgroundColor: "#eee",
+    borderRadius: 8,
+    marginTop: 12,
+    padding: 2,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 6,
+  },
+  modeButtonActive: { backgroundColor: "#4A90D9" },
+  modeText: { fontSize: 15, fontWeight: "600", color: "#666" },
+  modeTextActive: { color: "#fff" },
   button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   goButton: {
     backgroundColor: "#4A90D9",
