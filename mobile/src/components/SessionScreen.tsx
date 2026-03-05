@@ -28,6 +28,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     requestShowStep,
     skipExplainBack,
     submitExplanation,
+    switchToLearnMode,
     startSession,
     reset,
   } = useSessionStore();
@@ -111,8 +112,8 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps history */}
-        {completedSteps.length > 0 && (
+        {/* Completed steps history (hidden during practice) */}
+        {!isPractice && completedSteps.length > 0 && (
           <View style={styles.historySection}>
             {completedSteps.map((step, i) => (
               <View key={i} style={styles.historyRow}>
@@ -141,7 +142,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
             <Text style={styles.promptText}>
               {isPractice
-                ? "Show your work"
+                ? "Enter your final answer"
                 : session.current_step === 0
                   ? "How would you solve this?"
                   : "Type an answer or ask a question..."}
@@ -170,6 +171,16 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
+        {/* Switch to Learn Mode button (practice mode, wrong answer) */}
+        {isPractice && lastResponse && !lastResponse.is_correct && !isCompleted && (
+          <TouchableOpacity
+            style={styles.switchModeButton}
+            onPress={switchToLearnMode}
+          >
+            <Text style={styles.switchModeText}>Switch to Learn Mode</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Error */}
         {error && <Text style={styles.error}>{error}</Text>}
 
@@ -177,6 +188,18 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {isCompleted && (
           <View style={styles.card}>
             <Text style={styles.completedTitle}>Problem Solved!</Text>
+            {isPractice && (
+              <View style={styles.solutionSteps}>
+                <Text style={styles.solutionLabel}>Solution</Text>
+                {session.steps.map((step, i) => (
+                  <View key={i} style={styles.solutionRow}>
+                    <Text style={styles.solutionStepNum}>Step {i + 1}</Text>
+                    <Text style={styles.solutionDesc}>{step.description}</Text>
+                    <Text style={styles.solutionResult}>{step.after}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             {lastResponse?.similar_problem && (
               <TouchableOpacity
                 style={styles.similarButton}
@@ -248,15 +271,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 )}
               </TouchableOpacity>
 
-              {!isExplainBack && isPractice && (
-                <TouchableOpacity
-                  style={[styles.button, styles.hintButton]}
-                  onPress={requestHint}
-                  disabled={phase === "thinking"}
-                >
-                  <Text style={styles.hintText}>Hint</Text>
-                </TouchableOpacity>
-              )}
               {!isExplainBack && !isPractice && (
                 <TouchableOpacity
                   style={[styles.button, styles.hintButton]}
@@ -270,7 +284,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 <TouchableOpacity
                   style={[styles.button, styles.hintButton]}
                   onPress={skipExplainBack}
-                  disabled={phase === "thinking"}
                 >
                   <Text style={styles.hintText}>Skip</Text>
                 </TouchableOpacity>
@@ -424,4 +437,28 @@ const styles = StyleSheet.create({
   submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   hintButton: { backgroundColor: "#fff3e0" },
   hintText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
+  // Switch to Learn Mode
+  switchModeButton: {
+    backgroundColor: "#e3f2fd",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#90caf9",
+  },
+  switchModeText: { color: "#1565c0", fontWeight: "600", fontSize: 16 },
+  // Solution steps (shown on practice completion)
+  solutionSteps: { marginBottom: 12 },
+  solutionLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 8 },
+  solutionRow: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "#f6faf6",
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  solutionStepNum: { fontSize: 11, fontWeight: "600", color: "#999" },
+  solutionDesc: { fontSize: 14, color: "#666" },
+  solutionResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
 });

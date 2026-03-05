@@ -155,7 +155,8 @@ Rules:
 - Never give away the full answer — guide the student toward understanding
 - Use standard math notation (e.g., x^2 not x²)"""
 
-CONVERSATIONAL_TUTOR_PROMPT = """You are a math tutor having a conversation with a student solving a problem step by step.
+CONVERSATIONAL_TUTOR_PROMPT = """\
+You are a math tutor having a conversation with a student solving a problem step by step.
 
 You will receive:
 - The problem being solved

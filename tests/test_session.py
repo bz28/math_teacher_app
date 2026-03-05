@@ -576,7 +576,7 @@ async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_toke
 
 @pytest.mark.anyio
 async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: str) -> None:
-    """Practice mode: submitting an intermediate step advances past it."""
+    """Practice mode: submitting an intermediate step is rejected (final-answer-only)."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
         mock_decompose.return_value = _mock_decomposition()
         create_resp = await client.post(
@@ -586,16 +586,18 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
         )
     session_id = create_resp.json()["id"]
 
-    # Submit intermediate step (2x = 6) — should advance to step 1
-    resp = await client.post(
-        f"/v1/session/{session_id}/respond",
-        json={"student_response": "2x = 6"},
-        headers=_auth_headers(auth_token),
-    )
+    # Submit intermediate step (2x = 6) — should be rejected (not the final answer)
+    with patch("api.core.session._llm_check_final_answer", new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = False
+        resp = await client.post(
+            f"/v1/session/{session_id}/respond",
+            json={"student_response": "2x = 6"},
+            headers=_auth_headers(auth_token),
+        )
     data = resp.json()
-    assert data["action"] == "advance"
-    assert data["is_correct"] is True
-    assert data["current_step"] == 1
+    assert data["action"] == "error"
+    assert data["is_correct"] is False
+    assert data["current_step"] == 0
 
 
 @pytest.mark.anyio
@@ -610,15 +612,18 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
         )
     session_id = create_resp.json()["id"]
 
-    # Submit wrong answer — no symbolic match, returns error
-    resp = await client.post(
-        f"/v1/session/{session_id}/respond",
-        json={"student_response": "x = 99"},
-        headers=_auth_headers(auth_token),
-    )
+    # Submit wrong answer — no symbolic match, LLM also says wrong
+    with patch("api.core.session._llm_check_final_answer", new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = False
+        resp = await client.post(
+            f"/v1/session/{session_id}/respond",
+            json={"student_response": "x = 99"},
+            headers=_auth_headers(auth_token),
+        )
     data = resp.json()
     assert data["action"] == "error"
     assert data["is_correct"] is False
+    assert "incorrect" in data["feedback"].lower()
 
 
 @pytest.mark.anyio

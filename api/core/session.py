@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.math_engine import MathEngine
 from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
-from api.core.tutor import converse, evaluate, probe
+from api.core.tutor import _call_claude_json, converse, probe
 from api.models.session import Session
 
 MAX_ATTEMPTS_PER_STEP = 5
@@ -183,7 +183,9 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session:
 
 @dataclass
 class StepResponse:
-    action: str  # "advance", "hint", "explain_back", "scaffolded", "completed", "error", "skip_rejected", "conversation", "show_step"
+    # "advance", "hint", "explain_back", "completed", "error",
+    # "conversation", "show_step"
+    action: str
     feedback: str
     current_step: int
     total_steps: int
@@ -215,58 +217,41 @@ async def _complete_practice(
     )
 
 
-_PRACTICE_EVAL_PROMPT = """You are a strict math tutor checking a student's work.
+_PRACTICE_FINAL_EVAL_PROMPT = """You are a strict math tutor checking a student's final answer.
 
-Given a problem and solution steps, determine which step (if any) the student's
-answer is MATHEMATICALLY EQUIVALENT to. Allow differences in formatting or
-notation (e.g., "x=3" vs "x = 3"), but the answer must be completely correct.
+Determine if the student's answer is MATHEMATICALLY EQUIVALENT to the correct
+final answer. Allow differences in formatting or notation (e.g., "x=3" vs
+"x = 3", "6" vs "x = 6"), but the answer must be completely correct.
 
 Be STRICT:
 - "35" does NOT match "35x^4" — the variable/exponent is missing
-- "x = 2" DOES match "x = 2 or x = 3" — it's one of the solutions
-- "6" DOES match "x = 6" — just a formatting difference
 - Partial answers or answers missing terms are WRONG
 
 Respond with ONLY valid JSON:
-{"matched_step": <step_index or -1>, "is_correct": <true/false>}
-
-- matched_step: the 0-based index of the FURTHEST step the answer matches, or -1
-- is_correct: true ONLY if the answer is mathematically equivalent to a step result"""
+{"is_correct": <true/false>}"""
 
 
-async def _llm_match_step(
+async def _llm_check_final_answer(
     problem: str,
-    steps: list[Step],
-    current_idx: int,
+    correct_answer: str,
     student_response: str,
     session_id: str,
-) -> int:
-    """Use LLM to find which step a student's response matches.
-
-    Returns the matched step index, or -1 if no match.
-    """
-    remaining = []
-    for i in range(current_idx, len(steps)):
-        remaining.append(f"  Step {i}: {steps[i].description} → {steps[i].after}")
-    steps_text = "\n".join(remaining)
-
+) -> bool:
+    """Use LLM to check if student's response matches the final answer."""
     user_msg = (
-        f"Problem: {problem}\n\n"
-        f"Solution steps:\n{steps_text}\n\n"
+        f"Problem: {problem}\n"
+        f"Correct final answer: {correct_answer}\n"
         f"Student's answer: {student_response}"
     )
 
     try:
         result = await _call_claude_json(
-            _PRACTICE_EVAL_PROMPT, user_msg, mode="practice_eval", session_id=session_id,
+            _PRACTICE_FINAL_EVAL_PROMPT, user_msg,
+            mode="practice_eval", session_id=session_id,
         )
-        matched = int(result.get("matched_step", -1))
-        is_correct = bool(result.get("is_correct", False))
-        if matched >= current_idx and matched < len(steps) and is_correct:
-            return matched
+        return bool(result.get("is_correct", False))
     except Exception:
-        pass
-    return -1
+        return False
 
 
 async def _respond_practice_mode(
@@ -274,58 +259,35 @@ async def _respond_practice_mode(
     session: Session,
     student_response: str,
 ) -> StepResponse:
-    """Handle a student response in practice mode (free-form, no step enforcement)."""
-    steps_list = [
-        Step(s["description"], s["operation"], s["before"], s["after"])
-        for s in session.steps
-    ]
+    """Handle a student response in practice mode (final-answer-only)."""
+    final_step = session.steps[-1]
+    correct_answer = final_step["after"]
 
     _add_exchange(session, "student", student_response)
 
-    # 1. Fast symbolic match against ANY step (instant)
-    matches = _find_matching_steps(student_response, steps_list, session.current_step)
-    if matches:
-        furthest = max(matches)
-        session.current_step = furthest + 1
+    # 1. Fast symbolic check against the final answer only
+    is_correct = False
+    try:
+        is_correct = MathEngine.are_equivalent(student_response.strip(), correct_answer.strip())
+    except Exception:
+        pass
 
-        if session.current_step >= session.total_steps:
-            return await _complete_practice(db, session)
+    # Also try direct string match
+    if not is_correct:
+        is_correct = student_response.strip() == correct_answer.strip()
 
-        feedback = "Correct!"
-        _add_exchange(session, "tutor", feedback)
-        await db.commit()
-        return StepResponse(
-            action="advance",
-            feedback=feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-            is_correct=True,
+    # 2. LLM fallback if symbolic check fails
+    if not is_correct:
+        is_correct = await _llm_check_final_answer(
+            session.problem, correct_answer,
+            student_response, str(session.id),
         )
 
-    # 2. Symbolic match failed — fall back to LLM evaluation
-    llm_match = await _llm_match_step(
-        session.problem, steps_list, session.current_step,
-        student_response, str(session.id),
-    )
-    if llm_match >= 0:
-        session.current_step = llm_match + 1
+    if is_correct:
+        return await _complete_practice(db, session)
 
-        if session.current_step >= session.total_steps:
-            return await _complete_practice(db, session)
-
-        feedback = "Correct!"
-        _add_exchange(session, "tutor", feedback)
-        await db.commit()
-        return StepResponse(
-            action="advance",
-            feedback=feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-            is_correct=True,
-        )
-
-    # 3. Neither matched — wrong answer
-    feedback = "That doesn't match any step. Try again."
+    # Wrong answer
+    feedback = "Incorrect, try again."
     _add_exchange(session, "tutor", feedback)
     await db.commit()
     return StepResponse(
@@ -399,7 +361,7 @@ async def respond_to_step(
         step_info["shown"] = True
         tracking[step_key] = step_info
         session.step_tracking = tracking
-        feedback = f"Here's what to do next. Enter the math expression to continue."
+        feedback = "Here's what to do next. Enter the math expression to continue."
         _add_exchange(session, "tutor", f"Show step: {step.description}")
         await db.commit()
         return StepResponse(

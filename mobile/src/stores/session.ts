@@ -29,6 +29,7 @@ interface SessionState {
   requestShowStep: () => Promise<void>;
   skipExplainBack: () => Promise<void>;
   submitExplanation: (explanation: string) => Promise<void>;
+  switchToLearnMode: () => Promise<void>;
   reset: () => void;
 }
 
@@ -132,6 +133,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       else if (resp.action === "explain_back") nextPhase = "explain_back";
 
       set({ session: updated, lastResponse: resp, phase: nextPhase });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  switchToLearnMode: async () => {
+    const { session } = get();
+    if (!session) return;
+
+    const problem = session.problem;
+    set({ ...initialState, phase: "loading" });
+    try {
+      const newSession = await createSession(problem, "learn");
+      set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
