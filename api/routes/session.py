@@ -100,7 +100,9 @@ async def respond(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     try:
-        result = await respond_to_step(db, session, body.student_response, body.request_hint)
+        result = await respond_to_step(
+            db, session, body.student_response, body.request_hint, body.request_show_step
+        )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -114,6 +116,7 @@ async def respond(
         total_steps=result.total_steps,
         is_correct=result.is_correct,
         similar_problem=result.similar_problem,
+        step_description=result.step_description,
     )
 
 
@@ -134,7 +137,9 @@ async def explain_back(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     try:
-        result = await handle_explain_back(db, session, body.student_explanation)
+        result = await handle_explain_back(
+            db, session, body.student_explanation, body.skip_explain_back
+        )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

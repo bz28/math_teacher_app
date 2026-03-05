@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.math_engine import MathEngine
 from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
-from api.core.tutor import evaluate, probe
+from api.core.tutor import converse, evaluate, probe
 from api.models.session import Session
 
 MAX_ATTEMPTS_PER_STEP = 5
@@ -183,12 +183,90 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session:
 
 @dataclass
 class StepResponse:
-    action: str  # "advance", "hint", "explain_back", "scaffolded", "completed", "error", "skip_rejected"
+    action: str  # "advance", "hint", "explain_back", "scaffolded", "completed", "error", "skip_rejected", "conversation", "show_step"
     feedback: str
     current_step: int
     total_steps: int
     is_correct: bool = False
     similar_problem: str | None = None
+    step_description: str | None = None
+
+
+async def _complete_practice(
+    db: AsyncSession, session: Session,
+) -> StepResponse:
+    """Mark a practice session as completed and generate a similar problem."""
+    session.current_step = session.total_steps
+    session.status = "completed"
+    if session.problem_type == "word_problem":
+        similar = await generate_similar_word_problem(session.problem)
+    else:
+        similar = MathEngine.generate_similar(session.problem)
+    feedback = "Correct! Problem complete!"
+    _add_exchange(session, "tutor", feedback)
+    await db.commit()
+    return StepResponse(
+        action="completed",
+        feedback=feedback,
+        current_step=session.current_step,
+        total_steps=session.total_steps,
+        is_correct=True,
+        similar_problem=similar,
+    )
+
+
+_PRACTICE_EVAL_PROMPT = """You are a strict math tutor checking a student's work.
+
+Given a problem and solution steps, determine which step (if any) the student's
+answer is MATHEMATICALLY EQUIVALENT to. Allow differences in formatting or
+notation (e.g., "x=3" vs "x = 3"), but the answer must be completely correct.
+
+Be STRICT:
+- "35" does NOT match "35x^4" — the variable/exponent is missing
+- "x = 2" DOES match "x = 2 or x = 3" — it's one of the solutions
+- "6" DOES match "x = 6" — just a formatting difference
+- Partial answers or answers missing terms are WRONG
+
+Respond with ONLY valid JSON:
+{"matched_step": <step_index or -1>, "is_correct": <true/false>}
+
+- matched_step: the 0-based index of the FURTHEST step the answer matches, or -1
+- is_correct: true ONLY if the answer is mathematically equivalent to a step result"""
+
+
+async def _llm_match_step(
+    problem: str,
+    steps: list[Step],
+    current_idx: int,
+    student_response: str,
+    session_id: str,
+) -> int:
+    """Use LLM to find which step a student's response matches.
+
+    Returns the matched step index, or -1 if no match.
+    """
+    remaining = []
+    for i in range(current_idx, len(steps)):
+        remaining.append(f"  Step {i}: {steps[i].description} → {steps[i].after}")
+    steps_text = "\n".join(remaining)
+
+    user_msg = (
+        f"Problem: {problem}\n\n"
+        f"Solution steps:\n{steps_text}\n\n"
+        f"Student's answer: {student_response}"
+    )
+
+    try:
+        result = await _call_claude_json(
+            _PRACTICE_EVAL_PROMPT, user_msg, mode="practice_eval", session_id=session_id,
+        )
+        matched = int(result.get("matched_step", -1))
+        is_correct = bool(result.get("is_correct", False))
+        if matched >= current_idx and matched < len(steps) and is_correct:
+            return matched
+    except Exception:
+        pass
+    return -1
 
 
 async def _respond_practice_mode(
@@ -204,29 +282,14 @@ async def _respond_practice_mode(
 
     _add_exchange(session, "student", student_response)
 
-    # 1. Fast symbolic match against ANY step
+    # 1. Fast symbolic match against ANY step (instant)
     matches = _find_matching_steps(student_response, steps_list, session.current_step)
     if matches:
         furthest = max(matches)
         session.current_step = furthest + 1
 
         if session.current_step >= session.total_steps:
-            session.status = "completed"
-            if session.problem_type == "word_problem":
-                similar = await generate_similar_word_problem(session.problem)
-            else:
-                similar = MathEngine.generate_similar(session.problem)
-            feedback = "Correct! Problem complete!"
-            _add_exchange(session, "tutor", feedback)
-            await db.commit()
-            return StepResponse(
-                action="completed",
-                feedback=feedback,
-                current_step=session.current_step,
-                total_steps=session.total_steps,
-                is_correct=True,
-                similar_problem=similar,
-            )
+            return await _complete_practice(db, session)
 
         feedback = "Correct!"
         _add_exchange(session, "tutor", feedback)
@@ -239,7 +302,29 @@ async def _respond_practice_mode(
             is_correct=True,
         )
 
-    # 2. No symbolic match — wrong answer
+    # 2. Symbolic match failed — fall back to LLM evaluation
+    llm_match = await _llm_match_step(
+        session.problem, steps_list, session.current_step,
+        student_response, str(session.id),
+    )
+    if llm_match >= 0:
+        session.current_step = llm_match + 1
+
+        if session.current_step >= session.total_steps:
+            return await _complete_practice(db, session)
+
+        feedback = "Correct!"
+        _add_exchange(session, "tutor", feedback)
+        await db.commit()
+        return StepResponse(
+            action="advance",
+            feedback=feedback,
+            current_step=session.current_step,
+            total_steps=session.total_steps,
+            is_correct=True,
+        )
+
+    # 3. Neither matched — wrong answer
     feedback = "That doesn't match any step. Try again."
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -257,6 +342,7 @@ async def respond_to_step(
     session: Session,
     student_response: str,
     request_hint: bool = False,
+    request_show_step: bool = False,
 ) -> StepResponse | AsyncIterator[str]:
     """Process a student's response or hint request for the current step.
 
@@ -281,10 +367,10 @@ async def respond_to_step(
     step_key = str(session.current_step)
     tracking = dict(session.step_tracking)
     if step_key not in tracking:
-        tracking[step_key] = {"attempts": 0, "hints_used": 0, "explain_back": False}
+        tracking[step_key] = {"attempts": 0, "hints_used": 0, "explain_back": False, "shown": False}
     step_info = tracking[step_key]
 
-    # Handle hint request
+    # Handle hint request (practice mode only now; learn mode uses show_step)
     if request_hint:
         hint_level = min(step_info["hints_used"], MAX_HINTS_PER_STEP - 1)
         hint = _generate_hint(step, hint_level)
@@ -306,63 +392,65 @@ async def respond_to_step(
     if session.mode == "practice":
         return await _respond_practice_mode(db, session, student_response)
 
+    # --- Learn mode: conversational tutoring ---
+
+    # Handle "Show next step" request
+    if request_show_step:
+        step_info["shown"] = True
+        tracking[step_key] = step_info
+        session.step_tracking = tracking
+        feedback = f"Here's what to do next. Enter the math expression to continue."
+        _add_exchange(session, "tutor", f"Show step: {step.description}")
+        await db.commit()
+        return StepResponse(
+            action="show_step",
+            feedback=feedback,
+            current_step=session.current_step,
+            total_steps=session.total_steps,
+            step_description=step.description,
+        )
+
     # Record the student's response
     _add_exchange(session, "student", student_response)
     step_info["attempts"] += 1
 
-    # Step-size validation
-    steps_list = [
-        Step(s["description"], s["operation"], s["before"], s["after"])
-        for s in session.steps
-    ]
-    is_valid, skip_msg = _validate_step_size(student_response, steps_list, session.current_step)
-    if not is_valid:
-        _add_exchange(session, "tutor", skip_msg or "")
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-        await db.commit()
-        return StepResponse(
-            action="skip_rejected",
-            feedback=skip_msg or "Please show your work step by step.",
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-        )
-
-    # Check if too many attempts — scaffold down
-    if step_info["attempts"] > MAX_ATTEMPTS_PER_STEP:
-        feedback = (
-            f"Let me break this down further. {step.description}: "
-            f"Starting from {step.before}, apply {step.operation} to get closer to the answer."
-        )
-        _add_exchange(session, "tutor", feedback)
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-        await db.commit()
-        return StepResponse(
-            action="scaffolded",
-            feedback=feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-        )
-
-    # Evaluate the response using LLM
-    eval_result = await evaluate(
+    # Call converse() for LLM evaluation
+    converse_result = await converse(
         problem=session.problem,
-        step_before=step.before,
-        step_operation=step.operation,
-        step_after=step.after,
-        student_response=student_response,
+        steps=session.steps,
+        exchanges=session.exchanges,
+        student_input=student_response,
         session_id=str(session.id),
     )
 
-    if eval_result.is_correct:
-        # Explain-back only after hints were used (not on clean correct answers)
-        if step_info["hints_used"] > 0 and not step_info["explain_back"]:
+    # Question or unclear → return conversation feedback
+    if converse_result.input_type in ("question", "unclear"):
+        _add_exchange(session, "tutor", converse_result.feedback)
+        tracking[step_key] = step_info
+        session.step_tracking = tracking
+        await db.commit()
+        return StepResponse(
+            action="conversation",
+            feedback=converse_result.feedback,
+            current_step=session.current_step,
+            total_steps=session.total_steps,
+        )
+
+    # Answer attempt
+    if converse_result.is_correct and converse_result.steps_completed is not None:
+        new_step = converse_result.steps_completed + 1
+
+        # If step was shown, trigger explain-back before advancing
+        if step_info.get("shown") and not step_info["explain_back"]:
             step_info["explain_back"] = True
             tracking[step_key] = step_info
             session.step_tracking = tracking
-            feedback = f"{eval_result.feedback} Now explain this step in your own words."
+            feedback = f"{converse_result.feedback} Now explain this step in your own words."
             _add_exchange(session, "tutor", feedback)
+            # Store pending advance so explain-back knows where to go
+            step_info["pending_advance_to"] = new_step
+            tracking[step_key] = step_info
+            session.step_tracking = tracking
             await db.commit()
             return StepResponse(
                 action="explain_back",
@@ -372,8 +460,8 @@ async def respond_to_step(
                 is_correct=True,
             )
 
-        # Advance to next step
-        session.current_step += 1
+        # Advance
+        session.current_step = new_step
         tracking[step_key] = step_info
         session.step_tracking = tracking
 
@@ -383,7 +471,7 @@ async def respond_to_step(
                 similar = await generate_similar_word_problem(session.problem)
             else:
                 similar = MathEngine.generate_similar(session.problem)
-            feedback = f"{eval_result.feedback} Problem complete!"
+            feedback = f"{converse_result.feedback} Problem complete!"
             _add_exchange(session, "tutor", feedback)
             await db.commit()
             return StepResponse(
@@ -395,25 +483,25 @@ async def respond_to_step(
                 similar_problem=similar,
             )
 
-        _add_exchange(session, "tutor", eval_result.feedback)
+        _add_exchange(session, "tutor", converse_result.feedback)
         await db.commit()
         return StepResponse(
             action="advance",
-            feedback=eval_result.feedback,
+            feedback=converse_result.feedback,
             current_step=session.current_step,
             total_steps=session.total_steps,
             is_correct=True,
         )
 
-    # Wrong answer — stream an explanation
-    _add_exchange(session, "tutor", eval_result.feedback)
+    # Wrong answer
+    _add_exchange(session, "tutor", converse_result.feedback)
     tracking[step_key] = step_info
     session.step_tracking = tracking
     await db.commit()
 
     return StepResponse(
         action="error",
-        feedback=eval_result.feedback,
+        feedback=converse_result.feedback,
         current_step=session.current_step,
         total_steps=session.total_steps,
         is_correct=False,
@@ -428,64 +516,83 @@ async def handle_explain_back(
     db: AsyncSession,
     session: Session,
     student_explanation: str,
+    skip_explain_back: bool = False,
 ) -> StepResponse:
-    """Process a student's explain-back response."""
+    """Process a student's explain-back response.
+
+    If skip_explain_back is True, skip the probe and just advance.
+    """
     if session.current_step >= session.total_steps:
         raise SessionError("All steps completed")
 
-    step_data = session.steps[session.current_step]
-    step_desc = f"{step_data['description']}: {step_data['before']} → {step_data['after']}"
+    step_key = str(session.current_step)
+    tracking = dict(session.step_tracking)
+    step_info = tracking.get(step_key, {})
 
-    _add_exchange(session, "student", student_explanation)
+    should_advance = skip_explain_back
 
-    probe_result = await probe(
-        step=step_desc,
-        student_explanation=student_explanation,
-        session_id=str(session.id),
-    )
+    if not skip_explain_back:
+        step_data = session.steps[session.current_step]
+        step_desc = f"{step_data['description']}: {step_data['before']} → {step_data['after']}"
 
-    if probe_result.understanding == "clear":
-        # Advance
-        session.current_step += 1
+        _add_exchange(session, "student", student_explanation)
 
-        if session.current_step >= session.total_steps:
-            session.status = "completed"
-            if session.problem_type == "word_problem":
-                similar = await generate_similar_word_problem(session.problem)
-            else:
-                similar = MathEngine.generate_similar(session.problem)
-            feedback = "Great explanation! Problem complete!"
+        probe_result = await probe(
+            step=step_desc,
+            student_explanation=student_explanation,
+            session_id=str(session.id),
+        )
+        should_advance = probe_result.understanding == "clear"
+
+        if not should_advance:
+            # Partial or wrong — ask follow-up
+            feedback = probe_result.follow_up or "Can you explain why we do this step?"
             _add_exchange(session, "tutor", feedback)
             await db.commit()
             return StepResponse(
-                action="completed",
+                action="explain_back",
                 feedback=feedback,
                 current_step=session.current_step,
                 total_steps=session.total_steps,
-                is_correct=True,
-                similar_problem=similar,
             )
 
-        feedback = "Great explanation! Let's move on to the next step."
+    # Advance — use pending_advance_to if set (from show_step flow)
+    pending = step_info.get("pending_advance_to")
+    if pending is not None:
+        session.current_step = pending
+        step_info.pop("pending_advance_to", None)
+        tracking[step_key] = step_info
+        session.step_tracking = tracking
+    else:
+        session.current_step += 1
+
+    if session.current_step >= session.total_steps:
+        session.status = "completed"
+        if session.problem_type == "word_problem":
+            similar = await generate_similar_word_problem(session.problem)
+        else:
+            similar = MathEngine.generate_similar(session.problem)
+        feedback = "Problem complete!" if skip_explain_back else "Great explanation! Problem complete!"
         _add_exchange(session, "tutor", feedback)
         await db.commit()
         return StepResponse(
-            action="advance",
+            action="completed",
             feedback=feedback,
             current_step=session.current_step,
             total_steps=session.total_steps,
             is_correct=True,
+            similar_problem=similar,
         )
 
-    # Partial or wrong — ask follow-up
-    feedback = probe_result.follow_up or "Can you explain why we do this step?"
+    feedback = "Let's move on." if skip_explain_back else "Great explanation! Let's move on to the next step."
     _add_exchange(session, "tutor", feedback)
     await db.commit()
     return StepResponse(
-        action="explain_back",
+        action="advance",
         feedback=feedback,
         current_step=session.current_step,
         total_steps=session.total_steps,
+        is_correct=True,
     )
 
 

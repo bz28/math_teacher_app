@@ -11,10 +11,12 @@ class CreateSessionRequest(BaseModel):
 class RespondRequest(BaseModel):
     student_response: str
     request_hint: bool = False
+    request_show_step: bool = False
 
 
 class ExplainBackRequest(BaseModel):
-    student_explanation: str
+    student_explanation: str = ""
+    skip_explain_back: bool = False
 
 
 class StepDetail(BaseModel):
@@ -49,3 +51,4 @@ class StepResponseSchema(BaseModel):
     total_steps: int
     is_correct: bool = False
     similar_problem: str | None = None
+    step_description: str | None = None
