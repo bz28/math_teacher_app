@@ -194,7 +194,9 @@ Rules:
 - Accept mathematically equivalent answers (e.g., 2/4 and 1/2 are the same)
 - For correct answers that match multiple steps, set steps_completed to the furthest matching step index
 - Keep feedback concise (1-3 sentences)
-- For CORRECT answers: just confirm ("Correct!", "Nice work!"). Do NOT ask the student to explain the step or prompt them for the next step — the app handles navigation automatically."""
+- For CORRECT answers: just confirm ("Correct!", "Nice work!"). Do NOT ask
+  the student to explain the step or prompt for the next step — the app
+  handles navigation automatically."""
 
 PROBER_PROMPT = """You are a math tutor assessing whether a student truly understands a step.
 
