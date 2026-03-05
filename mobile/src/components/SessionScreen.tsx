@@ -25,12 +25,24 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     error,
     submitAnswer,
     requestHint,
+    requestShowStep,
+    skipExplainBack,
     submitExplanation,
     startSession,
     reset,
   } = useSessionStore();
 
-  if (!session) return null;
+  if (!session) {
+    if (phase === "loading") {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4A90D9" />
+          <Text style={styles.loadingText}>Generating problem...</Text>
+        </View>
+      );
+    }
+    return null;
+  }
 
   const isExplainBack = phase === "explain_back";
   const isCompleted = phase === "completed";
@@ -75,9 +87,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>
-            {isPractice
-              ? "Practice"
-              : `Step ${Math.min(session.current_step + 1, session.total_steps)} of ${session.total_steps}`}
+            {isPractice ? "Practice" : "Learn"}
           </Text>
         </View>
         <View style={styles.problemCard}>
@@ -133,14 +143,23 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               {isPractice
                 ? "Show your work"
                 : session.current_step === 0
-                  ? "What would you do first?"
-                  : "What's your next step?"}
+                  ? "How would you solve this?"
+                  : "Type an answer or ask a question..."}
             </Text>
           </>
         )}
 
+        {/* Step description card (after show_step) */}
+        {lastResponse?.action === "show_step" && lastResponse.step_description && (
+          <View style={styles.stepDescCard}>
+            <Text style={styles.stepDescLabel}>Next step</Text>
+            <Text style={styles.stepDescText}>{lastResponse.step_description}</Text>
+            <Text style={styles.stepDescHint}>Enter the math expression to continue</Text>
+          </View>
+        )}
+
         {/* Feedback */}
-        {lastResponse && (
+        {lastResponse && lastResponse.action !== "show_step" && (
           <View
             style={[
               styles.feedback,
@@ -229,13 +248,31 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 )}
               </TouchableOpacity>
 
-              {!isExplainBack && (
+              {!isExplainBack && isPractice && (
                 <TouchableOpacity
                   style={[styles.button, styles.hintButton]}
                   onPress={requestHint}
                   disabled={phase === "thinking"}
                 >
                   <Text style={styles.hintText}>Hint</Text>
+                </TouchableOpacity>
+              )}
+              {!isExplainBack && !isPractice && (
+                <TouchableOpacity
+                  style={[styles.button, styles.hintButton]}
+                  onPress={requestShowStep}
+                  disabled={phase === "thinking"}
+                >
+                  <Text style={styles.hintText}>Show next step</Text>
+                </TouchableOpacity>
+              )}
+              {isExplainBack && !isPractice && (
+                <TouchableOpacity
+                  style={[styles.button, styles.hintButton]}
+                  onPress={skipExplainBack}
+                  disabled={phase === "thinking"}
+                >
+                  <Text style={styles.hintText}>Skip</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -247,6 +284,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: { marginTop: 12, fontSize: 16, color: "#666" },
   container: { flex: 1, backgroundColor: "#fff" },
   stickyHeader: { paddingHorizontal: 20, paddingTop: 60, backgroundColor: "#fff" },
   content: { padding: 20, paddingTop: 8 },
@@ -302,6 +346,18 @@ const styles = StyleSheet.create({
   historyLabel: { fontSize: 11, fontWeight: "600", color: "#999" },
   historyDesc: { fontSize: 14, color: "#666" },
   historyResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
+  // Step description card
+  stepDescCard: {
+    backgroundColor: "#e3f2fd",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#90caf9",
+  },
+  stepDescLabel: { fontSize: 12, fontWeight: "600", color: "#1565c0", marginBottom: 4 },
+  stepDescText: { fontSize: 16, fontWeight: "600", color: "#1a237e", marginBottom: 8 },
+  stepDescHint: { fontSize: 13, color: "#42a5f5", fontStyle: "italic" },
   // Feedback
   feedback: { borderRadius: 8, padding: 12, marginBottom: 12 },
   feedbackCorrect: { backgroundColor: "#e8f5e9" },

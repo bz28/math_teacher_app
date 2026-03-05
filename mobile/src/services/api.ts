@@ -37,6 +37,7 @@ export interface StepResponse {
   total_steps: number;
   is_correct: boolean;
   similar_problem: string | null;
+  step_description: string | null;
 }
 
 let _authToken: string | null = null;
@@ -79,15 +80,26 @@ export const createSession = (problem: string, mode: string = "learn") =>
 export const getSession = (id: string) =>
   apiGet<SessionData>(`/session/${id}`);
 
-export const respondToStep = (id: string, studentResponse: string, requestHint = false) =>
+export const respondToStep = (
+  id: string,
+  studentResponse: string,
+  requestHint = false,
+  requestShowStep = false,
+) =>
   apiPost<StepResponse>(`/session/${id}/respond`, {
     student_response: studentResponse,
     request_hint: requestHint,
+    request_show_step: requestShowStep,
   });
 
-export const submitExplainBack = (id: string, explanation: string) =>
+export const submitExplainBack = (
+  id: string,
+  explanation: string,
+  skipExplainBack = false,
+) =>
   apiPost<StepResponse>(`/session/${id}/explain-back`, {
     student_explanation: explanation,
+    skip_explain_back: skipExplainBack,
   });
 
 // Auth API
