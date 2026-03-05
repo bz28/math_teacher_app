@@ -1,8 +1,16 @@
 """LLM Tutor Layer: evaluator, explainer, and prober modes.
 
 Each mode uses the same Claude model with different system prompts.
-All responses are streamed. Includes retry with exponential backoff,
-circuit breaker, and per-call logging with token/cost tracking.
+Streaming is used only for explain(); all JSON calls use non-streaming.
+Includes retry with exponential backoff, circuit breaker, prompt caching,
+and per-call logging with token/cost tracking.
+
+Cost optimizations:
+- Haiku for classification/eval tasks (converse, probe, evaluate, practice_eval)
+- Sonnet for reasoning-heavy tasks (explain)
+- Prompt caching via cache_control on static system prompts
+- Non-streaming for JSON responses (lower overhead than stream-then-collect)
+- Trimmed conversation history (last 6 exchanges instead of 10)
 """
 
 import asyncio
@@ -19,11 +27,32 @@ from api.config import settings
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL_SONNET = "claude-sonnet-4-20250514"
+MODEL_HAIKU = "claude-haiku-4-5-20251001"
+# Haiku for simple classification/eval; Sonnet for reasoning-heavy tasks
+MODEL_CLASSIFY = MODEL_HAIKU
+MODEL_REASON = MODEL_SONNET
 MAX_RETRIES = 3
 BASE_TIMEOUT = 10.0  # seconds
-COST_PER_INPUT_TOKEN = 3.0 / 1_000_000  # $3 per 1M input tokens (Sonnet)
-COST_PER_OUTPUT_TOKEN = 15.0 / 1_000_000  # $15 per 1M output tokens
+# Sonnet pricing
+COST_PER_INPUT_TOKEN_SONNET = 3.0 / 1_000_000
+COST_PER_OUTPUT_TOKEN_SONNET = 15.0 / 1_000_000
+# Haiku pricing
+COST_PER_INPUT_TOKEN_HAIKU = 0.80 / 1_000_000
+COST_PER_OUTPUT_TOKEN_HAIKU = 4.0 / 1_000_000
+
+_PRICING = {
+    MODEL_SONNET: (COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET),
+    MODEL_HAIKU: (COST_PER_INPUT_TOKEN_HAIKU, COST_PER_OUTPUT_TOKEN_HAIKU),
+}
+
+# Backward-compat aliases for existing imports/tests
+MODEL = MODEL_SONNET
+COST_PER_INPUT_TOKEN = COST_PER_INPUT_TOKEN_SONNET
+COST_PER_OUTPUT_TOKEN = COST_PER_OUTPUT_TOKEN_SONNET
+
+# Max recent exchanges sent to converse() — trimmed from 10 to 6
+CONVERSE_HISTORY_LIMIT = 6
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +292,73 @@ class LLMCallLog:
 
 
 # ---------------------------------------------------------------------------
-# Core LLM call with retry + streaming
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+def _log_llm_call(
+    model: str,
+    mode: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: float,
+    session_id: str | None,
+    user_id: str | None,
+) -> None:
+    """Log an LLM call and track cost using model-specific pricing."""
+    input_price, output_price = _PRICING.get(
+        model, (COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET)
+    )
+    cost = (input_tokens * input_price) + (output_tokens * output_price)
+    _cost_tracker.add(cost)
+
+    log = LLMCallLog(
+        mode=mode,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=round(cost, 6),
+        latency_ms=latency_ms,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    logger.info(
+        "LLM call: mode=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
+        log.mode, model, log.input_tokens, log.output_tokens,
+        log.cost_usd, log.latency_ms,
+        extra={
+            "llm_mode": log.mode,
+            "model": model,
+            "input_tokens": log.input_tokens,
+            "output_tokens": log.output_tokens,
+            "cost_usd": log.cost_usd,
+            "latency_ms": log.latency_ms,
+            "session_id": log.session_id,
+            "user_id": log.user_id,
+        },
+    )
+
+
+def _system_with_cache(
+    prompt: str,
+) -> list[anthropic.types.TextBlockParam]:
+    """Wrap a system prompt with cache_control for Anthropic prompt caching."""
+    return [
+        {"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}},
+    ]
+
+
+def _strip_markdown_fencing(text: str) -> str:
+    """Strip markdown code fencing from LLM response text."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Core LLM calls
 # ---------------------------------------------------------------------------
 
 async def _call_claude_stream(
@@ -272,11 +367,17 @@ async def _call_claude_stream(
     mode: str,
     session_id: str | None = None,
     user_id: str | None = None,
+    model: str | None = None,
 ) -> AsyncIterator[str]:
-    """Stream a Claude response with retry and circuit breaker."""
+    """Stream a Claude response with retry and circuit breaker.
+
+    Used only for streaming responses (explain). For JSON responses,
+    use _call_claude_json which is non-streaming and lower-overhead.
+    """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
 
+    use_model = model or MODEL_REASON
     client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
     last_error: Exception | None = None
 
@@ -284,47 +385,23 @@ async def _call_claude_stream(
         start = time.monotonic()
         try:
             async with client.messages.stream(
-                model=MODEL,
+                model=use_model,
                 max_tokens=512,
-                system=system_prompt,
+                system=_system_with_cache(system_prompt),
                 messages=[{"role": "user", "content": user_message}],
             ) as stream:
                 async for text in stream.text_stream:
                     yield text
 
-                # Log after stream completes
                 response = await stream.get_final_message()
                 latency_ms = round((time.monotonic() - start) * 1000, 2)
-                input_tokens = response.usage.input_tokens
-                output_tokens = response.usage.output_tokens
-                cost = (input_tokens * COST_PER_INPUT_TOKEN) + (output_tokens * COST_PER_OUTPUT_TOKEN)
-                _cost_tracker.add(cost)
+                _log_llm_call(
+                    use_model, mode,
+                    response.usage.input_tokens, response.usage.output_tokens,
+                    latency_ms, session_id, user_id,
+                )
                 _circuit.record_success()
-
-                log = LLMCallLog(
-                    mode=mode,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    cost_usd=round(cost, 6),
-                    latency_ms=latency_ms,
-                    session_id=session_id,
-                    user_id=user_id,
-                )
-                logger.info(
-                    "LLM call: mode=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
-                    log.mode, log.input_tokens, log.output_tokens,
-                    log.cost_usd, log.latency_ms,
-                    extra={
-                        "llm_mode": log.mode,
-                        "input_tokens": log.input_tokens,
-                        "output_tokens": log.output_tokens,
-                        "cost_usd": log.cost_usd,
-                        "latency_ms": log.latency_ms,
-                        "session_id": log.session_id,
-                        "user_id": log.user_id,
-                    },
-                )
-                return  # Success — exit retry loop
+                return
 
         except anthropic.APITimeoutError as e:
             last_error = e
@@ -335,7 +412,6 @@ async def _call_claude_stream(
             _circuit.record_failure()
             logger.warning("Claude API error (attempt %d): %s", attempt + 1, e)
 
-        # Exponential backoff
         if attempt < MAX_RETRIES - 1:
             await asyncio.sleep(2**attempt)
 
@@ -348,26 +424,61 @@ async def _call_claude_json(
     mode: str,
     session_id: str | None = None,
     user_id: str | None = None,
+    model: str | None = None,
 ) -> dict[str, object]:
-    """Call Claude and parse the full response as JSON (non-streaming)."""
-    chunks: list[str] = []
-    async for chunk in _call_claude_stream(system_prompt, user_message, mode, session_id, user_id):
-        chunks.append(chunk)
+    """Call Claude non-streaming and parse the response as JSON.
 
-    text = "".join(chunks).strip()
-    # Strip markdown fencing
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+    Uses messages.create() directly instead of streaming, which is
+    faster and lower-overhead for structured JSON responses.
+    Defaults to MODEL_CLASSIFY (Haiku) for cost efficiency.
+    """
+    if not _circuit.allow_request():
+        raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
 
-    result: dict[str, object] = json.loads(text)
-    return result
+    use_model = model or MODEL_CLASSIFY
+    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+    last_error: Exception | None = None
+
+    for attempt in range(MAX_RETRIES):
+        start = time.monotonic()
+        try:
+            response = await client.messages.create(
+                model=use_model,
+                max_tokens=512,
+                system=_system_with_cache(system_prompt),
+                messages=[{"role": "user", "content": user_message}],
+            )
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
+            _log_llm_call(
+                use_model, mode,
+                response.usage.input_tokens, response.usage.output_tokens,
+                latency_ms, session_id, user_id,
+            )
+            _circuit.record_success()
+
+            first_block = response.content[0]
+            if not hasattr(first_block, "text"):
+                raise ValueError("Unexpected response type from Claude")
+            text = _strip_markdown_fencing(first_block.text)
+            result: dict[str, object] = json.loads(text)
+            return result
+
+        except (anthropic.APITimeoutError, anthropic.APIError) as e:
+            last_error = e
+            _circuit.record_failure()
+            logger.warning("Claude API error (attempt %d): %s", attempt + 1, e)
+        except json.JSONDecodeError as e:
+            last_error = e
+            logger.warning("JSON parse error (attempt %d): %s", attempt + 1, e)
+
+        if attempt < MAX_RETRIES - 1:
+            await asyncio.sleep(2**attempt)
+
+    raise RuntimeError(f"Claude JSON call failed after {MAX_RETRIES} retries: {last_error}")
 
 
 # ---------------------------------------------------------------------------
-# Public API: three tutor modes
+# Public API: tutor modes
 # ---------------------------------------------------------------------------
 
 async def evaluate(
@@ -398,13 +509,19 @@ async def explain(
     session_id: str | None = None,
     user_id: str | None = None,
 ) -> AsyncIterator[str]:
-    """Stream an explanation for a step (optionally addressing an error)."""
+    """Stream an explanation for a step (optionally addressing an error).
+
+    Uses Sonnet (MODEL_REASON) since explanations require nuanced reasoning.
+    """
     parts = [f"Step: {step}", f"Grade level: {grade_level}"]
     if error:
         parts.append(f"Student's error: {error}")
     prompt = "\n".join(parts)
 
-    async for chunk in _call_claude_stream(EXPLAINER_PROMPT, prompt, "explainer", session_id, user_id):
+    async for chunk in _call_claude_stream(
+        EXPLAINER_PROMPT, prompt, "explainer", session_id, user_id,
+        model=MODEL_REASON,
+    ):
         yield chunk
 
 
@@ -441,7 +558,7 @@ async def converse(
     )
     history_text = "\n".join(
         f"  {e['role']}: {e['content']}"
-        for e in exchanges[-10:]  # last 10 exchanges
+        for e in exchanges[-CONVERSE_HISTORY_LIMIT:]
     ) if exchanges else "(no prior conversation)"
 
     prompt = (

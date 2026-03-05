@@ -64,7 +64,7 @@ class TestCostTracker:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: evaluate endpoint (mocked Claude)
+# Mock helpers
 # ---------------------------------------------------------------------------
 
 
@@ -91,13 +91,37 @@ def _mock_stream_context(response_text: str, input_tokens: int = 50, output_toke
     return mock_ctx
 
 
+def _mock_create_response(
+    response_text: str, input_tokens: int = 50, output_tokens: int = 30,
+) -> MagicMock:
+    """Create a mock for client.messages.create() (non-streaming JSON calls)."""
+    mock_content = MagicMock()
+    mock_content.text = response_text
+    # Make isinstance(block, TextBlock) work in production code
+    mock_content.__class__ = type("TextBlock", (), {})
+
+    mock_response = MagicMock()
+    mock_response.content = [mock_content]
+    mock_response.usage.input_tokens = input_tokens
+    mock_response.usage.output_tokens = output_tokens
+
+    return mock_response
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: evaluate endpoint (mocked Claude — non-streaming JSON)
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.anyio
 async def test_evaluate_correct(client: AsyncClient) -> None:
     response_json = json.dumps({"is_correct": True, "feedback": "Great job!"})
 
     with patch("api.core.tutor.anthropic.AsyncAnthropic") as mock_cls:
         mock_instance = MagicMock()
-        mock_instance.messages.stream = MagicMock(return_value=_mock_stream_context(response_json))
+        mock_instance.messages.create = AsyncMock(
+            return_value=_mock_create_response(response_json),
+        )
         mock_cls.return_value = mock_instance
 
         resp = await client.post("/v1/tutor/evaluate", json={
@@ -119,7 +143,9 @@ async def test_evaluate_incorrect(client: AsyncClient) -> None:
 
     with patch("api.core.tutor.anthropic.AsyncAnthropic") as mock_cls:
         mock_instance = MagicMock()
-        mock_instance.messages.stream = MagicMock(return_value=_mock_stream_context(response_json))
+        mock_instance.messages.create = AsyncMock(
+            return_value=_mock_create_response(response_json),
+        )
         mock_cls.return_value = mock_instance
 
         resp = await client.post("/v1/tutor/evaluate", json={
@@ -177,7 +203,7 @@ async def test_explain_with_error(client: AsyncClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: probe endpoint (mocked Claude)
+# Unit tests: probe endpoint (mocked Claude — non-streaming JSON)
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +213,9 @@ async def test_probe_clear(client: AsyncClient) -> None:
 
     with patch("api.core.tutor.anthropic.AsyncAnthropic") as mock_cls:
         mock_instance = MagicMock()
-        mock_instance.messages.stream = MagicMock(return_value=_mock_stream_context(response_json))
+        mock_instance.messages.create = AsyncMock(
+            return_value=_mock_create_response(response_json),
+        )
         mock_cls.return_value = mock_instance
 
         resp = await client.post("/v1/tutor/probe", json={
@@ -209,7 +237,9 @@ async def test_probe_partial(client: AsyncClient) -> None:
 
     with patch("api.core.tutor.anthropic.AsyncAnthropic") as mock_cls:
         mock_instance = MagicMock()
-        mock_instance.messages.stream = MagicMock(return_value=_mock_stream_context(response_json))
+        mock_instance.messages.create = AsyncMock(
+            return_value=_mock_create_response(response_json),
+        )
         mock_cls.return_value = mock_instance
 
         resp = await client.post("/v1/tutor/probe", json={
