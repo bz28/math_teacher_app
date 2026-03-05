@@ -194,6 +194,32 @@ class StepResponse:
     step_description: str | None = None
 
 
+async def _converse_completed(
+    db: AsyncSession,
+    session: Session,
+    student_response: str,
+) -> StepResponse:
+    """Allow the student to keep asking questions after completing a problem."""
+    _add_exchange(session, "student", student_response)
+
+    converse_result = await converse(
+        problem=session.problem,
+        steps=session.steps,
+        exchanges=session.exchanges,
+        student_input=student_response,
+        session_id=str(session.id),
+    )
+
+    _add_exchange(session, "tutor", converse_result.feedback)
+    await db.commit()
+    return StepResponse(
+        action="conversation",
+        feedback=converse_result.feedback,
+        current_step=session.current_step,
+        total_steps=session.total_steps,
+    )
+
+
 async def _complete_practice(
     db: AsyncSession, session: Session,
 ) -> StepResponse:
@@ -311,10 +337,13 @@ async def respond_to_step(
     Returns a StepResponse for JSON actions, or an AsyncIterator[str] for
     streamed explanations.
     """
-    if session.status != "active":
+    if session.status not in ("active", "completed"):
         raise SessionError("Session is not active")
 
+    # Allow conversation on completed sessions ("I still have questions")
     if session.current_step >= session.total_steps:
+        if student_response and not request_hint and not request_show_step:
+            return await _converse_completed(db, session, student_response)
         raise SessionError("All steps completed")
 
     step_data = session.steps[session.current_step]
@@ -402,26 +431,6 @@ async def respond_to_step(
     if converse_result.is_correct and converse_result.steps_completed is not None:
         new_step = converse_result.steps_completed + 1
 
-        # If step was shown, trigger explain-back before advancing
-        if step_info.get("shown") and not step_info["explain_back"]:
-            step_info["explain_back"] = True
-            tracking[step_key] = step_info
-            session.step_tracking = tracking
-            feedback = f"{converse_result.feedback} Now explain this step in your own words."
-            _add_exchange(session, "tutor", feedback)
-            # Store pending advance so explain-back knows where to go
-            step_info["pending_advance_to"] = new_step
-            tracking[step_key] = step_info
-            session.step_tracking = tracking
-            await db.commit()
-            return StepResponse(
-                action="explain_back",
-                feedback=feedback,
-                current_step=session.current_step,
-                total_steps=session.total_steps,
-                is_correct=True,
-            )
-
         # Advance
         session.current_step = new_step
         tracking[step_key] = step_info
@@ -478,55 +487,36 @@ async def handle_explain_back(
     db: AsyncSession,
     session: Session,
     student_explanation: str,
-    skip_explain_back: bool = False,
 ) -> StepResponse:
-    """Process a student's explain-back response.
-
-    If skip_explain_back is True, skip the probe and just advance.
-    """
+    """Process a student's explain-back response."""
     if session.current_step >= session.total_steps:
         raise SessionError("All steps completed")
 
-    step_key = str(session.current_step)
-    tracking = dict(session.step_tracking)
-    step_info = tracking.get(step_key, {})
+    step_data = session.steps[session.current_step]
+    step_desc = f"{step_data['description']}: {step_data['before']} → {step_data['after']}"
 
-    should_advance = skip_explain_back
+    _add_exchange(session, "student", student_explanation)
 
-    if not skip_explain_back:
-        step_data = session.steps[session.current_step]
-        step_desc = f"{step_data['description']}: {step_data['before']} → {step_data['after']}"
+    probe_result = await probe(
+        step=step_desc,
+        student_explanation=student_explanation,
+        session_id=str(session.id),
+    )
 
-        _add_exchange(session, "student", student_explanation)
-
-        probe_result = await probe(
-            step=step_desc,
-            student_explanation=student_explanation,
-            session_id=str(session.id),
+    if probe_result.understanding != "clear":
+        # Partial or wrong — ask follow-up
+        feedback = probe_result.follow_up or "Can you explain why we do this step?"
+        _add_exchange(session, "tutor", feedback)
+        await db.commit()
+        return StepResponse(
+            action="explain_back",
+            feedback=feedback,
+            current_step=session.current_step,
+            total_steps=session.total_steps,
         )
-        should_advance = probe_result.understanding == "clear"
 
-        if not should_advance:
-            # Partial or wrong — ask follow-up
-            feedback = probe_result.follow_up or "Can you explain why we do this step?"
-            _add_exchange(session, "tutor", feedback)
-            await db.commit()
-            return StepResponse(
-                action="explain_back",
-                feedback=feedback,
-                current_step=session.current_step,
-                total_steps=session.total_steps,
-            )
-
-    # Advance — use pending_advance_to if set (from show_step flow)
-    pending = step_info.get("pending_advance_to")
-    if pending is not None:
-        session.current_step = pending
-        step_info.pop("pending_advance_to", None)
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-    else:
-        session.current_step += 1
+    # Advance
+    session.current_step += 1
 
     if session.current_step >= session.total_steps:
         session.status = "completed"
@@ -534,7 +524,7 @@ async def handle_explain_back(
             similar = await generate_similar_word_problem(session.problem)
         else:
             similar = MathEngine.generate_similar(session.problem)
-        feedback = "Problem complete!" if skip_explain_back else "Great explanation! Problem complete!"
+        feedback = "Great explanation! Problem complete!"
         _add_exchange(session, "tutor", feedback)
         await db.commit()
         return StepResponse(
@@ -546,7 +536,7 @@ async def handle_explain_back(
             similar_problem=similar,
         )
 
-    feedback = "Let's move on." if skip_explain_back else "Great explanation! Let's move on to the next step."
+    feedback = "Great explanation! Let's move on to the next step."
     _add_exchange(session, "tutor", feedback)
     await db.commit()
     return StepResponse(

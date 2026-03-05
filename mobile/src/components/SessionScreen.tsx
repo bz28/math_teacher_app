@@ -26,9 +26,10 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     submitAnswer,
     requestHint,
     requestShowStep,
-    skipExplainBack,
     submitExplanation,
     switchToLearnMode,
+    continueAsking,
+    tryPracticeProblem,
     startSession,
     reset,
   } = useSessionStore();
@@ -200,7 +201,23 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 ))}
               </View>
             )}
-            {lastResponse?.similar_problem && (
+            {!isPractice && lastResponse?.similar_problem && (
+              <TouchableOpacity
+                style={styles.similarButton}
+                onPress={tryPracticeProblem}
+              >
+                <Text style={styles.similarText}>Try a practice problem</Text>
+              </TouchableOpacity>
+            )}
+            {!isPractice && (
+              <TouchableOpacity
+                style={styles.questionsButton}
+                onPress={continueAsking}
+              >
+                <Text style={styles.questionsText}>I still have questions</Text>
+              </TouchableOpacity>
+            )}
+            {isPractice && lastResponse?.similar_problem && (
               <TouchableOpacity
                 style={styles.similarButton}
                 onPress={() => handleSimilarProblem(lastResponse.similar_problem!)}
@@ -278,14 +295,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                   disabled={phase === "thinking"}
                 >
                   <Text style={styles.hintText}>Show next step</Text>
-                </TouchableOpacity>
-              )}
-              {isExplainBack && !isPractice && (
-                <TouchableOpacity
-                  style={[styles.button, styles.hintButton]}
-                  onPress={skipExplainBack}
-                >
-                  <Text style={styles.hintText}>Skip</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -437,6 +446,17 @@ const styles = StyleSheet.create({
   submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   hintButton: { backgroundColor: "#fff3e0" },
   hintText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
+  // I still have questions
+  questionsButton: {
+    backgroundColor: "#fff3e0",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ffcc80",
+  },
+  questionsText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
   // Switch to Learn Mode
   switchModeButton: {
     backgroundColor: "#e3f2fd",
