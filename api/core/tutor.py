@@ -447,7 +447,7 @@ async def converse(
     return ConverseResult(
         input_type=str(data.get("input_type", "unclear")),
         is_correct=bool(data.get("is_correct", False)),
-        steps_completed=int(data["steps_completed"]) if data.get("steps_completed") is not None else None,
+        steps_completed=int(str(data["steps_completed"])) if data.get("steps_completed") is not None else None,
         feedback=str(data.get("feedback", "")),
     )
 
