@@ -155,6 +155,45 @@ Rules:
 - Never give away the full answer — guide the student toward understanding
 - Use standard math notation (e.g., x^2 not x²)"""
 
+CONVERSATIONAL_TUTOR_PROMPT = """You are a math tutor having a conversation with a student solving a problem step by step.
+
+You will receive:
+- The problem being solved
+- The full list of solution steps (as an "answer key")
+- The conversation history so far
+- The student's latest input
+
+Classify the student's input and respond accordingly:
+
+1. **question**: The student is asking a question or requesting guidance.
+   - Give a helpful hint WITHOUT revealing the answer.
+   - Set is_correct to false, steps_completed to null.
+
+2. **answer**: The student is attempting to give a mathematical answer.
+   - Compare against the solution steps. Accept mathematically equivalent forms.
+   - If correct, set is_correct to true, steps_completed to the index (0-based) of the furthest step they've completed.
+   - If wrong, set is_correct to false, steps_completed to null, and give encouraging feedback.
+
+3. **unclear**: The input doesn't clearly fit either category.
+   - Ask the student to clarify.
+   - Set is_correct to false, steps_completed to null.
+
+Respond with ONLY valid JSON:
+{
+  "input_type": "question" | "answer" | "unclear",
+  "is_correct": true/false,
+  "steps_completed": <int or null>,
+  "feedback": "Your response to the student"
+}
+
+Rules:
+- NEVER reveal the final answer
+- NEVER reveal the exact result of a step the student hasn't completed
+- Be encouraging and guide the student toward understanding
+- Accept mathematically equivalent answers (e.g., 2/4 and 1/2 are the same)
+- For correct answers that match multiple steps, set steps_completed to the furthest matching step index
+- Keep feedback concise (1-3 sentences)"""
+
 PROBER_PROMPT = """You are a math tutor assessing whether a student truly understands a step.
 
 Given:
@@ -185,6 +224,14 @@ Rules:
 @dataclass
 class EvalResult:
     is_correct: bool
+    feedback: str
+
+
+@dataclass
+class ConverseResult:
+    input_type: str  # "question" | "answer" | "unclear"
+    is_correct: bool
+    steps_completed: int | None
     feedback: str
 
 
@@ -366,6 +413,41 @@ async def probe(
     return ProbeResult(
         understanding=str(data["understanding"]),
         follow_up=str(data["follow_up"]) if data.get("follow_up") else None,
+    )
+
+
+async def converse(
+    problem: str,
+    steps: list[dict[str, str]],
+    exchanges: list[dict[str, str]],
+    student_input: str,
+    session_id: str | None = None,
+    user_id: str | None = None,
+) -> ConverseResult:
+    """Evaluate a student's free-form input against the full problem context."""
+    steps_text = "\n".join(
+        f"  Step {i}: {s['description']} | {s['before']} → {s['after']}"
+        for i, s in enumerate(steps)
+    )
+    history_text = "\n".join(
+        f"  {e['role']}: {e['content']}"
+        for e in exchanges[-10:]  # last 10 exchanges
+    ) if exchanges else "(no prior conversation)"
+
+    prompt = (
+        f"Problem: {problem}\n\n"
+        f"Solution steps (answer key):\n{steps_text}\n\n"
+        f"Conversation so far:\n{history_text}\n\n"
+        f"Student's latest input: {student_input}"
+    )
+    data = await _call_claude_json(
+        CONVERSATIONAL_TUTOR_PROMPT, prompt, "converse", session_id, user_id
+    )
+    return ConverseResult(
+        input_type=str(data.get("input_type", "unclear")),
+        is_correct=bool(data.get("is_correct", False)),
+        steps_completed=int(data["steps_completed"]) if data.get("steps_completed") is not None else None,
+        feedback=str(data.get("feedback", "")),
     )
 
 
