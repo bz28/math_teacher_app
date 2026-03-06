@@ -11,9 +11,11 @@ import {
 import { AuthScreen } from "./src/components/AuthScreen";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { SessionScreen } from "./src/components/SessionScreen";
+import { HomeScreen } from "./src/components/HomeScreen";
+import { setAuthToken } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
 
-type Screen = "auth" | "input" | "session";
+type Screen = "auth" | "home" | "input" | "session";
 
 export default function App() {
   const inputRef = useRef<TextInput>(null);
@@ -50,7 +52,22 @@ export default function App() {
   if (screen === "auth") {
     return (
       <>
-        <AuthScreen onAuth={() => setScreen("input")} />
+        <AuthScreen onAuth={() => setScreen("home")} />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  if (screen === "home") {
+    return (
+      <>
+        <HomeScreen
+          onSelect={() => setScreen("input")}
+          onLogout={() => {
+            setAuthToken(null);
+            setScreen("auth");
+          }}
+        />
         <StatusBar style="auto" />
       </>
     );
@@ -72,6 +89,12 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => setScreen("home")}
+      >
+        <Text style={styles.backText}>{"< Home"}</Text>
+      </TouchableOpacity>
       <Text style={styles.title}>Math Teacher</Text>
 
       <TextInput
@@ -171,5 +194,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   goText: { color: "#fff", fontWeight: "600", fontSize: 18 },
+  backButton: { alignSelf: "flex-start", marginBottom: 8 },
+  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
   error: { color: "red", marginTop: 12, textAlign: "center" },
 });
