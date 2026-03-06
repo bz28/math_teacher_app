@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MathKeyboard } from "./MathKeyboard";
+import { PracticeSummary } from "./PracticeSummary";
+import { LearnSummary } from "./LearnSummary";
 import { useSessionStore } from "../stores/session";
 
 interface SessionScreenProps {
@@ -32,13 +34,10 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     submitAnswer,
     submitPracticeAnswer,
     togglePracticeFlag,
-    retryFlaggedProblems,
     learnQueue,
-    startLearnQueue,
     learnSimilarProblem,
     advanceLearnQueue,
     toggleLearnFlag,
-    practiceFlaggedFromLearnQueue,
     requestShowStep,
     submitExplanation,
     switchToLearnMode,
@@ -100,107 +99,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
     // Summary screen
     if (isPracticeSummary) {
-      const correct = results.filter((r) => r.isCorrect).length;
-      const pct = correct / results.length;
-      const encouragement =
-        pct === 1 ? "Perfect score!" :
-        pct >= 0.8 ? "Great job!" :
-        pct >= 0.5 ? "Good effort, keep practicing!" :
-        "Don't give up — review and try again!";
-
-      return (
-        <View style={styles.container}>
-          <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
-            <View style={styles.header}>
-              <TouchableOpacity onPress={handleBack}>
-                <Text style={styles.backText}>{"\u2039 Back"}</Text>
-              </TouchableOpacity>
-              <Text style={styles.title}>Practice Complete</Text>
-            </View>
-          </View>
-          <ScrollView contentContainerStyle={styles.content}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Results</Text>
-              <Text style={styles.summaryScore}>
-                {correct}/{results.length} correct
-              </Text>
-              <Text style={styles.summaryEncouragement}>{encouragement}</Text>
-              <View style={styles.summaryBar}>
-                <View
-                  style={[
-                    styles.summaryBarFill,
-                    { width: `${(correct / results.length) * 100}%` },
-                  ]}
-                />
-              </View>
-            </View>
-
-            {results.map((r, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.resultRow,
-                  r.isCorrect ? styles.resultCorrect : styles.resultWrong,
-                ]}
-              >
-                <Text style={styles.resultIcon}>
-                  {r.isCorrect ? "\u2713" : "\u2717"}
-                </Text>
-                <View style={styles.resultContent}>
-                  <Text style={styles.resultProblem}>{r.problem}</Text>
-                  <Text style={styles.resultAnswer}>
-                    Your answer: {r.userAnswer}
-                  </Text>
-                  {!r.isCorrect && (
-                    <Text style={styles.resultCorrectAnswer}>
-                      Correct: {r.correctAnswer}
-                    </Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={[styles.flagToggle, practiceBatch.flags[i] && styles.flagToggleActive]}
-                  onPress={() => togglePracticeFlag(i)}
-                >
-                  <Text style={[styles.flagToggleText, practiceBatch.flags[i] && styles.flagToggleTextActive]}>
-                    {practiceBatch.flags[i] ? "Flagged" : "Flag"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            {practiceBatch.flags.some(Boolean) && (
-              <TouchableOpacity
-                style={styles.retryButton}
-                onPress={retryFlaggedProblems}
-              >
-                <Text style={styles.retryText}>
-                  Retry {practiceBatch.flags.filter(Boolean).length} Flagged Problem{practiceBatch.flags.filter(Boolean).length > 1 ? "s" : ""}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {practiceBatch.flags.some(Boolean) && (
-              <TouchableOpacity
-                style={styles.learnFlaggedButton}
-                onPress={() => {
-                  const flagged = practiceBatch.problems
-                    .filter((_, i) => practiceBatch.flags[i])
-                    .map((p) => p.question);
-                  startLearnQueue(flagged);
-                }}
-              >
-                <Text style={styles.learnFlaggedText}>
-                  Learn {practiceBatch.flags.filter(Boolean).length} Flagged Problem{practiceBatch.flags.filter(Boolean).length > 1 ? "s" : ""}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
-              <Text style={styles.newProblemText}>New Problem</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      );
+      return <PracticeSummary onBack={onBack} />;
     }
 
     // Answering screen
@@ -290,59 +189,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   // --- Learn summary screen ---
   if (isLearnSummary && learnQueue) {
-    const handleBack = () => { reset(); onBack(); };
-    const flaggedCount = learnQueue.flags.filter(Boolean).length;
-
-    return (
-      <View style={styles.container}>
-        <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack}>
-              <Text style={styles.backText}>{"\u2039 Back"}</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>Learning Complete</Text>
-          </View>
-        </View>
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Problems Reviewed</Text>
-            <Text style={styles.summaryScore}>{learnQueue.problems.length}</Text>
-          </View>
-
-          {learnQueue.problems.map((problem, i) => (
-            <View key={i} style={[styles.resultRow, styles.resultCorrect]}>
-              <Text style={styles.resultIcon}>{"\u2713"}</Text>
-              <View style={styles.resultContent}>
-                <Text style={styles.resultProblem}>{problem}</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.flagToggle, learnQueue.flags[i] && styles.flagToggleActive]}
-                onPress={() => toggleLearnFlag(i)}
-              >
-                <Text style={[styles.flagToggleText, learnQueue.flags[i] && styles.flagToggleTextActive]}>
-                  {learnQueue.flags[i] ? "Flagged" : "Flag"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-
-          {flaggedCount > 0 && (
-            <TouchableOpacity
-              style={styles.learnFlaggedButton}
-              onPress={practiceFlaggedFromLearnQueue}
-            >
-              <Text style={styles.learnFlaggedText}>
-                Practice {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
-            <Text style={styles.newProblemText}>New Problem</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    );
+    return <LearnSummary onBack={onBack} />;
   }
 
   // --- Learn mode ---
@@ -844,42 +691,6 @@ const styles = StyleSheet.create({
   solutionStepNum: { fontSize: 11, fontWeight: "600", color: "#999" },
   solutionDesc: { fontSize: 14, color: "#666" },
   solutionResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
-  // Practice summary
-  summaryCard: {
-    backgroundColor: "#f8f8f8",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  summaryTitle: { fontSize: 20, fontWeight: "bold", color: "#333", marginBottom: 8 },
-  summaryScore: { fontSize: 28, fontWeight: "bold", color: "#4A90D9", marginBottom: 4 },
-  summaryEncouragement: { fontSize: 16, color: "#666", marginBottom: 12, fontStyle: "italic" },
-  summaryBar: {
-    width: "100%",
-    height: 8,
-    backgroundColor: "#fce4ec",
-    borderRadius: 4,
-  },
-  summaryBarFill: {
-    height: 8,
-    backgroundColor: "#4caf50",
-    borderRadius: 4,
-  },
-  resultRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  resultCorrect: { backgroundColor: "#f6faf6" },
-  resultWrong: { backgroundColor: "#fff5f5" },
-  resultIcon: { fontSize: 18, fontWeight: "bold", marginRight: 10, marginTop: 1 },
-  resultContent: { flex: 1 },
-  resultProblem: { fontSize: 15, fontWeight: "600", color: "#333" },
-  resultAnswer: { fontSize: 13, color: "#666", marginTop: 2 },
-  resultCorrectAnswer: { fontSize: 13, color: "#d32f2f", marginTop: 2 },
   // Flag button (during answering)
   flagButton: {
     backgroundColor: "#fff",
@@ -900,39 +711,4 @@ const styles = StyleSheet.create({
   },
   flagText: { color: "#999", fontWeight: "600", fontSize: 14 },
   flagTextActive: { color: "#e65100" },
-  // Flag toggle (on summary rows)
-  flagToggle: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    alignSelf: "center",
-    marginLeft: 8,
-    minHeight: 36,
-    justifyContent: "center",
-  },
-  flagToggleActive: {
-    backgroundColor: "#fff3e0",
-    borderColor: "#ff9800",
-  },
-  flagToggleText: { fontSize: 13, fontWeight: "600", color: "#999" },
-  flagToggleTextActive: { color: "#e65100" },
-  // Learn flagged button
-  learnFlaggedButton: {
-    backgroundColor: "#7c4dff",
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 4,
-    alignItems: "center",
-  },
-  learnFlaggedText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  retryButton: {
-    backgroundColor: "#ff9800",
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 4,
-    alignItems: "center",
-  },
-  retryText: { color: "#fff", fontWeight: "600", fontSize: 16 },
 });
