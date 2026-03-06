@@ -101,6 +101,12 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     // Summary screen
     if (isPracticeSummary) {
       const correct = results.filter((r) => r.isCorrect).length;
+      const pct = correct / results.length;
+      const encouragement =
+        pct === 1 ? "Perfect score!" :
+        pct >= 0.8 ? "Great job!" :
+        pct >= 0.5 ? "Good effort, keep practicing!" :
+        "Don't give up — review and try again!";
 
       return (
         <View style={styles.container}>
@@ -118,6 +124,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <Text style={styles.summaryScore}>
                 {correct}/{results.length} correct
               </Text>
+              <Text style={styles.summaryEncouragement}>{encouragement}</Text>
               <View style={styles.summaryBar}>
                 <View
                   style={[
@@ -846,7 +853,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   summaryTitle: { fontSize: 20, fontWeight: "bold", color: "#333", marginBottom: 8 },
-  summaryScore: { fontSize: 28, fontWeight: "bold", color: "#4A90D9", marginBottom: 12 },
+  summaryScore: { fontSize: 28, fontWeight: "bold", color: "#4A90D9", marginBottom: 4 },
+  summaryEncouragement: { fontSize: 16, color: "#666", marginBottom: 12, fontStyle: "italic" },
   summaryBar: {
     width: "100%",
     height: 8,
