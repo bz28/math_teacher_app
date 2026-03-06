@@ -23,9 +23,11 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("auth");
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("learn");
+  const [practiceCount, setPracticeCount] = useState(3);
   const [error, setError] = useState<string | null>(null);
   const {
     startSession,
+    startPracticeBatch,
     phase: sessionPhase,
     error: sessionError,
   } = useSessionStore();
@@ -42,8 +44,13 @@ export default function App() {
     const text = input.trim();
     if (!text) return;
     setError(null);
-    await startSession(text, mode);
-    // Store sets phase to "awaiting_input" on success, "error" on failure
+
+    if (mode === "practice") {
+      await startPracticeBatch(text, practiceCount);
+    } else {
+      await startSession(text, mode);
+    }
+
     const { phase } = useSessionStore.getState();
     if (phase !== "error") {
       setScreen("session");
@@ -130,6 +137,30 @@ export default function App() {
 
       <MathKeyboard onInsert={handleInsert} />
 
+      {mode === "practice" && (
+        <View style={styles.countPicker}>
+          <Text style={styles.countLabel}>Similar problems to generate:</Text>
+          <View style={styles.stepper}>
+            <TouchableOpacity
+              style={styles.stepperButton}
+              onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
+            >
+              <Text style={styles.stepperText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.countValue}>{practiceCount}</Text>
+            <TouchableOpacity
+              style={styles.stepperButton}
+              onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
+            >
+              <Text style={styles.stepperText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.countHint}>
+            Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
+          </Text>
+        </View>
+      )}
+
       <TouchableOpacity
         style={[styles.button, styles.goButton]}
         onPress={handleGo}
@@ -177,4 +208,27 @@ const styles = StyleSheet.create({
   backButton: { alignSelf: "flex-start", marginBottom: 8 },
   backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
   error: { color: "red", marginTop: 12, textAlign: "center" },
+  // Practice count picker
+  countPicker: {
+    width: "100%",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  countLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 8 },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  stepperButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#4A90D9",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stepperText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
+  countValue: { fontSize: 24, fontWeight: "bold", color: "#333", minWidth: 30, textAlign: "center" },
+  countHint: { fontSize: 12, color: "#999", marginTop: 4 },
 });

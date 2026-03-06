@@ -111,6 +111,22 @@ export const register = (email: string, password: string, gradeLevel: number) =>
     grade_level: gradeLevel,
   });
 
+// Practice API
+export interface PracticeProblem {
+  question: string;
+  answer: string;
+}
+
+export const generatePracticeProblems = (problem: string, count: number) =>
+  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count });
+
+export const checkPracticeAnswer = (question: string, correctAnswer: string, userAnswer: string) =>
+  apiPost<{ is_correct: boolean }>("/practice/check", {
+    question,
+    correct_answer: correctAnswer,
+    user_answer: userAnswer,
+  });
+
 // Problem parsing
 export async function parseProblem(expression: string): Promise<ParsedProblem> {
   const resp = await fetch(`${API_BASE}/problems/parse`, {

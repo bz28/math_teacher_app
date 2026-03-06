@@ -23,8 +23,10 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     phase,
     lastResponse,
     error,
+    practiceBatch,
     submitAnswer,
-    requestHint,
+    submitPracticeAnswer,
+    retryWrongProblems,
     requestShowStep,
     submitExplanation,
     switchToLearnMode,
@@ -34,22 +36,196 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     reset,
   } = useSessionStore();
 
-  if (!session) {
-    if (phase === "loading") {
+  const isBatchMode = !!practiceBatch;
+  const isExplainBack = phase === "explain_back";
+  const isCompleted = phase === "completed";
+  const isPracticeSummary = phase === "practice_summary";
+
+  // Loading state
+  if (phase === "loading") {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4A90D9" />
+        <Text style={styles.loadingText}>
+          {isBatchMode ? "Generating practice problems..." : "Generating problem..."}
+        </Text>
+      </View>
+    );
+  }
+
+  // Practice batch mode
+  if (isBatchMode) {
+    const { problems, currentIndex, results } = practiceBatch;
+    const currentProblem = problems[currentIndex];
+
+    const handlePracticeSubmit = async () => {
+      if (!input.trim()) return;
+      const text = input.trim();
+      setInput("");
+      await submitPracticeAnswer(text);
+    };
+
+    const handleInsert = (value: string) => {
+      setInput((prev) => prev + value);
+      inputRef.current?.focus();
+    };
+
+    const handleBack = () => {
+      reset();
+      onBack();
+    };
+
+    // Summary screen
+    if (isPracticeSummary) {
+      const correct = results.filter((r) => r.isCorrect).length;
+      const wrong = results.length - correct;
+
       return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4A90D9" />
-          <Text style={styles.loadingText}>Generating problem...</Text>
+        <View style={styles.container}>
+          <View style={styles.stickyHeader}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={handleBack}>
+                <Text style={styles.backText}>Back</Text>
+              </TouchableOpacity>
+              <Text style={styles.title}>Practice Complete</Text>
+            </View>
+          </View>
+          <ScrollView contentContainerStyle={styles.content}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Results</Text>
+              <Text style={styles.summaryScore}>
+                {correct}/{results.length} correct
+              </Text>
+              <View style={styles.summaryBar}>
+                <View
+                  style={[
+                    styles.summaryBarFill,
+                    { width: `${(correct / results.length) * 100}%` },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {results.map((r, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.resultRow,
+                  r.isCorrect ? styles.resultCorrect : styles.resultWrong,
+                ]}
+              >
+                <Text style={styles.resultIcon}>
+                  {r.isCorrect ? "\u2713" : "\u2717"}
+                </Text>
+                <View style={styles.resultContent}>
+                  <Text style={styles.resultProblem}>{r.problem}</Text>
+                  <Text style={styles.resultAnswer}>
+                    Your answer: {r.userAnswer}
+                  </Text>
+                  {!r.isCorrect && (
+                    <Text style={styles.resultCorrectAnswer}>
+                      Correct: {r.correctAnswer}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ))}
+
+            {wrong > 0 && (
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={retryWrongProblems}
+              >
+                <Text style={styles.retryText}>
+                  Retry {wrong} Wrong Problem{wrong > 1 ? "s" : ""}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
+              <Text style={styles.newProblemText}>New Problem</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       );
     }
-    return null;
+
+    // Answering screen
+    return (
+      <View style={styles.container}>
+        <View style={styles.stickyHeader}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBack}>
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>
+              Practice {currentIndex + 1}/{problems.length}
+            </Text>
+          </View>
+          <View style={styles.problemCard}>
+            <Text style={styles.cardLabel}>Problem</Text>
+            <Text style={styles.problemText}>{currentProblem.question}</Text>
+          </View>
+          <View style={styles.progressContainer}>
+            <View
+              style={[
+                styles.progressBar,
+                { width: `${(currentIndex / problems.length) * 100}%` },
+              ]}
+            />
+          </View>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.promptText}>Enter your final answer</Text>
+
+          {error && <Text style={styles.error}>{error}</Text>}
+
+          <View>
+            <Text style={styles.inputLabel}>Your answer</Text>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Enter your answer..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              onSubmitEditing={handlePracticeSubmit}
+            />
+          </View>
+
+          <MathKeyboard onInsert={handleInsert} />
+
+          <View style={styles.buttons}>
+            <TouchableOpacity
+              style={[styles.button, styles.submitButton]}
+              onPress={handlePracticeSubmit}
+              disabled={phase === "thinking" || !input.trim()}
+            >
+              {phase === "thinking" ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.submitText}>Answer</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    );
   }
 
-  const isExplainBack = phase === "explain_back";
-  const isCompleted = phase === "completed";
+  // --- Learn mode (existing behavior) ---
+
+  if (!session) return null;
+
   const currentStep = session.steps[session.current_step];
   const isPractice = session.mode === "practice";
+  const completedSteps = session.steps.slice(0, session.current_step);
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -78,11 +254,8 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     await startSession(problem, currentMode);
   };
 
-  const completedSteps = session.steps.slice(0, session.current_step);
-
   return (
     <View style={styles.container}>
-      {/* Sticky header + problem */}
       <View style={styles.stickyHeader}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack}>
@@ -96,14 +269,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <Text style={styles.cardLabel}>Problem</Text>
           <Text style={styles.problemText}>{session.problem}</Text>
         </View>
-        {/* Progress bar */}
         <View style={styles.progressContainer}>
           <View
             style={[
               styles.progressBar,
-              {
-                width: `${(session.current_step / session.total_steps) * 100}%`,
-              },
+              { width: `${(session.current_step / session.total_steps) * 100}%` },
             ]}
           />
         </View>
@@ -118,12 +288,10 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <View style={styles.historySection}>
             {completedSteps.map((step, i) => (
               <View key={i} style={styles.historyRow}>
-                <Text style={styles.historyCheck}>✓</Text>
+                <Text style={styles.historyCheck}>{"\u2713"}</Text>
                 <View style={styles.historyContent}>
                   <Text style={styles.historyLabel}>Step {i + 1}</Text>
-                  {!isPractice && (
-                    <Text style={styles.historyDesc}>{step.description}</Text>
-                  )}
+                  <Text style={styles.historyDesc}>{step.description}</Text>
                   <Text style={styles.historyResult}>{step.after}</Text>
                 </View>
               </View>
@@ -131,7 +299,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Current step guidance + expression */}
+        {/* Current step guidance */}
         {!isCompleted && (
           <>
             {!isPractice && session.current_step > 0 && currentStep && (
@@ -140,7 +308,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 <Text style={styles.problemText}>{currentStep.before}</Text>
               </View>
             )}
-
             <Text style={styles.promptText}>
               {isPractice
                 ? "Enter your final answer"
@@ -172,7 +339,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Switch to Learn Mode button (practice mode, wrong answer) */}
+        {/* Switch to Learn Mode (practice, wrong answer) */}
         {isPractice && lastResponse && !lastResponse.is_correct && !isCompleted && (
           <TouchableOpacity
             style={styles.switchModeButton}
@@ -182,7 +349,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </TouchableOpacity>
         )}
 
-        {/* Error */}
         {error && <Text style={styles.error}>{error}</Text>}
 
         {/* Completed */}
@@ -239,7 +405,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             {isExplainBack ? (
               <View style={styles.explainInputArea}>
                 <Text style={styles.explainLabel}>
-                  ✏️ Explain this step in your own words
+                  Explain this step in your own words
                 </Text>
                 <TextInput
                   ref={inputRef}
@@ -352,7 +518,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   progressBar: { height: 4, backgroundColor: "#4A90D9", borderRadius: 2 },
-  // Completed steps history
   historySection: { marginBottom: 12 },
   historyRow: {
     flexDirection: "row",
@@ -368,7 +533,6 @@ const styles = StyleSheet.create({
   historyLabel: { fontSize: 11, fontWeight: "600", color: "#999" },
   historyDesc: { fontSize: 14, color: "#666" },
   historyResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
-  // Step description card
   stepDescCard: {
     backgroundColor: "#e3f2fd",
     borderRadius: 12,
@@ -380,13 +544,11 @@ const styles = StyleSheet.create({
   stepDescLabel: { fontSize: 12, fontWeight: "600", color: "#1565c0", marginBottom: 4 },
   stepDescText: { fontSize: 16, fontWeight: "600", color: "#1a237e", marginBottom: 8 },
   stepDescHint: { fontSize: 13, color: "#42a5f5", fontStyle: "italic" },
-  // Feedback
   feedback: { borderRadius: 8, padding: 12, marginBottom: 12 },
   feedbackCorrect: { backgroundColor: "#e8f5e9" },
   feedbackWrong: { backgroundColor: "#fce4ec" },
   feedbackText: { fontSize: 14 },
   error: { color: "red", marginBottom: 12, textAlign: "center" },
-  // Completed
   completedTitle: {
     fontSize: 20,
     fontWeight: "bold",
@@ -410,7 +572,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   newProblemText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  // Input area
   inputLabel: { fontSize: 13, fontWeight: "600", color: "#999", marginBottom: 4 },
   input: {
     width: "100%",
@@ -446,7 +607,6 @@ const styles = StyleSheet.create({
   submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   hintButton: { backgroundColor: "#fff3e0" },
   hintText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
-  // I still have questions
   questionsButton: {
     backgroundColor: "#fff3e0",
     borderRadius: 8,
@@ -457,7 +617,6 @@ const styles = StyleSheet.create({
     borderColor: "#ffcc80",
   },
   questionsText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
-  // Switch to Learn Mode
   switchModeButton: {
     backgroundColor: "#e3f2fd",
     borderRadius: 8,
@@ -468,7 +627,6 @@ const styles = StyleSheet.create({
     borderColor: "#90caf9",
   },
   switchModeText: { color: "#1565c0", fontWeight: "600", fontSize: 16 },
-  // Solution steps (shown on practice completion)
   solutionSteps: { marginBottom: 12 },
   solutionLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 8 },
   solutionRow: {
@@ -481,4 +639,47 @@ const styles = StyleSheet.create({
   solutionStepNum: { fontSize: 11, fontWeight: "600", color: "#999" },
   solutionDesc: { fontSize: 14, color: "#666" },
   solutionResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
+  // Practice summary
+  summaryCard: {
+    backgroundColor: "#f8f8f8",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  summaryTitle: { fontSize: 20, fontWeight: "bold", color: "#333", marginBottom: 8 },
+  summaryScore: { fontSize: 28, fontWeight: "bold", color: "#4A90D9", marginBottom: 12 },
+  summaryBar: {
+    width: "100%",
+    height: 8,
+    backgroundColor: "#fce4ec",
+    borderRadius: 4,
+  },
+  summaryBarFill: {
+    height: 8,
+    backgroundColor: "#4caf50",
+    borderRadius: 4,
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  resultCorrect: { backgroundColor: "#f6faf6" },
+  resultWrong: { backgroundColor: "#fff5f5" },
+  resultIcon: { fontSize: 18, fontWeight: "bold", marginRight: 10, marginTop: 1 },
+  resultContent: { flex: 1 },
+  resultProblem: { fontSize: 15, fontWeight: "600", color: "#333" },
+  resultAnswer: { fontSize: 13, color: "#666", marginTop: 2 },
+  resultCorrectAnswer: { fontSize: 13, color: "#d32f2f", marginTop: 2 },
+  retryButton: {
+    backgroundColor: "#ff9800",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 4,
+    alignItems: "center",
+  },
+  retryText: { color: "#fff", fontWeight: "600", fontSize: 16 },
 });
