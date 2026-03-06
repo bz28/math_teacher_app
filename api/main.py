@@ -41,6 +41,7 @@ app = FastAPI(
 from api.middleware.setup import configure_middleware  # noqa: E402
 from api.routes.auth import router as auth_router  # noqa: E402
 from api.routes.health import router as health_router  # noqa: E402
+from api.routes.practice import router as practice_router  # noqa: E402
 from api.routes.problems import router as problems_router  # noqa: E402
 from api.routes.session import router as session_router  # noqa: E402
 from api.routes.sse import router as sse_router  # noqa: E402
@@ -53,3 +54,4 @@ app.include_router(sse_router, prefix="/v1")
 app.include_router(problems_router, prefix="/v1")
 app.include_router(tutor_router, prefix="/v1")
 app.include_router(session_router, prefix="/v1")
+app.include_router(practice_router, prefix="/v1")

@@ -1,0 +1,53 @@
+"""Practice endpoints: generate similar problems and check answers."""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.practice import check_answer, generate_practice_problems
+from api.database import get_db
+from api.middleware.auth import CurrentUser, get_current_user
+from api.schemas.practice import (
+    PracticeCheckRequest,
+    PracticeCheckResponse,
+    PracticeGenerateRequest,
+    PracticeGenerateResponse,
+    PracticeProblem,
+)
+
+router = APIRouter(prefix="/practice", tags=["practice"])
+
+
+@router.post("/generate", response_model=PracticeGenerateResponse)
+async def generate(
+    body: PracticeGenerateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PracticeGenerateResponse:
+    """Generate similar practice problems for a given problem."""
+    if body.count < 0 or body.count > 20:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Count must be between 0 and 20",
+        )
+
+    try:
+        problems = await generate_practice_problems(body.problem, body.count)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+    return PracticeGenerateResponse(
+        problems=[PracticeProblem(question=p["question"], answer=p["answer"]) for p in problems],
+    )
+
+
+@router.post("/check", response_model=PracticeCheckResponse)
+async def check(
+    body: PracticeCheckRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PracticeCheckResponse:
+    """Check if a user's answer is correct."""
+    is_correct = await check_answer(body.question, body.correct_answer, body.user_answer)
+    return PracticeCheckResponse(is_correct=is_correct)
