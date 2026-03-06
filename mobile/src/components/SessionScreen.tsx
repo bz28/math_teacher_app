@@ -27,7 +27,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     submitAnswer,
     submitPracticeAnswer,
     togglePracticeFlag,
-    retryWrongProblems,
+    retryFlaggedProblems,
     learnQueue,
     startLearnQueue,
     learnSimilarProblem,
@@ -87,7 +87,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     // Summary screen
     if (isPracticeSummary) {
       const correct = results.filter((r) => r.isCorrect).length;
-      const wrong = results.length - correct;
 
       return (
         <View style={styles.container}>
@@ -148,13 +147,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               </View>
             ))}
 
-            {wrong > 0 && (
+            {practiceBatch.flags.some(Boolean) && (
               <TouchableOpacity
                 style={styles.retryButton}
-                onPress={retryWrongProblems}
+                onPress={retryFlaggedProblems}
               >
                 <Text style={styles.retryText}>
-                  Retry {wrong} Wrong Problem{wrong > 1 ? "s" : ""}
+                  Retry {practiceBatch.flags.filter(Boolean).length} Flagged Problem{practiceBatch.flags.filter(Boolean).length > 1 ? "s" : ""}
                 </Text>
               </TouchableOpacity>
             )}
