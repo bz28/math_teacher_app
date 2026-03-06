@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -39,6 +41,10 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <Text style={styles.title}>Math Teacher</Text>
       <Text style={styles.subtitle}>
         {isLogin ? "Sign In" : "Create Account"}
@@ -84,6 +90,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
             : "Already have an account? Sign In"}
         </Text>
       </TouchableOpacity>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -92,10 +99,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    justifyContent: "center",
     paddingHorizontal: 32,
-    gap: 12,
   },
+  inner: { flex: 1, justifyContent: "center", gap: 12 },
   title: { fontSize: 28, fontWeight: "bold", textAlign: "center" },
   subtitle: {
     fontSize: 18,

@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -186,7 +188,10 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
     // Answering screen
     return (
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack}>
@@ -257,7 +262,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -354,7 +359,10 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack}>
@@ -611,7 +619,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
