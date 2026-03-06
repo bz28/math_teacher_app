@@ -32,6 +32,7 @@ interface PracticeBatch {
   problems: PracticeProblem[];
   currentIndex: number;
   results: PracticeResult[];
+  flags: boolean[];
 }
 
 interface SessionState {
@@ -49,6 +50,7 @@ interface SessionState {
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
+  togglePracticeFlag: (index: number) => void;
   retryWrongProblems: () => void;
   requestHint: () => Promise<void>;
   requestShowStep: () => Promise<void>;
@@ -89,6 +91,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           problems,
           currentIndex: 0,
           results: [],
+          flags: new Array(problems.length).fill(false),
         },
         phase: "awaiting_input",
       });
@@ -132,6 +135,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  togglePracticeFlag: (index) => {
+    const { practiceBatch } = get();
+    if (!practiceBatch) return;
+
+    const newFlags = [...practiceBatch.flags];
+    newFlags[index] = !newFlags[index];
+    set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
+  },
+
   retryWrongProblems: () => {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
@@ -149,6 +161,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         problems: wrongProblems,
         currentIndex: 0,
         results: [],
+        flags: new Array(wrongProblems.length).fill(false),
       },
       phase: "awaiting_input",
       error: null,

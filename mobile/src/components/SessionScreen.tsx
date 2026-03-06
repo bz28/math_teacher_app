@@ -26,6 +26,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     practiceBatch,
     submitAnswer,
     submitPracticeAnswer,
+    togglePracticeFlag,
     retryWrongProblems,
     requestShowStep,
     submitExplanation,
@@ -128,6 +129,14 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     </Text>
                   )}
                 </View>
+                <TouchableOpacity
+                  style={[styles.flagToggle, practiceBatch.flags[i] && styles.flagToggleActive]}
+                  onPress={() => togglePracticeFlag(i)}
+                >
+                  <Text style={[styles.flagToggleText, practiceBatch.flags[i] && styles.flagToggleTextActive]}>
+                    {practiceBatch.flags[i] ? "Flagged" : "Flag"}
+                  </Text>
+                </TouchableOpacity>
               </View>
             ))}
 
@@ -138,6 +147,19 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               >
                 <Text style={styles.retryText}>
                   Retry {wrong} Wrong Problem{wrong > 1 ? "s" : ""}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {practiceBatch.flags.some(Boolean) && (
+              <TouchableOpacity
+                style={styles.learnFlaggedButton}
+                onPress={() => {
+                  // Will be wired to learn queue in next commit
+                }}
+              >
+                <Text style={styles.learnFlaggedText}>
+                  Learn {practiceBatch.flags.filter(Boolean).length} Flagged Problem{practiceBatch.flags.filter(Boolean).length > 1 ? "s" : ""}
                 </Text>
               </TouchableOpacity>
             )}
@@ -212,6 +234,14 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               ) : (
                 <Text style={styles.submitText}>Answer</Text>
               )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.flagButton, practiceBatch.flags[currentIndex] && styles.flagButtonActive]}
+              onPress={() => togglePracticeFlag(currentIndex)}
+            >
+              <Text style={[styles.flagText, practiceBatch.flags[currentIndex] && styles.flagTextActive]}>
+                {practiceBatch.flags[currentIndex] ? "Flagged" : "Flag"}
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -674,6 +704,43 @@ const styles = StyleSheet.create({
   resultProblem: { fontSize: 15, fontWeight: "600", color: "#333" },
   resultAnswer: { fontSize: 13, color: "#666", marginTop: 2 },
   resultCorrectAnswer: { fontSize: 13, color: "#d32f2f", marginTop: 2 },
+  // Flag button (during answering)
+  flagButton: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  flagButtonActive: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#ff9800",
+  },
+  flagText: { color: "#999", fontWeight: "600", fontSize: 14 },
+  flagTextActive: { color: "#e65100" },
+  // Flag toggle (on summary rows)
+  flagToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    alignSelf: "center",
+    marginLeft: 8,
+  },
+  flagToggleActive: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#ff9800",
+  },
+  flagToggleText: { fontSize: 11, fontWeight: "600", color: "#999" },
+  flagToggleTextActive: { color: "#e65100" },
+  // Learn flagged button
+  learnFlaggedButton: {
+    backgroundColor: "#7c4dff",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 4,
+    alignItems: "center",
+  },
+  learnFlaggedText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   retryButton: {
     backgroundColor: "#ff9800",
     borderRadius: 8,
