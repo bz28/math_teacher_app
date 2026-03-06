@@ -19,6 +19,7 @@ type SessionPhase =
   | "explain_back"
   | "completed"
   | "practice_summary"
+  | "learn_summary"
   | "error";
 
 export interface PracticeResult {
@@ -35,6 +36,12 @@ interface PracticeBatch {
   flags: boolean[];
 }
 
+interface LearnQueue {
+  problems: string[];
+  currentIndex: number;
+  flags: boolean[];
+}
+
 interface SessionState {
   // Learn mode state
   session: SessionData | null;
@@ -45,13 +52,21 @@ interface SessionState {
   // Practice batch state
   practiceBatch: PracticeBatch | null;
 
+  // Learn queue state
+  learnQueue: LearnQueue | null;
+
   // Actions
   startSession: (problem: string, mode?: string) => Promise<void>;
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
+  startLearnQueue: (problems: string[]) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
+  toggleLearnFlag: (index: number) => void;
   retryWrongProblems: () => void;
+  learnSimilarProblem: () => Promise<void>;
+  advanceLearnQueue: () => Promise<void>;
+  practiceFlaggedFromLearnQueue: () => Promise<void>;
   requestHint: () => Promise<void>;
   requestShowStep: () => Promise<void>;
   submitExplanation: (explanation: string) => Promise<void>;
@@ -67,6 +82,7 @@ const initialState = {
   lastResponse: null as StepResponse | null,
   error: null as string | null,
   practiceBatch: null as PracticeBatch | null,
+  learnQueue: null as LearnQueue | null,
 };
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -168,7 +184,124 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     });
   },
 
-  // --- Learn mode actions (unchanged) ---
+  // --- Learn queue actions ---
+
+  startLearnQueue: async (problems) => {
+    if (problems.length === 0) return;
+    set({ ...initialState, phase: "loading" });
+    try {
+      const session = await createSession(problems[0], "learn");
+      set({
+        session,
+        phase: "awaiting_input",
+        lastResponse: null,
+        learnQueue: {
+          problems,
+          currentIndex: 0,
+          flags: new Array(problems.length).fill(false),
+        },
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  learnSimilarProblem: async () => {
+    const { lastResponse, learnQueue } = get();
+    const similar = lastResponse?.similar_problem;
+    if (!similar || !learnQueue) return;
+
+    // Insert similar problem after current index
+    const insertAt = learnQueue.currentIndex + 1;
+    const newProblems = [...learnQueue.problems];
+    newProblems.splice(insertAt, 0, similar);
+    const newFlags = [...learnQueue.flags];
+    newFlags.splice(insertAt, 0, false);
+
+    set({ phase: "loading", error: null });
+    try {
+      const session = await createSession(similar, "learn");
+      set({
+        session,
+        phase: "awaiting_input",
+        lastResponse: null,
+        learnQueue: {
+          problems: newProblems,
+          currentIndex: insertAt,
+          flags: newFlags,
+        },
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  advanceLearnQueue: async () => {
+    const { learnQueue } = get();
+    if (!learnQueue) return;
+
+    const nextIndex = learnQueue.currentIndex + 1;
+    if (nextIndex >= learnQueue.problems.length) {
+      set({ phase: "learn_summary", session: null, lastResponse: null });
+      return;
+    }
+
+    set({ phase: "loading", error: null });
+    try {
+      const session = await createSession(learnQueue.problems[nextIndex], "learn");
+      set({
+        session,
+        phase: "awaiting_input",
+        lastResponse: null,
+        learnQueue: { ...learnQueue, currentIndex: nextIndex },
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  toggleLearnFlag: (index) => {
+    const { learnQueue } = get();
+    if (!learnQueue) return;
+
+    const newFlags = [...learnQueue.flags];
+    newFlags[index] = !newFlags[index];
+    set({ learnQueue: { ...learnQueue, flags: newFlags } });
+  },
+
+  practiceFlaggedFromLearnQueue: async () => {
+    const { learnQueue } = get();
+    if (!learnQueue) return;
+
+    const flaggedProblems = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
+    if (flaggedProblems.length === 0) return;
+
+    set({ ...initialState, phase: "loading" });
+    try {
+      // Solve each flagged problem to get answers (parallel calls)
+      const results = await Promise.all(
+        flaggedProblems.map((p) => generatePracticeProblems(p, 0)),
+      );
+      const practiceProblemsList: PracticeProblem[] = results.map((r, i) => ({
+        question: flaggedProblems[i],
+        answer: r.problems[0]?.answer ?? "unknown",
+      }));
+
+      set({
+        practiceBatch: {
+          problems: practiceProblemsList,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(practiceProblemsList.length).fill(false),
+        },
+        phase: "awaiting_input",
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  // --- Learn mode actions ---
 
   submitAnswer: async (answer) => {
     const { session } = get();
