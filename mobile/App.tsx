@@ -131,7 +131,11 @@ export default function App() {
             >
               <Text style={styles.backText}>{"< Back"}</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>Math Teacher</Text>
+            <View style={styles.modeChip}>
+              <Text style={styles.modeChipText}>
+                {mode === "learn" ? "📖 Learn" : mode === "practice" ? "✏️ Practice" : "📝 Mock Exam"}
+              </Text>
+            </View>
 
             <TextInput
               ref={inputRef}
@@ -250,4 +254,14 @@ const styles = StyleSheet.create({
   countValue: { fontSize: 24, fontWeight: "bold", color: "#333", minWidth: 30, textAlign: "center" },
   countHint: { fontSize: 12, color: "#999", marginTop: 4 },
   buttonDisabled: { opacity: 0.5 },
+  modeChip: {
+    backgroundColor: "#F0F4FF",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#4A90D9",
+  },
+  modeChipText: { fontSize: 15, fontWeight: "600", color: "#4A90D9" },
 });
