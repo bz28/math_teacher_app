@@ -205,13 +205,18 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <Text style={styles.cardLabel}>Problem</Text>
             <Text style={styles.problemText}>{currentProblem.question}</Text>
           </View>
-          <View style={styles.progressContainer}>
-            <View
-              style={[
-                styles.progressBar,
-                { width: `${(currentIndex / problems.length) * 100}%` },
-              ]}
-            />
+          <View style={styles.progressRow}>
+            <View style={styles.progressContainer}>
+              <View
+                style={[
+                  styles.progressBar,
+                  { width: `${(currentIndex / problems.length) * 100}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressLabel}>
+              {currentIndex}/{problems.length}
+            </Text>
           </View>
         </View>
 
@@ -378,13 +383,18 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <Text style={styles.cardLabel}>Problem</Text>
           <Text style={styles.problemText}>{session.problem}</Text>
         </View>
-        <View style={styles.progressContainer}>
-          <View
-            style={[
-              styles.progressBar,
-              { width: `${(session.current_step / session.total_steps) * 100}%` },
-            ]}
-          />
+        <View style={styles.progressRow}>
+          <View style={styles.progressContainer}>
+            <View
+              style={[
+                styles.progressBar,
+                { width: `${(session.current_step / session.total_steps) * 100}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressLabel}>
+            Step {session.current_step}/{session.total_steps}
+          </Text>
         </View>
       </View>
 
@@ -676,13 +686,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
-  progressContainer: {
-    height: 4,
-    backgroundColor: "#eee",
-    borderRadius: 2,
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     marginBottom: 4,
   },
-  progressBar: { height: 4, backgroundColor: "#4A90D9", borderRadius: 2 },
+  progressContainer: {
+    flex: 1,
+    height: 6,
+    backgroundColor: "#eee",
+    borderRadius: 3,
+  },
+  progressBar: { height: 6, backgroundColor: "#4A90D9", borderRadius: 3 },
+  progressLabel: { fontSize: 12, fontWeight: "600", color: "#999" },
   historySection: { marginBottom: 12 },
   historyRow: {
     flexDirection: "row",
