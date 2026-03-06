@@ -1,6 +1,5 @@
 """Practice mode: generate similar problems and check answers."""
 
-import json
 import logging
 
 from api.core.math_engine import MathEngine, ParseError
