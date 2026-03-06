@@ -26,7 +26,14 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     practiceBatch,
     submitAnswer,
     submitPracticeAnswer,
+    togglePracticeFlag,
     retryWrongProblems,
+    learnQueue,
+    startLearnQueue,
+    learnSimilarProblem,
+    advanceLearnQueue,
+    toggleLearnFlag,
+    practiceFlaggedFromLearnQueue,
     requestShowStep,
     submitExplanation,
     switchToLearnMode,
@@ -37,9 +44,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   } = useSessionStore();
 
   const isBatchMode = !!practiceBatch;
+  const isLearnQueue = !!learnQueue;
   const isExplainBack = phase === "explain_back";
   const isCompleted = phase === "completed";
   const isPracticeSummary = phase === "practice_summary";
+  const isLearnSummary = phase === "learn_summary";
 
   // Loading state
   if (phase === "loading") {
@@ -128,6 +137,14 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     </Text>
                   )}
                 </View>
+                <TouchableOpacity
+                  style={[styles.flagToggle, practiceBatch.flags[i] && styles.flagToggleActive]}
+                  onPress={() => togglePracticeFlag(i)}
+                >
+                  <Text style={[styles.flagToggleText, practiceBatch.flags[i] && styles.flagToggleTextActive]}>
+                    {practiceBatch.flags[i] ? "Flagged" : "Flag"}
+                  </Text>
+                </TouchableOpacity>
               </View>
             ))}
 
@@ -138,6 +155,22 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               >
                 <Text style={styles.retryText}>
                   Retry {wrong} Wrong Problem{wrong > 1 ? "s" : ""}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {practiceBatch.flags.some(Boolean) && (
+              <TouchableOpacity
+                style={styles.learnFlaggedButton}
+                onPress={() => {
+                  const flagged = practiceBatch.problems
+                    .filter((_, i) => practiceBatch.flags[i])
+                    .map((p) => p.question);
+                  startLearnQueue(flagged);
+                }}
+              >
+                <Text style={styles.learnFlaggedText}>
+                  Learn {practiceBatch.flags.filter(Boolean).length} Flagged Problem{practiceBatch.flags.filter(Boolean).length > 1 ? "s" : ""}
                 </Text>
               </TouchableOpacity>
             )}
@@ -213,13 +246,78 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 <Text style={styles.submitText}>Answer</Text>
               )}
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.flagButton, practiceBatch.flags[currentIndex] && styles.flagButtonActive]}
+              onPress={() => togglePracticeFlag(currentIndex)}
+            >
+              <Text style={[styles.flagText, practiceBatch.flags[currentIndex] && styles.flagTextActive]}>
+                {practiceBatch.flags[currentIndex] ? "Flagged" : "Flag"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </View>
     );
   }
 
-  // --- Learn mode (existing behavior) ---
+  // --- Learn summary screen ---
+  if (isLearnSummary && learnQueue) {
+    const handleBack = () => { reset(); onBack(); };
+    const flaggedCount = learnQueue.flags.filter(Boolean).length;
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.stickyHeader}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBack}>
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>Learning Complete</Text>
+          </View>
+        </View>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Problems Reviewed</Text>
+            <Text style={styles.summaryScore}>{learnQueue.problems.length}</Text>
+          </View>
+
+          {learnQueue.problems.map((problem, i) => (
+            <View key={i} style={[styles.resultRow, styles.resultCorrect]}>
+              <Text style={styles.resultIcon}>{"\u2713"}</Text>
+              <View style={styles.resultContent}>
+                <Text style={styles.resultProblem}>{problem}</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.flagToggle, learnQueue.flags[i] && styles.flagToggleActive]}
+                onPress={() => toggleLearnFlag(i)}
+              >
+                <Text style={[styles.flagToggleText, learnQueue.flags[i] && styles.flagToggleTextActive]}>
+                  {learnQueue.flags[i] ? "Flagged" : "Flag"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {flaggedCount > 0 && (
+            <TouchableOpacity
+              style={styles.learnFlaggedButton}
+              onPress={practiceFlaggedFromLearnQueue}
+            >
+              <Text style={styles.learnFlaggedText}>
+                Practice {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
+            <Text style={styles.newProblemText}>New Problem</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // --- Learn mode ---
 
   if (!session) return null;
 
@@ -262,7 +360,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>
-            {isPractice ? "Practice" : "Learn"}
+            {isLearnQueue && learnQueue
+              ? `Learn ${learnQueue.currentIndex + 1}/${learnQueue.problems.length}`
+              : isPractice ? "Practice" : "Learn"}
           </Text>
         </View>
         <View style={styles.problemCard}>
@@ -351,8 +451,51 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        {/* Completed */}
-        {isCompleted && (
+        {/* Completed — learn queue mode */}
+        {isCompleted && isLearnQueue && learnQueue && (
+          <View style={styles.card}>
+            <Text style={styles.completedTitle}>Problem Solved!</Text>
+
+            <TouchableOpacity
+              style={styles.questionsButton}
+              onPress={continueAsking}
+            >
+              <Text style={styles.questionsText}>I still have questions</Text>
+            </TouchableOpacity>
+
+            {lastResponse?.similar_problem && (
+              <TouchableOpacity
+                style={styles.similarButton}
+                onPress={learnSimilarProblem}
+              >
+                <Text style={styles.similarText}>Learn Similar Problem</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.flagButton, styles.flagButtonWide, learnQueue.flags[learnQueue.currentIndex] && styles.flagButtonActive]}
+              onPress={() => toggleLearnFlag(learnQueue.currentIndex)}
+            >
+              <Text style={[styles.flagText, learnQueue.flags[learnQueue.currentIndex] && styles.flagTextActive]}>
+                {learnQueue.flags[learnQueue.currentIndex] ? "Flagged" : "Flag for Practice"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.newProblemButton}
+              onPress={advanceLearnQueue}
+            >
+              <Text style={styles.newProblemText}>
+                {learnQueue.currentIndex < learnQueue.problems.length - 1
+                  ? "Next Problem"
+                  : "View Results"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Completed — non-queue mode */}
+        {isCompleted && !isLearnQueue && (
           <View style={styles.card}>
             <Text style={styles.completedTitle}>Problem Solved!</Text>
             {isPractice && (
@@ -674,6 +817,51 @@ const styles = StyleSheet.create({
   resultProblem: { fontSize: 15, fontWeight: "600", color: "#333" },
   resultAnswer: { fontSize: 13, color: "#666", marginTop: 2 },
   resultCorrectAnswer: { fontSize: 13, color: "#d32f2f", marginTop: 2 },
+  // Flag button (during answering)
+  flagButton: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  flagButtonActive: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#ff9800",
+  },
+  flagButtonWide: {
+    flex: 0,
+    width: "100%",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  flagText: { color: "#999", fontWeight: "600", fontSize: 14 },
+  flagTextActive: { color: "#e65100" },
+  // Flag toggle (on summary rows)
+  flagToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    alignSelf: "center",
+    marginLeft: 8,
+  },
+  flagToggleActive: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#ff9800",
+  },
+  flagToggleText: { fontSize: 11, fontWeight: "600", color: "#999" },
+  flagToggleTextActive: { color: "#e65100" },
+  // Learn flagged button
+  learnFlaggedButton: {
+    backgroundColor: "#7c4dff",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 4,
+    alignItems: "center",
+  },
+  learnFlaggedText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   retryButton: {
     backgroundColor: "#ff9800",
     borderRadius: 8,
