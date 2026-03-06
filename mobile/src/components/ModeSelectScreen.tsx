@@ -33,7 +33,7 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backText}>{"< Back"}</Text>
+        <Text style={styles.backText}>{"\u2039 Back"}</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>Choose a Mode</Text>

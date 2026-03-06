@@ -113,7 +113,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
             <View style={styles.header}>
               <TouchableOpacity onPress={handleBack}>
-                <Text style={styles.backText}>Back</Text>
+                <Text style={styles.backText}>{"\u2039 Back"}</Text>
               </TouchableOpacity>
               <Text style={styles.title}>Practice Complete</Text>
             </View>
@@ -212,7 +212,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack}>
-              <Text style={styles.backText}>Back</Text>
+              <Text style={styles.backText}>{"\u2039 Back"}</Text>
             </TouchableOpacity>
             <Text style={styles.title}>
               Practice {currentIndex + 1}/{problems.length}
@@ -298,7 +298,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack}>
-              <Text style={styles.backText}>Back</Text>
+              <Text style={styles.backText}>{"\u2039 Back"}</Text>
             </TouchableOpacity>
             <Text style={styles.title}>Learning Complete</Text>
           </View>
@@ -388,7 +388,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack}>
-            <Text style={styles.backText}>Back</Text>
+            <Text style={styles.backText}>{"\u2039 Back"}</Text>
           </TouchableOpacity>
           <Text style={styles.title}>
             {isLearnQueue && learnQueue

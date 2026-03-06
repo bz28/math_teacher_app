@@ -129,7 +129,7 @@ export default function App() {
               style={styles.backButton}
               onPress={() => setScreen("mode-select")}
             >
-              <Text style={styles.backText}>{"< Back"}</Text>
+              <Text style={styles.backText}>{"\u2039 Back"}</Text>
             </TouchableOpacity>
             <View style={styles.modeChip}>
               <Text style={styles.modeChipText}>
