@@ -10,18 +10,19 @@ import {
 } from "react-native";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { MathKeyboard } from "./src/components/MathKeyboard";
+import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
 import { setAuthToken } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
 
-type Screen = "auth" | "home" | "input" | "session";
+type Screen = "auth" | "home" | "mode-select" | "input" | "session";
 
 export default function App() {
   const inputRef = useRef<TextInput>(null);
   const [screen, setScreen] = useState<Screen>("auth");
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"practice" | "learn">("practice");
+  const [mode, setMode] = useState<Mode>("learn");
   const [error, setError] = useState<string | null>(null);
   const {
     startSession,
@@ -62,11 +63,26 @@ export default function App() {
     return (
       <>
         <HomeScreen
-          onSelect={() => setScreen("input")}
+          onSelect={() => setScreen("mode-select")}
           onLogout={() => {
             setAuthToken(null);
             setScreen("auth");
           }}
+        />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  if (screen === "mode-select") {
+    return (
+      <>
+        <ModeSelectScreen
+          onSelect={(selectedMode) => {
+            setMode(selectedMode);
+            setScreen("input");
+          }}
+          onBack={() => setScreen("home")}
         />
         <StatusBar style="auto" />
       </>
@@ -91,9 +107,9 @@ export default function App() {
     <View style={styles.container}>
       <TouchableOpacity
         style={styles.backButton}
-        onPress={() => setScreen("home")}
+        onPress={() => setScreen("mode-select")}
       >
-        <Text style={styles.backText}>{"< Home"}</Text>
+        <Text style={styles.backText}>{"< Back"}</Text>
       </TouchableOpacity>
       <Text style={styles.title}>Math Teacher</Text>
 
@@ -111,25 +127,6 @@ export default function App() {
         returnKeyType="go"
         onSubmitEditing={handleGo}
       />
-
-      <View style={styles.modeToggle}>
-        <TouchableOpacity
-          style={[styles.modeButton, mode === "practice" && styles.modeButtonActive]}
-          onPress={() => setMode("practice")}
-        >
-          <Text style={[styles.modeText, mode === "practice" && styles.modeTextActive]}>
-            Practice
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.modeButton, mode === "learn" && styles.modeButtonActive]}
-          onPress={() => setMode("learn")}
-        >
-          <Text style={[styles.modeText, mode === "learn" && styles.modeTextActive]}>
-            Learn
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       <MathKeyboard onInsert={handleInsert} />
 
@@ -169,23 +166,6 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 18,
   },
-  modeToggle: {
-    flexDirection: "row",
-    width: "100%",
-    backgroundColor: "#eee",
-    borderRadius: 8,
-    marginTop: 12,
-    padding: 2,
-  },
-  modeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 6,
-  },
-  modeButtonActive: { backgroundColor: "#4A90D9" },
-  modeText: { fontSize: 15, fontWeight: "600", color: "#666" },
-  modeTextActive: { color: "#fff" },
   button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   goButton: {
     backgroundColor: "#4A90D9",
