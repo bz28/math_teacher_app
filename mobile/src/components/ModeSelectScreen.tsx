@@ -1,4 +1,5 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export type Mode = "learn" | "practice" | "mock_exam";
 
@@ -30,7 +31,7 @@ const MODES: { id: Mode; label: string; icon: string; description: string }[] = 
 
 export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
         <Text style={styles.backText}>{"< Back"}</Text>
       </TouchableOpacity>
@@ -53,7 +54,7 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
           </TouchableOpacity>
         ))}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -61,7 +62,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingTop: 60,
     paddingHorizontal: 24,
   },
   backButton: { alignSelf: "flex-start", marginBottom: 24 },

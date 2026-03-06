@@ -1,4 +1,5 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface HomeScreenProps {
   onSelect: (subject: string) => void;
@@ -11,7 +12,7 @@ const SUBJECTS = [
 
 export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
@@ -31,7 +32,7 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
           </TouchableOpacity>
         ))}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -43,7 +44,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 32,
   },
-  logoutButton: { position: "absolute", top: 60, right: 24 },
+  logoutButton: { alignSelf: "flex-end", marginBottom: 8 },
   logoutText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
   greeting: { fontSize: 28, fontWeight: "bold", marginBottom: 8 },
   subtitle: { fontSize: 16, color: "#666", marginBottom: 32 },

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
 
@@ -16,6 +17,7 @@ interface SessionScreenProps {
 }
 
 export function SessionScreen({ onBack }: SessionScreenProps) {
+  const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const {
@@ -53,12 +55,12 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   // Loading state
   if (phase === "loading") {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4A90D9" />
         <Text style={styles.loadingText}>
           {isBatchMode ? "Generating practice problems..." : "Generating problem..."}
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -90,7 +92,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
       return (
         <View style={styles.container}>
-          <View style={styles.stickyHeader}>
+          <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
             <View style={styles.header}>
               <TouchableOpacity onPress={handleBack}>
                 <Text style={styles.backText}>Back</Text>
@@ -185,7 +187,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     // Answering screen
     return (
       <View style={styles.container}>
-        <View style={styles.stickyHeader}>
+        <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack}>
               <Text style={styles.backText}>Back</Text>
@@ -266,7 +268,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
     return (
       <View style={styles.container}>
-        <View style={styles.stickyHeader}>
+        <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack}>
               <Text style={styles.backText}>Back</Text>
@@ -353,7 +355,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.stickyHeader}>
+      <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack}>
             <Text style={styles.backText}>Back</Text>
@@ -622,7 +624,7 @@ const styles = StyleSheet.create({
   },
   loadingText: { marginTop: 12, fontSize: 16, color: "#666" },
   container: { flex: 1, backgroundColor: "#fff" },
-  stickyHeader: { paddingHorizontal: 20, paddingTop: 60, backgroundColor: "#fff" },
+  stickyHeader: { paddingHorizontal: 20, backgroundColor: "#fff" },
   content: { padding: 20, paddingTop: 8 },
   header: {
     flexDirection: "row",

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { login, register, setAuthToken } from "../services/api";
 
 interface AuthScreenProps {
@@ -37,7 +38,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Math Teacher</Text>
       <Text style={styles.subtitle}>
         {isLogin ? "Sign In" : "Create Account"}
@@ -83,7 +84,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
             : "Already have an account? Sign In"}
         </Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 

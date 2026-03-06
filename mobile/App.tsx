@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
@@ -59,16 +60,16 @@ export default function App() {
 
   if (screen === "auth") {
     return (
-      <>
+      <SafeAreaProvider>
         <AuthScreen onAuth={() => setScreen("home")} />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   if (screen === "home") {
     return (
-      <>
+      <SafeAreaProvider>
         <HomeScreen
           onSelect={() => setScreen("mode-select")}
           onLogout={() => {
@@ -77,13 +78,13 @@ export default function App() {
           }}
         />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   if (screen === "mode-select") {
     return (
-      <>
+      <SafeAreaProvider>
         <ModeSelectScreen
           onSelect={(selectedMode) => {
             setMode(selectedMode);
@@ -92,13 +93,13 @@ export default function App() {
           onBack={() => setScreen("home")}
         />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   if (screen === "session") {
     return (
-      <>
+      <SafeAreaProvider>
         <SessionScreen
           onBack={() => {
             setInput("");
@@ -106,77 +107,79 @@ export default function App() {
           }}
         />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => setScreen("mode-select")}
-      >
-        <Text style={styles.backText}>{"< Back"}</Text>
-      </TouchableOpacity>
-      <Text style={styles.title}>Math Teacher</Text>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setScreen("mode-select")}
+        >
+          <Text style={styles.backText}>{"< Back"}</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Math Teacher</Text>
 
-      <TextInput
-        ref={inputRef}
-        style={styles.input}
-        value={input}
-        onChangeText={(text) => {
-          setInput(text);
-          setError(null);
-        }}
-        placeholder="Enter a math problem (e.g. 2x + 6 = 12)"
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="go"
-        onSubmitEditing={handleGo}
-      />
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          value={input}
+          onChangeText={(text) => {
+            setInput(text);
+            setError(null);
+          }}
+          placeholder="Enter a math problem (e.g. 2x + 6 = 12)"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="go"
+          onSubmitEditing={handleGo}
+        />
 
-      <MathKeyboard onInsert={handleInsert} />
+        <MathKeyboard onInsert={handleInsert} />
 
-      {mode === "practice" && (
-        <View style={styles.countPicker}>
-          <Text style={styles.countLabel}>Similar problems to generate:</Text>
-          <View style={styles.stepper}>
-            <TouchableOpacity
-              style={styles.stepperButton}
-              onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
-            >
-              <Text style={styles.stepperText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.countValue}>{practiceCount}</Text>
-            <TouchableOpacity
-              style={styles.stepperButton}
-              onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
-            >
-              <Text style={styles.stepperText}>+</Text>
-            </TouchableOpacity>
+        {mode === "practice" && (
+          <View style={styles.countPicker}>
+            <Text style={styles.countLabel}>Similar problems to generate:</Text>
+            <View style={styles.stepper}>
+              <TouchableOpacity
+                style={styles.stepperButton}
+                onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
+              >
+                <Text style={styles.stepperText}>-</Text>
+              </TouchableOpacity>
+              <Text style={styles.countValue}>{practiceCount}</Text>
+              <TouchableOpacity
+                style={styles.stepperButton}
+                onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
+              >
+                <Text style={styles.stepperText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.countHint}>
+              Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
+            </Text>
           </View>
-          <Text style={styles.countHint}>
-            Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
-          </Text>
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={[styles.button, styles.goButton]}
-        onPress={handleGo}
-        disabled={isLoading || !input.trim()}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.goText}>Go</Text>
         )}
-      </TouchableOpacity>
 
-      {displayError && <Text style={styles.error}>{displayError}</Text>}
+        <TouchableOpacity
+          style={[styles.button, styles.goButton, (!input.trim() || isLoading) && styles.buttonDisabled]}
+          onPress={handleGo}
+          disabled={isLoading || !input.trim()}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.goText}>Go</Text>
+          )}
+        </TouchableOpacity>
 
-      <StatusBar style="auto" />
-    </View>
+        {displayError && <Text style={styles.error}>{displayError}</Text>}
+
+        <StatusBar style="auto" />
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
@@ -185,7 +188,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
     alignItems: "center",
-    paddingTop: 60,
     paddingHorizontal: 20,
   },
   title: { fontSize: 24, fontWeight: "bold", marginBottom: 20 },
@@ -231,4 +233,5 @@ const styles = StyleSheet.create({
   stepperText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
   countValue: { fontSize: 24, fontWeight: "bold", color: "#333", minWidth: 30, textAlign: "center" },
   countHint: { fontSize: 12, color: "#999", marginTop: 4 },
+  buttonDisabled: { opacity: 0.5 },
 });
