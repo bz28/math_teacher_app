@@ -63,7 +63,7 @@ interface SessionState {
   submitPracticeAnswer: (answer: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
-  retryWrongProblems: () => void;
+  retryFlaggedProblems: () => void;
   learnSimilarProblem: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
@@ -138,10 +138,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const nextIndex = practiceBatch.currentIndex + 1;
       const isLast = nextIndex >= practiceBatch.problems.length;
 
+      // Auto-flag wrong answers
+      const newFlags = [...practiceBatch.flags];
+      if (!is_correct) {
+        newFlags[practiceBatch.currentIndex] = true;
+      }
+
       set({
         practiceBatch: {
           ...practiceBatch,
           results: newResults,
+          flags: newFlags,
           currentIndex: isLast ? practiceBatch.currentIndex : nextIndex,
         },
         phase: isLast ? "practice_summary" : "awaiting_input",
@@ -160,24 +167,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
   },
 
-  retryWrongProblems: () => {
+  retryFlaggedProblems: () => {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
 
-    const wrongProblems = practiceBatch.results
-      .filter((r) => !r.isCorrect)
-      .map((r): PracticeProblem => ({
-        question: r.problem,
-        answer: r.correctAnswer,
+    const flaggedProblems = practiceBatch.problems
+      .filter((_, i) => practiceBatch.flags[i])
+      .map((p): PracticeProblem => ({
+        question: p.question,
+        answer: p.answer,
       }));
-    if (wrongProblems.length === 0) return;
+    if (flaggedProblems.length === 0) return;
 
     set({
       practiceBatch: {
-        problems: wrongProblems,
+        problems: flaggedProblems,
         currentIndex: 0,
         results: [],
-        flags: new Array(wrongProblems.length).fill(false),
+        flags: new Array(flaggedProblems.length).fill(false),
       },
       phase: "awaiting_input",
       error: null,
