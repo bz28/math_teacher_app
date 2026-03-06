@@ -20,6 +20,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,13 +60,22 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         keyboardType="email-address"
       />
 
-      <TextInput
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-        placeholder="Password"
-        secureTextEntry
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={styles.passwordInput}
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Password"
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity
+          style={styles.eyeButton}
+          onPress={() => setShowPassword(!showPassword)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.eyeText}>{showPassword ? "Hide" : "Show"}</Text>
+        </TouchableOpacity>
+      </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -116,6 +126,23 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 16,
+  },
+  eyeButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  eyeText: { color: "#4A90D9", fontWeight: "600", fontSize: 14 },
   error: { color: "red", textAlign: "center" },
   button: {
     backgroundColor: "#4A90D9",
