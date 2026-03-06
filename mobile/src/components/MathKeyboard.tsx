@@ -4,6 +4,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 
 interface MathKeyboardProps {
   onInsert: (value: string) => void;
@@ -30,7 +31,10 @@ export function MathKeyboard({ onInsert }: MathKeyboardProps) {
           <TouchableOpacity
             key={key.label}
             style={styles.key}
-            onPress={() => onInsert(key.value)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onInsert(key.value);
+            }}
             accessibilityLabel={`Insert ${key.label}`}
           >
             <Text style={styles.keyText}>{key.label}</Text>

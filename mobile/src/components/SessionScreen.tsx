@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -53,6 +54,15 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   const isCompleted = phase === "completed";
   const isPracticeSummary = phase === "practice_summary";
   const isLearnSummary = phase === "learn_summary";
+
+  useEffect(() => {
+    if (!lastResponse || lastResponse.action === "show_step") return;
+    if (lastResponse.is_correct) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [lastResponse]);
 
   // Loading state
   if (phase === "loading") {
