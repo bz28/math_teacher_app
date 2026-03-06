@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600", minHeight: 44, lineHeight: 44 },
   title: { fontSize: 16, fontWeight: "600", color: "#666" },
   problemCard: {
     backgroundColor: "#f8f8f8",
@@ -849,19 +849,21 @@ const styles = StyleSheet.create({
   flagTextActive: { color: "#e65100" },
   // Flag toggle (on summary rows)
   flagToggle: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#ccc",
     alignSelf: "center",
     marginLeft: 8,
+    minHeight: 36,
+    justifyContent: "center",
   },
   flagToggleActive: {
     backgroundColor: "#fff3e0",
     borderColor: "#ff9800",
   },
-  flagToggleText: { fontSize: 11, fontWeight: "600", color: "#999" },
+  flagToggleText: { fontSize: 13, fontWeight: "600", color: "#999" },
   flagToggleTextActive: { color: "#e65100" },
   // Learn flagged button
   learnFlaggedButton: {
