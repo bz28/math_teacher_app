@@ -444,6 +444,19 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               lastResponse.is_correct ? styles.feedbackCorrect : styles.feedbackWrong,
             ]}
           >
+            <View style={styles.feedbackHeader}>
+              <Text style={styles.feedbackIcon}>
+                {lastResponse.is_correct ? "\u2713" : "\u2717"}
+              </Text>
+              <Text
+                style={[
+                  styles.feedbackTitle,
+                  lastResponse.is_correct ? styles.feedbackTitleCorrect : styles.feedbackTitleWrong,
+                ]}
+              >
+                {lastResponse.is_correct ? "Correct!" : "Not quite"}
+              </Text>
+            </View>
             <Text style={styles.feedbackText}>{lastResponse.feedback}</Text>
           </View>
         )}
@@ -696,10 +709,15 @@ const styles = StyleSheet.create({
   stepDescLabel: { fontSize: 12, fontWeight: "600", color: "#1565c0", marginBottom: 4 },
   stepDescText: { fontSize: 16, fontWeight: "600", color: "#1a237e", marginBottom: 8 },
   stepDescHint: { fontSize: 13, color: "#42a5f5", fontStyle: "italic" },
-  feedback: { borderRadius: 8, padding: 12, marginBottom: 12 },
-  feedbackCorrect: { backgroundColor: "#e8f5e9" },
-  feedbackWrong: { backgroundColor: "#fce4ec" },
-  feedbackText: { fontSize: 14 },
+  feedback: { borderRadius: 12, padding: 16, marginBottom: 12 },
+  feedbackCorrect: { backgroundColor: "#e8f5e9", borderWidth: 1, borderColor: "#a5d6a7" },
+  feedbackWrong: { backgroundColor: "#fce4ec", borderWidth: 1, borderColor: "#ef9a9a" },
+  feedbackHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  feedbackIcon: { fontSize: 20, fontWeight: "bold", marginRight: 8 },
+  feedbackTitle: { fontSize: 17, fontWeight: "bold" },
+  feedbackTitleCorrect: { color: "#2e7d32" },
+  feedbackTitleWrong: { color: "#c62828" },
+  feedbackText: { fontSize: 15, lineHeight: 22 },
   error: { color: "red", marginBottom: 12, textAlign: "center" },
   completedTitle: {
     fontSize: 20,
