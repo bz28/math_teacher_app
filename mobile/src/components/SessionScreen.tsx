@@ -242,7 +242,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
           <View style={styles.buttons}>
             <TouchableOpacity
-              style={[styles.button, styles.submitButton]}
+              style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
               onPress={handlePracticeSubmit}
               disabled={phase === "thinking" || !input.trim()}
             >
@@ -593,7 +593,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
             <View style={styles.buttons}>
               <TouchableOpacity
-                style={[styles.button, styles.submitButton]}
+                style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
                 onPress={handleSubmit}
                 disabled={phase === "thinking" || !input.trim()}
               >
@@ -608,7 +608,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
               {!isExplainBack && !isPractice && (
                 <TouchableOpacity
-                  style={[styles.button, styles.hintButton]}
+                  style={[styles.button, styles.hintButton, phase === "thinking" && styles.buttonDisabled]}
                   onPress={requestShowStep}
                   disabled={phase === "thinking"}
                 >
@@ -759,6 +759,7 @@ const styles = StyleSheet.create({
   submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   hintButton: { backgroundColor: "#fff3e0" },
   hintText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
+  buttonDisabled: { opacity: 0.5 },
   questionsButton: {
     backgroundColor: "#fff3e0",
     borderRadius: 8,

@@ -70,7 +70,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       {error && <Text style={styles.error}>{error}</Text>}
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, (loading || !email || !password) && styles.buttonDisabled]}
         onPress={handleSubmit}
         disabled={loading || !email || !password}
       >
@@ -126,4 +126,5 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   switchText: { color: "#4A90D9", textAlign: "center", marginTop: 8 },
+  buttonDisabled: { opacity: 0.5 },
 });
