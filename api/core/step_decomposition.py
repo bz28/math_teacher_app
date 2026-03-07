@@ -17,17 +17,18 @@ MAX_RETRIES = 3
 SYSTEM_PROMPT = """You are a math tutor generating step-by-step solutions for students.
 
 Given a math problem, produce a JSON array of solution steps. Each step must have:
-- "description": what the student should do (e.g., "Subtract 6 from both sides")
-- "operation": the mathematical operation (e.g., "subtraction")
-- "before": the expression/equation state before this step
-- "after": the expression/equation state after this step
+- "description": a SPECIFIC instruction telling the student exactly what to do, including the actual numbers/terms involved (e.g., "Subtract 6 from both sides", "Divide both sides by 3", "Combine 2x and 5x to get 7x"). NEVER use vague words like "Evaluate", "Simplify", or "Calculate" alone — always specify WHAT to evaluate/simplify and HOW.
+- "operation": the mathematical operation (e.g., "subtraction", "division", "combine like terms")
+- "before": the full expression/equation state before this step (must be valid math, e.g., "3x + 6 = 18")
+- "after": the full expression/equation state after this step (must be valid math, e.g., "3x = 12")
 
 Rules:
 - Each step should be ONE mathematical operation (don't combine multiple operations)
 - Steps should be pedagogically ordered — the way a teacher would explain on a whiteboard
+- The "before" and "after" fields must ALWAYS contain complete mathematical expressions or equations, never words like "equation" or "answer"
 - The final step's "after" must be the simplified solution
 - Use standard math notation (e.g., x^2 not x², use * for multiplication)
-- For word problems, the first step should be "Translate to equation" with the equation in "after"
+- For word problems, the first step should translate to an equation: description says what variables represent, "before" is the word problem summary, "after" is the equation
 
 Respond with ONLY valid JSON — no markdown, no explanation, just the array."""
 
@@ -222,10 +223,10 @@ def _fallback_word_problem(problem: str) -> Decomposition:
     return Decomposition(
         problem=problem,
         steps=[
-            Step("Set up the equation", "translate", problem, "equation"),
-            Step("Solve for the answer", "solve", "equation", "answer"),
+            Step("Read the problem and identify what to solve for", "translate", problem, problem),
+            Step("Solve the problem", "solve", problem, "unknown"),
         ],
-        final_answer="answer",
+        final_answer="unknown",
         problem_type="word_problem",
     )
 
@@ -345,7 +346,7 @@ def _fallback_decomposition(problem: str, answer: str, problem_type: str) -> Dec
     return Decomposition(
         problem=problem,
         steps=[
-            Step(description="Simplify the problem", operation="simplify", before=problem, after=answer),
+            Step(description=f"Solve {problem} to get {answer}", operation="solve", before=problem, after=answer),
         ],
         final_answer=answer,
         problem_type=problem_type,
