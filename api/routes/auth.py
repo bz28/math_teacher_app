@@ -28,7 +28,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/check-email")
-async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db)) -> dict:
+async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
