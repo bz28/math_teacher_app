@@ -35,6 +35,7 @@ export function MathKeyboard({ onInsert }: MathKeyboardProps) {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               onInsert(key.value);
             }}
+            activeOpacity={0.6}
             accessibilityLabel={`Insert ${key.label}`}
           >
             <Text style={styles.keyText}>{key.label}</Text>
@@ -48,7 +49,7 @@ export function MathKeyboard({ onInsert }: MathKeyboardProps) {
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   grid: {
     flexDirection: "row",
@@ -57,14 +58,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   key: {
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
-    paddingVertical: 10,
+    backgroundColor: "#F7F8FA",
+    borderRadius: 10,
+    paddingVertical: 12,
     minWidth: 56,
     width: "17%",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
   },
   keyText: {
     fontSize: 18,
