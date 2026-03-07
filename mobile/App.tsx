@@ -44,10 +44,9 @@ export default function App() {
   const displayError = error ?? sessionError;
 
   // On launch, check if onboarding was already completed
-  // TODO: remove deleteItemAsync — temporary for dev/testing
   useEffect(() => {
-    SecureStore.deleteItemAsync(ONBOARDING_KEY).then(() => {
-      setScreen("onboarding");
+    SecureStore.getItemAsync(ONBOARDING_KEY).then((done) => {
+      setScreen(done ? "auth" : "onboarding");
     });
   }, []);
 
