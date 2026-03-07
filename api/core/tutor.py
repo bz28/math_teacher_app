@@ -578,6 +578,66 @@ async def converse(
     )
 
 
+STEP_CHAT_PROMPT = """\
+You are a math tutor helping a student understand a specific step in solving a problem.
+
+You will receive:
+- The problem being solved
+- The current step the student is looking at (description, before, after)
+- The conversation history so far
+- The student's question
+
+Your job is to help the student understand THIS SPECIFIC STEP only.
+Do NOT reveal future steps or the final answer.
+
+Respond with ONLY valid JSON:
+{
+  "feedback": "Your helpful response to the student's question"
+}
+
+Rules:
+- Answer questions about WHY this step is done and HOW it works
+- Use concrete examples and analogies if helpful
+- Keep responses concise (2-4 sentences)
+- NEVER reveal the final answer to the problem
+- NEVER skip ahead to future steps — only discuss the current step
+- If the student asks about something unrelated to this step, gently redirect"""
+
+
+@dataclass
+class StepChatResult:
+    feedback: str
+
+
+async def step_chat(
+    problem: str,
+    step: dict[str, str],
+    exchanges: list[dict[str, str]],
+    student_input: str,
+    session_id: str | None = None,
+    user_id: str | None = None,
+) -> StepChatResult:
+    """Answer a student's question about a specific step."""
+    history_text = "\n".join(
+        f"  {e['role']}: {e['content']}"
+        for e in exchanges[-CONVERSE_HISTORY_LIMIT:]
+    ) if exchanges else "(no prior conversation)"
+
+    prompt = (
+        f"Problem: {problem}\n\n"
+        f"Current step:\n"
+        f"  Description: {step['description']}\n"
+        f"  Before: {step['before']}\n"
+        f"  After: {step['after']}\n\n"
+        f"Conversation so far:\n{history_text}\n\n"
+        f"Student's question: {student_input}"
+    )
+    data = await _call_claude_json(
+        STEP_CHAT_PROMPT, prompt, "step_chat", session_id, user_id
+    )
+    return StepChatResult(feedback=str(data.get("feedback", "")))
+
+
 def get_daily_cost() -> float:
     """Return the current day's total estimated Claude API cost."""
     return _cost_tracker.total_usd

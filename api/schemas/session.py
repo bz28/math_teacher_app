@@ -9,9 +9,10 @@ class CreateSessionRequest(BaseModel):
 
 
 class RespondRequest(BaseModel):
-    student_response: str
+    student_response: str = ""
     request_hint: bool = False
     request_show_step: bool = False
+    request_advance: bool = False
 
 
 class ExplainBackRequest(BaseModel):

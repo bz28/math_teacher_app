@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.math_engine import MathEngine
 from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
-from api.core.tutor import _call_claude_json, converse, probe
+from api.core.tutor import _call_claude_json, converse, probe, step_chat
 from api.models.session import Session
 
 MAX_ATTEMPTS_PER_STEP = 5
@@ -325,14 +325,127 @@ async def _respond_practice_mode(
     )
 
 
+async def _complete_learn(
+    db: AsyncSession, session: Session,
+) -> StepResponse:
+    """Mark a learn session as completed and generate a similar problem."""
+    session.current_step = session.total_steps
+    session.status = "completed"
+    if session.problem_type == "word_problem":
+        similar = await generate_similar_word_problem(session.problem)
+    else:
+        similar = MathEngine.generate_similar(session.problem)
+    feedback = "Correct! You've solved the problem!"
+    _add_exchange(session, "tutor", feedback)
+    await db.commit()
+    return StepResponse(
+        action="completed",
+        feedback=feedback,
+        current_step=session.current_step,
+        total_steps=session.total_steps,
+        is_correct=True,
+        similar_problem=similar,
+    )
+
+
+async def _respond_learn_mode(
+    db: AsyncSession,
+    session: Session,
+    student_response: str,
+    request_advance: bool = False,
+) -> StepResponse:
+    """Handle learn mode: steps shown upfront, chat scoped to current step.
+
+    Non-final steps: student reads the step, can ask questions, clicks
+    "I understand" (request_advance=True) to advance.
+
+    Final step: student must provide the final answer. The step is NOT
+    shown — we ask them what the answer is and evaluate it.
+    """
+    step_data = session.steps[session.current_step]
+    is_final_step = session.current_step >= session.total_steps - 1
+
+    # --- Non-final step: advance or chat ---
+    if not is_final_step:
+        if request_advance:
+            session.current_step += 1
+            await db.commit()
+            return StepResponse(
+                action="advance",
+                feedback="",
+                current_step=session.current_step,
+                total_steps=session.total_steps,
+                is_correct=True,
+            )
+
+        # Chat: answer questions about this step
+        _add_exchange(session, "student", student_response)
+        chat_result = await step_chat(
+            problem=session.problem,
+            step=step_data,
+            exchanges=session.exchanges,
+            student_input=student_response,
+            session_id=str(session.id),
+        )
+        _add_exchange(session, "tutor", chat_result.feedback)
+        await db.commit()
+        return StepResponse(
+            action="conversation",
+            feedback=chat_result.feedback,
+            current_step=session.current_step,
+            total_steps=session.total_steps,
+        )
+
+    # --- Final step: evaluate the student's answer ---
+    if request_advance:
+        raise SessionError("You must provide an answer for the final step")
+
+    correct_answer = step_data["after"]
+    _add_exchange(session, "student", student_response)
+
+    # 1. Fast symbolic check
+    is_correct = False
+    try:
+        is_correct = MathEngine.are_equivalent(student_response.strip(), correct_answer.strip())
+    except Exception:
+        pass
+
+    # 2. Direct string match
+    if not is_correct:
+        is_correct = student_response.strip() == correct_answer.strip()
+
+    # 3. LLM fallback
+    if not is_correct:
+        is_correct = await _llm_check_final_answer(
+            session.problem, correct_answer,
+            student_response, str(session.id),
+        )
+
+    if is_correct:
+        return await _complete_learn(db, session)
+
+    # Wrong answer
+    feedback = "Not quite. Review the steps above and try again."
+    _add_exchange(session, "tutor", feedback)
+    await db.commit()
+    return StepResponse(
+        action="error",
+        feedback=feedback,
+        current_step=session.current_step,
+        total_steps=session.total_steps,
+        is_correct=False,
+    )
+
+
 async def respond_to_step(
     db: AsyncSession,
     session: Session,
     student_response: str,
     request_hint: bool = False,
     request_show_step: bool = False,
+    request_advance: bool = False,
 ) -> StepResponse | AsyncIterator[str]:
-    """Process a student's response or hint request for the current step.
+    """Process a student's response or action for the current step.
 
     Returns a StepResponse for JSON actions, or an AsyncIterator[str] for
     streamed explanations.
@@ -346,137 +459,12 @@ async def respond_to_step(
             return await _converse_completed(db, session, student_response)
         raise SessionError("All steps completed")
 
-    step_data = session.steps[session.current_step]
-    step = Step(
-        description=step_data["description"],
-        operation=step_data["operation"],
-        before=step_data["before"],
-        after=step_data["after"],
-    )
-
-    # Initialize step tracking
-    step_key = str(session.current_step)
-    tracking = dict(session.step_tracking)
-    if step_key not in tracking:
-        tracking[step_key] = {"attempts": 0, "hints_used": 0, "explain_back": False, "shown": False}
-    step_info = tracking[step_key]
-
-    # Handle hint request (practice mode only now; learn mode uses show_step)
-    if request_hint:
-        hint_level = min(step_info["hints_used"], MAX_HINTS_PER_STEP - 1)
-        hint = _generate_hint(step, hint_level)
-        step_info["hints_used"] += 1
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-
-        _add_exchange(session, "tutor", f"Hint: {hint}")
-        await db.commit()
-
-        return StepResponse(
-            action="hint",
-            feedback=hint,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-        )
-
     # Practice mode: skip step enforcement, explain-back, scaffolding
     if session.mode == "practice":
         return await _respond_practice_mode(db, session, student_response)
 
-    # --- Learn mode: conversational tutoring ---
-
-    # Handle "Show next step" request
-    if request_show_step:
-        step_info["shown"] = True
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-        feedback = "Here's what to do next. Enter the math expression to continue."
-        _add_exchange(session, "tutor", f"Show step: {step.description}")
-        await db.commit()
-        return StepResponse(
-            action="show_step",
-            feedback=feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-            step_description=step.description,
-        )
-
-    # Record the student's response
-    _add_exchange(session, "student", student_response)
-    step_info["attempts"] += 1
-
-    # Call converse() for LLM evaluation
-    converse_result = await converse(
-        problem=session.problem,
-        steps=session.steps,
-        exchanges=session.exchanges,
-        student_input=student_response,
-        session_id=str(session.id),
-    )
-
-    # Question or unclear → return conversation feedback
-    if converse_result.input_type in ("question", "unclear"):
-        _add_exchange(session, "tutor", converse_result.feedback)
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-        await db.commit()
-        return StepResponse(
-            action="conversation",
-            feedback=converse_result.feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-        )
-
-    # Answer attempt
-    if converse_result.is_correct and converse_result.steps_completed is not None:
-        new_step = converse_result.steps_completed + 1
-
-        # Advance
-        session.current_step = new_step
-        tracking[step_key] = step_info
-        session.step_tracking = tracking
-
-        if session.current_step >= session.total_steps:
-            session.status = "completed"
-            if session.problem_type == "word_problem":
-                similar = await generate_similar_word_problem(session.problem)
-            else:
-                similar = MathEngine.generate_similar(session.problem)
-            feedback = f"{converse_result.feedback} Problem complete!"
-            _add_exchange(session, "tutor", feedback)
-            await db.commit()
-            return StepResponse(
-                action="completed",
-                feedback=feedback,
-                current_step=session.current_step,
-                total_steps=session.total_steps,
-                is_correct=True,
-                similar_problem=similar,
-            )
-
-        _add_exchange(session, "tutor", converse_result.feedback)
-        await db.commit()
-        return StepResponse(
-            action="advance",
-            feedback=converse_result.feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-            is_correct=True,
-        )
-
-    # Wrong answer
-    _add_exchange(session, "tutor", converse_result.feedback)
-    tracking[step_key] = step_info
-    session.step_tracking = tracking
-    await db.commit()
-
-    return StepResponse(
-        action="error",
-        feedback=converse_result.feedback,
-        current_step=session.current_step,
-        total_steps=session.total_steps,
-        is_correct=False,
-    )
+    # Learn mode: steps shown upfront, chat scoped to step, final answer eval
+    return await _respond_learn_mode(db, session, student_response, request_advance)
 
 
 # ---------------------------------------------------------------------------

@@ -101,7 +101,8 @@ async def respond(
 
     try:
         result = await respond_to_step(
-            db, session, body.student_response, body.request_hint, body.request_show_step
+            db, session, body.student_response, body.request_hint,
+            body.request_show_step, body.request_advance,
         )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
