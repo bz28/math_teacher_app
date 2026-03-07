@@ -247,19 +247,21 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <Text style={styles.cardLabel}>Problem</Text>
           <Text style={styles.problemText}>{session.problem}</Text>
         </View>
-        <View style={styles.progressRow}>
-          <View style={styles.progressContainer}>
-            <View
-              style={[
-                styles.progressBar,
-                { width: `${(session.current_step / session.total_steps) * 100}%` },
-              ]}
-            />
+        {!isPractice && (
+          <View style={styles.progressRow}>
+            <View style={styles.progressContainer}>
+              <View
+                style={[
+                  styles.progressBar,
+                  { width: `${(session.current_step / session.total_steps) * 100}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressLabel}>
+              Step {session.current_step}/{session.total_steps}
+            </Text>
           </View>
-          <Text style={styles.progressLabel}>
-            Step {session.current_step}/{session.total_steps}
-          </Text>
-        </View>
+        )}
       </View>
 
       <ScrollView
