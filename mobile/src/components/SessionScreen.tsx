@@ -112,9 +112,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack}>
-              <Text style={styles.backText}>{"\u2039 Back"}</Text>
+              <Text style={styles.backText}>{"\u2039"} Back</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>
+            <Text style={styles.headerTitle}>
               Practice {currentIndex + 1}/{problems.length}
             </Text>
           </View>
@@ -153,6 +153,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               value={input}
               onChangeText={setInput}
               placeholder="Enter your answer..."
+              placeholderTextColor="#999"
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="go"
@@ -167,6 +168,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
               onPress={handlePracticeSubmit}
               disabled={phase === "thinking" || !input.trim()}
+              activeOpacity={0.7}
             >
               {phase === "thinking" ? (
                 <ActivityIndicator color="#fff" size="small" />
@@ -177,6 +179,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <TouchableOpacity
               style={[styles.button, styles.flagButton, practiceBatch.flags[currentIndex] && styles.flagButtonActive]}
               onPress={() => togglePracticeFlag(currentIndex)}
+              activeOpacity={0.7}
             >
               <Text style={[styles.flagText, practiceBatch.flags[currentIndex] && styles.flagTextActive]}>
                 {practiceBatch.flags[currentIndex] ? "Flagged" : "Flag"}
@@ -245,9 +248,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack}>
-            <Text style={styles.backText}>{"\u2039 Back"}</Text>
+            <Text style={styles.backText}>{"\u2039"} Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>
+          <Text style={styles.headerTitle}>
             {isLearnQueue && learnQueue
               ? `Learn ${learnQueue.currentIndex + 1}/${learnQueue.problems.length}`
               : isPractice ? "Practice" : "Learn"}
@@ -349,6 +352,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <TouchableOpacity
             style={styles.switchModeButton}
             onPress={switchToLearnMode}
+            activeOpacity={0.7}
           >
             <Text style={styles.switchModeText}>Switch to Learn Mode</Text>
           </TouchableOpacity>
@@ -358,12 +362,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
         {/* Completed — learn queue mode */}
         {isCompleted && isLearnQueue && learnQueue && (
-          <View style={styles.card}>
+          <View style={styles.completedCard}>
             <Text style={styles.completedTitle}>Problem Solved!</Text>
 
             <TouchableOpacity
               style={styles.questionsButton}
               onPress={continueAsking}
+              activeOpacity={0.7}
             >
               <Text style={styles.questionsText}>I still have questions</Text>
             </TouchableOpacity>
@@ -372,14 +377,16 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <TouchableOpacity
                 style={styles.similarButton}
                 onPress={learnSimilarProblem}
+                activeOpacity={0.7}
               >
                 <Text style={styles.similarText}>Learn Similar Problem</Text>
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
-              style={[styles.flagButton, styles.flagButtonWide, learnQueue.flags[learnQueue.currentIndex] && styles.flagButtonActive]}
+              style={[styles.flagButtonWide, learnQueue.flags[learnQueue.currentIndex] && styles.flagButtonActive]}
               onPress={() => toggleLearnFlag(learnQueue.currentIndex)}
+              activeOpacity={0.7}
             >
               <Text style={[styles.flagText, learnQueue.flags[learnQueue.currentIndex] && styles.flagTextActive]}>
                 {learnQueue.flags[learnQueue.currentIndex] ? "Flagged" : "Flag for Practice"}
@@ -387,10 +394,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.newProblemButton}
+              style={styles.outlineButton}
               onPress={advanceLearnQueue}
+              activeOpacity={0.7}
             >
-              <Text style={styles.newProblemText}>
+              <Text style={styles.outlineButtonText}>
                 {learnQueue.currentIndex < learnQueue.problems.length - 1
                   ? "Next Problem"
                   : "View Results"}
@@ -401,7 +409,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
         {/* Completed — non-queue mode */}
         {isCompleted && !isLearnQueue && (
-          <View style={styles.card}>
+          <View style={styles.completedCard}>
             <Text style={styles.completedTitle}>Problem Solved!</Text>
             {isPractice && (
               <View style={styles.solutionSteps}>
@@ -419,6 +427,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <TouchableOpacity
                 style={styles.similarButton}
                 onPress={tryPracticeProblem}
+                activeOpacity={0.7}
               >
                 <Text style={styles.similarText}>Try a practice problem</Text>
               </TouchableOpacity>
@@ -427,6 +436,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <TouchableOpacity
                 style={styles.questionsButton}
                 onPress={continueAsking}
+                activeOpacity={0.7}
               >
                 <Text style={styles.questionsText}>I still have questions</Text>
               </TouchableOpacity>
@@ -435,14 +445,19 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <TouchableOpacity
                 style={styles.similarButton}
                 onPress={() => handleSimilarProblem(lastResponse.similar_problem!)}
+                activeOpacity={0.7}
               >
                 <Text style={styles.similarText}>
                   Try: {lastResponse.similar_problem}
                 </Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
-              <Text style={styles.newProblemText}>New Problem</Text>
+            <TouchableOpacity
+              style={styles.outlineButton}
+              onPress={handleBack}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.outlineButtonText}>New Problem</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -461,6 +476,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     value={input}
                     onChangeText={setInput}
                     placeholder="Ask a question..."
+                    placeholderTextColor="#999"
                     autoCapitalize="none"
                     autoCorrect={false}
                     returnKeyType="go"
@@ -474,6 +490,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                       style={[styles.button, styles.submitButton, phase === "thinking" && styles.buttonDisabled]}
                       onPress={handleAsk}
                       disabled={phase === "thinking"}
+                      activeOpacity={0.7}
                     >
                       {phase === "thinking" ? (
                         <ActivityIndicator color="#fff" size="small" />
@@ -486,6 +503,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                       style={[styles.button, styles.submitButton, phase === "thinking" && styles.buttonDisabled]}
                       onPress={advanceStep}
                       disabled={phase === "thinking"}
+                      activeOpacity={0.7}
                     >
                       {phase === "thinking" ? (
                         <ActivityIndicator color="#fff" size="small" />
@@ -509,6 +527,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     value={input}
                     onChangeText={setInput}
                     placeholder="Enter your answer..."
+                    placeholderTextColor="#999"
                     autoCapitalize="none"
                     autoCorrect={false}
                     returnKeyType="go"
@@ -523,6 +542,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
                     onPress={handleSubmit}
                     disabled={phase === "thinking" || !input.trim()}
+                    activeOpacity={0.7}
                   >
                     {phase === "thinking" ? (
                       <ActivityIndicator color="#fff" size="small" />
@@ -547,6 +567,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     value={input}
                     onChangeText={setInput}
                     placeholder="Type your explanation..."
+                    placeholderTextColor="#999"
                     autoCapitalize="none"
                     autoCorrect={false}
                     returnKeyType="go"
@@ -559,6 +580,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     style={[styles.button, styles.submitButton, !input.trim() && styles.buttonDisabled]}
                     onPress={handleSubmit}
                     disabled={!input.trim()}
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.submitText}>Submit</Text>
                   </TouchableOpacity>
@@ -579,7 +601,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: { marginTop: 12, fontSize: 16, color: "#666" },
+  loadingText: { marginTop: 16, fontSize: 16, color: "#888" },
   container: { flex: 1, backgroundColor: "#fff" },
   stickyHeader: { paddingHorizontal: 20, backgroundColor: "#fff" },
   content: { padding: 20, paddingTop: 8 },
@@ -590,25 +612,29 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600", minHeight: 44, lineHeight: 44 },
-  title: { fontSize: 16, fontWeight: "600", color: "#666" },
+  headerTitle: { fontSize: 15, fontWeight: "600", color: "#888" },
   problemCard: {
-    backgroundColor: "#f8f8f8",
-    borderRadius: 12,
+    backgroundColor: "#F7F8FA",
+    borderRadius: 14,
     padding: 16,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E8EBF0",
   },
-  card: {
-    backgroundColor: "#f8f8f8",
-    borderRadius: 12,
-    padding: 16,
+  completedCard: {
+    backgroundColor: "#F7F8FA",
+    borderRadius: 14,
+    padding: 20,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E8EBF0",
   },
-  cardLabel: { fontSize: 12, fontWeight: "600", color: "#999", marginBottom: 4 },
-  problemText: { fontSize: 18, fontWeight: "600" },
+  cardLabel: { fontSize: 12, fontWeight: "600", color: "#999", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 },
+  problemText: { fontSize: 18, fontWeight: "600", color: "#1a1a1a" },
   promptText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#333",
+    color: "#1a1a1a",
     marginBottom: 12,
     textAlign: "center",
   },
@@ -621,7 +647,7 @@ const styles = StyleSheet.create({
   progressContainer: {
     flex: 1,
     height: 6,
-    backgroundColor: "#eee",
+    backgroundColor: "#E8EBF0",
     borderRadius: 3,
   },
   progressBar: { height: 6, backgroundColor: "#4A90D9", borderRadius: 3 },
@@ -630,147 +656,155 @@ const styles = StyleSheet.create({
   historyRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: "#f6faf6",
-    borderRadius: 8,
+    backgroundColor: "#F0F7F0",
+    borderRadius: 10,
     marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#D4E8D4",
   },
   historyCheck: { fontSize: 16, color: "#4caf50", marginRight: 10, marginTop: 1 },
   historyContent: { flex: 1 },
-  historyLabel: { fontSize: 11, fontWeight: "600", color: "#999" },
-  historyDesc: { fontSize: 14, color: "#666" },
+  historyLabel: { fontSize: 11, fontWeight: "600", color: "#999", textTransform: "uppercase", letterSpacing: 0.5 },
+  historyDesc: { fontSize: 14, color: "#666", marginTop: 2 },
   historyResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
   stepDescCard: {
-    backgroundColor: "#e3f2fd",
-    borderRadius: 12,
+    backgroundColor: "#EBF2FC",
+    borderRadius: 14,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#90caf9",
+    borderWidth: 1.5,
+    borderColor: "#B8D4F0",
   },
-  stepDescLabel: { fontSize: 12, fontWeight: "600", color: "#1565c0", marginBottom: 4 },
+  stepDescLabel: { fontSize: 12, fontWeight: "600", color: "#4A90D9", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 },
   stepDescText: { fontSize: 16, fontWeight: "600", color: "#1a237e", marginBottom: 8 },
   stepDescHint: { fontSize: 13, color: "#42a5f5", fontStyle: "italic" },
-  feedback: { borderRadius: 12, padding: 16, marginBottom: 12 },
-  feedbackCorrect: { backgroundColor: "#e8f5e9", borderWidth: 1, borderColor: "#a5d6a7" },
-  feedbackWrong: { backgroundColor: "#fce4ec", borderWidth: 1, borderColor: "#ef9a9a" },
-  feedbackConversation: { backgroundColor: "#e3f2fd", borderWidth: 1, borderColor: "#90caf9" },
+  feedback: { borderRadius: 14, padding: 16, marginBottom: 12 },
+  feedbackCorrect: { backgroundColor: "#F0F7F0", borderWidth: 1.5, borderColor: "#C8E6C9" },
+  feedbackWrong: { backgroundColor: "#FFF5F5", borderWidth: 1.5, borderColor: "#FFCDD2" },
+  feedbackConversation: { backgroundColor: "#EBF2FC", borderWidth: 1.5, borderColor: "#B8D4F0" },
   feedbackHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   feedbackIcon: { fontSize: 20, fontWeight: "bold", marginRight: 8 },
   feedbackTitle: { fontSize: 17, fontWeight: "bold" },
   feedbackTitleCorrect: { color: "#2e7d32" },
   feedbackTitleWrong: { color: "#c62828" },
-  feedbackText: { fontSize: 15, lineHeight: 22 },
-  error: { color: "red", marginBottom: 12, textAlign: "center" },
+  feedbackText: { fontSize: 15, lineHeight: 22, color: "#333" },
+  error: { color: "#E53935", marginBottom: 12, textAlign: "center", fontSize: 14 },
   completedTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#4caf50",
-    marginBottom: 12,
+    marginBottom: 16,
     textAlign: "center",
   },
   similarButton: {
     backgroundColor: "#4caf50",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     marginTop: 8,
     alignItems: "center",
   },
-  similarText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  newProblemButton: {
+  similarText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  outlineButton: {
     backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     marginTop: 8,
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: "#4A90D9",
   },
-  newProblemText: { color: "#4A90D9", fontWeight: "600", fontSize: 16 },
-  inputLabel: { fontSize: 13, fontWeight: "600", color: "#999", marginBottom: 4 },
+  outlineButtonText: { color: "#4A90D9", fontWeight: "700", fontSize: 16 },
+  inputLabel: { fontSize: 13, fontWeight: "600", color: "#888", marginBottom: 6 },
   input: {
     width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 18,
-    minHeight: 44,
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 17,
+    minHeight: 48,
+    backgroundColor: "#F9FAFB",
+    color: "#1a1a1a",
   },
   explainInputArea: {
-    backgroundColor: "#eef5ff",
-    borderWidth: 1,
-    borderColor: "#b3d4fc",
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: "#EBF2FC",
+    borderWidth: 1.5,
+    borderColor: "#B8D4F0",
+    borderRadius: 14,
+    padding: 14,
     marginBottom: 4,
   },
   explainLabel: { fontSize: 14, fontWeight: "600", color: "#4A90D9", marginBottom: 8 },
   explainInput: {
     width: "100%",
-    borderWidth: 1,
-    borderColor: "#b3d4fc",
-    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#B8D4F0",
+    borderRadius: 10,
     padding: 12,
     fontSize: 16,
     minHeight: 60,
     backgroundColor: "#fff",
+    color: "#1a1a1a",
   },
-  buttons: { flexDirection: "row", gap: 12, marginTop: 8 },
-  button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  buttons: { flexDirection: "row", gap: 12, marginTop: 10 },
+  button: { paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12 },
   submitButton: { backgroundColor: "#4A90D9", flex: 1, alignItems: "center" },
-  submitText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  hintButton: { backgroundColor: "#fff3e0" },
+  submitText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  hintButton: { backgroundColor: "#FFF3E0" },
   hintText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
-  buttonDisabled: { opacity: 0.5 },
+  buttonDisabled: { opacity: 0.4 },
   questionsButton: {
     backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     marginTop: 8,
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: "#e65100",
   },
-  questionsText: { color: "#e65100", fontWeight: "600", fontSize: 16 },
+  questionsText: { color: "#e65100", fontWeight: "700", fontSize: 16 },
   switchModeButton: {
     backgroundColor: "#1565c0",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 12,
     alignItems: "center",
   },
-  switchModeText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  switchModeText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   solutionSteps: { marginBottom: 12 },
-  solutionLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 8 },
+  solutionLabel: { fontSize: 14, fontWeight: "600", color: "#888", marginBottom: 8 },
   solutionRow: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: "#f6faf6",
-    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#F0F7F0",
+    borderRadius: 8,
     marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#D4E8D4",
   },
-  solutionStepNum: { fontSize: 11, fontWeight: "600", color: "#999" },
-  solutionDesc: { fontSize: 14, color: "#666" },
+  solutionStepNum: { fontSize: 11, fontWeight: "600", color: "#999", textTransform: "uppercase", letterSpacing: 0.5 },
+  solutionDesc: { fontSize: 14, color: "#666", marginTop: 2 },
   solutionResult: { fontSize: 14, fontWeight: "600", color: "#333", marginTop: 2 },
-  // Flag button (during answering)
   flagButton: {
     backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ccc",
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
   },
   flagButtonActive: {
-    backgroundColor: "#fff3e0",
+    backgroundColor: "#FFF3E0",
     borderColor: "#ff9800",
   },
   flagButtonWide: {
-    flex: 0,
     width: "100%",
     alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
     marginTop: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
   },
   flagText: { color: "#999", fontWeight: "600", fontSize: 14 },
   flagTextActive: { color: "#e65100" },

@@ -33,11 +33,13 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backText}>{"\u2039 Back"}</Text>
+        <Text style={styles.backText}>{"\u2039"} Back</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>Choose a Mode</Text>
-      <Text style={styles.subtitle}>How would you like to study?</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Choose a Mode</Text>
+        <Text style={styles.subtitle}>How would you like to study?</Text>
+      </View>
 
       <View style={styles.list}>
         {MODES.map((mode) => (
@@ -45,12 +47,14 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
             key={mode.id}
             style={styles.card}
             onPress={() => onSelect(mode.id)}
+            activeOpacity={0.7}
           >
             <Text style={styles.icon}>{mode.icon}</Text>
             <View style={styles.cardText}>
               <Text style={styles.label}>{mode.label}</Text>
               <Text style={styles.description}>{mode.description}</Text>
             </View>
+            <Text style={styles.chevron}>{"\u203A"}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -62,24 +66,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
   },
-  backButton: { alignSelf: "flex-start", marginBottom: 24 },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
   backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
-  title: { fontSize: 28, fontWeight: "bold", marginBottom: 8 },
-  subtitle: { fontSize: 16, color: "#666", marginBottom: 32 },
-  list: { gap: 16 },
+  header: {
+    marginBottom: 28,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: "#888",
+    lineHeight: 22,
+  },
+  list: { gap: 14 },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F4FF",
-    borderRadius: 16,
+    backgroundColor: "#F7F8FA",
+    borderRadius: 14,
     padding: 20,
     borderWidth: 2,
-    borderColor: "#4A90D9",
+    borderColor: "#E8EBF0",
   },
-  icon: { fontSize: 32, marginRight: 16 },
+  icon: { fontSize: 30, marginRight: 16 },
   cardText: { flex: 1 },
-  label: { fontSize: 18, fontWeight: "600", color: "#333", marginBottom: 4 },
-  description: { fontSize: 14, color: "#666" },
+  label: { fontSize: 17, fontWeight: "700", color: "#1a1a1a", marginBottom: 4 },
+  description: { fontSize: 14, color: "#888", lineHeight: 20 },
+  chevron: { fontSize: 24, color: "#C0C4CC", fontWeight: "300" },
 });

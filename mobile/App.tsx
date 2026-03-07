@@ -160,28 +160,36 @@ export default function App() {
               style={styles.backButton}
               onPress={() => setScreen("mode-select")}
             >
-              <Text style={styles.backText}>{"\u2039 Back"}</Text>
+              <Text style={styles.backText}>{"\u2039"} Back</Text>
             </TouchableOpacity>
-            <View style={styles.modeChip}>
-              <Text style={styles.modeChipText}>
-                {mode === "learn" ? "📖 Learn" : mode === "practice" ? "✏️ Practice" : "📝 Mock Exam"}
-              </Text>
+
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Enter a Problem</Text>
+              <View style={styles.modeChip}>
+                <Text style={styles.modeChipText}>
+                  {mode === "learn" ? "📖 Learn" : mode === "practice" ? "✏️ Practice" : "📝 Mock Exam"}
+                </Text>
+              </View>
             </View>
 
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              value={input}
-              onChangeText={(text) => {
-                setInput(text);
-                setError(null);
-              }}
-              placeholder="Enter a math problem (e.g. 2x + 6 = 12)"
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="go"
-              onSubmitEditing={handleGo}
-            />
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Math problem</Text>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                value={input}
+                onChangeText={(text) => {
+                  setInput(text);
+                  setError(null);
+                }}
+                placeholder="e.g. 2x + 6 = 12"
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="go"
+                onSubmitEditing={handleGo}
+              />
+            </View>
 
             <MathKeyboard onInsert={handleInsert} />
 
@@ -192,6 +200,7 @@ export default function App() {
                   <TouchableOpacity
                     style={styles.stepperButton}
                     onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.stepperText}>-</Text>
                   </TouchableOpacity>
@@ -199,6 +208,7 @@ export default function App() {
                   <TouchableOpacity
                     style={styles.stepperButton}
                     onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.stepperText}>+</Text>
                   </TouchableOpacity>
@@ -210,9 +220,10 @@ export default function App() {
             )}
 
             <TouchableOpacity
-              style={[styles.button, styles.goButton, (!input.trim() || isLoading) && styles.buttonDisabled]}
+              style={[styles.goButton, (!input.trim() || isLoading) && styles.buttonDisabled]}
               onPress={handleGo}
               disabled={isLoading || !input.trim()}
+              activeOpacity={0.7}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" size="small" />
@@ -237,62 +248,88 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1 },
   scrollContent: {
-    alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 28,
     paddingBottom: 20,
   },
-  title: { fontSize: 24, fontWeight: "bold", marginBottom: 20 },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
+  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+  header: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+    marginBottom: 10,
+  },
+  modeChip: {
+    backgroundColor: "#EBF2FC",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  modeChipText: { fontSize: 14, fontWeight: "600", color: "#4A90D9" },
+  inputWrapper: {
+    width: "100%",
+    marginBottom: 4,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#888",
+    marginBottom: 6,
+  },
   input: {
     width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 18,
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 17,
+    backgroundColor: "#F9FAFB",
+    color: "#1a1a1a",
   },
-  button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
   goButton: {
     backgroundColor: "#4A90D9",
+    borderRadius: 12,
+    padding: 16,
     marginTop: 12,
     width: "100%",
     alignItems: "center",
   },
-  goText: { color: "#fff", fontWeight: "600", fontSize: 18 },
-  backButton: { alignSelf: "flex-start", marginBottom: 8 },
-  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
-  error: { color: "red", marginTop: 12, textAlign: "center" },
-  // Practice count picker
+  goText: { color: "#fff", fontWeight: "700", fontSize: 17 },
+  error: { color: "#E53935", marginTop: 12, textAlign: "center", fontSize: 14 },
   countPicker: {
     width: "100%",
     alignItems: "center",
     marginTop: 16,
+    backgroundColor: "#F7F8FA",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E8EBF0",
   },
-  countLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 8 },
+  countLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 10 },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 20,
   },
   stepperButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#4A90D9",
     justifyContent: "center",
     alignItems: "center",
   },
   stepperText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
-  countValue: { fontSize: 24, fontWeight: "bold", color: "#333", minWidth: 30, textAlign: "center" },
-  countHint: { fontSize: 12, color: "#999", marginTop: 4 },
-  buttonDisabled: { opacity: 0.5 },
-  modeChip: {
-    backgroundColor: "#F0F4FF",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#4A90D9",
-  },
-  modeChipText: { fontSize: 15, fontWeight: "600", color: "#4A90D9" },
+  countValue: { fontSize: 26, fontWeight: "bold", color: "#1a1a1a", minWidth: 30, textAlign: "center" },
+  countHint: { fontSize: 12, color: "#999", marginTop: 6 },
+  buttonDisabled: { opacity: 0.4 },
 });
