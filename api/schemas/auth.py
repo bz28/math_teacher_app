@@ -27,6 +27,10 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class CheckEmailRequest(BaseModel):
+    email: EmailStr
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str

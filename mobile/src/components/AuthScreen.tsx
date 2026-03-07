@@ -12,10 +12,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { login, register, setAuthToken } from "../services/api";
+import { checkEmail, login, register, setAuthToken } from "../services/api";
 
 interface AuthScreenProps {
   onAuth: () => void;
+  defaultToRegister?: boolean;
 }
 
 const GRADES = [
@@ -36,8 +37,8 @@ const TOPICS = [
 
 type RegisterStep = "credentials" | "grade" | "topics";
 
-export function AuthScreen({ onAuth }: AuthScreenProps) {
-  const [isLogin, setIsLogin] = useState(false);
+export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
+  const [isLogin, setIsLogin] = useState(!defaultToRegister);
   const [registerStep, setRegisterStep] = useState<RegisterStep>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -84,9 +85,35 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     }
   };
 
-  const handleCredentialsNext = () => {
+  const handleCredentialsNext = async () => {
     if (!email || !password) return;
     setError(null);
+
+    // Check email availability first (most important to know early)
+    setLoading(true);
+    try {
+      await checkEmail(email);
+    } catch (e) {
+      setError((e as Error).message);
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+
+    // Then validate password client-side
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError("Password must contain an uppercase letter");
+      return;
+    }
+    if (!/\d/.test(password)) {
+      setError("Password must contain a digit");
+      return;
+    }
+
     setRegisterStep("grade");
   };
 
@@ -228,12 +255,16 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
             <TouchableOpacity
               style={[
                 styles.primaryButton,
-                (!email || !password) && styles.buttonDisabled,
+                (loading || !email || !password) && styles.buttonDisabled,
               ]}
               onPress={handleCredentialsNext}
-              disabled={!email || !password}
+              disabled={loading || !email || !password}
             >
-              <Text style={styles.primaryButtonText}>Continue</Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Continue</Text>
+              )}
             </TouchableOpacity>
           </View>
 
