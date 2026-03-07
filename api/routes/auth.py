@@ -16,6 +16,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.user import User
 from api.schemas.auth import (
+    CheckEmailRequest,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -24,6 +25,14 @@ from api.schemas.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/check-email")
+async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
+    existing = await db.execute(select(User).where(User.email == body.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    return {"available": True}
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

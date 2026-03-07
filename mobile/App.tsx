@@ -33,6 +33,7 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("learn");
   const [practiceCount, setPracticeCount] = useState(3);
   const [error, setError] = useState<string | null>(null);
+  const [fromOnboarding, setFromOnboarding] = useState(false);
   const {
     startSession,
     startPracticeBatch,
@@ -74,6 +75,7 @@ export default function App() {
 
   const handleOnboardingComplete = async () => {
     await SecureStore.setItemAsync(ONBOARDING_KEY, "true");
+    setFromOnboarding(true);
     setScreen("auth");
   };
 
@@ -94,7 +96,7 @@ export default function App() {
   if (screen === "auth") {
     return (
       <SafeAreaProvider>
-        <AuthScreen onAuth={() => setScreen("home")} />
+        <AuthScreen onAuth={() => setScreen("home")} defaultToRegister={fromOnboarding} />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -107,6 +109,7 @@ export default function App() {
           onSelect={() => setScreen("mode-select")}
           onLogout={() => {
             setAuthToken(null);
+            setFromOnboarding(false);
             setScreen("auth");
           }}
         />

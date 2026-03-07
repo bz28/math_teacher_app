@@ -51,6 +51,15 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+function extractError(data: Record<string, unknown> | null, status: number): string {
+  if (!data?.detail) return `Request failed (${status})`;
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((e: { msg?: string }) => e.msg ?? String(e)).join(". ");
+  }
+  return `Request failed (${status})`;
+}
+
 async function apiPost<T>(path: string, body: object): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -59,7 +68,7 @@ async function apiPost<T>(path: string, body: object): Promise<T> {
   });
   if (!resp.ok) {
     const data = await resp.json().catch(() => null);
-    throw new Error(data?.detail ?? `Request failed (${resp.status})`);
+    throw new Error(extractError(data, resp.status));
   }
   return resp.json();
 }
@@ -68,7 +77,7 @@ async function apiGet<T>(path: string): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
   if (!resp.ok) {
     const data = await resp.json().catch(() => null);
-    throw new Error(data?.detail ?? `Request failed (${resp.status})`);
+    throw new Error(extractError(data, resp.status));
   }
   return resp.json();
 }
@@ -105,6 +114,9 @@ export const submitExplainBack = (
 // Auth API
 export const login = (email: string, password: string) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });
+
+export const checkEmail = (email: string) =>
+  apiPost<{ available: boolean }>("/auth/check-email", { email });
 
 export const register = (email: string, password: string, gradeLevel: number) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/register", {
