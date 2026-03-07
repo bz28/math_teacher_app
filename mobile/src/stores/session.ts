@@ -5,7 +5,6 @@ import {
   generatePracticeProblems,
   getSession,
   respondToStep,
-  submitExplainBack,
   type PracticeProblem,
   type SessionData,
   type StepResponse,
@@ -16,7 +15,6 @@ type SessionPhase =
   | "loading"
   | "awaiting_input"
   | "thinking"
-  | "explain_back"
   | "completed"
   | "practice_summary"
   | "learn_summary"
@@ -69,7 +67,6 @@ interface SessionState {
   learnSimilarProblem: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
-  submitExplanation: (explanation: string) => Promise<void>;
   switchToLearnMode: () => Promise<void>;
   continueAsking: () => void;
   tryPracticeProblem: () => Promise<void>;
@@ -319,9 +316,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const resp = await respondToStep(session.id, answer);
       const updated = await getSession(session.id);
 
-      let nextPhase: SessionPhase = "awaiting_input";
-      if (resp.action === "completed") nextPhase = "completed";
-      else if (resp.action === "explain_back") nextPhase = "explain_back";
+      const nextPhase: SessionPhase = resp.action === "completed" ? "completed" : "awaiting_input";
 
       set({ session: updated, lastResponse: resp, phase: nextPhase });
     } catch (e) {
@@ -352,25 +347,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const resp = await respondToStep(session.id, question);
       const updated = await getSession(session.id);
       set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
-    }
-  },
-
-  submitExplanation: async (explanation) => {
-    const { session } = get();
-    if (!session) return;
-
-    set({ phase: "thinking", error: null });
-    try {
-      const resp = await submitExplainBack(session.id, explanation);
-      const updated = await getSession(session.id);
-
-      let nextPhase: SessionPhase = "awaiting_input";
-      if (resp.action === "completed") nextPhase = "completed";
-      else if (resp.action === "explain_back") nextPhase = "explain_back";
-
-      set({ session: updated, lastResponse: resp, phase: nextPhase });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }

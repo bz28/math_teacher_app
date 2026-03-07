@@ -2,14 +2,6 @@ const API_BASE = __DEV__
   ? "http://localhost:8000/v1"
   : "https://math-teacher-api.up.railway.app/v1";
 
-export interface ParsedProblem {
-  expression: string;
-  latex: string;
-  problem_type: string;
-  solutions: string[];
-  solutions_latex: string[];
-}
-
 // Session types
 export interface StepDetail {
   description: string;
@@ -27,7 +19,7 @@ export interface SessionData {
   status: string;
   mode: string;
   steps: StepDetail[];
-  step_tracking: Record<string, { attempts: number; hints_used: number; explain_back: boolean }>;
+  step_tracking: Record<string, { attempts: number; hints_used: number }>;
 }
 
 export interface StepResponse {
@@ -103,14 +95,6 @@ export const respondToStep = (
     request_advance: requestAdvance,
   });
 
-export const submitExplainBack = (
-  id: string,
-  explanation: string,
-) =>
-  apiPost<StepResponse>(`/session/${id}/explain-back`, {
-    student_explanation: explanation,
-  });
-
 // Auth API
 export const login = (email: string, password: string) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });
@@ -141,19 +125,3 @@ export const checkPracticeAnswer = (question: string, correctAnswer: string, use
     user_answer: userAnswer,
   });
 
-// Problem parsing
-export async function parseProblem(expression: string): Promise<ParsedProblem> {
-  const resp = await fetch(`${API_BASE}/problems/parse`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ expression }),
-  });
-
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => null);
-    const detail = body?.detail ?? `Request failed (${resp.status})`;
-    throw new Error(detail);
-  }
-
-  return resp.json();
-}

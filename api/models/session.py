@@ -30,7 +30,7 @@ class Session(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")  # active, completed, abandoned
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="learn")
 
-    # Per-step tracking (JSON: {step_index: {attempts: int, hints_used: int, explain_back: bool}})
+    # Per-step tracking (JSON: {step_index: {attempts: int, hints_used: int}})
     step_tracking: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     # Conversation history (JSON array of {role, content, timestamp})

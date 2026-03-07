@@ -1,7 +1,7 @@
 """Session orchestration: manages the tutoring loop.
 
-Handles step advancement, hint system, explain-back triggers,
-step-size validation, and per-user daily request caps.
+Handles step advancement, hint system, step-size validation,
+and per-user daily request caps.
 """
 
 import uuid
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.math_engine import MathEngine
 from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
-from api.core.tutor import _call_claude_json, converse, probe, step_chat
+from api.core.tutor import _call_claude_json, converse, step_chat
 from api.models.session import Session
 
 MAX_ATTEMPTS_PER_STEP = 5
@@ -183,8 +183,7 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session:
 
 @dataclass
 class StepResponse:
-    # "advance", "hint", "explain_back", "completed", "error",
-    # "conversation", "show_step"
+    # "advance", "hint", "completed", "error", "conversation", "show_step"
     action: str
     feedback: str
     current_step: int
@@ -459,81 +458,12 @@ async def respond_to_step(
             return await _converse_completed(db, session, student_response)
         raise SessionError("All steps completed")
 
-    # Practice mode: skip step enforcement, explain-back, scaffolding
+    # Practice mode: skip step enforcement and scaffolding
     if session.mode == "practice":
         return await _respond_practice_mode(db, session, student_response)
 
     # Learn mode: steps shown upfront, chat scoped to step, final answer eval
     return await _respond_learn_mode(db, session, student_response, request_advance)
-
-
-# ---------------------------------------------------------------------------
-# Handle explain-back response
-# ---------------------------------------------------------------------------
-
-async def handle_explain_back(
-    db: AsyncSession,
-    session: Session,
-    student_explanation: str,
-) -> StepResponse:
-    """Process a student's explain-back response."""
-    if session.current_step >= session.total_steps:
-        raise SessionError("All steps completed")
-
-    step_data = session.steps[session.current_step]
-    step_desc = f"{step_data['description']}: {step_data['before']} → {step_data['after']}"
-
-    _add_exchange(session, "student", student_explanation)
-
-    probe_result = await probe(
-        step=step_desc,
-        student_explanation=student_explanation,
-        session_id=str(session.id),
-    )
-
-    if probe_result.understanding != "clear":
-        # Partial or wrong — ask follow-up
-        feedback = probe_result.follow_up or "Can you explain why we do this step?"
-        _add_exchange(session, "tutor", feedback)
-        await db.commit()
-        return StepResponse(
-            action="explain_back",
-            feedback=feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-        )
-
-    # Advance
-    session.current_step += 1
-
-    if session.current_step >= session.total_steps:
-        session.status = "completed"
-        if session.problem_type == "word_problem":
-            similar = await generate_similar_word_problem(session.problem)
-        else:
-            similar = MathEngine.generate_similar(session.problem)
-        feedback = "Great explanation! Problem complete!"
-        _add_exchange(session, "tutor", feedback)
-        await db.commit()
-        return StepResponse(
-            action="completed",
-            feedback=feedback,
-            current_step=session.current_step,
-            total_steps=session.total_steps,
-            is_correct=True,
-            similar_problem=similar,
-        )
-
-    feedback = "Great explanation! Let's move on to the next step."
-    _add_exchange(session, "tutor", feedback)
-    await db.commit()
-    return StepResponse(
-        action="advance",
-        feedback=feedback,
-        current_step=session.current_step,
-        total_steps=session.total_steps,
-        is_correct=True,
-    )
 
 
 # ---------------------------------------------------------------------------
