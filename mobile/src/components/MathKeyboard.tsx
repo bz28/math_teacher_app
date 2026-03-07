@@ -1,10 +1,10 @@
 import {
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 
 interface MathKeyboardProps {
   onInsert: (value: string) => void;
@@ -26,22 +26,21 @@ const KEYS = [
 export function MathKeyboard({ onInsert }: MathKeyboardProps) {
   return (
     <View style={styles.container}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      >
+      <View style={styles.grid}>
         {KEYS.map((key) => (
           <TouchableOpacity
             key={key.label}
             style={styles.key}
-            onPress={() => onInsert(key.value)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onInsert(key.value);
+            }}
             accessibilityLabel={`Insert ${key.label}`}
           >
             <Text style={styles.keyText}>{key.label}</Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -51,18 +50,21 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingVertical: 8,
   },
-  row: {
+  grid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    paddingHorizontal: 4,
+    justifyContent: "center",
   },
   key: {
     backgroundColor: "#f0f0f0",
     borderRadius: 8,
-    paddingHorizontal: 16,
     paddingVertical: 10,
-    minWidth: 44,
+    minWidth: 56,
+    width: "17%",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
   keyText: {
     fontSize: 18,

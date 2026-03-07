@@ -2,12 +2,16 @@ import { useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
@@ -59,16 +63,16 @@ export default function App() {
 
   if (screen === "auth") {
     return (
-      <>
+      <SafeAreaProvider>
         <AuthScreen onAuth={() => setScreen("home")} />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   if (screen === "home") {
     return (
-      <>
+      <SafeAreaProvider>
         <HomeScreen
           onSelect={() => setScreen("mode-select")}
           onLogout={() => {
@@ -77,13 +81,13 @@ export default function App() {
           }}
         />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   if (screen === "mode-select") {
     return (
-      <>
+      <SafeAreaProvider>
         <ModeSelectScreen
           onSelect={(selectedMode) => {
             setMode(selectedMode);
@@ -92,13 +96,13 @@ export default function App() {
           onBack={() => setScreen("home")}
         />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   if (screen === "session") {
     return (
-      <>
+      <SafeAreaProvider>
         <SessionScreen
           onBack={() => {
             setInput("");
@@ -106,77 +110,92 @@ export default function App() {
           }}
         />
         <StatusBar style="auto" />
-      </>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => setScreen("mode-select")}
-      >
-        <Text style={styles.backText}>{"< Back"}</Text>
-      </TouchableOpacity>
-      <Text style={styles.title}>Math Teacher</Text>
-
-      <TextInput
-        ref={inputRef}
-        style={styles.input}
-        value={input}
-        onChangeText={(text) => {
-          setInput(text);
-          setError(null);
-        }}
-        placeholder="Enter a math problem (e.g. 2x + 6 = 12)"
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="go"
-        onSubmitEditing={handleGo}
-      />
-
-      <MathKeyboard onInsert={handleInsert} />
-
-      {mode === "practice" && (
-        <View style={styles.countPicker}>
-          <Text style={styles.countLabel}>Similar problems to generate:</Text>
-          <View style={styles.stepper}>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
             <TouchableOpacity
-              style={styles.stepperButton}
-              onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
+              style={styles.backButton}
+              onPress={() => setScreen("mode-select")}
             >
-              <Text style={styles.stepperText}>-</Text>
+              <Text style={styles.backText}>{"\u2039 Back"}</Text>
             </TouchableOpacity>
-            <Text style={styles.countValue}>{practiceCount}</Text>
+            <View style={styles.modeChip}>
+              <Text style={styles.modeChipText}>
+                {mode === "learn" ? "📖 Learn" : mode === "practice" ? "✏️ Practice" : "📝 Mock Exam"}
+              </Text>
+            </View>
+
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={input}
+              onChangeText={(text) => {
+                setInput(text);
+                setError(null);
+              }}
+              placeholder="Enter a math problem (e.g. 2x + 6 = 12)"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              onSubmitEditing={handleGo}
+            />
+
+            <MathKeyboard onInsert={handleInsert} />
+
+            {mode === "practice" && (
+              <View style={styles.countPicker}>
+                <Text style={styles.countLabel}>Similar problems to generate:</Text>
+                <View style={styles.stepper}>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
+                  >
+                    <Text style={styles.stepperText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.countValue}>{practiceCount}</Text>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
+                  >
+                    <Text style={styles.stepperText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.countHint}>
+                  Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
+                </Text>
+              </View>
+            )}
+
             <TouchableOpacity
-              style={styles.stepperButton}
-              onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
+              style={[styles.button, styles.goButton, (!input.trim() || isLoading) && styles.buttonDisabled]}
+              onPress={handleGo}
+              disabled={isLoading || !input.trim()}
             >
-              <Text style={styles.stepperText}>+</Text>
+              {isLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.goText}>Go</Text>
+              )}
             </TouchableOpacity>
-          </View>
-          <Text style={styles.countHint}>
-            Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
-          </Text>
-        </View>
-      )}
 
-      <TouchableOpacity
-        style={[styles.button, styles.goButton]}
-        onPress={handleGo}
-        disabled={isLoading || !input.trim()}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.goText}>Go</Text>
-        )}
-      </TouchableOpacity>
-
-      {displayError && <Text style={styles.error}>{displayError}</Text>}
-
-      <StatusBar style="auto" />
-    </View>
+            {displayError && <Text style={styles.error}>{displayError}</Text>}
+          </ScrollView>
+        </KeyboardAvoidingView>
+        <StatusBar style="auto" />
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
@@ -184,9 +203,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  flex: { flex: 1 },
+  scrollContent: {
     alignItems: "center",
-    paddingTop: 60,
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   title: { fontSize: 24, fontWeight: "bold", marginBottom: 20 },
   input: {
@@ -231,4 +253,15 @@ const styles = StyleSheet.create({
   stepperText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
   countValue: { fontSize: 24, fontWeight: "bold", color: "#333", minWidth: 30, textAlign: "center" },
   countHint: { fontSize: 12, color: "#999", marginTop: 4 },
+  buttonDisabled: { opacity: 0.5 },
+  modeChip: {
+    backgroundColor: "#F0F4FF",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#4A90D9",
+  },
+  modeChipText: { fontSize: 15, fontWeight: "600", color: "#4A90D9" },
 });
