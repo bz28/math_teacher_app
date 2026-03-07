@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { checkEmail, login, register, setAuthToken } from "../services/api";
+import { checkEmail, login, register, saveTokens } from "../services/api";
 
 interface AuthScreenProps {
   onAuth: () => void;
@@ -42,7 +42,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setLoading(true);
     try {
       const resp = await login(email, password);
-      setAuthToken(resp.access_token);
+      await saveTokens(resp.access_token, resp.refresh_token);
       onAuth();
     } catch (e) {
       setError((e as Error).message);
@@ -56,7 +56,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setLoading(true);
     try {
       const resp = await register(email, password, 8);
-      setAuthToken(resp.access_token);
+      await saveTokens(resp.access_token, resp.refresh_token);
       onAuth();
     } catch (e) {
       setError((e as Error).message);
