@@ -61,14 +61,14 @@ interface SessionState {
   startLearnQueue: (problems: string[]) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
+  advanceStep: () => Promise<void>;
+  askAboutStep: (question: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
   retryFlaggedProblems: () => void;
   learnSimilarProblem: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
-  requestHint: () => Promise<void>;
-  requestShowStep: () => Promise<void>;
   submitExplanation: (explanation: string) => Promise<void>;
   switchToLearnMode: () => Promise<void>;
   continueAsking: () => void;
@@ -329,27 +329,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  requestHint: async () => {
+  advanceStep: async () => {
     const { session } = get();
     if (!session) return;
 
     set({ phase: "thinking", error: null });
     try {
-      const resp = await respondToStep(session.id, "", true);
+      const resp = await respondToStep(session.id, "", false, false, true);
       const updated = await getSession(session.id);
-      set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
+      set({ session: updated, lastResponse: null, phase: "awaiting_input" });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
   },
 
-  requestShowStep: async () => {
+  askAboutStep: async (question) => {
     const { session } = get();
     if (!session) return;
 
     set({ phase: "thinking", error: null });
     try {
-      const resp = await respondToStep(session.id, "", false, true);
+      const resp = await respondToStep(session.id, question);
       const updated = await getSession(session.id);
       set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
     } catch (e) {

@@ -33,12 +33,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     practiceBatch,
     submitAnswer,
     submitPracticeAnswer,
+    advanceStep,
+    askAboutStep,
     togglePracticeFlag,
     learnQueue,
     learnSimilarProblem,
     advanceLearnQueue,
     toggleLearnFlag,
-    requestShowStep,
     submitExplanation,
     switchToLearnMode,
     continueAsking,
@@ -192,13 +193,15 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     return <LearnSummary onBack={onBack} />;
   }
 
-  // --- Learn mode ---
+  // --- Learn / Practice mode ---
 
   if (!session) return null;
 
   const currentStep = session.steps[session.current_step];
   const isPractice = session.mode === "practice";
+  const isLearn = !isPractice;
   const completedSteps = session.steps.slice(0, session.current_step);
+  const isFinalStep = session.current_step >= session.total_steps - 1;
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -209,6 +212,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     } else {
       await submitAnswer(text);
     }
+  };
+
+  const handleAsk = async () => {
+    if (!input.trim()) return;
+    const text = input.trim();
+    setInput("");
+    await askAboutStep(text);
   };
 
   const handleInsert = (value: string) => {
@@ -247,7 +257,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           <Text style={styles.cardLabel}>Problem</Text>
           <Text style={styles.problemText}>{session.problem}</Text>
         </View>
-        {!isPractice && (
+        {isLearn && (
           <View style={styles.progressRow}>
             <View style={styles.progressContainer}>
               <View
@@ -258,7 +268,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               />
             </View>
             <Text style={styles.progressLabel}>
-              Step {session.current_step}/{session.total_steps}
+              Step {session.current_step + 1}/{session.total_steps}
             </Text>
           </View>
         )}
@@ -268,8 +278,8 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps history (hidden during practice) */}
-        {!isPractice && completedSteps.length > 0 && (
+        {/* Completed steps history (learn mode) */}
+        {isLearn && completedSteps.length > 0 && (
           <View style={styles.historySection}>
             {completedSteps.map((step, i) => (
               <View key={i} style={styles.historyRow}>
@@ -284,55 +294,52 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Current step guidance */}
-        {!isCompleted && (
-          <>
-            {!isPractice && session.current_step > 0 && currentStep && (
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>Current expression</Text>
-                <Text style={styles.problemText}>{currentStep.before}</Text>
-              </View>
-            )}
-            <Text style={styles.promptText}>
-              {isPractice
-                ? "Enter your final answer"
-                : session.current_step === 0
-                  ? "How would you solve this?"
-                  : "Type an answer or ask a question..."}
-            </Text>
-          </>
-        )}
-
-        {/* Step description card (after show_step) */}
-        {lastResponse?.action === "show_step" && lastResponse.step_description && (
+        {/* Learn mode: show current step (non-final) */}
+        {isLearn && !isCompleted && !isFinalStep && currentStep && (
           <View style={styles.stepDescCard}>
-            <Text style={styles.stepDescLabel}>Next step</Text>
-            <Text style={styles.stepDescText}>{lastResponse.step_description}</Text>
-            <Text style={styles.stepDescHint}>Enter the math expression to continue</Text>
+            <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
+            <Text style={styles.stepDescText}>{currentStep.description}</Text>
+            <Text style={styles.historyResult}>{currentStep.before} → {currentStep.after}</Text>
           </View>
         )}
 
-        {/* Feedback */}
-        {lastResponse && lastResponse.action !== "show_step" && (
+        {/* Learn mode: final step — ask for answer */}
+        {isLearn && !isCompleted && isFinalStep && (
+          <Text style={styles.promptText}>
+            Based on the steps above, what is the final answer?
+          </Text>
+        )}
+
+        {/* Practice mode: prompt */}
+        {isPractice && !isCompleted && (
+          <Text style={styles.promptText}>Enter your final answer</Text>
+        )}
+
+        {/* Feedback (chat response or wrong answer) */}
+        {lastResponse && (
           <View
             style={[
               styles.feedback,
-              lastResponse.is_correct ? styles.feedbackCorrect : styles.feedbackWrong,
+              lastResponse.is_correct ? styles.feedbackCorrect :
+              lastResponse.action === "conversation" ? styles.feedbackConversation :
+              styles.feedbackWrong,
             ]}
           >
-            <View style={styles.feedbackHeader}>
-              <Text style={styles.feedbackIcon}>
-                {lastResponse.is_correct ? "\u2713" : "\u2717"}
-              </Text>
-              <Text
-                style={[
-                  styles.feedbackTitle,
-                  lastResponse.is_correct ? styles.feedbackTitleCorrect : styles.feedbackTitleWrong,
-                ]}
-              >
-                {lastResponse.is_correct ? "Correct!" : "Not quite"}
-              </Text>
-            </View>
+            {lastResponse.action !== "conversation" && (
+              <View style={styles.feedbackHeader}>
+                <Text style={styles.feedbackIcon}>
+                  {lastResponse.is_correct ? "\u2713" : "\u2717"}
+                </Text>
+                <Text
+                  style={[
+                    styles.feedbackTitle,
+                    lastResponse.is_correct ? styles.feedbackTitleCorrect : styles.feedbackTitleWrong,
+                  ]}
+                >
+                  {lastResponse.is_correct ? "Correct!" : "Not quite"}
+                </Text>
+              </View>
+            )}
             <Text style={styles.feedbackText}>{lastResponse.feedback}</Text>
           </View>
         )}
@@ -408,7 +415,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 ))}
               </View>
             )}
-            {!isPractice && lastResponse?.similar_problem && (
+            {isLearn && lastResponse?.similar_problem && (
               <TouchableOpacity
                 style={styles.similarButton}
                 onPress={tryPracticeProblem}
@@ -416,7 +423,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 <Text style={styles.similarText}>Try a practice problem</Text>
               </TouchableOpacity>
             )}
-            {!isPractice && (
+            {isLearn && (
               <TouchableOpacity
                 style={styles.questionsButton}
                 onPress={continueAsking}
@@ -443,68 +450,121 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {/* Input area */}
         {!isCompleted && (
           <>
-            {isExplainBack ? (
-              <View style={styles.explainInputArea}>
-                <Text style={styles.explainLabel}>
-                  Explain this step in your own words
-                </Text>
-                <TextInput
-                  ref={inputRef}
-                  style={styles.explainInput}
-                  value={input}
-                  onChangeText={setInput}
-                  placeholder="Type your explanation..."
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="go"
-                  onSubmitEditing={handleSubmit}
-                  multiline
-                />
-              </View>
-            ) : (
-              <View>
-                <Text style={styles.inputLabel}>Your answer</Text>
-                <TextInput
-                  ref={inputRef}
-                  style={styles.input}
-                  value={input}
-                  onChangeText={setInput}
-                  placeholder="Enter your answer..."
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="go"
-                  onSubmitEditing={handleSubmit}
-                />
-              </View>
+            {/* Learn mode non-final: chat input for questions */}
+            {isLearn && !isFinalStep && (
+              <>
+                <View>
+                  <Text style={styles.inputLabel}>Have a question about this step?</Text>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.input}
+                    value={input}
+                    onChangeText={setInput}
+                    placeholder="Ask a question..."
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="go"
+                    onSubmitEditing={handleAsk}
+                  />
+                </View>
+
+                <View style={styles.buttons}>
+                  {input.trim() ? (
+                    <TouchableOpacity
+                      style={[styles.button, styles.submitButton, phase === "thinking" && styles.buttonDisabled]}
+                      onPress={handleAsk}
+                      disabled={phase === "thinking"}
+                    >
+                      {phase === "thinking" ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitText}>Ask</Text>
+                      )}
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.button, styles.submitButton, phase === "thinking" && styles.buttonDisabled]}
+                      onPress={advanceStep}
+                      disabled={phase === "thinking"}
+                    >
+                      {phase === "thinking" ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitText}>I Understand</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
             )}
 
-            {!isExplainBack && <MathKeyboard onInsert={handleInsert} />}
+            {/* Learn mode final step OR practice mode: answer input */}
+            {(isPractice || (isLearn && isFinalStep)) && (
+              <>
+                <View>
+                  <Text style={styles.inputLabel}>Your answer</Text>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.input}
+                    value={input}
+                    onChangeText={setInput}
+                    placeholder="Enter your answer..."
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="go"
+                    onSubmitEditing={handleSubmit}
+                  />
+                </View>
 
-            <View style={styles.buttons}>
-              <TouchableOpacity
-                style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
-                onPress={handleSubmit}
-                disabled={phase === "thinking" || !input.trim()}
-              >
-                {phase === "thinking" ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.submitText}>
-                    {isExplainBack ? "Submit" : "Answer"}
+                <MathKeyboard onInsert={handleInsert} />
+
+                <View style={styles.buttons}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={phase === "thinking" || !input.trim()}
+                  >
+                    {phase === "thinking" ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.submitText}>Answer</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* Explain-back */}
+            {isExplainBack && (
+              <>
+                <View style={styles.explainInputArea}>
+                  <Text style={styles.explainLabel}>
+                    Explain this step in your own words
                   </Text>
-                )}
-              </TouchableOpacity>
-
-              {!isExplainBack && !isPractice && (
-                <TouchableOpacity
-                  style={[styles.button, styles.hintButton, phase === "thinking" && styles.buttonDisabled]}
-                  onPress={requestShowStep}
-                  disabled={phase === "thinking"}
-                >
-                  <Text style={styles.hintText}>Show next step</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.explainInput}
+                    value={input}
+                    onChangeText={setInput}
+                    placeholder="Type your explanation..."
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="go"
+                    onSubmitEditing={handleSubmit}
+                    multiline
+                  />
+                </View>
+                <View style={styles.buttons}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.submitButton, !input.trim() && styles.buttonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={!input.trim()}
+                  >
+                    <Text style={styles.submitText}>Submit</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </>
         )}
       </ScrollView>
@@ -595,6 +655,7 @@ const styles = StyleSheet.create({
   feedback: { borderRadius: 12, padding: 16, marginBottom: 12 },
   feedbackCorrect: { backgroundColor: "#e8f5e9", borderWidth: 1, borderColor: "#a5d6a7" },
   feedbackWrong: { backgroundColor: "#fce4ec", borderWidth: 1, borderColor: "#ef9a9a" },
+  feedbackConversation: { backgroundColor: "#e3f2fd", borderWidth: 1, borderColor: "#90caf9" },
   feedbackHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
   feedbackIcon: { fontSize: 20, fontWeight: "bold", marginRight: 8 },
   feedbackTitle: { fontSize: 17, fontWeight: "bold" },

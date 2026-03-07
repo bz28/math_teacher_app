@@ -85,11 +85,13 @@ export const respondToStep = (
   studentResponse: string,
   requestHint = false,
   requestShowStep = false,
+  requestAdvance = false,
 ) =>
   apiPost<StepResponse>(`/session/${id}/respond`, {
     student_response: studentResponse,
     request_hint: requestHint,
     request_show_step: requestShowStep,
+    request_advance: requestAdvance,
   });
 
 export const submitExplainBack = (

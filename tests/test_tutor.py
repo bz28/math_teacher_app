@@ -16,7 +16,15 @@ from api.core.tutor import (
     CostTracker,
     EvalResult,
     ProbeResult,
+    _circuit,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_circuit_breaker() -> None:
+    """Reset the global circuit breaker before each test."""
+    _circuit._failure_count = 0
+    _circuit._state = CircuitState.CLOSED
 
 # ---------------------------------------------------------------------------
 # Unit tests: circuit breaker
