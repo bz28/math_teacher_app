@@ -1,8 +1,10 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,21 +18,49 @@ interface AuthScreenProps {
   onAuth: () => void;
 }
 
+const GRADES = [
+  { label: "K-2", range: "Kindergarten - 2nd" },
+  { label: "3-5", range: "3rd - 5th" },
+  { label: "6-8", range: "6th - 8th" },
+  { label: "9-12", range: "9th - 12th" },
+];
+
+const TOPICS = [
+  { id: "arithmetic", label: "Arithmetic", icon: "+" },
+  { id: "fractions", label: "Fractions", icon: "\u00BD" },
+  { id: "algebra", label: "Algebra", icon: "x" },
+  { id: "quadratics", label: "Quadratics", icon: "x\u00B2" },
+  { id: "word_problems", label: "Word Problems", icon: "\uD83D\uDCDD" },
+  { id: "geometry", label: "Geometry", icon: "\u25B3" },
+];
+
+type RegisterStep = "credentials" | "grade" | "topics";
+
 export function AuthScreen({ onAuth }: AuthScreenProps) {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(false);
+  const [registerStep, setRegisterStep] = useState<RegisterStep>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async () => {
+  const toggleTopic = (id: string) => {
+    setSelectedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleLogin = async () => {
     setError(null);
     setLoading(true);
     try {
-      const resp = isLogin
-        ? await login(email, password)
-        : await register(email, password, 8);
+      const resp = await login(email, password);
       setAuthToken(resp.access_token);
       onAuth();
     } catch (e) {
@@ -40,118 +70,498 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     }
   };
 
+  const handleRegisterSubmit = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const resp = await register(email, password, 8);
+      setAuthToken(resp.access_token);
+      onAuth();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCredentialsNext = () => {
+    if (!email || !password) return;
+    setError(null);
+    setRegisterStep("grade");
+  };
+
+  const handleGradeNext = () => {
+    if (!selectedGrade) return;
+    setRegisterStep("topics");
+  };
+
+  const switchMode = () => {
+    setIsLogin(!isLogin);
+    setRegisterStep("credentials");
+    setError(null);
+  };
+
+  // Login view
+  if (isLogin) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.inner}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.header}>
+            <Text style={styles.headerIcon}>{"\uD83C\uDF93"}</Text>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>
+              Sign in to continue learning
+            </Text>
+          </View>
+
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholderTextColor="#999"
+            />
+
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                secureTextEntry={!showPassword}
+                placeholderTextColor="#999"
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.eyeText}>
+                  {showPassword ? "Hide" : "Show"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {error && <Text style={styles.error}>{error}</Text>}
+
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (loading || !email || !password) && styles.buttonDisabled,
+              ]}
+              onPress={handleLogin}
+              disabled={loading || !email || !password}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
+            <Text style={styles.switchText}>
+              Don't have an account?{" "}
+              <Text style={styles.switchTextBold}>Register</Text>
+            </Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // Register: credentials step
+  if (registerStep === "credentials") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.inner}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Create your account</Text>
+            <Text style={styles.subtitle}>
+              Step 1 of 3
+            </Text>
+          </View>
+
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholderTextColor="#999"
+            />
+
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                secureTextEntry={!showPassword}
+                placeholderTextColor="#999"
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.eyeText}>
+                  {showPassword ? "Hide" : "Show"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {error && <Text style={styles.error}>{error}</Text>}
+
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (!email || !password) && styles.buttonDisabled,
+              ]}
+              onPress={handleCredentialsNext}
+              disabled={!email || !password}
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
+            <Text style={styles.switchText}>
+              Already have an account?{" "}
+              <Text style={styles.switchTextBold}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // Register: grade step
+  if (registerStep === "grade") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <TouchableOpacity
+            onPress={() => setRegisterStep("credentials")}
+            style={styles.backButton}
+          >
+            <Text style={styles.backText}>{"\u2039"} Back</Text>
+          </TouchableOpacity>
+
+          <View style={styles.header}>
+            <Text style={styles.title}>What grade are you in?</Text>
+            <Text style={styles.subtitle}>
+              Step 2 of 3 — we'll tailor problems to your level
+            </Text>
+          </View>
+
+          <View style={styles.gradeGrid}>
+            {GRADES.map((g) => (
+              <TouchableOpacity
+                key={g.label}
+                style={[
+                  styles.gradeCard,
+                  selectedGrade === g.label && styles.gradeCardSelected,
+                ]}
+                onPress={() => setSelectedGrade(g.label)}
+              >
+                <Text
+                  style={[
+                    styles.gradeLabel,
+                    selectedGrade === g.label && styles.gradeLabelSelected,
+                  ]}
+                >
+                  {g.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.gradeRange,
+                    selectedGrade === g.label && styles.gradeRangeSelected,
+                  ]}
+                >
+                  {g.range}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              { marginTop: 24 },
+              !selectedGrade && styles.buttonDisabled,
+            ]}
+            onPress={handleGradeNext}
+            disabled={!selectedGrade}
+          >
+            <Text style={styles.primaryButtonText}>Continue</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Register: topics step
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.inner}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
-      <Text style={styles.title}>Math Tutor</Text>
-      <Text style={styles.subtitle}>
-        {isLogin ? "Sign In" : "Create Account"}
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-
-      <View style={styles.passwordContainer}>
-        <TextInput
-          style={styles.passwordInput}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Password"
-          secureTextEntry={!showPassword}
-        />
         <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={() => setShowPassword(!showPassword)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => setRegisterStep("grade")}
+          style={styles.backButton}
         >
-          <Text style={styles.eyeText}>{showPassword ? "Hide" : "Show"}</Text>
+          <Text style={styles.backText}>{"\u2039"} Back</Text>
         </TouchableOpacity>
-      </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <TouchableOpacity
-        style={[styles.button, (loading || !email || !password) && styles.buttonDisabled]}
-        onPress={handleSubmit}
-        disabled={loading || !email || !password}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>
-            {isLogin ? "Sign In" : "Register"}
+        <View style={styles.header}>
+          <Text style={styles.title}>What are you working on?</Text>
+          <Text style={styles.subtitle}>
+            Step 3 of 3 — pick one or more topics
           </Text>
-        )}
-      </TouchableOpacity>
+        </View>
 
-      <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
-        <Text style={styles.switchText}>
-          {isLogin
-            ? "Don't have an account? Register"
-            : "Already have an account? Sign In"}
-        </Text>
-      </TouchableOpacity>
-      </KeyboardAvoidingView>
+        <View style={styles.topicGrid}>
+          {TOPICS.map((t) => {
+            const isSelected = selectedTopics.has(t.id);
+            return (
+              <TouchableOpacity
+                key={t.id}
+                style={[
+                  styles.topicCard,
+                  isSelected && styles.topicCardSelected,
+                ]}
+                onPress={() => toggleTopic(t.id)}
+              >
+                <Text style={styles.topicIcon}>{t.icon}</Text>
+                <Text
+                  style={[
+                    styles.topicLabel,
+                    isSelected && styles.topicLabelSelected,
+                  ]}
+                >
+                  {t.label}
+                </Text>
+                {isSelected && (
+                  <Text style={styles.checkmark}>{"\u2713"}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            { marginTop: 24 },
+            (loading || selectedTopics.size === 0) && styles.buttonDisabled,
+          ]}
+          onPress={handleRegisterSubmit}
+          disabled={loading || selectedTopics.size === 0}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Create Account</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
+
+/* -- Styles -- */
+
+const { width } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingHorizontal: 32,
   },
-  inner: { flex: 1, justifyContent: "center", gap: 12 },
-  title: { fontSize: 28, fontWeight: "bold", textAlign: "center" },
-  subtitle: {
-    fontSize: 18,
-    color: "#666",
-    textAlign: "center",
+  inner: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  scrollContent: {
+    paddingHorizontal: 28,
+    paddingBottom: 40,
+  },
+
+  // Header
+  header: {
+    alignItems: "center",
+    marginBottom: 28,
+  },
+  headerIcon: {
+    fontSize: 48,
     marginBottom: 12,
   },
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: "#888",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+
+  // Form
+  form: {
+    gap: 14,
+  },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
+    borderRadius: 12,
+    padding: 14,
     fontSize: 16,
+    backgroundColor: "#F9FAFB",
+    color: "#1a1a1a",
   },
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "#E0E4EA",
+    borderRadius: 12,
+    backgroundColor: "#F9FAFB",
   },
   passwordInput: {
     flex: 1,
-    padding: 12,
+    padding: 14,
     fontSize: 16,
+    color: "#1a1a1a",
   },
   eyeButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   eyeText: { color: "#4A90D9", fontWeight: "600", fontSize: 14 },
-  error: { color: "red", textAlign: "center" },
-  button: {
+
+  // Buttons
+  primaryButton: {
     backgroundColor: "#4A90D9",
-    borderRadius: 8,
-    padding: 14,
+    borderRadius: 12,
+    padding: 16,
     alignItems: "center",
-    marginTop: 8,
   },
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  switchText: { color: "#4A90D9", textAlign: "center", marginTop: 8 },
-  buttonDisabled: { opacity: 0.5 },
+  primaryButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  buttonDisabled: { opacity: 0.4 },
+
+  // Switch mode
+  switchButton: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  switchText: {
+    color: "#888",
+    fontSize: 15,
+  },
+  switchTextBold: {
+    color: "#4A90D9",
+    fontWeight: "600",
+  },
+
+  // Back
+  backButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
+  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+
+  // Error
+  error: { color: "#E53935", textAlign: "center", fontSize: 14 },
+
+  // Grade
+  gradeGrid: { gap: 12 },
+  gradeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F7F8FA",
+    borderRadius: 14,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: "#E8EBF0",
+  },
+  gradeCardSelected: {
+    backgroundColor: "#EBF2FC",
+    borderColor: "#4A90D9",
+  },
+  gradeLabel: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#333",
+  },
+  gradeLabelSelected: { color: "#4A90D9" },
+  gradeRange: {
+    fontSize: 14,
+    color: "#888",
+  },
+  gradeRangeSelected: { color: "#5A9BE6" },
+
+  // Topics
+  topicGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  topicCard: {
+    width: (width - 56 - 12) / 2,
+    backgroundColor: "#F7F8FA",
+    borderRadius: 14,
+    padding: 18,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#E8EBF0",
+  },
+  topicCardSelected: {
+    backgroundColor: "#EBF2FC",
+    borderColor: "#4A90D9",
+  },
+  topicIcon: { fontSize: 28, marginBottom: 6 },
+  topicLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+  },
+  topicLabelSelected: { color: "#4A90D9" },
+  checkmark: {
+    position: "absolute",
+    top: 8,
+    right: 10,
+    fontSize: 16,
+    color: "#4A90D9",
+    fontWeight: "bold",
+  },
 });

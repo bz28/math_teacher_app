@@ -1,49 +1,19 @@
 import { useState } from "react";
-import {
-  Dimensions,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
-const GRADES = [
-  { label: "K-2", range: "Kindergarten - 2nd" },
-  { label: "3-5", range: "3rd - 5th" },
-  { label: "6-8", range: "6th - 8th" },
-  { label: "9-12", range: "9th - 12th" },
-];
-
-const TOPICS = [
-  { id: "arithmetic", label: "Arithmetic", icon: "+" },
-  { id: "fractions", label: "Fractions", icon: "\u00BD" },
-  { id: "algebra", label: "Algebra", icon: "x" },
-  { id: "quadratics", label: "Quadratics", icon: "x\u00B2" },
-  { id: "word_problems", label: "Word Problems", icon: "\uD83D\uDCDD" },
-  { id: "geometry", label: "Geometry", icon: "\u25B3" },
-];
-
-type Step = "welcome" | "grade" | "topics" | "modes";
-const STEPS: Step[] = ["welcome", "grade", "topics", "modes"];
+type Step = "welcome" | "modes";
+const STEPS: Step[] = ["welcome", "modes"];
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [stepIndex, setStepIndex] = useState(0);
-  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
-  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
 
   const step = STEPS[stepIndex];
   const isLast = stepIndex === STEPS.length - 1;
-
-  const canContinue = () => {
-    if (step === "grade") return selectedGrade !== null;
-    if (step === "topics") return selectedTopics.size > 0;
-    return true;
-  };
 
   const handleNext = () => {
     if (isLast) {
@@ -55,15 +25,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   const handleBack = () => {
     if (stepIndex > 0) setStepIndex(stepIndex - 1);
-  };
-
-  const toggleTopic = (id: string) => {
-    setSelectedTopics((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   };
 
   return (
@@ -80,12 +41,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       <View style={styles.content}>
         {step === "welcome" && <WelcomeStep />}
-        {step === "grade" && (
-          <GradeStep selected={selectedGrade} onSelect={setSelectedGrade} />
-        )}
-        {step === "topics" && (
-          <TopicsStep selected={selectedTopics} onToggle={toggleTopic} />
-        )}
         {step === "modes" && <ModesStep />}
       </View>
 
@@ -99,11 +54,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           <View />
         )}
 
-        <TouchableOpacity
-          style={[styles.nextButton, !canContinue() && styles.buttonDisabled]}
-          onPress={handleNext}
-          disabled={!canContinue()}
-        >
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
           <Text style={styles.nextText}>
             {isLast ? "Get Started" : "Continue"}
           </Text>
@@ -113,7 +64,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   );
 }
 
-/* ── Step Components ── */
+/* -- Step Components -- */
 
 function WelcomeStep() {
   return (
@@ -150,93 +101,6 @@ function FeatureRow({ icon, text }: { icon: string; text: string }) {
   );
 }
 
-function GradeStep({
-  selected,
-  onSelect,
-}: {
-  selected: string | null;
-  onSelect: (grade: string) => void;
-}) {
-  return (
-    <View style={styles.stepTop}>
-      <Text style={styles.stepTitle}>What grade are you in?</Text>
-      <Text style={styles.stepSubtitle}>
-        We'll tailor problems to your level.
-      </Text>
-      <View style={styles.gradeGrid}>
-        {GRADES.map((g) => (
-          <TouchableOpacity
-            key={g.label}
-            style={[
-              styles.gradeCard,
-              selected === g.label && styles.gradeCardSelected,
-            ]}
-            onPress={() => onSelect(g.label)}
-          >
-            <Text
-              style={[
-                styles.gradeLabel,
-                selected === g.label && styles.gradeLabelSelected,
-              ]}
-            >
-              {g.label}
-            </Text>
-            <Text
-              style={[
-                styles.gradeRange,
-                selected === g.label && styles.gradeRangeSelected,
-              ]}
-            >
-              {g.range}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function TopicsStep({
-  selected,
-  onToggle,
-}: {
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-}) {
-  return (
-    <View style={styles.stepTop}>
-      <Text style={styles.stepTitle}>What are you working on?</Text>
-      <Text style={styles.stepSubtitle}>Pick one or more topics.</Text>
-      <View style={styles.topicGrid}>
-        {TOPICS.map((t) => {
-          const isSelected = selected.has(t.id);
-          return (
-            <TouchableOpacity
-              key={t.id}
-              style={[
-                styles.topicCard,
-                isSelected && styles.topicCardSelected,
-              ]}
-              onPress={() => onToggle(t.id)}
-            >
-              <Text style={styles.topicIcon}>{t.icon}</Text>
-              <Text
-                style={[
-                  styles.topicLabel,
-                  isSelected && styles.topicLabelSelected,
-                ]}
-              >
-                {t.label}
-              </Text>
-              {isSelected && <Text style={styles.checkmark}>{"\u2713"}</Text>}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 function ModesStep() {
   return (
     <View style={styles.stepTop}>
@@ -266,14 +130,14 @@ function ModesStep() {
         </View>
       </View>
 
-      <Text style={styles.readyText}>You're all set — let's go!</Text>
+      <Text style={styles.readyText}>
+        Create an account to start learning!
+      </Text>
     </View>
   );
 }
 
-/* ── Styles ── */
-
-const { width } = Dimensions.get("window");
+/* -- Styles -- */
 
 const styles = StyleSheet.create({
   container: {
@@ -322,7 +186,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   nextText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  buttonDisabled: { opacity: 0.4 },
 
   // Welcome
   stepCenter: {
@@ -353,7 +216,7 @@ const styles = StyleSheet.create({
   featureIcon: { fontSize: 28 },
   featureText: { fontSize: 16, color: "#444", flex: 1, lineHeight: 22 },
 
-  // Grade
+  // Modes
   stepTop: { paddingTop: 16 },
   stepTitle: {
     fontSize: 26,
@@ -366,69 +229,6 @@ const styles = StyleSheet.create({
     color: "#666",
     marginBottom: 28,
   },
-  gradeGrid: { gap: 12 },
-  gradeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#F7F8FA",
-    borderRadius: 14,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: "#E8EBF0",
-  },
-  gradeCardSelected: {
-    backgroundColor: "#EBF2FC",
-    borderColor: "#4A90D9",
-  },
-  gradeLabel: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#333",
-  },
-  gradeLabelSelected: { color: "#4A90D9" },
-  gradeRange: {
-    fontSize: 14,
-    color: "#888",
-  },
-  gradeRangeSelected: { color: "#5A9BE6" },
-
-  // Topics
-  topicGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  topicCard: {
-    width: (width - 48 - 12) / 2,
-    backgroundColor: "#F7F8FA",
-    borderRadius: 14,
-    padding: 18,
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#E8EBF0",
-  },
-  topicCardSelected: {
-    backgroundColor: "#EBF2FC",
-    borderColor: "#4A90D9",
-  },
-  topicIcon: { fontSize: 28, marginBottom: 6 },
-  topicLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-  },
-  topicLabelSelected: { color: "#4A90D9" },
-  checkmark: {
-    position: "absolute",
-    top: 8,
-    right: 10,
-    fontSize: 16,
-    color: "#4A90D9",
-    fontWeight: "bold",
-  },
-
-  // Modes
   modeCard: {
     flexDirection: "row",
     backgroundColor: "#F0F4FF",
