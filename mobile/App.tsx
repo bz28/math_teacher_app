@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   ActivityIndicator,
@@ -12,19 +12,23 @@ import {
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import * as SecureStore from "expo-secure-store";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
+import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
 import { setAuthToken } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
 
-type Screen = "auth" | "home" | "mode-select" | "input" | "session";
+const ONBOARDING_KEY = "onboarding_completed";
+
+type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session";
 
 export default function App() {
   const inputRef = useRef<TextInput>(null);
-  const [screen, setScreen] = useState<Screen>("auth");
+  const [screen, setScreen] = useState<Screen | null>(null);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("learn");
   const [practiceCount, setPracticeCount] = useState(3);
@@ -38,6 +42,13 @@ export default function App() {
 
   const isLoading = sessionPhase === "loading";
   const displayError = error ?? sessionError;
+
+  // On launch, check if onboarding was already completed
+  useEffect(() => {
+    SecureStore.getItemAsync(ONBOARDING_KEY).then((done) => {
+      setScreen(done ? "auth" : "onboarding");
+    });
+  }, []);
 
   const handleInsert = (value: string) => {
     setInput(input + value);
@@ -60,6 +71,25 @@ export default function App() {
       setScreen("session");
     }
   };
+
+  const handleOnboardingComplete = async () => {
+    await SecureStore.setItemAsync(ONBOARDING_KEY, "true");
+    setScreen("auth");
+  };
+
+  // Show nothing while checking onboarding status
+  if (screen === null) {
+    return null;
+  }
+
+  if (screen === "onboarding") {
+    return (
+      <SafeAreaProvider>
+        <OnboardingScreen onComplete={handleOnboardingComplete} />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  }
 
   if (screen === "auth") {
     return (

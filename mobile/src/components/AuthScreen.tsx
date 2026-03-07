@@ -46,7 +46,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         style={styles.inner}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-      <Text style={styles.title}>Math Teacher</Text>
+      <Text style={styles.title}>Math Tutor</Text>
       <Text style={styles.subtitle}>
         {isLogin ? "Sign In" : "Create Account"}
       </Text>
