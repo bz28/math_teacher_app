@@ -8,6 +8,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -141,7 +142,7 @@ async def create_session(
         problem_type = decomposition.problem_type
         steps_data = []
         for i, s in enumerate(decomposition.steps):
-            step_dict: dict[str, object] = {
+            step_dict: dict[str, Any] = {
                 "description": s.description,
                 "operation": s.operation,
                 "before": s.before,
