@@ -1,8 +1,10 @@
 """Step-by-step decomposition: Claude generates steps for any math problem."""
 
+import asyncio
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 import anthropic
@@ -116,9 +118,11 @@ def _is_word_problem(text: str) -> bool:
 async def generate_similar_problem(problem: str) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
     client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    model = "claude-sonnet-4-20250514"
+    start = time.monotonic()
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=256,
             system=(
                 "Generate a similar math problem with the same structure "
@@ -127,10 +131,20 @@ async def generate_similar_problem(problem: str) -> str:
             ),
             messages=[{"role": "user", "content": f"Original problem: {problem}"}],
         )
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
         first_block = response.content[0]
+        resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
+        _log_decomposition_call(
+            model=model, function="generate_similar",
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            latency_ms=latency_ms, success=True, retry_count=0,
+            input_text=f"Original problem: {problem}", output_text=resp_text,
+        )
         if isinstance(first_block, TextBlock):
             return first_block.text.strip()
     except Exception:
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
         logger.warning("Failed to generate similar problem, returning original")
     return problem
 
@@ -145,27 +159,53 @@ async def decompose_problem(problem: str) -> Decomposition:
 
     client = anthropic.Anthropic(api_key=settings.claude_api_key)
 
+    model = "claude-sonnet-4-20250514"
     last_error: str | None = None
     for attempt in range(MAX_RETRIES):
         prompt = _build_prompt(problem, problem_type)
+        start = time.monotonic()
 
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=model,
                 max_tokens=1024,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
 
             first_block = response.content[0]
+            resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
             if not isinstance(first_block, TextBlock):
                 last_error = "Unexpected response type from Claude"
+                _log_decomposition_call(
+                    model=model, function="decompose",
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    latency_ms=latency_ms, success=False, retry_count=attempt,
+                    input_text=prompt, output_text=resp_text,
+                )
                 continue
             steps = _parse_steps(first_block.text)
 
             if not steps:
                 last_error = "Empty steps returned"
+                _log_decomposition_call(
+                    model=model, function="decompose",
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    latency_ms=latency_ms, success=False, retry_count=attempt,
+                    input_text=prompt, output_text=resp_text,
+                )
                 continue
+
+            _log_decomposition_call(
+                model=model, function="decompose",
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                latency_ms=latency_ms, success=True, retry_count=attempt,
+                input_text=prompt, output_text=resp_text,
+            )
 
             decomposition = Decomposition(
                 problem=problem,
@@ -184,9 +224,11 @@ async def decompose_problem(problem: str) -> Decomposition:
             return decomposition
 
         except json.JSONDecodeError as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = f"JSON parse error: {e}"
             logger.warning("Attempt %d: %s", attempt + 1, last_error)
         except Exception as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = f"API error: {e}"
             logger.warning("Attempt %d: %s", attempt + 1, last_error)
 
@@ -198,6 +240,40 @@ async def decompose_problem(problem: str) -> Decomposition:
         last_error,
     )
     raise RuntimeError(f"Failed to decompose problem after {MAX_RETRIES} attempts: {last_error}")
+
+
+def _log_decomposition_call(
+    model: str,
+    function: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: float,
+    success: bool,
+    retry_count: int,
+    input_text: str | None = None,
+    output_text: str | None = None,
+) -> None:
+    """Log a Claude call from step_decomposition to the llm_calls table."""
+    from api.core.tutor import _persist_llm_call, COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET
+
+    cost = (input_tokens * COST_PER_INPUT_TOKEN_SONNET) + (output_tokens * COST_PER_OUTPUT_TOKEN_SONNET)
+    logger.info(
+        "LLM call: function=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
+        function, model, input_tokens, output_tokens, cost, latency_ms,
+    )
+    try:
+        asyncio.get_running_loop().create_task(
+            _persist_llm_call(
+                model=model, function=function,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                latency_ms=latency_ms, cost_usd=round(cost, 6),
+                session_id=None, user_id=None,
+                success=success, retry_count=retry_count,
+                input_text=input_text, output_text=output_text,
+            )
+        )
+    except RuntimeError:
+        logger.warning("No running event loop — skipping LLM call persistence")
 
 
 def _cache_decomposition(decomposition: Decomposition) -> None:
