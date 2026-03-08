@@ -8,6 +8,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -139,15 +140,21 @@ async def create_session(
         # Full decomposition for learn mode
         decomposition = await decompose_problem(problem)
         problem_type = decomposition.problem_type
-        steps_data = [
-            {
+        steps_data = []
+        for i, s in enumerate(decomposition.steps):
+            step_dict: dict[str, Any] = {
                 "description": s.description,
                 "operation": s.operation,
                 "before": s.before,
                 "after": s.after,
             }
-            for s in decomposition.steps
-        ]
+            # Attach shuffled multiple-choice options to the final step
+            if i == len(decomposition.steps) - 1 and decomposition.distractors:
+                import random
+                choices = [s.after] + decomposition.distractors[:3]
+                random.shuffle(choices)
+                step_dict["choices"] = choices
+            steps_data.append(step_dict)
 
     session = Session(
         user_id=user_id,
@@ -380,22 +387,15 @@ async def _respond_learn_mode(
             total_steps=session.total_steps,
         )
 
-    # --- Final step: evaluate the student's answer ---
+    # --- Final step: multiple-choice answer ---
     if request_advance:
         raise SessionError("You must provide an answer for the final step")
 
     correct_answer = step_data["after"]
     _add_exchange(session, "student", student_response)
 
-    # 1. Direct string match
+    # Direct string match (multiple-choice: student selects an exact option)
     is_correct = student_response.strip() == correct_answer.strip()
-
-    # 2. LLM check if string match fails
-    if not is_correct:
-        is_correct = await _llm_check_final_answer(
-            session.problem, correct_answer,
-            student_response, str(session.id),
-        )
 
     if is_correct:
         return await _complete_learn(db, session)
