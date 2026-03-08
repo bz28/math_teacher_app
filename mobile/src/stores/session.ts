@@ -4,6 +4,7 @@ import {
   createSession,
   generatePracticeProblems,
   getSession,
+  getSimilarProblem,
   respondToStep,
   type PracticeProblem,
   type SessionData,
@@ -211,22 +212,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   learnSimilarProblem: async () => {
-    const { lastResponse, learnQueue } = get();
-    const similar = lastResponse?.similar_problem;
-    if (!similar || !learnQueue) return;
-
-    // Insert similar problem after current index
-    const insertAt = learnQueue.currentIndex + 1;
-    const newProblems = [...learnQueue.problems];
-    newProblems.splice(insertAt, 0, similar);
-    const newFlags = [...learnQueue.flags];
-    newFlags.splice(insertAt, 0, false);
+    const { session, learnQueue } = get();
+    if (!session || !learnQueue) return;
 
     set({ phase: "loading", error: null });
     try {
-      const session = await createSession(similar, "learn");
+      const { similar_problem: similar } = await getSimilarProblem(session.id);
+
+      // Insert similar problem after current index
+      const insertAt = learnQueue.currentIndex + 1;
+      const newProblems = [...learnQueue.problems];
+      newProblems.splice(insertAt, 0, similar);
+      const newFlags = [...learnQueue.flags];
+      newFlags.splice(insertAt, 0, false);
+
+      const newSession = await createSession(similar, "learn");
       set({
-        session,
+        session: newSession,
         phase: "awaiting_input",
         lastResponse: null,
         learnQueue: {
@@ -371,12 +373,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   tryPracticeProblem: async () => {
-    const { lastResponse } = get();
-    const similarProblem = lastResponse?.similar_problem;
-    if (!similarProblem) return;
+    const { session } = get();
+    if (!session) return;
 
     set({ ...initialState, phase: "loading" });
     try {
+      const { similar_problem: similarProblem } = await getSimilarProblem(session.id);
       const newSession = await createSession(similarProblem, "practice");
       set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
     } catch (e) {

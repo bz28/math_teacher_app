@@ -187,6 +187,9 @@ export const respondToStep = (
     request_advance: requestAdvance,
   });
 
+export const getSimilarProblem = (sessionId: string) =>
+  apiPost<{ similar_problem: string }>(`/session/${sessionId}/similar`, {});
+
 // Auth API
 export const login = (email: string, password: string) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });

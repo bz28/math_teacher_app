@@ -1,4 +1,4 @@
-"""Session endpoints: create, get, respond."""
+"""Session endpoints: create, get, respond, similar."""
 
 import uuid
 
@@ -13,6 +13,7 @@ from api.core.session import (
     get_session,
     respond_to_step,
 )
+from api.core.step_decomposition import generate_similar_problem
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
@@ -117,5 +118,27 @@ async def respond(
         similar_problem=result.similar_problem,
         step_description=result.step_description,
     )
+
+
+@router.post("/{session_id}/similar")
+async def similar(
+    session_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Generate a similar problem on demand (only after session is completed)."""
+    try:
+        session = await get_session(db, session_id)
+    except SessionError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    if session.user_id != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
+
+    if session.status != "completed":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
+
+    problem = await generate_similar_problem(session.problem)
+    return {"similar_problem": problem}
 
 

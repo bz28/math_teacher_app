@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.step_decomposition import Step, decompose_problem, generate_similar_problem
+from api.core.step_decomposition import Step, decompose_problem
 from api.core.tutor import _call_claude_json, converse, step_chat
 from api.models.session import Session
 
@@ -213,10 +213,9 @@ async def _converse_completed(
 async def _complete_practice(
     db: AsyncSession, session: Session,
 ) -> StepResponse:
-    """Mark a practice session as completed and generate a similar problem."""
+    """Mark a practice session as completed."""
     session.current_step = session.total_steps
     session.status = "completed"
-    similar = await generate_similar_problem(session.problem)
     feedback = "Correct! Problem complete!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -226,7 +225,6 @@ async def _complete_practice(
         current_step=session.current_step,
         total_steps=session.total_steps,
         is_correct=True,
-        similar_problem=similar,
     )
 
 
@@ -307,10 +305,9 @@ async def _respond_practice_mode(
 async def _complete_learn(
     db: AsyncSession, session: Session,
 ) -> StepResponse:
-    """Mark a learn session as completed and generate a similar problem."""
+    """Mark a learn session as completed."""
     session.current_step = session.total_steps
     session.status = "completed"
-    similar = await generate_similar_problem(session.problem)
     feedback = "Correct! You've solved the problem!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -320,7 +317,6 @@ async def _complete_learn(
         current_step=session.current_step,
         total_steps=session.total_steps,
         is_correct=True,
-        similar_problem=similar,
     )
 
 
