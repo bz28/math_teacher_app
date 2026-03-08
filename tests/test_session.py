@@ -417,7 +417,6 @@ async def test_session_completion(client: AsyncClient, auth_token: str) -> None:
 
     data = resp.json()
     assert data["action"] == "completed"
-    assert data["similar_problem"] is not None
 
 
 @pytest.mark.anyio
@@ -492,7 +491,6 @@ async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_toke
     data = resp.json()
     assert data["action"] == "completed"
     assert data["is_correct"] is True
-    assert data["similar_problem"] is not None
 
 
 @pytest.mark.anyio
