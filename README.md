@@ -10,7 +10,7 @@ Students type a math problem or enter a word problem. The app breaks it down int
 
 - [How the App Works (The Tutoring Loop)](#how-the-app-works-the-tutoring-loop)
 - [How Problems Get Into the App](#how-problems-get-into-the-app)
-- [The Math Engine (SymPy + Claude Hybrid)](#the-math-engine-sympy--claude-hybrid)
+- [The Math Engine (Claude)](#the-math-engine-claude)
 - [The AI Tutor (Claude LLM)](#the-ai-tutor-claude-llm)
 - [Anti-Cheating and Integrity](#anti-cheating-and-integrity)
 - [Hint System](#hint-system)
@@ -50,32 +50,24 @@ The key design principle: the app is a tutor, not an answer key. It will guide, 
 ## How Problems Get Into the App
 
 ### Text Input
-The student types the math problem using a specialized math keyboard that supports fractions, exponents, parentheses, and other mathematical notation. The typed input is sent to the backend, parsed by SymPy (a Python math library) into a structured representation, and displayed back to the student as properly formatted math using LaTeX rendering (rendered via KaTeX in a WebView on mobile).
-
-If the input can't be parsed (e.g., gibberish or unsupported notation), the app tells the student and asks them to try again.
+The student types the math problem using a specialized math keyboard that supports fractions, exponents, parentheses, and other mathematical notation. The typed input is sent to the backend and displayed back to the student as properly formatted math using LaTeX rendering (rendered via KaTeX in a WebView on mobile).
 
 ### Word Problems
-Students can also enter word problems in plain English (e.g., "A store sells apples for $2 each. If Maria buys some apples and pays $14, how many apples did she buy?"). For word problems, Claude parses the natural language into a mathematical equation, then SymPy takes over for verification and step generation. This is included in v1 because students rarely encounter naked equations — the translation from a real-world context to math is where most students struggle.
+Students can also enter word problems in plain English (e.g., "A store sells apples for $2 each. If Maria buys some apples and pays $14, how many apples did she buy?"). Claude handles both the natural language understanding and the step-by-step breakdown. This is included in v1 because students rarely encounter naked equations — the translation from a real-world context to math is where most students struggle.
 
 ### Photo Input (Future — v2)
 Photo-based input using OCR (camera capture → Mathpix API → LaTeX → structured math) is planned for a future version but is not included in the v1 launch.
 
 ---
 
-## The Math Engine (SymPy + Claude Hybrid)
+## The Math Engine (Claude)
 
-This is the most technically interesting part of the app and was the highest-risk component to build.
+Claude handles all math problem solving — step decomposition, answer checking, and similar problem generation. There is no separate symbolic math engine.
 
-### The Problem
-SymPy (a Python computer algebra system) can solve math problems and verify answers, but it only gives you the final answer — not the step-by-step process a student would follow. If you ask SymPy to solve `2x + 6 = 12`, it tells you `x = 3`. It doesn't say "first subtract 6 from both sides, then divide both sides by 2."
+### How It Works
+Given a problem (algebra, calculus, word problem, etc.), Claude generates a pedagogically sensible sequence of steps a student should follow — the kind of steps a good math teacher would walk through on a whiteboard. The system retries on JSON parse or API errors (up to 3 attempts).
 
-### The Solution: Hybrid Approach
-The app uses both SymPy and Claude (an AI language model) together:
-
-- **Claude generates the step-by-step breakdown.** Given a problem, Claude produces a pedagogically sensible sequence of steps a student should follow — the kind of steps a good math teacher would walk through on a whiteboard.
-- **SymPy verifies the final answer.** After Claude generates all the steps, SymPy independently solves the problem and checks that Claude's final answer matches. For v1's algebra-level math, a correct final answer strongly implies correct intermediate steps. This avoids the fragility of trying to parse each of Claude's intermediate expressions back into SymPy for per-step verification.
-- **If the final answer doesn't match**, the system feeds SymPy's correct answer back to Claude and asks it to regenerate (up to 3 retries). If retries are exhausted, the system falls back to a simpler decomposition with fewer steps.
-- **Few-shot caching by problem structure.** The cache key is the problem type and structure (e.g., "linear equation, ax+b=c"). The cache stores real decompositions of previously solved problems of that structure, which are used as few-shot examples in Claude's prompt — not as templates to instantiate. When a new problem comes in, the cached example is included in the prompt ("Here's how we broke down a similar problem: [cached example]. Now decompose this one: ..."). Claude handles the translation naturally. New outputs are cached alongside existing examples. This avoids the fragility of template instantiation (Claude doesn't generate structurally identical steps for different numbers) while improving quality, consistency, and retry rates.
+- **Few-shot caching by problem structure.** The cache key is the problem type. The cache stores real decompositions of previously solved problems, which are used as few-shot examples in Claude's prompt. When a new problem comes in, the cached example is included in the prompt ("Here's how we broke down a similar problem: [cached example]. Now decompose this one: ..."). Claude handles the translation naturally. New outputs are cached alongside existing examples.
 
 Each step in the generated sequence contains:
 - A description of what's happening (e.g., "Subtract 6 from both sides")
@@ -83,10 +75,9 @@ Each step in the generated sequence contains:
 - The state before the step (e.g., `2x + 6 = 12`)
 - The state after the step (e.g., `2x = 6`)
 
-### Other Math Engine Capabilities
-- **Expression equivalence** — The engine knows that `2/4` and `1/2` are the same thing, and that `x + 1` and `1 + x` are equivalent. Students don't get marked wrong for correct answers in different forms.
-- **Answer verification** — Given a problem and a proposed answer, the engine can confirm whether it's correct.
-- **Similar problem generation** — The engine can generate a new problem with the same structure and difficulty but different numbers. This is used to confirm the student actually understands a concept (not just memorized one problem).
+### Other Capabilities
+- **Answer equivalence** — Claude checks if a student's answer is mathematically equivalent to the correct answer, handling different notations and forms (e.g., `2/4` vs `1/2`, `x + 1` vs `1 + x`).
+- **Similar problem generation** — Claude generates new problems with the same structure and difficulty but different numbers. This is used to confirm the student actually understands a concept (not just memorized one problem).
 
 ---
 
@@ -95,7 +86,7 @@ Each step in the generated sequence contains:
 The app uses Claude (Anthropic's language model) as the tutoring intelligence layer. It runs in three distinct modes, each with its own specialized system prompt:
 
 ### Evaluator Mode
-Takes the correct step (from SymPy) and the student's response, then determines if the student is right, wrong, or partially right. This is more nuanced than simple string matching — the evaluator handles:
+Takes the correct step and the student's response, then determines if the student is right, wrong, or partially right. This is more nuanced than simple string matching — the evaluator handles:
 - Correct answer with wrong method (student got the right number but did something mathematically invalid to get there)
 - Partially correct responses (right direction but arithmetic errors)
 - Equivalent expressions (different forms of the same answer)
@@ -256,18 +247,17 @@ React Native (iOS/Android)          React Web (Teacher Dashboard)
         +------ HTTPS API (SSE streaming) ---+
                         |
               FastAPI (Python Backend)
-             /          |            \
-          SymPy      Claude API    PostgreSQL
-         (math)     (AI tutor)     (data)
+               /                    \
+          Claude API            PostgreSQL
+         (AI tutor + math)        (data)
 ```
 
 ### Why This Stack
 
 - **React Native (Expo)** — One codebase for both iOS and Android. Student-facing only.
 - **React Web** — Teacher dashboard. Teachers use laptops, so a web app is more practical.
-- **FastAPI (Python)** — Python was chosen specifically because SymPy is a Python library. Keeping SymPy in-process (no separate microservice) reduces latency and complexity.
-- **SymPy** — The math correctness engine. Handles parsing, verification, and equivalence checking.
-- **Claude API** — The tutoring intelligence. Generates step-by-step breakdowns, evaluates student responses, explains concepts, and assesses understanding. Also parses word problems into equations.
+- **FastAPI (Python)** — Python backend with async support for streaming LLM responses.
+- **Claude API** — The tutoring intelligence and math engine. Generates step-by-step breakdowns, evaluates student responses, explains concepts, assesses understanding, checks answer equivalence, and generates similar problems.
 - **PostgreSQL** — Stores users, sessions, progress data, and mastery scores. Student emails are encrypted at rest.
 - **Alembic** — Database migration tool. Schema evolves across multiple PRs, so migration tooling is in place from day one.
 - **SSE (Server-Sent Events)** — Used for streaming LLM responses from the backend to the mobile app in real-time.

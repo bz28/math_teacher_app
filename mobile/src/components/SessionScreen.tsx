@@ -228,12 +228,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     onBack();
   };
 
-  const handleSimilarProblem = async (problem: string) => {
-    const currentMode = session.mode;
-    reset();
-    await startSession(problem, currentMode);
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -300,11 +294,18 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Learn mode: final step — ask for answer */}
-        {isLearn && !isCompleted && isFinalStep && (
-          <Text style={styles.promptText}>
-            Based on the steps above, what is the final answer?
-          </Text>
+        {/* Learn mode: final step — show what to do, ask for answer */}
+        {isLearn && !isCompleted && isFinalStep && currentStep && (
+          <View>
+            <View style={styles.stepDescCard}>
+              <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
+              <Text style={styles.stepDescText}>{currentStep.description}</Text>
+              <Text style={styles.historyResult}>{currentStep.before}</Text>
+            </View>
+            <Text style={styles.promptText}>
+              What is the result?
+            </Text>
+          </View>
         )}
 
         {/* Practice mode: prompt */}
@@ -367,15 +368,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <Text style={styles.questionsText}>I still have questions</Text>
             </TouchableOpacity>
 
-            {lastResponse?.similar_problem && (
-              <TouchableOpacity
-                style={styles.similarButton}
-                onPress={learnSimilarProblem}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.similarText}>Learn Similar Problem</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.similarButton}
+              onPress={learnSimilarProblem}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.similarText}>Learn Similar Problem</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.flagButtonWide, learnQueue.flags[learnQueue.currentIndex] && styles.flagButtonActive]}
@@ -417,7 +416,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 ))}
               </View>
             )}
-            {isLearn && lastResponse?.similar_problem && (
+            {isLearn && (
               <TouchableOpacity
                 style={styles.similarButton}
                 onPress={tryPracticeProblem}
@@ -435,15 +434,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 <Text style={styles.questionsText}>I still have questions</Text>
               </TouchableOpacity>
             )}
-            {isPractice && lastResponse?.similar_problem && (
+            {isPractice && (
               <TouchableOpacity
                 style={styles.similarButton}
-                onPress={() => handleSimilarProblem(lastResponse.similar_problem!)}
+                onPress={tryPracticeProblem}
                 activeOpacity={0.7}
               >
-                <Text style={styles.similarText}>
-                  Try: {lastResponse.similar_problem}
-                </Text>
+                <Text style={styles.similarText}>Try a similar problem</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity

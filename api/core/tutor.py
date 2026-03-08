@@ -303,8 +303,12 @@ def _log_llm_call(
     latency_ms: float,
     session_id: str | None,
     user_id: str | None,
+    success: bool = True,
+    retry_count: int = 0,
+    input_text: str | None = None,
+    output_text: str | None = None,
 ) -> None:
-    """Log an LLM call and track cost using model-specific pricing."""
+    """Log an LLM call, track cost, and persist to database."""
     input_price, output_price = _PRICING.get(
         model, (COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET)
     )
@@ -335,6 +339,66 @@ def _log_llm_call(
             "user_id": log.user_id,
         },
     )
+
+    # Persist to database (fire-and-forget)
+    asyncio.get_running_loop().create_task(
+        _persist_llm_call(
+            model=model,
+            function=mode,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+            cost_usd=round(cost, 6),
+            session_id=session_id,
+            user_id=user_id,
+            success=success,
+            retry_count=retry_count,
+            input_text=input_text,
+            output_text=output_text,
+        )
+    )
+
+
+async def _persist_llm_call(
+    model: str,
+    function: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: float,
+    cost_usd: float,
+    session_id: str | None,
+    user_id: str | None,
+    success: bool,
+    retry_count: int,
+    input_text: str | None = None,
+    output_text: str | None = None,
+) -> None:
+    """Write an LLM call record to the database."""
+    try:
+        import uuid as _uuid
+
+        from api.database import get_session_factory
+        from api.models.llm_call import LLMCall
+
+        async with get_session_factory()() as db:
+            record = LLMCall(
+                function=function,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                session_id=_uuid.UUID(session_id) if session_id else None,
+                user_id=_uuid.UUID(user_id) if user_id else None,
+                success=success,
+                retry_count=retry_count,
+                input_text=input_text,
+                output_text=output_text,
+            )
+            db.add(record)
+            await db.commit()
+    except Exception as e:
+        logger.error("Failed to persist LLM call log: %s", e, exc_info=True)
 
 
 def _system_with_cache(
@@ -395,10 +459,15 @@ async def _call_claude_stream(
 
                 response = await stream.get_final_message()
                 latency_ms = round((time.monotonic() - start) * 1000, 2)
+                resp_text = "".join(
+                    b.text for b in response.content if hasattr(b, "text")
+                )
                 _log_llm_call(
                     use_model, mode,
                     response.usage.input_tokens, response.usage.output_tokens,
                     latency_ms, session_id, user_id,
+                    success=True, retry_count=attempt,
+                    input_text=user_message, output_text=resp_text,
                 )
                 _circuit.record_success()
                 return
@@ -449,17 +518,21 @@ async def _call_claude_json(
                 messages=[{"role": "user", "content": user_message}],
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
+            first_block = response.content[0]
+            resp_text = first_block.text if hasattr(first_block, "text") else ""
             _log_llm_call(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
                 latency_ms, session_id, user_id,
+                success=True, retry_count=attempt,
+                input_text=user_message, output_text=resp_text,
             )
             _circuit.record_success()
 
             first_block = response.content[0]
             if not hasattr(first_block, "text"):
                 raise ValueError("Unexpected response type from Claude")
-            text = _strip_markdown_fencing(first_block.text)
+            text = _strip_markdown_fencing(first_block.text)  # type: ignore[union-attr]
             result: dict[str, object] = json.loads(text)
             return result
 

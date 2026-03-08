@@ -1,14 +1,16 @@
-"""Step-by-step decomposition: Claude generates steps, SymPy verifies final answer."""
+"""Step-by-step decomposition: Claude generates steps for any math problem."""
 
+import asyncio
 import json
 import logging
+import re
+import time
 from dataclasses import dataclass
 
 import anthropic
 from anthropic.types import TextBlock
 
 from api.config import settings
-from api.core.math_engine import MathEngine, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +64,8 @@ class Decomposition:
 _few_shot_cache: dict[str, list[Decomposition]] = {}
 
 
-def _build_prompt(problem: str, problem_type: str, correct_answer: str | None = None) -> str:
-    """Build the user prompt, optionally with few-shot examples and corrective feedback."""
+def _build_prompt(problem: str, problem_type: str) -> str:
+    """Build the user prompt, optionally with few-shot examples."""
     parts: list[str] = []
 
     # Include few-shot example if available
@@ -82,12 +84,6 @@ def _build_prompt(problem: str, problem_type: str, correct_answer: str | None = 
         )
 
     parts.append(f"Problem: {problem}")
-
-    if correct_answer:
-        parts.append(
-            f"\nIMPORTANT: The correct final answer is {correct_answer}. "
-            f"Your last step's 'after' field MUST match this answer."
-        )
 
     return "\n\n".join(parts)
 
@@ -114,252 +110,170 @@ def _parse_steps(response_text: str) -> list[Step]:
     ]
 
 
-EXTRACTION_PROMPT = """You are a math tutor. Extract the math equation from this word problem.
-
-Given a word problem, identify the underlying math equation and solve it.
-
-Respond with ONLY valid JSON:
-{
-  "equation": "the equation using standard notation (e.g., d = 60 * 3)",
-  "simplified_equation": "simplified form if different (e.g., d = 180)",
-  "variable": "the variable being solved for (e.g., d)",
-  "answer": "the numeric answer (e.g., 180)"
-}
-
-Use standard math notation: * for multiplication, / for division, ^ for exponents."""
+def _is_word_problem(text: str) -> bool:
+    """Detect whether text is a word problem vs pure math notation."""
+    return bool(re.search(r"[a-zA-Z]{2,}", text))
 
 
-async def _extract_equation(problem: str) -> dict[str, str]:
-    """Call Claude to extract the math equation from a word problem."""
+async def generate_similar_problem(problem: str) -> str:
+    """Use Claude to generate a similar math problem with different numbers/context."""
     client = anthropic.Anthropic(api_key=settings.claude_api_key)
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=256,
-        system=EXTRACTION_PROMPT,
-        messages=[{"role": "user", "content": f"Word problem: {problem}"}],
-    )
-    first_block = response.content[0]
-    if not isinstance(first_block, TextBlock):
-        raise ValueError("Unexpected response type from Claude")
-    text = first_block.text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-    result: dict[str, str] = json.loads(text)
-    return result
-
-
-async def _decompose_word_problem(problem: str) -> Decomposition:
-    """Decompose a word problem: extract equation, then generate steps."""
-    client = anthropic.Anthropic(api_key=settings.claude_api_key)
-
-    last_error: str | None = None
-    for attempt in range(MAX_RETRIES):
-        try:
-            # Step 1: Extract the equation
-            extraction = await _extract_equation(problem)
-            equation = extraction.get("equation", "")
-            answer = extraction.get("answer", "")
-
-            # Step 2: Verify with SymPy
-            try:
-                solutions = MathEngine.solve_problem(equation)
-                correct_answer = str(solutions[0]) if solutions else answer
-            except (ParseError, Exception):
-                # Equation may not be directly solvable (e.g., d = 60*3)
-                try:
-                    result = MathEngine.evaluate_arithmetic(answer)
-                    correct_answer = str(result)
-                except Exception:
-                    correct_answer = answer
-
-            # Step 3: Generate step decomposition via Claude
-            prompt = _build_prompt(problem, "word_problem", correct_answer=correct_answer)
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            first_block = response.content[0]
-            if not isinstance(first_block, TextBlock):
-                last_error = "Unexpected response type from Claude"
-                continue
-            steps = _parse_steps(first_block.text)
-            if not steps:
-                last_error = "Empty steps returned"
-                continue
-
-            # Step 4: Verify final answer
-            final_after = steps[-1].after
-            if MathEngine.are_equivalent(final_after, correct_answer):
-                decomposition = Decomposition(
-                    problem=problem,
-                    steps=steps,
-                    final_answer=final_after,
-                    problem_type="word_problem",
-                )
-                _cache_decomposition(decomposition)
-                logger.info(
-                    "Word problem decomposition succeeded on attempt %d",
-                    attempt + 1,
-                    extra={"problem": problem, "equation": equation},
-                )
-                return decomposition
-
-            last_error = f"Final answer mismatch: got '{final_after}', expected '{correct_answer}'"
-            logger.warning("Attempt %d: %s", attempt + 1, last_error)
-
-        except json.JSONDecodeError as e:
-            last_error = f"JSON parse error: {e}"
-            logger.warning("Attempt %d: %s", attempt + 1, last_error)
-        except Exception as e:
-            last_error = f"API error: {e}"
-            logger.warning("Attempt %d: %s", attempt + 1, last_error)
-
-    logger.error(
-        "All %d attempts failed for word problem '%s'. Last error: %s. Using fallback.",
-        MAX_RETRIES, problem, last_error,
-    )
-    return _fallback_word_problem(problem)
-
-
-def _fallback_word_problem(problem: str) -> Decomposition:
-    """Minimal fallback for word problems when retries are exhausted."""
-    return Decomposition(
-        problem=problem,
-        steps=[
-            Step("Read the problem and identify what to solve for", "translate", problem, problem),
-            Step("Solve the problem", "solve", problem, "unknown"),
-        ],
-        final_answer="unknown",
-        problem_type="word_problem",
-    )
-
-
-async def generate_similar_word_problem(problem: str) -> str:
-    """Use Claude to generate a similar word problem with different numbers/context."""
-    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    model = "claude-sonnet-4-20250514"
+    start = time.monotonic()
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=256,
             system=(
-                "Generate a similar math word problem with the same structure "
+                "Generate a similar math problem with the same structure "
                 "but different numbers and context. Respond with ONLY the new "
-                "word problem text, nothing else."
+                "problem text, nothing else."
             ),
             messages=[{"role": "user", "content": f"Original problem: {problem}"}],
         )
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
         first_block = response.content[0]
+        resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
+        _log_decomposition_call(
+            model=model, function="generate_similar",
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            latency_ms=latency_ms, success=True, retry_count=0,
+            input_text=f"Original problem: {problem}", output_text=resp_text,
+        )
         if isinstance(first_block, TextBlock):
             return first_block.text.strip()
     except Exception:
-        logger.warning("Failed to generate similar word problem, returning original")
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
+        logger.warning("Failed to generate similar problem, returning original")
     return problem
 
 
 async def decompose_problem(problem: str) -> Decomposition:
     """Generate step-by-step decomposition for a math problem.
 
-    Claude generates steps, SymPy verifies the final answer.
-    Retries with corrective feedback if the final answer doesn't match.
+    Claude generates the steps directly. Retries only on JSON parse
+    or API errors.
     """
-    problem_type = MathEngine.classify_problem(problem)
-
-    if problem_type == "word_problem":
-        return await _decompose_word_problem(problem)
-
-    solutions = MathEngine.solve_problem(problem)
-    correct_answer = str(solutions[0]) if solutions else None
+    problem_type = "word_problem" if _is_word_problem(problem) else "math"
 
     client = anthropic.Anthropic(api_key=settings.claude_api_key)
 
+    model = "claude-sonnet-4-20250514"
     last_error: str | None = None
     for attempt in range(MAX_RETRIES):
-        prompt = _build_prompt(
-            problem,
-            problem_type,
-            correct_answer=correct_answer if attempt > 0 else None,
-        )
+        prompt = _build_prompt(problem, problem_type)
+        start = time.monotonic()
 
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=model,
                 max_tokens=1024,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
 
             first_block = response.content[0]
+            resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
             if not isinstance(first_block, TextBlock):
                 last_error = "Unexpected response type from Claude"
+                _log_decomposition_call(
+                    model=model, function="decompose",
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    latency_ms=latency_ms, success=False, retry_count=attempt,
+                    input_text=prompt, output_text=resp_text,
+                )
                 continue
-            response_text = first_block.text
-            steps = _parse_steps(response_text)
+            steps = _parse_steps(first_block.text)
 
             if not steps:
                 last_error = "Empty steps returned"
+                _log_decomposition_call(
+                    model=model, function="decompose",
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    latency_ms=latency_ms, success=False, retry_count=attempt,
+                    input_text=prompt, output_text=resp_text,
+                )
                 continue
 
-            # Verify final answer matches SymPy
-            final_after = steps[-1].after
-            if correct_answer and MathEngine.are_equivalent(final_after, correct_answer):
-                decomposition = Decomposition(
-                    problem=problem,
-                    steps=steps,
-                    final_answer=final_after,
-                    problem_type=problem_type,
-                )
-                # Cache for few-shot examples
-                _cache_decomposition(decomposition)
-
-                logger.info(
-                    "Decomposition succeeded on attempt %d for %s",
-                    attempt + 1,
-                    problem,
-                    extra={"problem_type": problem_type, "num_steps": len(steps)},
-                )
-                return decomposition
-
-            last_error = f"Final answer mismatch: got '{final_after}', expected '{correct_answer}'"
-            logger.warning(
-                "Attempt %d: %s",
-                attempt + 1,
-                last_error,
-                extra={"problem": problem},
+            _log_decomposition_call(
+                model=model, function="decompose",
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                latency_ms=latency_ms, success=True, retry_count=attempt,
+                input_text=prompt, output_text=resp_text,
             )
 
+            decomposition = Decomposition(
+                problem=problem,
+                steps=steps,
+                final_answer=steps[-1].after,
+                problem_type=problem_type,
+            )
+            _cache_decomposition(decomposition)
+
+            logger.info(
+                "Decomposition succeeded on attempt %d for %s",
+                attempt + 1,
+                problem,
+                extra={"problem_type": problem_type, "num_steps": len(steps)},
+            )
+            return decomposition
+
         except json.JSONDecodeError as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = f"JSON parse error: {e}"
             logger.warning("Attempt %d: %s", attempt + 1, last_error)
         except Exception as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = f"API error: {e}"
             logger.warning("Attempt %d: %s", attempt + 1, last_error)
 
-    # Fallback: simple 2-step decomposition
+    # All retries exhausted — this should be rare
     logger.error(
-        "All %d attempts failed for '%s'. Last error: %s. Using fallback.",
+        "All %d attempts failed for '%s'. Last error: %s.",
         MAX_RETRIES,
         problem,
         last_error,
     )
-    return _fallback_decomposition(problem, correct_answer or "unknown", problem_type)
+    raise RuntimeError(f"Failed to decompose problem after {MAX_RETRIES} attempts: {last_error}")
 
 
-def _fallback_decomposition(problem: str, answer: str, problem_type: str) -> Decomposition:
-    """Minimal fallback when Claude retries are exhausted."""
-    return Decomposition(
-        problem=problem,
-        steps=[
-            Step(description=f"Solve {problem} to get {answer}", operation="solve", before=problem, after=answer),
-        ],
-        final_answer=answer,
-        problem_type=problem_type,
+def _log_decomposition_call(
+    model: str,
+    function: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: float,
+    success: bool,
+    retry_count: int,
+    input_text: str | None = None,
+    output_text: str | None = None,
+) -> None:
+    """Log a Claude call from step_decomposition to the llm_calls table."""
+    from api.core.tutor import COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET, _persist_llm_call
+
+    cost = (input_tokens * COST_PER_INPUT_TOKEN_SONNET) + (output_tokens * COST_PER_OUTPUT_TOKEN_SONNET)
+    logger.info(
+        "LLM call: function=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
+        function, model, input_tokens, output_tokens, cost, latency_ms,
     )
+    try:
+        asyncio.get_running_loop().create_task(
+            _persist_llm_call(
+                model=model, function=function,
+                input_tokens=input_tokens, output_tokens=output_tokens,
+                latency_ms=latency_ms, cost_usd=round(cost, 6),
+                session_id=None, user_id=None,
+                success=success, retry_count=retry_count,
+                input_text=input_text, output_text=output_text,
+            )
+        )
+    except RuntimeError:
+        logger.warning("No running event loop — skipping LLM call persistence")
 
 
 def _cache_decomposition(decomposition: Decomposition) -> None:

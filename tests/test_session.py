@@ -154,7 +154,7 @@ class TestFindMatchingSteps:
         assert 0 in matches
 
     def test_finds_later_step(self) -> None:
-        matches = _find_matching_steps("3", MOCK_STEPS, 0)
+        matches = _find_matching_steps("x = 3", MOCK_STEPS, 0)
         assert 1 in matches
 
     def test_no_match(self) -> None:
@@ -417,7 +417,6 @@ async def test_session_completion(client: AsyncClient, auth_token: str) -> None:
 
     data = resp.json()
     assert data["action"] == "completed"
-    assert data["similar_problem"] is not None
 
 
 @pytest.mark.anyio
@@ -492,7 +491,6 @@ async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_toke
     data = resp.json()
     assert data["action"] == "completed"
     assert data["is_correct"] is True
-    assert data["similar_problem"] is not None
 
 
 @pytest.mark.anyio
