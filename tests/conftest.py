@@ -15,6 +15,7 @@ from sqlalchemy import text
 
 from api.database import Base, get_engine, get_session_factory
 from api.main import app
+from api.models.llm_call import LLMCall  # noqa: F401 — register models with Base
 from api.models.session import Session  # noqa: F401 — register models with Base
 from api.models.user import RefreshToken, User  # noqa: F401 — register models with Base
 

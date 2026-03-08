@@ -303,8 +303,10 @@ def _log_llm_call(
     latency_ms: float,
     session_id: str | None,
     user_id: str | None,
+    success: bool = True,
+    retry_count: int = 0,
 ) -> None:
-    """Log an LLM call and track cost using model-specific pricing."""
+    """Log an LLM call, track cost, and persist to database."""
     input_price, output_price = _PRICING.get(
         model, (COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET)
     )
@@ -335,6 +337,59 @@ def _log_llm_call(
             "user_id": log.user_id,
         },
     )
+
+    # Persist to database (fire-and-forget)
+    asyncio.get_event_loop().create_task(
+        _persist_llm_call(
+            model=model,
+            function=mode,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+            cost_usd=round(cost, 6),
+            session_id=session_id,
+            user_id=user_id,
+            success=success,
+            retry_count=retry_count,
+        )
+    )
+
+
+async def _persist_llm_call(
+    model: str,
+    function: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: float,
+    cost_usd: float,
+    session_id: str | None,
+    user_id: str | None,
+    success: bool,
+    retry_count: int,
+) -> None:
+    """Write an LLM call record to the database."""
+    try:
+        import uuid as _uuid
+        from api.database import get_session_factory
+        from api.models.llm_call import LLMCall
+
+        async with get_session_factory()() as db:
+            record = LLMCall(
+                function=function,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                session_id=_uuid.UUID(session_id) if session_id else None,
+                user_id=_uuid.UUID(user_id) if user_id else None,
+                success=success,
+                retry_count=retry_count,
+            )
+            db.add(record)
+            await db.commit()
+    except Exception as e:
+        logger.warning("Failed to persist LLM call log: %s", e)
 
 
 def _system_with_cache(
@@ -399,6 +454,7 @@ async def _call_claude_stream(
                     use_model, mode,
                     response.usage.input_tokens, response.usage.output_tokens,
                     latency_ms, session_id, user_id,
+                    success=True, retry_count=attempt,
                 )
                 _circuit.record_success()
                 return
@@ -453,6 +509,7 @@ async def _call_claude_json(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
                 latency_ms, session_id, user_id,
+                success=True, retry_count=attempt,
             )
             _circuit.record_success()
 
