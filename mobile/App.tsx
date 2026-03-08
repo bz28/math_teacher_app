@@ -19,7 +19,7 @@ import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
-import { setAuthToken } from "./src/services/api";
+import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
 
 const ONBOARDING_KEY = "onboarding_completed";
@@ -44,10 +44,21 @@ export default function App() {
   const isLoading = sessionPhase === "loading";
   const displayError = error ?? sessionError;
 
-  // On launch, check if onboarding was already completed
+  // On launch, check onboarding status and try to restore auth session
   useEffect(() => {
-    SecureStore.getItemAsync(ONBOARDING_KEY).then((done) => {
-      setScreen(done ? "auth" : "onboarding");
+    setOnSessionExpired(() => {
+      setScreen("auth");
+      setFromOnboarding(false);
+    });
+
+    SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
+      if (!done) {
+        setScreen("onboarding");
+        return;
+      }
+      // Try to restore a previous session
+      const restored = await loadStoredAuth();
+      setScreen(restored ? "home" : "auth");
     });
   }, []);
 
@@ -107,8 +118,8 @@ export default function App() {
       <SafeAreaProvider>
         <HomeScreen
           onSelect={() => setScreen("mode-select")}
-          onLogout={() => {
-            setAuthToken(null);
+          onLogout={async () => {
+            await clearAuth();
             setFromOnboarding(false);
             setScreen("auth");
           }}

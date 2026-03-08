@@ -1,4 +1,4 @@
-"""Session endpoints: create, get, respond, explain-back."""
+"""Session endpoints: create, get, respond."""
 
 import uuid
 
@@ -11,7 +11,6 @@ from api.core.session import (
     StepResponse,
     create_session,
     get_session,
-    handle_explain_back,
     respond_to_step,
 )
 from api.database import get_db
@@ -19,7 +18,6 @@ from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
 from api.schemas.session import (
     CreateSessionRequest,
-    ExplainBackRequest,
     RespondRequest,
     SessionResponse,
     StepDetail,
@@ -121,34 +119,3 @@ async def respond(
     )
 
 
-@router.post("/{session_id}/explain-back", response_model=StepResponseSchema)
-async def explain_back(
-    session_id: uuid.UUID,
-    body: ExplainBackRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> StepResponseSchema:
-    """Submit an explain-back response for the current step."""
-    try:
-        session = await get_session(db, session_id)
-    except SessionError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-
-    if session.user_id != current_user.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
-
-    try:
-        result = await handle_explain_back(
-            db, session, body.student_explanation
-        )
-    except SessionError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    return StepResponseSchema(
-        action=result.action,
-        feedback=result.feedback,
-        current_step=result.current_step,
-        total_steps=result.total_steps,
-        is_correct=result.is_correct,
-        similar_problem=result.similar_problem,
-    )

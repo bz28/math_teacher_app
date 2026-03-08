@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { checkEmail, login, register, setAuthToken } from "../services/api";
+import { checkEmail, login, register, saveTokens } from "../services/api";
 
 interface AuthScreenProps {
   onAuth: () => void;
@@ -26,16 +25,7 @@ const GRADES = [
   { label: "9-12", range: "9th - 12th" },
 ];
 
-const TOPICS = [
-  { id: "arithmetic", label: "Arithmetic", icon: "+" },
-  { id: "fractions", label: "Fractions", icon: "\u00BD" },
-  { id: "algebra", label: "Algebra", icon: "x" },
-  { id: "quadratics", label: "Quadratics", icon: "x\u00B2" },
-  { id: "word_problems", label: "Word Problems", icon: "\uD83D\uDCDD" },
-  { id: "geometry", label: "Geometry", icon: "\u25B3" },
-];
-
-type RegisterStep = "credentials" | "grade" | "topics";
+type RegisterStep = "credentials" | "grade";
 
 export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
@@ -44,25 +34,15 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
-  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const toggleTopic = (id: string) => {
-    setSelectedTopics((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const handleLogin = async () => {
     setError(null);
     setLoading(true);
     try {
       const resp = await login(email, password);
-      setAuthToken(resp.access_token);
+      await saveTokens(resp.access_token, resp.refresh_token);
       onAuth();
     } catch (e) {
       setError((e as Error).message);
@@ -76,7 +56,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setLoading(true);
     try {
       const resp = await register(email, password, 8);
-      setAuthToken(resp.access_token);
+      await saveTokens(resp.access_token, resp.refresh_token);
       onAuth();
     } catch (e) {
       setError((e as Error).message);
@@ -115,11 +95,6 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     }
 
     setRegisterStep("grade");
-  };
-
-  const handleGradeNext = () => {
-    if (!selectedGrade) return;
-    setRegisterStep("topics");
   };
 
   const switchMode = () => {
@@ -215,7 +190,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           <View style={styles.header}>
             <Text style={styles.title}>Create your account</Text>
             <Text style={styles.subtitle}>
-              Step 1 of 3
+              Step 1 of 2
             </Text>
           </View>
 
@@ -297,7 +272,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           <View style={styles.header}>
             <Text style={styles.title}>What grade are you in?</Text>
             <Text style={styles.subtitle}>
-              Step 2 of 3 — we'll tailor problems to your level
+              Step 2 of 2 — we'll tailor problems to your level
             </Text>
           </View>
 
@@ -331,97 +306,32 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
             ))}
           </View>
 
+          {error && <Text style={styles.error}>{error}</Text>}
+
           <TouchableOpacity
             style={[
               styles.primaryButton,
               { marginTop: 24 },
-              !selectedGrade && styles.buttonDisabled,
+              (loading || !selectedGrade) && styles.buttonDisabled,
             ]}
-            onPress={handleGradeNext}
-            disabled={!selectedGrade}
+            onPress={handleRegisterSubmit}
+            disabled={loading || !selectedGrade}
           >
-            <Text style={styles.primaryButtonText}>Continue</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Create Account</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // Register: topics step
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <TouchableOpacity
-          onPress={() => setRegisterStep("grade")}
-          style={styles.backButton}
-        >
-          <Text style={styles.backText}>{"\u2039"} Back</Text>
-        </TouchableOpacity>
-
-        <View style={styles.header}>
-          <Text style={styles.title}>What are you working on?</Text>
-          <Text style={styles.subtitle}>
-            Step 3 of 3 — pick one or more topics
-          </Text>
-        </View>
-
-        <View style={styles.topicGrid}>
-          {TOPICS.map((t) => {
-            const isSelected = selectedTopics.has(t.id);
-            return (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.topicCard,
-                  isSelected && styles.topicCardSelected,
-                ]}
-                onPress={() => toggleTopic(t.id)}
-              >
-                <Text style={styles.topicIcon}>{t.icon}</Text>
-                <Text
-                  style={[
-                    styles.topicLabel,
-                    isSelected && styles.topicLabelSelected,
-                  ]}
-                >
-                  {t.label}
-                </Text>
-                {isSelected && (
-                  <Text style={styles.checkmark}>{"\u2713"}</Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {error && <Text style={styles.error}>{error}</Text>}
-
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            { marginTop: 24 },
-            (loading || selectedTopics.size === 0) && styles.buttonDisabled,
-          ]}
-          onPress={handleRegisterSubmit}
-          disabled={loading || selectedTopics.size === 0}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
-  );
+  return null;
 }
 
 /* -- Styles -- */
-
-const { width } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
   container: {
@@ -560,39 +470,4 @@ const styles = StyleSheet.create({
     color: "#888",
   },
   gradeRangeSelected: { color: "#5A9BE6" },
-
-  // Topics
-  topicGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  topicCard: {
-    width: (width - 56 - 12) / 2,
-    backgroundColor: "#F7F8FA",
-    borderRadius: 14,
-    padding: 18,
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#E8EBF0",
-  },
-  topicCardSelected: {
-    backgroundColor: "#EBF2FC",
-    borderColor: "#4A90D9",
-  },
-  topicIcon: { fontSize: 28, marginBottom: 6 },
-  topicLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-  },
-  topicLabelSelected: { color: "#4A90D9" },
-  checkmark: {
-    position: "absolute",
-    top: 8,
-    right: 10,
-    fontSize: 16,
-    color: "#4A90D9",
-    fontWeight: "bold",
-  },
 });

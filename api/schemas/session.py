@@ -15,10 +15,6 @@ class RespondRequest(BaseModel):
     request_advance: bool = False
 
 
-class ExplainBackRequest(BaseModel):
-    student_explanation: str
-
-
 class StepDetail(BaseModel):
     description: str
     operation: str
@@ -29,7 +25,6 @@ class StepDetail(BaseModel):
 class StepTrackingInfo(BaseModel):
     attempts: int = 0
     hints_used: int = 0
-    explain_back: bool = False
 
 
 class SessionResponse(BaseModel):

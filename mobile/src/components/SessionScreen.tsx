@@ -40,7 +40,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     learnSimilarProblem,
     advanceLearnQueue,
     toggleLearnFlag,
-    submitExplanation,
     switchToLearnMode,
     continueAsking,
     tryPracticeProblem,
@@ -50,7 +49,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   const isBatchMode = !!practiceBatch;
   const isLearnQueue = !!learnQueue;
-  const isExplainBack = phase === "explain_back";
   const isCompleted = phase === "completed";
   const isPracticeSummary = phase === "practice_summary";
   const isLearnSummary = phase === "learn_summary";
@@ -210,11 +208,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     if (!input.trim()) return;
     const text = input.trim();
     setInput("");
-    if (isExplainBack) {
-      await submitExplanation(text);
-    } else {
-      await submitAnswer(text);
-    }
+    await submitAnswer(text);
   };
 
   const handleAsk = async () => {
@@ -554,39 +548,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               </>
             )}
 
-            {/* Explain-back */}
-            {isExplainBack && (
-              <>
-                <View style={styles.explainInputArea}>
-                  <Text style={styles.explainLabel}>
-                    Explain this step in your own words
-                  </Text>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.explainInput}
-                    value={input}
-                    onChangeText={setInput}
-                    placeholder="Type your explanation..."
-                    placeholderTextColor="#999"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="go"
-                    onSubmitEditing={handleSubmit}
-                    multiline
-                  />
-                </View>
-                <View style={styles.buttons}>
-                  <TouchableOpacity
-                    style={[styles.button, styles.submitButton, !input.trim() && styles.buttonDisabled]}
-                    onPress={handleSubmit}
-                    disabled={!input.trim()}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.submitText}>Submit</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
           </>
         )}
       </ScrollView>
@@ -726,26 +687,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     minHeight: 48,
     backgroundColor: "#F9FAFB",
-    color: "#1a1a1a",
-  },
-  explainInputArea: {
-    backgroundColor: "#EBF2FC",
-    borderWidth: 1.5,
-    borderColor: "#B8D4F0",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 4,
-  },
-  explainLabel: { fontSize: 14, fontWeight: "600", color: "#4A90D9", marginBottom: 8 },
-  explainInput: {
-    width: "100%",
-    borderWidth: 1.5,
-    borderColor: "#B8D4F0",
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-    minHeight: 60,
-    backgroundColor: "#fff",
     color: "#1a1a1a",
   },
   buttons: { flexDirection: "row", gap: 12, marginTop: 10 },

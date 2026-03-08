@@ -88,16 +88,6 @@ def _mock_converse_question():
     )
 
 
-def _mock_probe_clear():
-    from api.core.tutor import ProbeResult
-    return ProbeResult(understanding="clear", follow_up=None)
-
-
-def _mock_probe_partial():
-    from api.core.tutor import ProbeResult
-    return ProbeResult(understanding="partial", follow_up="Why do we subtract?")
-
-
 @pytest.fixture
 async def auth_token(client: AsyncClient) -> str:
     """Register a test user and return their access token."""

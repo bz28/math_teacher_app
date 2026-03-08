@@ -1,14 +1,11 @@
+import * as SecureStore from "expo-secure-store";
+
 const API_BASE = __DEV__
   ? "http://localhost:8000/v1"
   : "https://math-teacher-api.up.railway.app/v1";
 
-export interface ParsedProblem {
-  expression: string;
-  latex: string;
-  problem_type: string;
-  solutions: string[];
-  solutions_latex: string[];
-}
+const ACCESS_TOKEN_KEY = "access_token";
+const REFRESH_TOKEN_KEY = "refresh_token";
 
 // Session types
 export interface StepDetail {
@@ -27,7 +24,7 @@ export interface SessionData {
   status: string;
   mode: string;
   steps: StepDetail[];
-  step_tracking: Record<string, { attempts: number; hints_used: number; explain_back: boolean }>;
+  step_tracking: Record<string, { attempts: number; hints_used: number }>;
 }
 
 export interface StepResponse {
@@ -41,8 +38,79 @@ export interface StepResponse {
 }
 
 let _authToken: string | null = null;
-export function setAuthToken(token: string | null) {
-  _authToken = token;
+let _refreshToken: string | null = null;
+let _refreshPromise: Promise<boolean> | null = null;
+let _onSessionExpired: (() => void) | null = null;
+
+export function setOnSessionExpired(callback: () => void) {
+  _onSessionExpired = callback;
+}
+
+export async function saveTokens(access: string, refresh: string) {
+  _authToken = access;
+  _refreshToken = refresh;
+  await Promise.all([
+    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, access),
+    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refresh),
+  ]);
+}
+
+export async function loadStoredAuth(): Promise<boolean> {
+  const [access, refresh] = await Promise.all([
+    SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+  ]);
+  if (!access || !refresh) return false;
+  _authToken = access;
+  _refreshToken = refresh;
+  // Verify the access token is still valid
+  try {
+    const resp = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${access}` },
+    });
+    if (resp.ok) return true;
+    if (resp.status === 401) return await _tryRefresh();
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function clearAuth() {
+  _authToken = null;
+  _refreshToken = null;
+  await Promise.all([
+    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+  ]);
+}
+
+async function _tryRefresh(): Promise<boolean> {
+  if (!_refreshToken) return false;
+  // Deduplicate concurrent refresh attempts
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = _doRefresh();
+  try {
+    return await _refreshPromise;
+  } finally {
+    _refreshPromise = null;
+  }
+}
+
+async function _doRefresh(): Promise<boolean> {
+  try {
+    const resp = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: _refreshToken }),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    await saveTokens(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function authHeaders(): Record<string, string> {
@@ -60,8 +128,24 @@ function extractError(data: Record<string, unknown> | null, status: number): str
   return `Request failed (${status})`;
 }
 
+async function _fetchWithRefresh(url: string, init: RequestInit): Promise<Response> {
+  let resp = await fetch(url, init);
+  if (resp.status === 401 && _refreshToken) {
+    const refreshed = await _tryRefresh();
+    if (refreshed) {
+      // Retry with new token
+      const newInit = { ...init, headers: authHeaders() };
+      resp = await fetch(url, newInit);
+    } else {
+      await clearAuth();
+      _onSessionExpired?.();
+    }
+  }
+  return resp;
+}
+
 async function apiPost<T>(path: string, body: object): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`, {
+  const resp = await _fetchWithRefresh(`${API_BASE}${path}`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -74,7 +158,7 @@ async function apiPost<T>(path: string, body: object): Promise<T> {
 }
 
 async function apiGet<T>(path: string): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+  const resp = await _fetchWithRefresh(`${API_BASE}${path}`, { headers: authHeaders() });
   if (!resp.ok) {
     const data = await resp.json().catch(() => null);
     throw new Error(extractError(data, resp.status));
@@ -101,14 +185,6 @@ export const respondToStep = (
     request_hint: requestHint,
     request_show_step: requestShowStep,
     request_advance: requestAdvance,
-  });
-
-export const submitExplainBack = (
-  id: string,
-  explanation: string,
-) =>
-  apiPost<StepResponse>(`/session/${id}/explain-back`, {
-    student_explanation: explanation,
   });
 
 // Auth API
@@ -141,19 +217,3 @@ export const checkPracticeAnswer = (question: string, correctAnswer: string, use
     user_answer: userAnswer,
   });
 
-// Problem parsing
-export async function parseProblem(expression: string): Promise<ParsedProblem> {
-  const resp = await fetch(`${API_BASE}/problems/parse`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ expression }),
-  });
-
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => null);
-    const detail = body?.detail ?? `Request failed (${resp.status})`;
-    throw new Error(detail);
-  }
-
-  return resp.json();
-}
