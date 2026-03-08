@@ -300,11 +300,18 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Learn mode: final step — ask for answer */}
-        {isLearn && !isCompleted && isFinalStep && (
-          <Text style={styles.promptText}>
-            Based on the steps above, what is the final answer?
-          </Text>
+        {/* Learn mode: final step — show what to do, ask for answer */}
+        {isLearn && !isCompleted && isFinalStep && currentStep && (
+          <View>
+            <View style={styles.stepDescCard}>
+              <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
+              <Text style={styles.stepDescText}>{currentStep.description}</Text>
+              <Text style={styles.historyResult}>{currentStep.before}</Text>
+            </View>
+            <Text style={styles.promptText}>
+              What is the result?
+            </Text>
+          </View>
         )}
 
         {/* Practice mode: prompt */}
