@@ -471,8 +471,8 @@ async def test_learn_mode_steps_visible_in_session(client: AsyncClient, auth_tok
 @pytest.mark.anyio
 async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting the final answer directly completes the session."""
-    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
-        mock_decompose.return_value = _mock_decomposition()
+    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
+        mock_solve.return_value = ("x = 3", "linear")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "2x + 6 = 12", "mode": "practice"},
@@ -495,9 +495,9 @@ async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_toke
 
 @pytest.mark.anyio
 async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: str) -> None:
-    """Practice mode: submitting an intermediate step is rejected (final-answer-only)."""
-    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
-        mock_decompose.return_value = _mock_decomposition()
+    """Practice mode: submitting a wrong answer is rejected."""
+    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
+        mock_solve.return_value = ("x = 3", "linear")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "2x + 6 = 12", "mode": "practice"},
@@ -505,7 +505,7 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
         )
     session_id = create_resp.json()["id"]
 
-    # Submit intermediate step (2x = 6) — should be rejected (not the final answer)
+    # Submit intermediate step (2x = 6) — not the final answer
     with patch("api.core.session._llm_check_final_answer", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = False
         resp = await client.post(
@@ -522,8 +522,8 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
 @pytest.mark.anyio
 async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting a wrong answer returns error feedback."""
-    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
-        mock_decompose.return_value = _mock_decomposition()
+    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
+        mock_solve.return_value = ("x = 3", "linear")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "2x + 6 = 12", "mode": "practice"},
@@ -547,22 +547,9 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
 
 @pytest.mark.anyio
 async def test_practice_mode_no_step_skip_rejection(client: AsyncClient, auth_token: str) -> None:
-    """Practice mode: skipping steps is allowed (no skip_rejected action)."""
-    from api.core.step_decomposition import Decomposition
-
-    three_step = Decomposition(
-        problem="3x + 9 = 18",
-        steps=[
-            Step("Subtract 9 from both sides", "subtraction", "3x + 9 = 18", "3x = 9"),
-            Step("Divide both sides by 3", "division", "3x = 9", "x = 3"),
-            Step("Simplify", "simplification", "x = 3", "3"),
-        ],
-        final_answer="3",
-        problem_type="linear",
-    )
-
-    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
-        mock_decompose.return_value = three_step
+    """Practice mode: any correct final answer completes the session."""
+    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
+        mock_solve.return_value = ("3", "linear")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "3x + 9 = 18", "mode": "practice"},
@@ -570,7 +557,6 @@ async def test_practice_mode_no_step_skip_rejection(client: AsyncClient, auth_to
         )
     session_id = create_resp.json()["id"]
 
-    # In learn mode this would be rejected (skip 2+ steps). In practice mode, it completes.
     resp = await client.post(
         f"/v1/session/{session_id}/respond",
         json={"student_response": "3"},

@@ -404,18 +404,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {isCompleted && !isLearnQueue && (
           <View style={styles.completedCard}>
             <Text style={styles.completedTitle}>Problem Solved!</Text>
-            {isPractice && (
-              <View style={styles.solutionSteps}>
-                <Text style={styles.solutionLabel}>Solution</Text>
-                {session.steps.map((step, i) => (
-                  <View key={i} style={styles.solutionRow}>
-                    <Text style={styles.solutionStepNum}>Step {i + 1}</Text>
-                    <Text style={styles.solutionDesc}>{step.description}</Text>
-                    <Text style={styles.solutionResult}>{step.after}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
             {isLearn && (
               <TouchableOpacity
                 style={styles.similarButton}

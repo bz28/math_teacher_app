@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.step_decomposition import Step, decompose_problem
+from api.core.step_decomposition import Step, decompose_problem, solve_problem
 from api.core.tutor import _call_claude_json, converse, step_chat
 from api.models.session import Session
 
@@ -124,26 +124,38 @@ async def create_session(
     """Create a new tutoring session for a problem."""
     await _check_daily_cap(db, user_id)
 
-    # Decompose the problem into steps
-    decomposition = await decompose_problem(problem)
-
-    steps_data = [
-        {
-            "description": s.description,
-            "operation": s.operation,
-            "before": s.before,
-            "after": s.after,
-        }
-        for s in decomposition.steps
-    ]
+    if mode == "practice":
+        # Lightweight: just solve for the answer, no step decomposition
+        answer, problem_type = await solve_problem(problem)
+        steps_data = [
+            {
+                "description": "Final answer",
+                "operation": "solve",
+                "before": problem,
+                "after": answer,
+            }
+        ]
+    else:
+        # Full decomposition for learn mode
+        decomposition = await decompose_problem(problem)
+        problem_type = decomposition.problem_type
+        steps_data = [
+            {
+                "description": s.description,
+                "operation": s.operation,
+                "before": s.before,
+                "after": s.after,
+            }
+            for s in decomposition.steps
+        ]
 
     session = Session(
         user_id=user_id,
         problem=problem,
-        problem_type=decomposition.problem_type,
+        problem_type=problem_type,
         steps=steps_data,
         current_step=0,
-        total_steps=len(decomposition.steps),
+        total_steps=len(steps_data),
         status="active",
         mode=mode,
         step_tracking={},
