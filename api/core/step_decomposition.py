@@ -41,7 +41,11 @@ Rules:
 - Every step must make meaningful progress toward the answer. If a step makes the expression
   more complex (e.g., introducing fractions where there were none), it is probably wrong.
 
-Respond with ONLY valid JSON — no markdown, no explanation, just the array."""
+Also include a top-level "distractors" array with exactly 3 plausible but WRONG final answers.
+Distractors should reflect common student mistakes (sign errors, arithmetic mistakes, forgetting a term).
+
+Respond with ONLY valid JSON in this format — no markdown, no explanation:
+{"steps": [<step objects>], "distractors": ["wrong1", "wrong2", "wrong3"]}"""
 
 
 @dataclass
@@ -58,6 +62,7 @@ class Decomposition:
     steps: list[Step]
     final_answer: str
     problem_type: str
+    distractors: list[str]
 
 
 # In-memory few-shot cache: problem_type → list of example decompositions
@@ -88,26 +93,41 @@ def _build_prompt(problem: str, problem_type: str) -> str:
     return "\n\n".join(parts)
 
 
-def _parse_steps(response_text: str) -> list[Step]:
-    """Parse Claude's JSON response into Step objects."""
-    # Strip any markdown fencing
-    text = response_text.strip()
+def _strip_markdown_fencing(text: str) -> str:
+    """Strip markdown code fencing from LLM response."""
+    text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
         if text.endswith("```"):
             text = text[:-3]
         text = text.strip()
+    return text
+
+
+def _parse_steps(response_text: str) -> tuple[list[Step], list[str]]:
+    """Parse Claude's JSON response into Step objects and distractors."""
+    text = _strip_markdown_fencing(response_text)
 
     data = json.loads(text)
-    return [
+
+    # Support both formats: {"steps": [...], "distractors": [...]} and bare [...]
+    if isinstance(data, list):
+        steps_data = data
+        distractors = []
+    else:
+        steps_data = data["steps"]
+        distractors = data.get("distractors", [])
+
+    steps = [
         Step(
             description=s["description"],
             operation=s["operation"],
             before=s["before"],
             after=s["after"],
         )
-        for s in data
+        for s in steps_data
     ]
+    return steps, distractors
 
 
 def _is_word_problem(text: str) -> bool:
@@ -152,14 +172,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
             if not isinstance(first_block, TextBlock):
                 continue
             resp_text = first_block.text.strip()
-
-            # Strip markdown fencing if present
-            text = resp_text
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-                if text.endswith("```"):
-                    text = text[:-3]
-                text = text.strip()
+            text = _strip_markdown_fencing(resp_text)
 
             data = json.loads(text)
             answer = data["answer"]
@@ -253,7 +266,7 @@ async def decompose_problem(problem: str) -> Decomposition:
                     input_text=prompt, output_text=resp_text,
                 )
                 continue
-            steps = _parse_steps(first_block.text)
+            steps, distractors = _parse_steps(first_block.text)
 
             if not steps:
                 last_error = "Empty steps returned"
@@ -279,6 +292,7 @@ async def decompose_problem(problem: str) -> Decomposition:
                 steps=steps,
                 final_answer=steps[-1].after,
                 problem_type=problem_type,
+                distractors=distractors,
             )
             _cache_decomposition(decomposition)
 

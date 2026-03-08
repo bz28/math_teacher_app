@@ -294,7 +294,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Learn mode: final step — show what to do, ask for answer */}
+        {/* Learn mode: final step — multiple choice answer */}
         {isLearn && !isCompleted && isFinalStep && currentStep && (
           <View>
             <View style={styles.stepDescCard}>
@@ -305,6 +305,21 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             <Text style={styles.promptText}>
               What is the result?
             </Text>
+            {currentStep.choices && (
+              <View style={styles.choicesContainer}>
+                {currentStep.choices.map((choice, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.choiceButton, phase === "thinking" && styles.buttonDisabled]}
+                    onPress={() => submitAnswer(choice)}
+                    disabled={phase === "thinking"}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.choiceText}>{choice}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -495,8 +510,8 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               </>
             )}
 
-            {/* Learn mode final step OR practice mode: answer input */}
-            {(isPractice || (isLearn && isFinalStep)) && (
+            {/* Practice mode: answer input */}
+            {isPractice && (
               <>
                 <View>
                   <Text style={styles.inputLabel}>Your answer</Text>
@@ -583,6 +598,24 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     marginBottom: 12,
     textAlign: "center",
+  },
+  choicesContainer: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  choiceButton: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#4F46E5",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  choiceText: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#4F46E5",
   },
   progressRow: {
     flexDirection: "row",

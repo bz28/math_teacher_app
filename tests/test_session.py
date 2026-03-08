@@ -41,6 +41,7 @@ def _mock_decomposition():
         steps=MOCK_STEPS,
         final_answer="x = 3",
         problem_type="linear",
+        distractors=["x = 2", "x = 6", "x = -3"],
     )
 
 
@@ -51,6 +52,7 @@ def _mock_word_problem_decomposition():
         steps=MOCK_WORD_PROBLEM_STEPS,
         final_answer="d = 180",
         problem_type="word_problem",
+        distractors=["d = 120", "d = 60", "d = 200"],
     )
 
 
@@ -277,14 +279,12 @@ async def test_wrong_answer_gives_feedback(client: AsyncClient, auth_token: str)
         headers=_auth_headers(auth_token),
     )
 
-    # Now on final step — submit wrong answer
-    with patch("api.core.session._llm_check_final_answer", new_callable=AsyncMock) as mock_llm:
-        mock_llm.return_value = False
-        resp = await client.post(
-            f"/v1/session/{session_id}/respond",
-            json={"student_response": "wrong answer"},
-            headers=_auth_headers(auth_token),
-        )
+    # Now on final step — submit wrong answer (multiple-choice: just string match)
+    resp = await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "wrong answer"},
+        headers=_auth_headers(auth_token),
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["action"] == "error"

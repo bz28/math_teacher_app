@@ -13,6 +13,7 @@ export interface StepDetail {
   operation: string;
   before: string;
   after: string;
+  choices?: string[];
 }
 
 export interface SessionData {

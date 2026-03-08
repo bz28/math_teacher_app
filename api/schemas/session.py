@@ -20,6 +20,7 @@ class StepDetail(BaseModel):
     operation: str
     before: str
     after: str
+    choices: list[str] | None = None
 
 
 class StepTrackingInfo(BaseModel):
