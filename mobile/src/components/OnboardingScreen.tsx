@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { AnimatedPressable } from "./AnimatedPressable";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface OnboardingScreenProps {
   onComplete: () => void;
@@ -47,18 +51,27 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       {/* Navigation */}
       <View style={styles.nav}>
         {stepIndex > 0 ? (
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Text style={styles.backText}>{"\u2039"} Back</Text>
-          </TouchableOpacity>
+          <AnimatedPressable onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={20} color={colors.primary} />
+            <Text style={styles.backText}>Back</Text>
+          </AnimatedPressable>
         ) : (
           <View />
         )}
 
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextText}>
-            {isLast ? "Get Started" : "Continue"}
-          </Text>
-        </TouchableOpacity>
+        <AnimatedPressable onPress={handleNext}>
+          <LinearGradient
+            colors={gradients.primary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.nextButton}
+          >
+            <Text style={styles.nextText}>
+              {isLast ? "Get Started" : "Continue"}
+            </Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.white} />
+          </LinearGradient>
+        </AnimatedPressable>
       </View>
     </SafeAreaView>
   );
@@ -69,22 +82,29 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 function WelcomeStep() {
   return (
     <View style={styles.stepCenter}>
-      <Text style={styles.welcomeIcon}>{"\uD83C\uDF93"}</Text>
+      <View style={styles.heroIconWrap}>
+        <LinearGradient
+          colors={gradients.primary}
+          style={styles.heroIconGradient}
+        >
+          <Ionicons name="school" size={48} color={colors.white} />
+        </LinearGradient>
+      </View>
       <Text style={styles.welcomeTitle}>Welcome to Math Tutor</Text>
       <Text style={styles.welcomeSubtitle}>
         Learn math step-by-step, at your pace.
       </Text>
       <View style={styles.featureList}>
         <FeatureRow
-          icon={"\uD83D\uDCA1"}
+          icon="bulb-outline"
           text="Get guided through each step — never just the answer"
         />
         <FeatureRow
-          icon={"\uD83C\uDFAF"}
+          icon="checkmark-circle-outline"
           text="Practice with similar problems until you've got it"
         />
         <FeatureRow
-          icon={"\uD83D\uDCAC"}
+          icon="chatbubble-ellipses-outline"
           text="Ask questions anytime — your AI tutor is always here"
         />
       </View>
@@ -95,7 +115,9 @@ function WelcomeStep() {
 function FeatureRow({ icon, text }: { icon: string; text: string }) {
   return (
     <View style={styles.featureRow}>
-      <Text style={styles.featureIcon}>{icon}</Text>
+      <View style={styles.featureIconWrap}>
+        <Ionicons name={icon as any} size={22} color={colors.primary} />
+      </View>
       <Text style={styles.featureText}>{text}</Text>
     </View>
   );
@@ -107,8 +129,10 @@ function ModesStep() {
       <Text style={styles.stepTitle}>Two ways to study</Text>
       <Text style={styles.stepSubtitle}>Use both to master any topic.</Text>
 
-      <View style={styles.modeCard}>
-        <Text style={styles.modeIcon}>{"\uD83D\uDCD6"}</Text>
+      <View style={[styles.modeCard, shadows.md]}>
+        <View style={[styles.modeIconWrap, { backgroundColor: colors.primaryBg }]}>
+          <Ionicons name="book-outline" size={24} color={colors.primary} />
+        </View>
         <View style={styles.modeTextWrap}>
           <Text style={styles.modeLabel}>Learn Mode</Text>
           <Text style={styles.modeDesc}>
@@ -119,8 +143,10 @@ function ModesStep() {
         </View>
       </View>
 
-      <View style={styles.modeCard}>
-        <Text style={styles.modeIcon}>{"\u270F\uFE0F"}</Text>
+      <View style={[styles.modeCard, shadows.md]}>
+        <View style={[styles.modeIconWrap, { backgroundColor: colors.successLight }]}>
+          <Ionicons name="pencil-outline" size={24} color={colors.success} />
+        </View>
         <View style={styles.modeTextWrap}>
           <Text style={styles.modeLabel}>Practice Mode</Text>
           <Text style={styles.modeDesc}>
@@ -142,26 +168,27 @@ function ModesStep() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 24,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.xxl,
   },
 
   // Progress
   progressRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#D0D5DD",
+    backgroundColor: colors.border,
   },
   dotActive: {
-    backgroundColor: "#4A90D9",
+    backgroundColor: colors.primary,
     width: 24,
+    borderRadius: radii.pill,
   },
 
   // Content
@@ -175,88 +202,114 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: spacing.lg,
   },
-  backButton: { padding: 8 },
-  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    padding: spacing.sm,
+  },
+  backText: { color: colors.primary, ...typography.bodyBold },
   nextButton: {
-    backgroundColor: "#4A90D9",
-    borderRadius: 12,
-    paddingHorizontal: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.xxxl,
     paddingVertical: 14,
   },
-  nextText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  nextText: { color: colors.white, ...typography.button },
 
   // Welcome
   stepCenter: {
     alignItems: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
   },
-  welcomeIcon: { fontSize: 64, marginBottom: 16 },
+  heroIconWrap: {
+    marginBottom: spacing.xl,
+  },
+  heroIconGradient: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   welcomeTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
+    ...typography.hero,
     textAlign: "center",
-    marginBottom: 8,
-    color: "#1a1a1a",
+    marginBottom: spacing.sm,
+    color: colors.text,
   },
   welcomeSubtitle: {
-    fontSize: 17,
-    color: "#666",
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: "center",
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: spacing.xxxl,
   },
-  featureList: { gap: 20, width: "100%" },
+  featureList: { gap: spacing.xl, width: "100%" },
   featureRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
   },
-  featureIcon: { fontSize: 28 },
-  featureText: { fontSize: 16, color: "#444", flex: 1, lineHeight: 22 },
+  featureIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryBg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  featureText: { ...typography.body, color: colors.textSecondary, flex: 1 },
 
   // Modes
-  stepTop: { paddingTop: 16 },
+  stepTop: { paddingTop: spacing.lg },
   stepTitle: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 8,
-    color: "#1a1a1a",
+    ...typography.title,
+    marginBottom: spacing.sm,
+    color: colors.text,
   },
   stepSubtitle: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 28,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxl,
   },
   modeCard: {
     flexDirection: "row",
-    backgroundColor: "#F0F4FF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: "#4A90D9",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     alignItems: "flex-start",
   },
-  modeIcon: { fontSize: 32, marginRight: 14, marginTop: 2 },
+  modeIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
   modeTextWrap: { flex: 1 },
   modeLabel: {
+    ...typography.heading,
     fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 6,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   modeDesc: {
     fontSize: 14,
-    color: "#555",
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   readyText: {
-    fontSize: 16,
-    color: "#4A90D9",
-    fontWeight: "600",
+    ...typography.bodyBold,
+    color: colors.primary,
     textAlign: "center",
-    marginTop: 20,
+    marginTop: spacing.xl,
   },
 });

@@ -1,5 +1,9 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { AnimatedPressable } from "./AnimatedPressable";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface HomeScreenProps {
   onSelect: (subject: string) => void;
@@ -7,16 +11,17 @@ interface HomeScreenProps {
 }
 
 const SUBJECTS = [
-  { id: "math", label: "Math", icon: "+" },
+  { id: "math", label: "Math", icon: "calculator-outline" as const },
 ] as const;
 
 export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+        <AnimatedPressable style={styles.logoutButton} onPress={onLogout}>
+          <Ionicons name="log-out-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
+        </AnimatedPressable>
       </View>
 
       <View style={styles.center}>
@@ -25,17 +30,20 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
 
         <View style={styles.grid}>
           {SUBJECTS.map((subject) => (
-            <TouchableOpacity
+            <AnimatedPressable
               key={subject.id}
-              style={styles.card}
+              style={[styles.card, shadows.lg]}
               onPress={() => onSelect(subject.id)}
-              activeOpacity={0.7}
+              scaleDown={0.94}
             >
-              <View style={styles.iconCircle}>
-                <Text style={styles.icon}>{subject.icon}</Text>
-              </View>
+              <LinearGradient
+                colors={gradients.primary}
+                style={styles.iconCircle}
+              >
+                <Ionicons name={subject.icon} size={32} color={colors.white} />
+              </LinearGradient>
               <Text style={styles.label}>{subject.label}</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           ))}
         </View>
       </View>
@@ -46,63 +54,64 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 28,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.xxl + 4,
   },
   topBar: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   logoutButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
     borderWidth: 1.5,
-    borderColor: "#E0E4EA",
+    borderColor: colors.border,
+    backgroundColor: colors.white,
   },
-  logoutText: { color: "#888", fontSize: 14, fontWeight: "600" },
+  logoutText: { color: colors.textSecondary, fontSize: 14, fontWeight: "600" },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-    marginBottom: 8,
+    ...typography.hero,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#888",
+    ...typography.body,
+    color: colors.textSecondary,
     marginBottom: 36,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: 16,
+    gap: spacing.lg,
   },
   card: {
-    width: 150,
-    height: 150,
-    backgroundColor: "#F7F8FA",
-    borderRadius: 20,
+    width: 160,
+    height: 160,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#E8EBF0",
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#EBF2FC",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
-  icon: { fontSize: 28, color: "#4A90D9", fontWeight: "700" },
-  label: { fontSize: 17, fontWeight: "600", color: "#333" },
+  label: { ...typography.bodyBold, fontSize: 17, color: colors.text },
 });

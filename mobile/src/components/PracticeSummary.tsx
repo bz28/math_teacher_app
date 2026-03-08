@@ -1,12 +1,14 @@
 import {
   ScrollView,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { AnimatedPressable } from "./AnimatedPressable";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
+import { colors, spacing } from "../theme";
 
 interface PracticeSummaryProps {
   onBack: () => void;
@@ -44,9 +46,10 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
     <View style={styles.container}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack}>
-            <Text style={styles.backText}>{"\u2039 Back"}</Text>
-          </TouchableOpacity>
+          <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }}>
+            <Ionicons name="chevron-back" size={20} color={colors.primary} />
+            <Text style={styles.backText}>Back</Text>
+          </AnimatedPressable>
           <Text style={styles.title}>Practice Complete</Text>
         </View>
       </View>
@@ -75,9 +78,12 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
               r.isCorrect ? styles.resultCorrect : styles.resultWrong,
             ]}
           >
-            <Text style={styles.resultIcon}>
-              {r.isCorrect ? "\u2713" : "\u2717"}
-            </Text>
+            <Ionicons
+              name={r.isCorrect ? "checkmark-circle" : "close-circle"}
+              size={20}
+              color={r.isCorrect ? colors.success : colors.error}
+              style={{ marginRight: 10, marginTop: 1 }}
+            />
             <View style={styles.resultContent}>
               <Text style={styles.resultProblem}>{r.problem}</Text>
               <Text style={styles.resultAnswer}>
@@ -89,30 +95,30 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
                 </Text>
               )}
             </View>
-            <TouchableOpacity
+            <AnimatedPressable
               style={[styles.flagToggle, flags[i] && styles.flagToggleActive]}
               onPress={() => togglePracticeFlag(i)}
             >
               <Text style={[styles.flagToggleText, flags[i] && styles.flagToggleTextActive]}>
                 {flags[i] ? "Flagged" : "Flag"}
               </Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           </View>
         ))}
 
         {flaggedCount > 0 && (
-          <TouchableOpacity
+          <AnimatedPressable
             style={styles.retryButton}
             onPress={retryFlaggedProblems}
           >
             <Text style={styles.retryText}>
               Retry {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
         )}
 
         {flaggedCount > 0 && (
-          <TouchableOpacity
+          <AnimatedPressable
             style={styles.learnFlaggedButton}
             onPress={() => {
               const flagged = problems
@@ -124,12 +130,12 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
             <Text style={styles.learnFlaggedText}>
               Learn {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
         )}
 
-        <TouchableOpacity style={styles.newProblemButton} onPress={handleBack}>
+        <AnimatedPressable style={styles.newProblemButton} onPress={handleBack}>
           <Text style={styles.newProblemText}>New Problem</Text>
-        </TouchableOpacity>
+        </AnimatedPressable>
       </ScrollView>
     </View>
   );
