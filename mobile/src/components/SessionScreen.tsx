@@ -456,8 +456,44 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </View>
         )}
 
+        {/* Continue asking after completion */}
+        {!isCompleted && session.status === "completed" && isLearn && (
+          <>
+            <View>
+              <Text style={styles.inputLabel}>Ask a question about the problem</Text>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask a question..."
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="go"
+                onSubmitEditing={handleAsk}
+              />
+            </View>
+
+            <View style={styles.buttons}>
+              <TouchableOpacity
+                style={[styles.button, styles.submitButton, (phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
+                onPress={handleAsk}
+                disabled={phase === "thinking" || !input.trim()}
+                activeOpacity={0.7}
+              >
+                {phase === "thinking" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.submitText}>Ask</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         {/* Input area */}
-        {!isCompleted && (
+        {!isCompleted && session.status !== "completed" && (
           <>
             {/* Learn mode non-final: chat input for questions */}
             {isLearn && !isFinalStep && (
