@@ -11,7 +11,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { AnimatedPressable } from "./AnimatedPressable";
 import { checkEmail, login, register, saveTokens } from "../services/api";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AuthScreenProps {
   onAuth: () => void;
@@ -69,7 +73,6 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     if (!email || !password) return;
     setError(null);
 
-    // Check email availability first (most important to know early)
     setLoading(true);
     try {
       await checkEmail(email);
@@ -80,7 +83,6 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     }
     setLoading(false);
 
-    // Then validate password client-side
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
@@ -112,7 +114,14 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <View style={styles.header}>
-            <Text style={styles.headerIcon}>{"\uD83C\uDF93"}</Text>
+            <View style={styles.heroIconWrap}>
+              <LinearGradient
+                colors={gradients.primary}
+                style={styles.heroIconGradient}
+              >
+                <Ionicons name="school" size={36} color={colors.white} />
+              </LinearGradient>
+            </View>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>
               Sign in to continue learning
@@ -120,52 +129,69 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           </View>
 
           <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholderTextColor="#999"
-            />
-
-            <View style={styles.passwordContainer}>
+            <View style={styles.inputWrap}>
+              <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
               <TextInput
-                style={styles.passwordInput}
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+
+            <View style={styles.inputWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Password"
                 secureTextEntry={!showPassword}
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textMuted}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
                 onPress={() => setShowPassword(!showPassword)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.eyeText}>
-                  {showPassword ? "Hide" : "Show"}
-                </Text>
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={colors.primary}
+                />
               </TouchableOpacity>
             </View>
 
-            {error && <Text style={styles.error}>{error}</Text>}
+            {error && (
+              <View style={styles.errorWrap}>
+                <Ionicons name="alert-circle" size={16} color={colors.error} />
+                <Text style={styles.error}>{error}</Text>
+              </View>
+            )}
 
-            <TouchableOpacity
+            <AnimatedPressable
               style={[
-                styles.primaryButton,
                 (loading || !email || !password) && styles.buttonDisabled,
               ]}
               onPress={handleLogin}
               disabled={loading || !email || !password}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
+              <LinearGradient
+                colors={gradients.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryButton}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Sign In</Text>
+                )}
+              </LinearGradient>
+            </AnimatedPressable>
           </View>
 
           <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
@@ -189,58 +215,75 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
         >
           <View style={styles.header}>
             <Text style={styles.title}>Create your account</Text>
-            <Text style={styles.subtitle}>
-              Step 1 of 2
-            </Text>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepBadgeText}>Step 1 of 2</Text>
+            </View>
           </View>
 
           <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholderTextColor="#999"
-            />
-
-            <View style={styles.passwordContainer}>
+            <View style={styles.inputWrap}>
+              <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
               <TextInput
-                style={styles.passwordInput}
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+
+            <View style={styles.inputWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Password"
                 secureTextEntry={!showPassword}
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textMuted}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
                 onPress={() => setShowPassword(!showPassword)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.eyeText}>
-                  {showPassword ? "Hide" : "Show"}
-                </Text>
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={colors.primary}
+                />
               </TouchableOpacity>
             </View>
 
-            {error && <Text style={styles.error}>{error}</Text>}
+            {error && (
+              <View style={styles.errorWrap}>
+                <Ionicons name="alert-circle" size={16} color={colors.error} />
+                <Text style={styles.error}>{error}</Text>
+              </View>
+            )}
 
-            <TouchableOpacity
+            <AnimatedPressable
               style={[
-                styles.primaryButton,
                 (loading || !email || !password) && styles.buttonDisabled,
               ]}
               onPress={handleCredentialsNext}
               disabled={loading || !email || !password}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Continue</Text>
-              )}
-            </TouchableOpacity>
+              <LinearGradient
+                colors={gradients.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryButton}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Continue</Text>
+                )}
+              </LinearGradient>
+            </AnimatedPressable>
           </View>
 
           <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
@@ -262,26 +305,31 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity
+          <AnimatedPressable
             onPress={() => setRegisterStep("credentials")}
             style={styles.backButton}
           >
-            <Text style={styles.backText}>{"\u2039"} Back</Text>
-          </TouchableOpacity>
+            <Ionicons name="chevron-back" size={20} color={colors.primary} />
+            <Text style={styles.backText}>Back</Text>
+          </AnimatedPressable>
 
           <View style={styles.header}>
             <Text style={styles.title}>What grade are you in?</Text>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepBadgeText}>Step 2 of 2</Text>
+            </View>
             <Text style={styles.subtitle}>
-              Step 2 of 2 — we'll tailor problems to your level
+              We'll tailor problems to your level
             </Text>
           </View>
 
           <View style={styles.gradeGrid}>
             {GRADES.map((g) => (
-              <TouchableOpacity
+              <AnimatedPressable
                 key={g.label}
                 style={[
                   styles.gradeCard,
+                  shadows.sm,
                   selectedGrade === g.label && styles.gradeCardSelected,
                 ]}
                 onPress={() => setSelectedGrade(g.label)}
@@ -302,27 +350,41 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
                 >
                   {g.range}
                 </Text>
-              </TouchableOpacity>
+                {selectedGrade === g.label && (
+                  <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                )}
+              </AnimatedPressable>
             ))}
           </View>
 
-          {error && <Text style={styles.error}>{error}</Text>}
+          {error && (
+            <View style={styles.errorWrap}>
+              <Ionicons name="alert-circle" size={16} color={colors.error} />
+              <Text style={styles.error}>{error}</Text>
+            </View>
+          )}
 
-          <TouchableOpacity
+          <AnimatedPressable
             style={[
-              styles.primaryButton,
-              { marginTop: 24 },
+              { marginTop: spacing.xxl },
               (loading || !selectedGrade) && styles.buttonDisabled,
             ]}
             onPress={handleRegisterSubmit}
             disabled={loading || !selectedGrade}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryButton}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Create Account</Text>
+              )}
+            </LinearGradient>
+          </AnimatedPressable>
         </ScrollView>
       </SafeAreaView>
     );
@@ -331,143 +393,159 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
   return null;
 }
 
-/* -- Styles -- */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   inner: {
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.xxl + 4,
   },
   scrollContent: {
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.xxl + 4,
     paddingBottom: 40,
   },
 
   // Header
   header: {
     alignItems: "center",
-    marginBottom: 28,
+    marginBottom: spacing.xxl + 4,
   },
-  headerIcon: {
-    fontSize: 48,
-    marginBottom: 12,
+  heroIconWrap: {
+    marginBottom: spacing.lg,
+  },
+  heroIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#1a1a1a",
+    ...typography.title,
+    color: colors.text,
     textAlign: "center",
-    marginBottom: 6,
+    marginBottom: spacing.sm,
   },
   subtitle: {
+    ...typography.body,
     fontSize: 15,
-    color: "#888",
+    color: colors.textSecondary,
     textAlign: "center",
-    lineHeight: 22,
+  },
+  stepBadge: {
+    backgroundColor: colors.primaryBg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    marginBottom: spacing.sm,
+  },
+  stepBadgeText: {
+    ...typography.label,
+    color: colors.primary,
   },
 
   // Form
   form: {
     gap: 14,
   },
-  input: {
-    borderWidth: 1.5,
-    borderColor: "#E0E4EA",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    backgroundColor: "#F9FAFB",
-    color: "#1a1a1a",
-  },
-  passwordContainer: {
+  inputWrap: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#E0E4EA",
-    borderRadius: 12,
-    backgroundColor: "#F9FAFB",
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.inputBg,
   },
-  passwordInput: {
+  inputIcon: {
+    marginLeft: 14,
+  },
+  input: {
     flex: 1,
     padding: 14,
-    fontSize: 16,
-    color: "#1a1a1a",
+    ...typography.body,
+    color: colors.text,
   },
   eyeButton: {
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  eyeText: { color: "#4A90D9", fontWeight: "600", fontSize: 14 },
 
   // Buttons
   primaryButton: {
-    backgroundColor: "#4A90D9",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: radii.md,
+    padding: spacing.lg,
     alignItems: "center",
   },
   primaryButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
+    color: colors.white,
+    ...typography.button,
   },
   buttonDisabled: { opacity: 0.4 },
 
   // Switch mode
   switchButton: {
-    marginTop: 20,
+    marginTop: spacing.xl,
     alignItems: "center",
   },
   switchText: {
-    color: "#888",
+    color: colors.textSecondary,
     fontSize: 15,
   },
   switchTextBold: {
-    color: "#4A90D9",
+    color: colors.primary,
     fontWeight: "600",
   },
 
   // Back
   backButton: {
     alignSelf: "flex-start",
-    paddingVertical: 16,
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+  backText: { color: colors.primary, ...typography.bodyBold },
 
   // Error
-  error: { color: "#E53935", textAlign: "center", fontSize: 14 },
+  errorWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    justifyContent: "center",
+  },
+  error: { color: colors.error, fontSize: 14 },
 
   // Grade
-  gradeGrid: { gap: 12 },
+  gradeGrid: { gap: spacing.md },
   gradeCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F7F8FA",
-    borderRadius: 14,
-    padding: 20,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
     borderWidth: 2,
-    borderColor: "#E8EBF0",
+    borderColor: colors.border,
   },
   gradeCardSelected: {
-    backgroundColor: "#EBF2FC",
-    borderColor: "#4A90D9",
+    backgroundColor: colors.primaryBg,
+    borderColor: colors.primary,
   },
   gradeLabel: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#333",
+    color: colors.text,
   },
-  gradeLabelSelected: { color: "#4A90D9" },
+  gradeLabelSelected: { color: colors.primary },
   gradeRange: {
     fontSize: 14,
-    color: "#888",
+    color: colors.textSecondary,
+    flex: 1,
+    marginLeft: spacing.lg,
   },
-  gradeRangeSelected: { color: "#5A9BE6" },
+  gradeRangeSelected: { color: colors.primaryLight },
 });

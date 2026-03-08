@@ -1,5 +1,8 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { AnimatedPressable } from "./AnimatedPressable";
+import { colors, spacing, radii, typography, shadows } from "../theme";
 
 export type Mode = "learn" | "practice" | "mock_exam";
 
@@ -8,23 +11,29 @@ interface ModeSelectScreenProps {
   onBack: () => void;
 }
 
-const MODES: { id: Mode; label: string; icon: string; description: string }[] = [
+const MODES: { id: Mode; label: string; icon: string; iconColor: string; iconBg: string; description: string }[] = [
   {
     id: "learn",
     label: "Learn",
-    icon: "📖",
+    icon: "book-outline",
+    iconColor: colors.primary,
+    iconBg: colors.primaryBg,
     description: "Step-by-step guided learning",
   },
   {
     id: "practice",
     label: "Practice",
-    icon: "✏️",
+    icon: "pencil-outline",
+    iconColor: colors.success,
+    iconBg: colors.successLight,
     description: "Solve problems on your own",
   },
   {
     id: "mock_exam",
     label: "Mock Exam",
-    icon: "📝",
+    icon: "document-text-outline",
+    iconColor: colors.warningDark,
+    iconBg: colors.warningBg,
     description: "Timed exam simulation",
   },
 ];
@@ -32,9 +41,10 @@ const MODES: { id: Mode; label: string; icon: string; description: string }[] = 
 export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backText}>{"\u2039"} Back</Text>
-      </TouchableOpacity>
+      <AnimatedPressable style={styles.backButton} onPress={onBack}>
+        <Ionicons name="chevron-back" size={20} color={colors.primary} />
+        <Text style={styles.backText}>Back</Text>
+      </AnimatedPressable>
 
       <View style={styles.header}>
         <Text style={styles.title}>Choose a Mode</Text>
@@ -43,19 +53,20 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
 
       <View style={styles.list}>
         {MODES.map((mode) => (
-          <TouchableOpacity
+          <AnimatedPressable
             key={mode.id}
-            style={styles.card}
+            style={[styles.card, shadows.sm]}
             onPress={() => onSelect(mode.id)}
-            activeOpacity={0.7}
           >
-            <Text style={styles.icon}>{mode.icon}</Text>
+            <View style={[styles.iconWrap, { backgroundColor: mode.iconBg }]}>
+              <Ionicons name={mode.icon as any} size={24} color={mode.iconColor} />
+            </View>
             <View style={styles.cardText}>
               <Text style={styles.label}>{mode.label}</Text>
               <Text style={styles.description}>{mode.description}</Text>
             </View>
-            <Text style={styles.chevron}>{"\u203A"}</Text>
-          </TouchableOpacity>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </AnimatedPressable>
         ))}
       </View>
     </SafeAreaView>
@@ -65,42 +76,50 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 28,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.xxl + 4,
   },
   backButton: {
     alignSelf: "flex-start",
-    paddingVertical: 16,
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+  backText: { color: colors.primary, ...typography.bodyBold },
   header: {
-    marginBottom: 28,
+    marginBottom: spacing.xxl + 4,
   },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-    marginBottom: 6,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   subtitle: {
+    ...typography.body,
     fontSize: 15,
-    color: "#888",
-    lineHeight: 22,
+    color: colors.textSecondary,
   },
   list: { gap: 14 },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F7F8FA",
-    borderRadius: 14,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: "#E8EBF0",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  icon: { fontSize: 30, marginRight: 16 },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: spacing.lg,
+  },
   cardText: { flex: 1 },
-  label: { fontSize: 17, fontWeight: "700", color: "#1a1a1a", marginBottom: 4 },
-  description: { fontSize: 14, color: "#888", lineHeight: 20 },
-  chevron: { fontSize: 24, color: "#C0C4CC", fontWeight: "300" },
+  label: { ...typography.bodyBold, fontSize: 17, color: colors.text, marginBottom: spacing.xs },
+  description: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
 });

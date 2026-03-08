@@ -8,11 +8,13 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
+import { AnimatedPressable } from "./src/components/AnimatedPressable";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { MathKeyboard } from "./src/components/MathKeyboard";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
@@ -21,6 +23,7 @@ import { SessionScreen } from "./src/components/SessionScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
 import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
+import { colors, spacing, radii, typography, shadows, gradients } from "./src/theme";
 
 const ONBOARDING_KEY = "onboarding_completed";
 
@@ -158,6 +161,9 @@ export default function App() {
     );
   }
 
+  const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Exam";
+  const modeIcon = mode === "learn" ? "book-outline" : mode === "practice" ? "pencil-outline" : "document-text-outline";
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
@@ -169,19 +175,19 @@ export default function App() {
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            <TouchableOpacity
+            <AnimatedPressable
               style={styles.backButton}
               onPress={() => setScreen("mode-select")}
             >
-              <Text style={styles.backText}>{"\u2039"} Back</Text>
-            </TouchableOpacity>
+              <Ionicons name="chevron-back" size={20} color={colors.primary} />
+              <Text style={styles.backText}>Back</Text>
+            </AnimatedPressable>
 
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Enter a Problem</Text>
               <View style={styles.modeChip}>
-                <Text style={styles.modeChipText}>
-                  {mode === "learn" ? "📖 Learn" : mode === "practice" ? "✏️ Practice" : "📝 Mock Exam"}
-                </Text>
+                <Ionicons name={modeIcon as any} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
+                <Text style={styles.modeChipText}>{modeLabel}</Text>
               </View>
             </View>
 
@@ -196,7 +202,7 @@ export default function App() {
                   setError(null);
                 }}
                 placeholder="e.g. 2x + 6 = 12"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="go"
@@ -207,24 +213,26 @@ export default function App() {
             <MathKeyboard onInsert={handleInsert} />
 
             {mode === "practice" && (
-              <View style={styles.countPicker}>
+              <View style={[styles.countPicker, shadows.sm]}>
                 <Text style={styles.countLabel}>Similar problems to generate:</Text>
                 <View style={styles.stepper}>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
+                  <AnimatedPressable
+                    scaleDown={0.9}
                     onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
-                    activeOpacity={0.7}
                   >
-                    <Text style={styles.stepperText}>-</Text>
-                  </TouchableOpacity>
+                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
+                      <Ionicons name="remove" size={20} color={colors.white} />
+                    </LinearGradient>
+                  </AnimatedPressable>
                   <Text style={styles.countValue}>{practiceCount}</Text>
-                  <TouchableOpacity
-                    style={styles.stepperButton}
+                  <AnimatedPressable
+                    scaleDown={0.9}
                     onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
-                    activeOpacity={0.7}
                   >
-                    <Text style={styles.stepperText}>+</Text>
-                  </TouchableOpacity>
+                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
+                      <Ionicons name="add" size={20} color={colors.white} />
+                    </LinearGradient>
+                  </AnimatedPressable>
                 </View>
                 <Text style={styles.countHint}>
                   Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
@@ -232,20 +240,31 @@ export default function App() {
               </View>
             )}
 
-            <TouchableOpacity
-              style={[styles.goButton, (!input.trim() || isLoading) && styles.buttonDisabled]}
+            <AnimatedPressable
+              style={[(!input.trim() || isLoading) && styles.buttonDisabled]}
               onPress={handleGo}
               disabled={isLoading || !input.trim()}
-              activeOpacity={0.7}
             >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.goText}>Go</Text>
-              )}
-            </TouchableOpacity>
+              <LinearGradient
+                colors={gradients.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.goButton}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={styles.goText}>Go</Text>
+                )}
+              </LinearGradient>
+            </AnimatedPressable>
 
-            {displayError && <Text style={styles.error}>{displayError}</Text>}
+            {displayError && (
+              <View style={styles.errorWrap}>
+                <Ionicons name="alert-circle" size={16} color={colors.error} />
+                <Text style={styles.error}>{displayError}</Text>
+              </View>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
         <StatusBar style="auto" />
@@ -257,92 +276,99 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   flex: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: 28,
-    paddingBottom: 20,
+    paddingHorizontal: spacing.xxl + 4,
+    paddingBottom: spacing.xl,
   },
   backButton: {
     alignSelf: "flex-start",
-    paddingVertical: 16,
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  backText: { color: "#4A90D9", fontSize: 16, fontWeight: "600" },
+  backText: { color: colors.primary, ...typography.bodyBold },
   header: {
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#1a1a1a",
+    ...typography.title,
+    color: colors.text,
     marginBottom: 10,
   },
   modeChip: {
-    backgroundColor: "#EBF2FC",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  modeChipText: { fontSize: 14, fontWeight: "600", color: "#4A90D9" },
+  modeChipText: { ...typography.label, color: colors.primary },
   inputWrapper: {
     width: "100%",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#888",
-    marginBottom: 6,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   input: {
     width: "100%",
     borderWidth: 1.5,
-    borderColor: "#E0E4EA",
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     padding: 14,
     fontSize: 17,
-    backgroundColor: "#F9FAFB",
-    color: "#1a1a1a",
+    backgroundColor: colors.inputBg,
+    color: colors.text,
   },
   goButton: {
-    backgroundColor: "#4A90D9",
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginTop: spacing.md,
     width: "100%",
     alignItems: "center",
   },
-  goText: { color: "#fff", fontWeight: "700", fontSize: 17 },
-  error: { color: "#E53935", marginTop: 12, textAlign: "center", fontSize: 14 },
+  goText: { color: colors.white, ...typography.button, fontSize: 17 },
+  errorWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    justifyContent: "center",
+    marginTop: spacing.md,
+  },
+  error: { color: colors.error, fontSize: 14 },
   countPicker: {
     width: "100%",
     alignItems: "center",
-    marginTop: 16,
-    backgroundColor: "#F7F8FA",
-    borderRadius: 14,
-    padding: 16,
+    marginTop: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: "#E8EBF0",
+    borderColor: colors.borderLight,
   },
-  countLabel: { fontSize: 14, fontWeight: "600", color: "#666", marginBottom: 10 },
+  countLabel: { ...typography.label, color: colors.textSecondary, marginBottom: 10 },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 20,
+    gap: spacing.xl,
   },
   stepperButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#4A90D9",
     justifyContent: "center",
     alignItems: "center",
   },
-  stepperText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
-  countValue: { fontSize: 26, fontWeight: "bold", color: "#1a1a1a", minWidth: 30, textAlign: "center" },
-  countHint: { fontSize: 12, color: "#999", marginTop: 6 },
+  countValue: { fontSize: 26, fontWeight: "bold", color: colors.text, minWidth: 30, textAlign: "center" },
+  countHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   buttonDisabled: { opacity: 0.4 },
 });
