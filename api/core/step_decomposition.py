@@ -115,6 +115,73 @@ def _is_word_problem(text: str) -> bool:
     return bool(re.search(r"[a-zA-Z]{2,}", text))
 
 
+SOLVE_SYSTEM_PROMPT = """You are a math tutor solving a problem.
+
+Given a math problem, compute the final answer. Respond with ONLY valid JSON:
+{"answer": "<the final simplified answer>", "problem_type": "word_problem" or "math"}
+
+Rules:
+- The answer must be the fully simplified final result
+- Use standard math notation (e.g., x^2 not x², use * for multiplication)
+- For equations, give the solution (e.g., "x = 3")
+- For expressions, give the simplified form (e.g., "28x")
+- Do NOT include any explanation, just the JSON"""
+
+
+async def solve_problem(problem: str) -> tuple[str, str]:
+    """Solve a math problem and return (final_answer, problem_type).
+
+    Lighter-weight alternative to decompose_problem — no step breakdown,
+    just the answer. Used for practice mode where steps aren't needed upfront.
+    """
+    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    model = "claude-sonnet-4-20250514"
+
+    for attempt in range(MAX_RETRIES):
+        start = time.monotonic()
+        try:
+            response = client.messages.create(
+                model=model,
+                max_tokens=256,
+                system=SOLVE_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": f"Problem: {problem}"}],
+            )
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
+
+            first_block = response.content[0]
+            if not isinstance(first_block, TextBlock):
+                continue
+            resp_text = first_block.text.strip()
+
+            # Strip markdown fencing if present
+            text = resp_text
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                text = text.strip()
+
+            data = json.loads(text)
+            answer = data["answer"]
+            problem_type = data.get("problem_type", "math")
+
+            _log_decomposition_call(
+                model=model, function="solve",
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                latency_ms=latency_ms, success=True, retry_count=attempt,
+                input_text=f"Problem: {problem}", output_text=resp_text,
+            )
+            logger.info("solve_problem succeeded on attempt %d", attempt + 1)
+            return answer, problem_type
+
+        except (json.JSONDecodeError, KeyError, Exception) as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
+            logger.warning("solve_problem attempt %d failed: %s", attempt + 1, e)
+
+    raise RuntimeError(f"Failed to solve problem after {MAX_RETRIES} attempts")
+
+
 async def generate_similar_problem(problem: str) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
     client = anthropic.Anthropic(api_key=settings.claude_api_key)
