@@ -2,7 +2,6 @@
 
 import logging
 
-from api.core.math_engine import MathEngine, ParseError
 from api.core.tutor import _call_claude_json
 
 logger = logging.getLogger(__name__)
@@ -12,13 +11,13 @@ logger = logging.getLogger(__name__)
 # Problem generation
 # ---------------------------------------------------------------------------
 
-_GENERATE_WORD_PROBLEMS_PROMPT = """You are a math tutor generating practice problems.
+_GENERATE_PROBLEMS_PROMPT = """You are a math tutor generating practice problems.
 
-Given an original math word problem, generate similar problems with different
+Given an original math problem, generate similar problems with different
 numbers and context but the same underlying math structure.
 
 Respond with ONLY valid JSON:
-{"problems": [{"question": "the word problem text", "answer": "the numeric answer"}]}
+{"problems": [{"question": "the problem text", "answer": "the correct answer"}]}
 
 Rules:
 - Each problem must be solvable with the same type of math as the original
@@ -34,44 +33,6 @@ async def generate_practice_problems(
 
     Returns list of {"question": ..., "answer": ...} dicts.
     """
-    results: list[dict[str, str]] = []
-
-    is_word = MathEngine.is_word_problem(problem)
-
-    # Solve the original problem
-    original_answer = _solve_problem(problem) if not is_word else None
-
-    if is_word:
-        # Use LLM to generate all problems + answers at once (including original)
-        return await _generate_word_problems(problem, count)
-
-    # Math expressions: use MathEngine
-    if original_answer:
-        results.append({"question": problem, "answer": original_answer})
-    else:
-        results.append({"question": problem, "answer": "unknown"})
-
-    for _ in range(count):
-        similar = MathEngine.generate_similar(problem)
-        answer = _solve_problem(similar)
-        results.append({"question": similar, "answer": answer or "unknown"})
-
-    return results
-
-
-def _solve_problem(problem: str) -> str | None:
-    """Solve a math problem and return the answer as a string."""
-    try:
-        solutions = MathEngine.solve_problem(problem)
-        return str(solutions[0]) if solutions else None
-    except (ParseError, Exception):
-        return None
-
-
-async def _generate_word_problems(
-    problem: str, count: int,
-) -> list[dict[str, str]]:
-    """Use LLM to generate word problems with answers."""
     user_msg = (
         f"Original problem: {problem}\n\n"
         f"Generate {1 + count} problems total (include the original reworded, "
@@ -80,7 +41,7 @@ async def _generate_word_problems(
 
     try:
         result = await _call_claude_json(
-            _GENERATE_WORD_PROBLEMS_PROMPT,
+            _GENERATE_PROBLEMS_PROMPT,
             user_msg,
             mode="practice_generate",
         )
@@ -92,10 +53,10 @@ async def _generate_word_problems(
                 if isinstance(p, dict)
             ]
     except Exception:
-        logger.warning("Failed to generate word problems via LLM, using fallback")
+        logger.warning("Failed to generate problems via LLM, using fallback")
 
     # Fallback: return original only
-    return [{"question": problem, "answer": "unknown"}]
+    return [{"question": problem, "answer": ""}]
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +82,7 @@ async def check_answer(
 ) -> bool:
     """Check if user's answer matches the correct answer.
 
-    Uses symbolic check first, then string match, then LLM fallback.
+    Uses string match first, then LLM fallback.
     """
     user_clean = user_answer.strip()
     correct_clean = correct_answer.strip()
@@ -130,14 +91,7 @@ async def check_answer(
     if user_clean == correct_clean:
         return True
 
-    # 2. Symbolic equivalence
-    try:
-        if MathEngine.are_equivalent(user_clean, correct_clean):
-            return True
-    except Exception:
-        pass
-
-    # 3. LLM fallback
+    # 2. LLM check
     try:
         user_msg = (
             f"Problem: {question}\n"

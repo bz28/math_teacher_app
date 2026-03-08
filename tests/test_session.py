@@ -154,7 +154,7 @@ class TestFindMatchingSteps:
         assert 0 in matches
 
     def test_finds_later_step(self) -> None:
-        matches = _find_matching_steps("3", MOCK_STEPS, 0)
+        matches = _find_matching_steps("x = 3", MOCK_STEPS, 0)
         assert 1 in matches
 
     def test_no_match(self) -> None:

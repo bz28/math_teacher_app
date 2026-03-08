@@ -13,8 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.math_engine import MathEngine
-from api.core.step_decomposition import Step, decompose_problem, generate_similar_word_problem
+from api.core.step_decomposition import Step, decompose_problem, generate_similar_problem
 from api.core.tutor import _call_claude_json, converse, step_chat
 from api.models.session import Session
 
@@ -60,22 +59,14 @@ async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
 def _find_matching_steps(response: str, steps: list[Step], current_idx: int) -> list[int]:
     """Check which future steps the student's response matches.
 
-    Returns list of matching step indices.
-    Compares both as expressions and as string equality for equation forms.
+    Returns list of matching step indices via direct string comparison.
     """
     response_clean = response.strip()
     matches: list[int] = []
     for i in range(current_idx, len(steps)):
         after = steps[i].after.strip()
-        # Direct string match (handles equation forms like "2x = 6")
         if response_clean == after:
             matches.append(i)
-            continue
-        try:
-            if MathEngine.are_equivalent(response_clean, after):
-                matches.append(i)
-        except Exception:
-            continue
     return matches
 
 
@@ -225,10 +216,7 @@ async def _complete_practice(
     """Mark a practice session as completed and generate a similar problem."""
     session.current_step = session.total_steps
     session.status = "completed"
-    if session.problem_type == "word_problem":
-        similar = await generate_similar_word_problem(session.problem)
-    else:
-        similar = MathEngine.generate_similar(session.problem)
+    similar = await generate_similar_problem(session.problem)
     feedback = "Correct! Problem complete!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -290,18 +278,10 @@ async def _respond_practice_mode(
 
     _add_exchange(session, "student", student_response)
 
-    # 1. Fast symbolic check against the final answer only
-    is_correct = False
-    try:
-        is_correct = MathEngine.are_equivalent(student_response.strip(), correct_answer.strip())
-    except Exception:
-        pass
+    # 1. Direct string match
+    is_correct = student_response.strip() == correct_answer.strip()
 
-    # Also try direct string match
-    if not is_correct:
-        is_correct = student_response.strip() == correct_answer.strip()
-
-    # 2. LLM fallback if symbolic check fails
+    # 2. LLM check if string match fails
     if not is_correct:
         is_correct = await _llm_check_final_answer(
             session.problem, correct_answer,
@@ -330,10 +310,7 @@ async def _complete_learn(
     """Mark a learn session as completed and generate a similar problem."""
     session.current_step = session.total_steps
     session.status = "completed"
-    if session.problem_type == "word_problem":
-        similar = await generate_similar_word_problem(session.problem)
-    else:
-        similar = MathEngine.generate_similar(session.problem)
+    similar = await generate_similar_problem(session.problem)
     feedback = "Correct! You've solved the problem!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -402,18 +379,10 @@ async def _respond_learn_mode(
     correct_answer = step_data["after"]
     _add_exchange(session, "student", student_response)
 
-    # 1. Fast symbolic check
-    is_correct = False
-    try:
-        is_correct = MathEngine.are_equivalent(student_response.strip(), correct_answer.strip())
-    except Exception:
-        pass
+    # 1. Direct string match
+    is_correct = student_response.strip() == correct_answer.strip()
 
-    # 2. Direct string match
-    if not is_correct:
-        is_correct = student_response.strip() == correct_answer.strip()
-
-    # 3. LLM fallback
+    # 2. LLM check if string match fails
     if not is_correct:
         is_correct = await _llm_check_final_answer(
             session.problem, correct_answer,
