@@ -141,7 +141,7 @@ async def create_session(
         problem_type = decomposition.problem_type
         steps_data = []
         for i, s in enumerate(decomposition.steps):
-            step_dict: dict = {
+            step_dict: dict[str, object] = {
                 "description": s.description,
                 "operation": s.operation,
                 "before": s.before,
