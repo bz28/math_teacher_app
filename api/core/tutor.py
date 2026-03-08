@@ -376,6 +376,7 @@ async def _persist_llm_call(
     """Write an LLM call record to the database."""
     try:
         import uuid as _uuid
+
         from api.database import get_session_factory
         from api.models.llm_call import LLMCall
 
