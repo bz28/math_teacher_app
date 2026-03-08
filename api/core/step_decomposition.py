@@ -254,7 +254,7 @@ def _log_decomposition_call(
     output_text: str | None = None,
 ) -> None:
     """Log a Claude call from step_decomposition to the llm_calls table."""
-    from api.core.tutor import _persist_llm_call, COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET
+    from api.core.tutor import COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET, _persist_llm_call
 
     cost = (input_tokens * COST_PER_INPUT_TOKEN_SONNET) + (output_tokens * COST_PER_OUTPUT_TOKEN_SONNET)
     logger.info(

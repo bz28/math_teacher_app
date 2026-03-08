@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select, case, cast, Date
+from sqlalchemy import Date, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db

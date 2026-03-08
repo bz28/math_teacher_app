@@ -39,9 +39,9 @@ app = FastAPI(
 
 # Middleware and routes are wired in after app creation to avoid circular imports
 from api.middleware.setup import configure_middleware  # noqa: E402
+from api.routes.admin import router as admin_router  # noqa: E402
 from api.routes.auth import router as auth_router  # noqa: E402
 from api.routes.health import router as health_router  # noqa: E402
-from api.routes.admin import router as admin_router  # noqa: E402
 from api.routes.practice import router as practice_router  # noqa: E402
 from api.routes.session import router as session_router  # noqa: E402
 
