@@ -532,7 +532,7 @@ async def _call_claude_json(
             first_block = response.content[0]
             if not hasattr(first_block, "text"):
                 raise ValueError("Unexpected response type from Claude")
-            text = _strip_markdown_fencing(first_block.text)
+            text = _strip_markdown_fencing(first_block.text)  # type: ignore[union-attr]
             result: dict[str, object] = json.loads(text)
             return result
 

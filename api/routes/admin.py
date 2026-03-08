@@ -1,6 +1,7 @@
 """Admin dashboard endpoints: overview, LLM calls, sessions, users."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import Date, case, cast, func, select
@@ -34,7 +35,7 @@ def _date_range(days: int) -> datetime:
 async def overview(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     _require_admin(current_user)
 
     now = datetime.now(UTC)
@@ -151,7 +152,7 @@ async def llm_calls(
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     _require_admin(current_user)
 
     since = _date_range(days)
@@ -267,7 +268,7 @@ async def sessions(
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     _require_admin(current_user)
 
     since = _date_range(days)
@@ -411,7 +412,7 @@ async def users(
     days: int = Query(default=30, ge=1, le=90),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     _require_admin(current_user)
 
     since = _date_range(days)
