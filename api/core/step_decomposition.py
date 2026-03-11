@@ -154,13 +154,13 @@ async def solve_problem(problem: str) -> tuple[str, str]:
     Lighter-weight alternative to decompose_problem — no step breakdown,
     just the answer. Used for practice mode where steps aren't needed upfront.
     """
-    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
     model = "claude-sonnet-4-20250514"
 
     for attempt in range(MAX_RETRIES):
         start = time.monotonic()
         try:
-            response = client.messages.create(
+            response = await client.messages.create(
                 model=model,
                 max_tokens=256,
                 system=SOLVE_SYSTEM_PROMPT,
@@ -197,11 +197,11 @@ async def solve_problem(problem: str) -> tuple[str, str]:
 
 async def generate_similar_problem(problem: str) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
-    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
     model = "claude-sonnet-4-20250514"
     start = time.monotonic()
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model=model,
             max_tokens=256,
             system=(
@@ -237,7 +237,7 @@ async def decompose_problem(problem: str) -> Decomposition:
     """
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
 
-    client = anthropic.Anthropic(api_key=settings.claude_api_key)
+    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
 
     model = "claude-sonnet-4-20250514"
     last_error: str | None = None
@@ -246,7 +246,7 @@ async def decompose_problem(problem: str) -> Decomposition:
         start = time.monotonic()
 
         try:
-            response = client.messages.create(
+            response = await client.messages.create(
                 model=model,
                 max_tokens=1024,
                 system=SYSTEM_PROMPT,
