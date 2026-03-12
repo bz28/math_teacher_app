@@ -11,6 +11,7 @@ import anthropic
 from anthropic.types import TextBlock
 
 from api.config import settings
+from api.core.llm_client import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
     Lighter-weight alternative to decompose_problem — no step breakdown,
     just the answer. Used for practice mode where steps aren't needed upfront.
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+    client = get_client()
     model = "claude-sonnet-4-20250514"
 
     for attempt in range(MAX_RETRIES):
@@ -197,7 +198,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
 
 async def generate_similar_problem(problem: str) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
-    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+    client = get_client()
     model = "claude-sonnet-4-20250514"
     start = time.monotonic()
     try:
@@ -237,7 +238,7 @@ async def decompose_problem(problem: str) -> Decomposition:
     """
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
 
-    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+    client = get_client()
 
     model = "claude-sonnet-4-20250514"
     last_error: str | None = None

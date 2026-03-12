@@ -72,6 +72,13 @@ export function useImageExtraction(
 
     if (result.canceled || !result.assets?.[0]?.base64) return;
 
+    // ~7MB base64 ≈ 5MB decoded — reject before uploading
+    const MAX_BASE64_LENGTH = 7 * 1024 * 1024;
+    if (result.assets[0].base64.length > MAX_BASE64_LENGTH) {
+      setError("Image is too large (max 5MB). Try a lower resolution photo.");
+      return;
+    }
+
     setState((prev) => ({ ...prev, extracting: true, lastSource: source }));
     setError(null);
 
@@ -152,19 +159,9 @@ export function useImageExtraction(
     });
   };
 
-  const confirmSelection = (
-    currentQueue: string[],
-    setQueue: (q: string[]) => void,
-  ) => {
-    if (!state.problems) return;
-    const selected = state.problems.filter((_, i) => state.selected[i]);
-    const remaining = maxProblems - currentQueue.length;
-    const toAdd = selected.slice(0, remaining);
-    if (toAdd.length > 0) {
-      setQueue([...currentQueue, ...toAdd]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    dismiss();
+  const getSelectedProblems = (): string[] => {
+    if (!state.problems) return [];
+    return state.problems.filter((_, i) => state.selected[i]);
   };
 
   const selectedCount = state.selected.filter(Boolean).length;
@@ -181,6 +178,6 @@ export function useImageExtraction(
     startEdit,
     setEditingText,
     finishEdit,
-    confirmSelection,
+    getSelectedProblems,
   };
 }
