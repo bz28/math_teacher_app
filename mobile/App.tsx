@@ -43,6 +43,8 @@ export default function App() {
   const {
     startSession,
     startPracticeBatch,
+    startPracticeQueue,
+    startLearnQueue,
     phase: sessionPhase,
     error: sessionError,
   } = useSessionStore();
@@ -103,17 +105,30 @@ export default function App() {
   };
 
   const handleGo = async () => {
+    // Collect all problems: queue + any text currently in the input
+    const allProblems = [...problemQueue];
     const text = input.trim();
-    if (!text) return;
+    if (text) allProblems.push(text);
+    if (allProblems.length === 0) return;
     setError(null);
 
     // Navigate immediately — session screen shows skeleton while loading
     setScreen("session");
 
-    if (mode === "practice") {
-      await startPracticeBatch(text, practiceCount);
+    if (allProblems.length === 1) {
+      // Single problem — existing behavior
+      if (mode === "practice") {
+        await startPracticeBatch(allProblems[0], practiceCount);
+      } else {
+        await startSession(allProblems[0], mode);
+      }
     } else {
-      await startSession(text, mode);
+      // Multi-problem queue
+      if (mode === "practice") {
+        await startPracticeQueue(allProblems);
+      } else {
+        await startLearnQueue(allProblems);
+      }
     }
 
     // If generation failed, go back to input screen
@@ -122,6 +137,7 @@ export default function App() {
       navigateTo("input");
       setError(useSessionStore.getState().error ?? "Something went wrong");
     } else {
+      setProblemQueue([]);
       navigateTo("session");
     }
   };
@@ -212,6 +228,11 @@ export default function App() {
 
   const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Exam";
   const modeIcon = mode === "learn" ? "book-outline" : mode === "practice" ? "pencil-outline" : "document-text-outline";
+  const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
+  const hasNoProblems = totalProblems === 0;
+  const goButtonLabel = problemQueue.length > 0
+    ? `Start ${modeLabel} (${totalProblems})`
+    : "Go";
 
   return (
     <SafeAreaProvider>
@@ -307,7 +328,7 @@ export default function App() {
 
             <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
-            {mode === "practice" && (
+            {mode === "practice" && problemQueue.length === 0 && (
               <View style={[styles.countPicker, shadows.sm]}>
                 <Text style={styles.countLabel}>Similar problems to generate:</Text>
                 <View style={styles.stepper}>
@@ -336,9 +357,9 @@ export default function App() {
             )}
 
             <AnimatedPressable
-              style={[(!input.trim() || isLoading) && styles.buttonDisabled]}
+              style={[hasNoProblems && styles.buttonDisabled]}
               onPress={handleGo}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || hasNoProblems}
             >
               <LinearGradient
                 colors={gradients.primary}
@@ -349,7 +370,7 @@ export default function App() {
                 {isLoading ? (
                   <ActivityIndicator color={colors.white} size="small" />
                 ) : (
-                  <Text style={styles.goText}>Go</Text>
+                  <Text style={styles.goText}>{goButtonLabel}</Text>
                 )}
               </LinearGradient>
             </AnimatedPressable>
