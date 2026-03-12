@@ -39,6 +39,8 @@ interface PracticeBatch {
   totalCount: number;
   /** True when the batch was created from user-supplied problems (no similar generation) */
   isUserQueue: boolean;
+  /** Problems that failed to process and were skipped */
+  skippedProblems: string[];
 }
 
 interface LearnQueue {
@@ -120,6 +122,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           loadingMore: needsMore,
           totalCount: 1 + similarCount,
           isUserQueue: false,
+          skippedProblems: [],
         },
         phase: "awaiting_input",
       });
@@ -181,23 +184,37 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           loadingMore: needsMore,
           totalCount: problems.length,
           isUserQueue: true,
+          skippedProblems: [],
         },
         phase: "awaiting_input",
       });
 
       // Solve remaining problems in the background
       if (needsMore) {
-        Promise.all(
+        Promise.allSettled(
           problems.slice(1).map((p) => generatePracticeProblems(p, 0)),
         )
-          .then((results) => {
+          .then((outcomes) => {
             const { practiceBatch } = get();
             if (!practiceBatch) return;
-            const remaining: PracticeProblem[] = results
-              .map((r, i) => ({
+            const remaining: PracticeProblem[] = [];
+            const skipped: string[] = [];
+            for (let i = 0; i < outcomes.length; i++) {
+              const outcome = outcomes[i];
+              if (outcome.status === "rejected") {
+                skipped.push(problems[i + 1]);
+                continue;
+              }
+              const solved = outcome.value.problems[0];
+              if (!solved) {
+                skipped.push(problems[i + 1]);
+                continue;
+              }
+              remaining.push({
                 question: problems[i + 1],
-                answer: r.problems[0]?.answer ?? "unknown",
-              }));
+                answer: solved.answer,
+              });
+            }
             set({
               practiceBatch: {
                 ...practiceBatch,
@@ -206,15 +223,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
                   ...practiceBatch.flags,
                   ...new Array(remaining.length).fill(false),
                 ],
+                totalCount: practiceBatch.problems.length + remaining.length,
+                skippedProblems: skipped,
                 loadingMore: false,
               },
             });
-          })
-          .catch(() => {
-            const { practiceBatch } = get();
-            if (practiceBatch) {
-              set({ practiceBatch: { ...practiceBatch, loadingMore: false } });
-            }
           });
       }
     } catch (e) {
@@ -328,6 +341,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         loadingMore: false,
         totalCount: flaggedProblems.length,
         isUserQueue: false,
+        skippedProblems: [],
       },
       phase: "awaiting_input",
       error: null,
@@ -416,6 +430,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           loadingMore: false,
           totalCount: practiceProblemsList.length,
           isUserQueue: false,
+          skippedProblems: [],
         },
         phase: "awaiting_input",
       });

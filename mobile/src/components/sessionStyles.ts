@@ -87,6 +87,32 @@ export const sessionStyles = StyleSheet.create({
     alignItems: "center",
   },
   learnFlaggedText: { color: colors.white, ...typography.button },
+  skippedCard: {
+    backgroundColor: colors.warningBg,
+    borderRadius: radii.md,
+    padding: 14,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  skippedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  skippedTitle: {
+    ...typography.bodyBold,
+    fontSize: 14,
+    color: colors.warningDark,
+  },
+  skippedProblem: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginLeft: spacing.lg,
+    marginBottom: 2,
+  },
   retryButton: {
     backgroundColor: colors.warningDark,
     borderRadius: radii.md,
