@@ -39,6 +39,8 @@ interface PracticeBatch {
   totalCount: number;
   /** Problems that failed to process and were skipped */
   skippedProblems: string[];
+  /** Number of answer checks still in flight */
+  pendingChecks: number;
 }
 
 interface LearnQueue {
@@ -89,6 +91,30 @@ const initialState = {
   learnQueue: null as LearnQueue | null,
 };
 
+type StoreGet = () => SessionState;
+type StoreSet = (partial: Partial<SessionState>) => void;
+
+/** Show summary if all problems answered and all checks done */
+function _maybeShowSummary(get: StoreGet, set: StoreSet) {
+  const { practiceBatch, phase } = get();
+  if (!practiceBatch) return;
+  const allAnswered = practiceBatch.results.length >= practiceBatch.problems.length && !practiceBatch.loadingMore;
+  if (allAnswered && practiceBatch.pendingChecks <= 0 && phase !== "awaiting_input") {
+    set({ phase: "practice_summary" });
+  }
+}
+
+/** Wait for pending checks then show summary */
+function _waitForChecksAndShowSummary(get: StoreGet, set: StoreSet) {
+  const { practiceBatch } = get();
+  if (!practiceBatch) return;
+  if (practiceBatch.pendingChecks <= 0) {
+    set({ phase: "practice_summary" });
+  } else {
+    setTimeout(() => _waitForChecksAndShowSummary(get, set), 200);
+  }
+}
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   ...initialState,
 
@@ -120,6 +146,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           loadingMore: needsMore,
           totalCount: 1 + similarCount,
           skippedProblems: [],
+          pendingChecks: 0,
         },
         phase: "awaiting_input",
       });
@@ -181,6 +208,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           loadingMore: needsMore,
           totalCount: problems.length,
           skippedProblems: [],
+          pendingChecks: 0,
         },
         phase: "awaiting_input",
       });
@@ -236,75 +264,111 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!practiceBatch) return;
 
     const current = practiceBatch.problems[practiceBatch.currentIndex];
-    set({ phase: "thinking", error: null });
+    const answerIndex = practiceBatch.currentIndex;
+    const nextIndex = answerIndex + 1;
+    const hasMoreProblems = nextIndex < practiceBatch.problems.length;
 
-    try {
-      const { is_correct } = await checkPracticeAnswer(
-        current.question, current.answer, answer,
-      );
+    // Store a placeholder result and advance immediately
+    const placeholder: PracticeResult = {
+      problem: current.question,
+      userAnswer: answer,
+      correctAnswer: current.answer,
+      isCorrect: false, // will be updated by background check
+    };
+    const newResults = [...practiceBatch.results, placeholder];
 
-      const result: PracticeResult = {
-        problem: current.question,
-        userAnswer: answer,
-        correctAnswer: current.answer,
-        isCorrect: is_correct,
+    if (hasMoreProblems) {
+      // Advance to next problem immediately
+      set({
+        practiceBatch: {
+          ...practiceBatch,
+          results: newResults,
+          currentIndex: nextIndex,
+          pendingChecks: practiceBatch.pendingChecks + 1,
+        },
+        phase: "awaiting_input",
+        error: null,
+      });
+    } else if (practiceBatch.loadingMore) {
+      // Waiting for more problems to be generated
+      set({
+        practiceBatch: {
+          ...practiceBatch,
+          results: newResults,
+          pendingChecks: practiceBatch.pendingChecks + 1,
+        },
+        phase: "loading",
+      });
+      const waitForMore = () => {
+        const { practiceBatch: batch } = get();
+        if (!batch) return;
+        if (batch.problems.length > nextIndex) {
+          set({
+            practiceBatch: { ...batch, currentIndex: nextIndex },
+            phase: "awaiting_input",
+          });
+        } else if (!batch.loadingMore) {
+          // No more problems coming — wait for pending checks then show summary
+          _waitForChecksAndShowSummary(get, set);
+        } else {
+          setTimeout(waitForMore, 200);
+        }
       };
-      const newResults = [...practiceBatch.results, result];
-      const nextIndex = practiceBatch.currentIndex + 1;
-      const hasMoreProblems = nextIndex < practiceBatch.problems.length;
-      const isLast = !hasMoreProblems && !practiceBatch.loadingMore;
+      setTimeout(waitForMore, 200);
+    } else {
+      // Last problem answered — wait for all checks to finish
+      set({
+        practiceBatch: {
+          ...practiceBatch,
+          results: newResults,
+          pendingChecks: practiceBatch.pendingChecks + 1,
+        },
+        phase: "loading",
+      });
+      // Will transition to summary once all checks complete
+    }
 
-      // Auto-flag wrong answers
-      const newFlags = [...practiceBatch.flags];
-      if (!is_correct) {
-        newFlags[practiceBatch.currentIndex] = true;
-      }
+    // Fire answer check in background
+    checkPracticeAnswer(current.question, current.answer, answer)
+      .then(({ is_correct }) => {
+        const { practiceBatch: batch } = get();
+        if (!batch) return;
 
-      if (isLast) {
-        // All problems done, no more loading — show summary
-        set({
-          practiceBatch: { ...practiceBatch, results: newResults, flags: newFlags },
-          phase: "practice_summary",
-        });
-      } else if (hasMoreProblems) {
-        // Next problem is ready — advance
+        // Update the result at the correct index
+        const updatedResults = [...batch.results];
+        updatedResults[answerIndex] = { ...updatedResults[answerIndex], isCorrect: is_correct };
+
+        // Auto-flag wrong answers
+        const updatedFlags = [...batch.flags];
+        if (!is_correct) {
+          updatedFlags[answerIndex] = true;
+        }
+
+        const remaining = batch.pendingChecks - 1;
         set({
           practiceBatch: {
-            ...practiceBatch,
-            results: newResults,
-            flags: newFlags,
-            currentIndex: nextIndex,
+            ...batch,
+            results: updatedResults,
+            flags: updatedFlags,
+            pendingChecks: remaining,
           },
-          phase: "awaiting_input",
         });
-      } else {
-        // Still loading more problems — wait for them
+
+        // If all problems answered and all checks done, show summary
+        _maybeShowSummary(get, set);
+      })
+      .catch(() => {
+        // On error, keep the placeholder (isCorrect: false) and decrement
+        const { practiceBatch: batch } = get();
+        if (!batch) return;
         set({
-          practiceBatch: { ...practiceBatch, results: newResults, flags: newFlags },
-          phase: "loading",
+          practiceBatch: {
+            ...batch,
+            pendingChecks: batch.pendingChecks - 1,
+          },
         });
-        const waitForMore = () => {
-          const { practiceBatch: batch } = get();
-          if (!batch) return;
-          if (batch.problems.length > nextIndex) {
-            // New problems arrived — advance
-            set({
-              practiceBatch: { ...batch, currentIndex: nextIndex },
-              phase: "awaiting_input",
-            });
-          } else if (!batch.loadingMore) {
-            // Loading finished but no new problems — show summary
-            set({ phase: "practice_summary" });
-          } else {
-            // Still loading — check again shortly
-            setTimeout(waitForMore, 200);
-          }
-        };
-        setTimeout(waitForMore, 200);
-      }
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
-    }
+        _maybeShowSummary(get, set);
+      });
   },
 
   togglePracticeFlag: (index) => {
@@ -337,6 +401,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         loadingMore: false,
         totalCount: flaggedProblems.length,
         skippedProblems: [],
+        pendingChecks: 0,
       },
       phase: "awaiting_input",
       error: null,
@@ -425,6 +490,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           loadingMore: false,
           totalCount: practiceProblemsList.length,
           skippedProblems: [],
+          pendingChecks: 0,
         },
         phase: "awaiting_input",
       });
