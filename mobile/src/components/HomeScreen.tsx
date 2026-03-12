@@ -18,7 +18,7 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <AnimatedPressable style={styles.logoutButton} onPress={onLogout}>
+        <AnimatedPressable style={styles.logoutButton} onPress={onLogout} accessibilityRole="button" accessibilityLabel="Log out">
           <Ionicons name="log-out-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.logoutText}>Log Out</Text>
         </AnimatedPressable>
@@ -35,6 +35,8 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
               style={[styles.card, shadows.lg]}
               onPress={() => onSelect(subject.id)}
               scaleDown={0.94}
+              accessibilityRole="button"
+              accessibilityLabel={`Study ${subject.label}`}
             >
               <LinearGradient
                 colors={gradients.primary}
