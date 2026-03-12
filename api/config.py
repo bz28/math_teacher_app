@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     daily_request_cap_free: int = 50
     daily_request_cap_school: int = 500
 
+    # LLM Models
+    llm_model_sonnet: str = "claude-sonnet-4-20250514"
+    llm_model_haiku: str = "claude-haiku-4-5-20251001"
+
     # Cost Alerting
     daily_cost_limit_usd: float = 50.0
 

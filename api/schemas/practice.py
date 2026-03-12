@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PracticeGenerateRequest(BaseModel):
-    problem: str
-    count: int = 3
+    problem: str = Field(..., min_length=1, max_length=5000)
+    count: int = Field(3, ge=1, le=20)
 
 
 class PracticeProblem(BaseModel):
@@ -16,9 +16,9 @@ class PracticeGenerateResponse(BaseModel):
 
 
 class PracticeCheckRequest(BaseModel):
-    question: str
-    correct_answer: str
-    user_answer: str
+    question: str = Field(..., max_length=5000)
+    correct_answer: str = Field(..., max_length=2000)
+    user_answer: str = Field(..., max_length=2000)
 
 
 class PracticeCheckResponse(BaseModel):

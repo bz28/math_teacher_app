@@ -1,15 +1,15 @@
 import uuid
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CreateSessionRequest(BaseModel):
-    problem: str
-    mode: str = "learn"
+    problem: str = Field(..., min_length=1, max_length=5000)
+    mode: str = Field("learn", pattern=r"^(learn|practice)$")
 
 
 class RespondRequest(BaseModel):
-    student_response: str = ""
+    student_response: str = Field("", max_length=2000)
     request_hint: bool = False
     request_show_step: bool = False
     request_advance: bool = False

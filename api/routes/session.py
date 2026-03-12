@@ -1,5 +1,6 @@
 """Session endpoints: create, get, respond, similar."""
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,6 +26,8 @@ from api.schemas.session import (
     StepResponseSchema,
     StepTrackingInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -58,8 +61,9 @@ async def create(
         session = await create_session(db, current_user.user_id, body.problem, body.mode)
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Failed to create session")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create session")
 
     return _session_to_response(session)
 

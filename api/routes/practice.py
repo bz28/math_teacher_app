@@ -1,5 +1,7 @@
 """Practice endpoints: generate similar problems and check answers."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,8 @@ from api.schemas.practice import (
     PracticeProblem,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/practice", tags=["practice"])
 
 
@@ -24,18 +28,13 @@ async def generate(
     db: AsyncSession = Depends(get_db),
 ) -> PracticeGenerateResponse:
     """Generate similar practice problems for a given problem."""
-    if body.count < 0 or body.count > 20:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Count must be between 0 and 20",
-        )
-
     try:
         problems = await generate_practice_problems(body.problem, body.count)
-    except Exception as e:
+    except Exception:
+        logger.exception("Failed to generate practice problems")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail="Failed to generate practice problems",
         )
 
     return PracticeGenerateResponse(

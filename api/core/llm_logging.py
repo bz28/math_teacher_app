@@ -50,9 +50,18 @@ async def persist_llm_call(
         logger.error("Failed to persist LLM call log: %s", e, exc_info=True)
 
 
+def _handle_persist_exception(task: asyncio.Task[None]) -> None:
+    """Log exceptions from fire-and-forget persistence tasks."""
+    if not task.cancelled() and task.exception():
+        logger.error("LLM call persistence failed: %s", task.exception())
+
+
 def fire_and_forget_persist(**kwargs: object) -> None:
     """Schedule persist_llm_call as a fire-and-forget background task."""
     try:
-        asyncio.get_running_loop().create_task(persist_llm_call(**kwargs))  # type: ignore[arg-type]
+        task = asyncio.get_running_loop().create_task(
+            persist_llm_call(**kwargs),  # type: ignore[arg-type]
+        )
+        task.add_done_callback(_handle_persist_exception)
     except RuntimeError:
         logger.warning("No running event loop — skipping LLM call persistence")

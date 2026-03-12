@@ -30,8 +30,8 @@ from api.core.llm_utils import strip_markdown_fencing
 
 logger = logging.getLogger(__name__)
 
-MODEL_SONNET = "claude-sonnet-4-20250514"
-MODEL_HAIKU = "claude-haiku-4-5-20251001"
+MODEL_SONNET = settings.llm_model_sonnet
+MODEL_HAIKU = settings.llm_model_haiku
 # Haiku for simple classification/eval; Sonnet for reasoning-heavy tasks
 MODEL_CLASSIFY = MODEL_HAIKU
 MODEL_REASON = MODEL_SONNET
@@ -114,6 +114,15 @@ class CostTracker:
         if today != self._reset_day:
             self._total_usd = 0.0
             self._reset_day = today
+
+    def check_limit(self) -> None:
+        """Raise if daily cost limit has been reached."""
+        self._maybe_reset()
+        if self._total_usd >= settings.daily_cost_limit_usd:
+            raise RuntimeError(
+                f"Daily cost limit reached "
+                f"(${self._total_usd:.2f} >= ${settings.daily_cost_limit_usd:.2f})"
+            )
 
     def add(self, amount: float) -> None:
         self._maybe_reset()
@@ -387,6 +396,7 @@ async def _call_claude_stream(
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
+    _cost_tracker.check_limit()
 
     use_model = model or MODEL_REASON
     client = get_client()
@@ -451,6 +461,7 @@ async def _call_claude_json(
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
+    _cost_tracker.check_limit()
 
     use_model = model or MODEL_CLASSIFY
     client = get_client()

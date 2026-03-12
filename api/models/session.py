@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,7 +15,10 @@ class Session(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
 
     # Problem
     problem: Mapped[str] = mapped_column(Text, nullable=False)
@@ -27,7 +30,7 @@ class Session(Base):
     # Progress
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String(20), default="active")  # active, completed, abandoned
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active, completed, abandoned
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default="learn")
 
     # Per-step tracking (JSON: {step_index: {attempts: int, hints_used: int}})

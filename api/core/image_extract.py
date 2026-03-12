@@ -7,12 +7,13 @@ import re
 import time
 from typing import Any
 
+from api.config import settings
 from api.core.llm_client import get_client
 from api.core.llm_logging import fire_and_forget_persist
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = settings.llm_model_sonnet
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB after decode
 
 # Sonnet pricing for cost tracking

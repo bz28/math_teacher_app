@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from anthropic.types import TextBlock
 
+from api.config import settings
 from api.core.llm_client import get_client
 from api.core.llm_logging import fire_and_forget_persist
 from api.core.llm_utils import strip_markdown_fencing
@@ -15,7 +16,7 @@ from api.core.llm_utils import strip_markdown_fencing
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
-MODEL_SONNET = "claude-sonnet-4-20250514"
+MODEL_SONNET = settings.llm_model_sonnet
 # Sonnet pricing for cost calculation
 COST_PER_INPUT_TOKEN = 3.0 / 1_000_000
 COST_PER_OUTPUT_TOKEN = 15.0 / 1_000_000
