@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Platform,
   ScrollView,
   StyleSheet,
@@ -50,7 +49,6 @@ export default function App() {
   const displayError = error ?? sessionError;
 
   const navigateTo = (next: Screen) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setScreen(next);
   };
 

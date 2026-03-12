@@ -3,7 +3,6 @@ import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Platform,
   ScrollView,
   StyleSheet,
@@ -73,7 +72,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   const prevStep = useRef(session?.current_step);
   useEffect(() => {
     if (session && session.current_step !== prevStep.current) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setSelectedChoice(null);
       prevStep.current = session.current_step;
     }
