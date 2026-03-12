@@ -78,9 +78,16 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   // Loading state — skeleton placeholders that mimic the real layout
   if (phase === "loading") {
+    const isGrading = isBatchMode && practiceBatch.pendingChecks > 0
+      && practiceBatch.results.length >= practiceBatch.problems.length;
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        {isBatchMode ? <PracticeSkeleton /> : <SessionSkeleton />}
+        {isGrading ? (
+          <>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.gradingText}>Grading your answers...</Text>
+          </>
+        ) : isBatchMode ? <PracticeSkeleton /> : <SessionSkeleton />}
       </SafeAreaView>
     );
   }
@@ -724,6 +731,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     justifyContent: "center",
     alignItems: "center",
+  },
+  gradingText: {
+    ...typography.bodyBold,
+    color: colors.text,
+    marginTop: spacing.lg,
   },
   container: { flex: 1, backgroundColor: colors.background },
   stickyHeader: { paddingHorizontal: spacing.xl, backgroundColor: colors.background },
