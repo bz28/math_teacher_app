@@ -173,10 +173,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               autoCorrect={false}
               returnKeyType="go"
               onSubmitEditing={handlePracticeSubmit}
+              inputAccessoryViewID="math-session"
             />
           </View>
-
-          <MathKeyboard onInsert={handleInsert} />
 
           <View style={styles.buttons}>
             <AnimatedPressable
@@ -213,6 +212,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             </AnimatedPressable>
           </View>
         </ScrollView>
+        <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
       </KeyboardAvoidingView>
     );
   }
@@ -545,6 +545,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 autoCorrect={false}
                 returnKeyType="go"
                 onSubmitEditing={handleAsk}
+                inputAccessoryViewID="math-session"
               />
             </View>
 
@@ -590,6 +591,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     autoCorrect={false}
                     returnKeyType="go"
                     onSubmitEditing={handleAsk}
+                    inputAccessoryViewID="math-session"
                   />
                 </View>
 
@@ -653,10 +655,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                     autoCorrect={false}
                     returnKeyType="go"
                     onSubmitEditing={handleSubmit}
+                    inputAccessoryViewID="math-session"
                   />
                 </View>
-
-                <MathKeyboard onInsert={handleInsert} />
 
                 <View style={styles.buttons}>
                   <AnimatedPressable
@@ -684,6 +685,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
           </>
         )}
       </ScrollView>
+      <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
     </KeyboardAvoidingView>
   );
 }

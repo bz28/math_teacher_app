@@ -207,10 +207,11 @@ export default function App() {
                 autoCorrect={false}
                 returnKeyType="go"
                 onSubmitEditing={handleGo}
+                inputAccessoryViewID="math-input"
               />
             </View>
 
-            <MathKeyboard onInsert={handleInsert} />
+            <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
             {mode === "practice" && (
               <View style={[styles.countPicker, shadows.sm]}>
