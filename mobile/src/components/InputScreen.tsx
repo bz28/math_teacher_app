@@ -380,35 +380,24 @@ export function InputScreen({
               Total: {1 + similarCount} problem{similarCount > 0 ? "s" : ""}
             </Text>
 
-            <View style={styles.promptActions}>
-              <TouchableOpacity
-                style={styles.promptSecondaryBtn}
-                onPress={() => {
-                  setShowMorePrompt(false);
-                  startProblems(collectProblems(), 0);
-                }}
+            <TouchableOpacity
+              style={styles.promptStartBtn}
+              onPress={() => {
+                setShowMorePrompt(false);
+                startProblems(collectProblems(), similarCount);
+              }}
+            >
+              <LinearGradient
+                colors={gradients.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.promptPrimaryGradient}
               >
-                <Text style={styles.promptSecondaryText}>Just this one</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.promptPrimaryBtn}
-                onPress={() => {
-                  setShowMorePrompt(false);
-                  startProblems(collectProblems(), similarCount);
-                }}
-              >
-                <LinearGradient
-                  colors={gradients.primary}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.promptPrimaryGradient}
-                >
-                  <Text style={styles.promptPrimaryText}>
-                    {similarCount > 0 ? `Start Practice (${1 + similarCount})` : "Just this one"}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                <Text style={styles.promptPrimaryText}>
+                  {similarCount > 0 ? `Start Practice (${1 + similarCount})` : "Just this one"}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -627,28 +616,11 @@ const styles = StyleSheet.create({
   },
   countValue: { fontSize: 26, fontWeight: "bold" as const, color: colors.text, minWidth: 30, textAlign: "center" as const },
   countHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
-  promptActions: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginTop: spacing.xxl,
+  promptStartBtn: {
     width: "100%",
-  },
-  promptSecondaryBtn: {
-    flex: 1,
-    paddingVertical: spacing.lg,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-  },
-  promptSecondaryText: {
-    ...typography.button,
-    color: colors.textSecondary,
-  },
-  promptPrimaryBtn: {
-    flex: 1,
     borderRadius: radii.md,
     overflow: "hidden" as const,
+    marginTop: spacing.xxl,
   },
   promptPrimaryGradient: {
     paddingVertical: spacing.lg,
