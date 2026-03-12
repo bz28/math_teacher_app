@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -44,6 +45,9 @@ export default function App() {
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractedProblems, setExtractedProblems] = useState<string[] | null>(null);
+  const [selectedExtracted, setSelectedExtracted] = useState<boolean[]>([]);
+  const [editingExtractedIndex, setEditingExtractedIndex] = useState<number | null>(null);
+  const [editingExtractedText, setEditingExtractedText] = useState("");
   const {
     startSession,
     startPracticeBatch,
@@ -139,20 +143,59 @@ export default function App() {
         setExtracting(false);
         return;
       }
-      if (problems.length === 1) {
-        // Single problem — put directly in input for quick edit
-        setInput(problems[0]);
-        inputRef.current?.focus();
-      } else {
-        // Multiple problems — show confirmation modal
-        setExtractedProblems(problems);
-      }
+      // Show confirmation modal for all extracted problems
+      setExtractedProblems(problems);
+      setSelectedExtracted(problems.map(() => true));
+      setEditingExtractedIndex(null);
     } catch (e) {
       setError((e as Error).message || "Failed to extract problems from image");
     } finally {
       setExtracting(false);
     }
   };
+
+  const handleDismissExtraction = () => {
+    setExtractedProblems(null);
+    setSelectedExtracted([]);
+    setEditingExtractedIndex(null);
+  };
+
+  const handleToggleExtracted = (index: number) => {
+    setSelectedExtracted((prev) => prev.map((v, i) => (i === index ? !v : v)));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleStartEditExtracted = (index: number) => {
+    setEditingExtractedIndex(index);
+    setEditingExtractedText(extractedProblems![index]);
+  };
+
+  const handleFinishEditExtracted = () => {
+    if (editingExtractedIndex === null || !extractedProblems) return;
+    const text = editingExtractedText.trim();
+    if (text) {
+      setExtractedProblems((prev) =>
+        prev!.map((p, i) => (i === editingExtractedIndex ? text : p))
+      );
+    }
+    setEditingExtractedIndex(null);
+    setEditingExtractedText("");
+  };
+
+  const handleAddExtracted = () => {
+    if (!extractedProblems) return;
+    const selected = extractedProblems.filter((_, i) => selectedExtracted[i]);
+    const remaining = MAX_PROBLEMS - problemQueue.length;
+    const toAdd = selected.slice(0, remaining);
+    if (toAdd.length > 0) {
+      setProblemQueue([...problemQueue, ...toAdd]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    handleDismissExtraction();
+  };
+
+  const selectedCount = selectedExtracted.filter(Boolean).length;
+  const canAddMore = problemQueue.length < MAX_PROBLEMS;
 
   const handleGo = async () => {
     // Collect all problems: queue + any text currently in the input
@@ -461,6 +504,107 @@ export default function App() {
           </ScrollView>
         </KeyboardAvoidingView>
         <StatusBar style="auto" />
+
+        {/* Extraction confirmation modal */}
+        <Modal
+          visible={extractedProblems !== null}
+          animationType="slide"
+          transparent
+          onRequestClose={handleDismissExtraction}
+        >
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <View style={[styles.modalContent, shadows.lg]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  Found {extractedProblems?.length ?? 0} problem{(extractedProblems?.length ?? 0) !== 1 ? "s" : ""}
+                </Text>
+                <TouchableOpacity onPress={handleDismissExtraction} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalHint}>Tap to edit · Uncheck to skip</Text>
+
+              <ScrollView style={styles.modalList} bounces={false}>
+                {extractedProblems?.map((problem, i) => (
+                  <View key={`ext-${i}`} style={styles.extractedRow}>
+                    <TouchableOpacity
+                      onPress={() => handleToggleExtracted(i)}
+                      style={styles.checkbox}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    >
+                      <Ionicons
+                        name={selectedExtracted[i] ? "checkbox" : "square-outline"}
+                        size={24}
+                        color={selectedExtracted[i] ? colors.primary : colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                    {editingExtractedIndex === i ? (
+                      <TextInput
+                        style={styles.extractedEditInput}
+                        value={editingExtractedText}
+                        onChangeText={setEditingExtractedText}
+                        onBlur={handleFinishEditExtracted}
+                        onSubmitEditing={handleFinishEditExtracted}
+                        autoFocus
+                        returnKeyType="done"
+                        selectTextOnFocus
+                      />
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.extractedTextWrap}
+                        onPress={() => handleStartEditExtracted(i)}
+                        activeOpacity={0.6}
+                      >
+                        <Text
+                          style={[
+                            styles.extractedText,
+                            !selectedExtracted[i] && styles.extractedTextDeselected,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {problem}
+                        </Text>
+                        <Ionicons name="pencil-outline" size={14} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+
+              {!canAddMore && (
+                <Text style={styles.modalWarning}>
+                  Queue is full ({MAX_PROBLEMS} problems max)
+                </Text>
+              )}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={handleDismissExtraction}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalAddBtn, selectedCount === 0 && styles.buttonDisabled]}
+                  onPress={handleAddExtracted}
+                  disabled={selectedCount === 0}
+                >
+                  <LinearGradient
+                    colors={gradients.primary}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.modalAddGradient}
+                  >
+                    <Text style={styles.modalAddText}>
+                      Add Selected ({selectedCount})
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -643,4 +787,109 @@ const styles = StyleSheet.create({
   countValue: { fontSize: 26, fontWeight: "bold", color: colors.text, minWidth: 30, textAlign: "center" },
   countHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   buttonDisabled: { opacity: 0.4 },
+  // Extraction confirmation modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    paddingTop: spacing.xxl,
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xxxl,
+    maxHeight: "75%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  modalTitle: {
+    ...typography.heading,
+    color: colors.text,
+  },
+  modalHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.lg,
+  },
+  modalList: {
+    flexGrow: 0,
+    marginBottom: spacing.lg,
+  },
+  extractedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    gap: spacing.md,
+  },
+  checkbox: {
+    flexShrink: 0,
+  },
+  extractedTextWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  extractedText: {
+    ...typography.body,
+    color: colors.text,
+    flex: 1,
+  },
+  extractedTextDeselected: {
+    color: colors.textMuted,
+    textDecorationLine: "line-through",
+  },
+  extractedEditInput: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    fontSize: 16,
+    color: colors.text,
+    backgroundColor: colors.inputBg,
+  },
+  modalWarning: {
+    ...typography.caption,
+    color: colors.warningDark,
+    textAlign: "center",
+    marginBottom: spacing.md,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  modalCancelText: {
+    ...typography.button,
+    color: colors.textSecondary,
+  },
+  modalAddBtn: {
+    flex: 2,
+    borderRadius: radii.md,
+    overflow: "hidden",
+  },
+  modalAddGradient: {
+    paddingVertical: spacing.lg,
+    alignItems: "center",
+  },
+  modalAddText: {
+    ...typography.button,
+    color: colors.white,
+  },
 });
