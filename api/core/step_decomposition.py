@@ -7,10 +7,8 @@ import re
 import time
 from dataclasses import dataclass
 
-import anthropic
 from anthropic.types import TextBlock
 
-from api.config import settings
 from api.core.llm_client import get_client
 
 logger = logging.getLogger(__name__)
