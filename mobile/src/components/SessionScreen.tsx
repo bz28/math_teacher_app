@@ -43,7 +43,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     askAboutStep,
     togglePracticeFlag,
     learnQueue,
-    learnSimilarProblem,
     advanceLearnQueue,
     toggleLearnFlag,
     switchToLearnMode,
@@ -478,17 +477,6 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             >
               <Ionicons name="chatbubble-outline" size={16} color={colors.warningDark} style={{ marginRight: spacing.sm }} />
               <Text style={styles.questionsText}>I still have questions</Text>
-            </AnimatedPressable>
-
-            <AnimatedPressable onPress={learnSimilarProblem}>
-              <LinearGradient
-                colors={gradients.success}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.similarButton}
-              >
-                <Text style={styles.similarText}>Learn Similar Problem</Text>
-              </LinearGradient>
             </AnimatedPressable>
 
             <AnimatedPressable

@@ -72,7 +72,6 @@ interface SessionState {
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
   retryFlaggedProblems: () => void;
-  learnSimilarProblem: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
   switchToLearnMode: () => Promise<void>;
@@ -350,37 +349,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           problems,
           currentIndex: 0,
           flags: new Array(problems.length).fill(false),
-        },
-      });
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
-    }
-  },
-
-  learnSimilarProblem: async () => {
-    const { session, learnQueue } = get();
-    if (!session || !learnQueue) return;
-
-    set({ phase: "loading", error: null });
-    try {
-      const { similar_problem: similar } = await getSimilarProblem(session.id);
-
-      // Insert similar problem after current index
-      const insertAt = learnQueue.currentIndex + 1;
-      const newProblems = [...learnQueue.problems];
-      newProblems.splice(insertAt, 0, similar);
-      const newFlags = [...learnQueue.flags];
-      newFlags.splice(insertAt, 0, false);
-
-      const newSession = await createSession(similar, "learn");
-      set({
-        session: newSession,
-        phase: "awaiting_input",
-        lastResponse: null,
-        learnQueue: {
-          problems: newProblems,
-          currentIndex: insertAt,
-          flags: newFlags,
         },
       });
     } catch (e) {
