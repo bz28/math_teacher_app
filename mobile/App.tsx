@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -45,9 +46,11 @@ export default function App() {
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractedProblems, setExtractedProblems] = useState<string[] | null>(null);
+  const [extractionConfidence, setExtractionConfidence] = useState<string>("high");
   const [selectedExtracted, setSelectedExtracted] = useState<boolean[]>([]);
   const [editingExtractedIndex, setEditingExtractedIndex] = useState<number | null>(null);
   const [editingExtractedText, setEditingExtractedText] = useState("");
+  const [lastImageSource, setLastImageSource] = useState<"camera" | "gallery" | null>(null);
   const {
     startSession,
     startPracticeBatch,
@@ -115,7 +118,27 @@ export default function App() {
     if (source === "camera") {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Camera Access", "Please enable camera access in Settings to scan problems.");
+        Alert.alert(
+          "Camera Access Required",
+          "Please enable camera access in Settings to scan math problems.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Photo Access Required",
+          "Please enable photo library access in Settings to select images.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ],
+        );
         return;
       }
     }
@@ -132,23 +155,29 @@ export default function App() {
 
     if (result.canceled || !result.assets?.[0]?.base64) return;
 
+    setLastImageSource(source);
     const base64 = result.assets[0].base64;
     setExtracting(true);
     setError(null);
 
     try {
-      const { problems } = await extractProblemsFromImage(base64);
+      const { problems, confidence } = await extractProblemsFromImage(base64);
       if (problems.length === 0) {
         setError("No math problems found. Try a clearer photo.");
-        setExtracting(false);
         return;
       }
       // Show confirmation modal for all extracted problems
       setExtractedProblems(problems);
+      setExtractionConfidence(confidence);
       setSelectedExtracted(problems.map(() => true));
       setEditingExtractedIndex(null);
     } catch (e) {
-      setError((e as Error).message || "Failed to extract problems from image");
+      const msg = (e as Error).message || "";
+      if (msg.includes("Network") || msg.includes("fetch")) {
+        setError("Network error — check your connection and try again.");
+      } else {
+        setError(msg || "Failed to extract problems from image.");
+      }
     } finally {
       setExtracting(false);
     }
@@ -156,8 +185,16 @@ export default function App() {
 
   const handleDismissExtraction = () => {
     setExtractedProblems(null);
+    setExtractionConfidence("high");
     setSelectedExtracted([]);
     setEditingExtractedIndex(null);
+  };
+
+  const handleRetryExtraction = () => {
+    handleDismissExtraction();
+    if (lastImageSource) {
+      handlePickImage(lastImageSource);
+    }
   };
 
   const handleToggleExtracted = (index: number) => {
@@ -499,6 +536,11 @@ export default function App() {
               <View style={styles.errorWrap}>
                 <Ionicons name="alert-circle" size={16} color={colors.error} />
                 <Text style={styles.error}>{displayError}</Text>
+                {lastImageSource && (
+                  <TouchableOpacity onPress={() => { setError(null); handlePickImage(lastImageSource); }}>
+                    <Text style={styles.retryLink}>Retry</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </ScrollView>
@@ -525,6 +567,30 @@ export default function App() {
                   <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
+
+              {extractionConfidence !== "high" && (
+                <View style={[
+                  styles.confidenceBadge,
+                  extractionConfidence === "low" ? styles.confidenceLow : styles.confidenceMedium,
+                ]}>
+                  <Ionicons
+                    name={extractionConfidence === "low" ? "warning" : "alert-circle-outline"}
+                    size={16}
+                    color={extractionConfidence === "low" ? colors.warningDark : colors.warning}
+                  />
+                  <Text style={[
+                    styles.confidenceText,
+                    extractionConfidence === "low" && styles.confidenceTextLow,
+                  ]}>
+                    {extractionConfidence === "low"
+                      ? "Image was hard to read — please review carefully"
+                      : "Some parts were unclear — double-check the results"}
+                  </Text>
+                  <TouchableOpacity onPress={handleRetryExtraction} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                    <Text style={styles.retryText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <Text style={styles.modalHint}>Tap to edit · Uncheck to skip</Text>
 
@@ -760,7 +826,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: spacing.md,
   },
-  error: { color: colors.error, fontSize: 14 },
+  error: { color: colors.error, fontSize: 14, flex: 1 },
+  retryLink: {
+    ...typography.label,
+    color: colors.primary,
+    marginLeft: spacing.sm,
+  },
   countPicker: {
     width: "100%",
     alignItems: "center",
@@ -811,6 +882,32 @@ const styles = StyleSheet.create({
   modalTitle: {
     ...typography.heading,
     color: colors.text,
+  },
+  confidenceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    marginBottom: spacing.md,
+  },
+  confidenceMedium: {
+    backgroundColor: colors.warningBg,
+  },
+  confidenceLow: {
+    backgroundColor: colors.errorLight,
+  },
+  confidenceText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  confidenceTextLow: {
+    color: colors.warningDark,
+  },
+  retryText: {
+    ...typography.label,
+    color: colors.primary,
   },
   modalHint: {
     ...typography.caption,
