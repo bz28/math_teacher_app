@@ -25,6 +25,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [mode, setMode] = useState<Mode>("learn");
   const [practiceCount, setPracticeCount] = useState(3);
+  const [problemQueue, setProblemQueue] = useState<string[]>([]);
   const [fromOnboarding, setFromOnboarding] = useState(false);
 
   useEffect(() => {
@@ -112,7 +113,10 @@ export default function App() {
   if (screen === "session") {
     return (
       <SafeAreaProvider>
-        <SessionScreen onBack={() => setScreen("input")} />
+        <SessionScreen onBack={() => {
+          setProblemQueue([]);
+          setScreen("input");
+        }} />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -129,9 +133,15 @@ export default function App() {
           <InputScreen
             mode={mode}
             practiceCount={practiceCount}
+            problemQueue={problemQueue}
             onPracticeCountChange={setPracticeCount}
-            onBack={() => setScreen("mode-select")}
+            onProblemQueueChange={setProblemQueue}
+            onBack={() => {
+              setProblemQueue([]);
+              setScreen("mode-select");
+            }}
             onSessionStart={() => setScreen("session")}
+            onSessionError={() => setScreen("input")}
           />
         </KeyboardAvoidingView>
         <StatusBar style="auto" />

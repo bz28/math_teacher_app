@@ -22,31 +22,29 @@ import { colors, spacing, radii, typography, shadows, gradients } from "../theme
 
 const MAX_PROBLEMS = 10;
 
-interface QueueItem {
-  id: number;
-  text: string;
-}
-
-let nextQueueId = 0;
-
 interface Props {
   mode: Mode;
   practiceCount: number;
+  problemQueue: string[];
   onPracticeCountChange: (count: number) => void;
+  onProblemQueueChange: (queue: string[]) => void;
   onBack: () => void;
   onSessionStart: () => void;
+  onSessionError: () => void;
 }
 
 export function InputScreen({
   mode,
   practiceCount,
+  problemQueue,
   onPracticeCountChange,
+  onProblemQueueChange,
   onBack,
   onSessionStart,
+  onSessionError,
 }: Props) {
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
-  const [problemQueue, setProblemQueue] = useState<QueueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showMorePrompt, setShowMorePrompt] = useState(false);
   const [similarCount, setSimilarCount] = useState(0);
@@ -76,8 +74,7 @@ export function InputScreen({
     const remaining = MAX_PROBLEMS - problemQueue.length;
     const toAdd = selected.slice(0, remaining);
     if (toAdd.length > 0) {
-      const newItems = toAdd.map((text) => ({ id: nextQueueId++, text }));
-      setProblemQueue([...problemQueue, ...newItems]);
+      onProblemQueueChange([...problemQueue, ...toAdd]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     dismissExtraction();
@@ -103,7 +100,7 @@ export function InputScreen({
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text || problemQueue.length >= MAX_PROBLEMS) return;
-    setProblemQueue([...problemQueue, { id: nextQueueId++, text }]);
+    onProblemQueueChange([...problemQueue, text]);
     setInput("");
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -111,19 +108,19 @@ export function InputScreen({
   };
 
   const handleRemoveFromQueue = (index: number) => {
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEditFromQueue = (index: number) => {
-    setInput(problemQueue[index].text);
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    setInput(problemQueue[index]);
+    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
   };
 
   const collectProblems = (): string[] => {
-    const allProblems = problemQueue.map((q) => q.text);
+    const allProblems = [...problemQueue];
     const text = input.trim();
     if (text) allProblems.push(text);
     return allProblems;
@@ -147,6 +144,9 @@ export function InputScreen({
   const startProblems = async (allProblems: string[], count: number) => {
     setError(null);
 
+    // Navigate immediately — session screen shows skeleton while loading
+    onSessionStart();
+
     if (allProblems.length === 1) {
       if (mode === "practice") {
         await startPracticeBatch(allProblems[0], count);
@@ -161,12 +161,11 @@ export function InputScreen({
       }
     }
 
-    const { phase, error: storeError } = useSessionStore.getState();
+    const { phase } = useSessionStore.getState();
     if (phase === "error") {
-      setError(storeError ?? "Something went wrong");
+      onSessionError();
     } else {
-      setProblemQueue([]);
-      onSessionStart();
+      onProblemQueueChange([]);
     }
   };
 
@@ -267,15 +266,15 @@ export function InputScreen({
 
         {problemQueue.length > 0 && (
           <View style={[styles.queueContainer, shadows.sm]}>
-            {problemQueue.map((item, i) => (
+            {problemQueue.map((problem, i) => (
               <TouchableOpacity
-                key={item.id}
+                key={`${i}-${problem}`}
                 style={styles.queueRow}
                 onPress={() => handleEditFromQueue(i)}
                 activeOpacity={0.6}
               >
                 <Text style={styles.queueIndex}>{i + 1}.</Text>
-                <Text style={styles.queueText} numberOfLines={1}>{item.text}</Text>
+                <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
                 <TouchableOpacity
                   onPress={() => handleRemoveFromQueue(i)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
