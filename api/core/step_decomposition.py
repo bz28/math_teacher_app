@@ -181,9 +181,12 @@ async def solve_problem(problem: str) -> tuple[str, str]:
             logger.info("solve_problem succeeded on attempt %d", attempt + 1)
             return answer, problem_type
 
-        except (json.JSONDecodeError, KeyError, Exception) as e:
+        except (json.JSONDecodeError, KeyError) as e:
             latency_ms = round((time.monotonic() - start) * 1000, 2)
-            logger.warning("solve_problem attempt %d failed: %s", attempt + 1, e)
+            logger.warning("solve_problem attempt %d parse error: %s", attempt + 1, e)
+        except Exception as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
+            logger.warning("solve_problem attempt %d API error: %s", attempt + 1, e)
 
     raise RuntimeError(f"Failed to solve problem after {MAX_RETRIES} attempts")
 

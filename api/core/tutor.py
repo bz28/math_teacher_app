@@ -400,6 +400,7 @@ async def _call_claude_stream(
                 max_tokens=512,
                 system=_system_with_cache(system_prompt),
                 messages=[{"role": "user", "content": user_message}],
+                timeout=30.0,
             ) as stream:
                 async for text in stream.text_stream:
                     yield text
@@ -463,10 +464,13 @@ async def _call_claude_json(
                 max_tokens=512,
                 system=_system_with_cache(system_prompt),
                 messages=[{"role": "user", "content": user_message}],
+                timeout=30.0,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
             first_block = response.content[0]
-            resp_text = first_block.text if hasattr(first_block, "text") else ""
+            if not hasattr(first_block, "text"):
+                raise ValueError("Unexpected response type from Claude")
+            resp_text = first_block.text  # type: ignore[union-attr]
             _log_llm_call(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
@@ -476,10 +480,7 @@ async def _call_claude_json(
             )
             _circuit.record_success()
 
-            first_block = response.content[0]
-            if not hasattr(first_block, "text"):
-                raise ValueError("Unexpected response type from Claude")
-            text = strip_markdown_fencing(first_block.text)  # type: ignore[union-attr]
+            text = strip_markdown_fencing(resp_text)
             result: dict[str, object] = json.loads(text)
             return result
 
