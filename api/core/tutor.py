@@ -25,6 +25,8 @@ import anthropic
 
 from api.config import settings
 from api.core.llm_client import get_client
+from api.core.llm_logging import fire_and_forget_persist
+from api.core.llm_utils import strip_markdown_fencing
 
 logger = logging.getLogger(__name__)
 
@@ -341,64 +343,20 @@ def _log_llm_call(
     )
 
     # Persist to database (fire-and-forget)
-    asyncio.get_running_loop().create_task(
-        _persist_llm_call(
-            model=model,
-            function=mode,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            latency_ms=latency_ms,
-            cost_usd=round(cost, 6),
-            session_id=session_id,
-            user_id=user_id,
-            success=success,
-            retry_count=retry_count,
-            input_text=input_text,
-            output_text=output_text,
-        )
+    fire_and_forget_persist(
+        model=model,
+        function=mode,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        latency_ms=latency_ms,
+        cost_usd=round(cost, 6),
+        session_id=session_id,
+        user_id=user_id,
+        success=success,
+        retry_count=retry_count,
+        input_text=input_text,
+        output_text=output_text,
     )
-
-
-async def _persist_llm_call(
-    model: str,
-    function: str,
-    input_tokens: int,
-    output_tokens: int,
-    latency_ms: float,
-    cost_usd: float,
-    session_id: str | None,
-    user_id: str | None,
-    success: bool,
-    retry_count: int,
-    input_text: str | None = None,
-    output_text: str | None = None,
-) -> None:
-    """Write an LLM call record to the database."""
-    try:
-        import uuid as _uuid
-
-        from api.database import get_session_factory
-        from api.models.llm_call import LLMCall
-
-        async with get_session_factory()() as db:
-            record = LLMCall(
-                function=function,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                latency_ms=latency_ms,
-                cost_usd=cost_usd,
-                session_id=_uuid.UUID(session_id) if session_id else None,
-                user_id=_uuid.UUID(user_id) if user_id else None,
-                success=success,
-                retry_count=retry_count,
-                input_text=input_text,
-                output_text=output_text,
-            )
-            db.add(record)
-            await db.commit()
-    except Exception as e:
-        logger.error("Failed to persist LLM call log: %s", e, exc_info=True)
 
 
 def _system_with_cache(
@@ -408,17 +366,6 @@ def _system_with_cache(
     return [
         {"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}},
     ]
-
-
-def _strip_markdown_fencing(text: str) -> str:
-    """Strip markdown code fencing from LLM response text."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-    return text
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +479,7 @@ async def _call_claude_json(
             first_block = response.content[0]
             if not hasattr(first_block, "text"):
                 raise ValueError("Unexpected response type from Claude")
-            text = _strip_markdown_fencing(first_block.text)  # type: ignore[union-attr]
+            text = strip_markdown_fencing(first_block.text)  # type: ignore[union-attr]
             result: dict[str, object] = json.loads(text)
             return result
 

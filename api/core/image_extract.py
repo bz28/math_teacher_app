@@ -1,6 +1,5 @@
 """Extract math problems from images using Claude Vision."""
 
-import asyncio
 import base64
 import json
 import logging
@@ -9,6 +8,7 @@ import time
 from typing import Any
 
 from api.core.llm_client import get_client
+from api.core.llm_logging import fire_and_forget_persist
 
 logger = logging.getLogger(__name__)
 
@@ -129,44 +129,14 @@ async def extract_problems_from_image(image_base64: str) -> dict[str, Any]:
     cost = (input_tokens * COST_PER_INPUT_TOKEN) + (
         output_tokens * COST_PER_OUTPUT_TOKEN
     )
-    asyncio.get_running_loop().create_task(
-        _persist_llm_call(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            latency_ms=latency_ms,
-            cost_usd=round(cost, 6),
-            output_text=text,
-        )
+    fire_and_forget_persist(
+        model=MODEL,
+        function="image_extract",
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        latency_ms=latency_ms,
+        cost_usd=round(cost, 6),
+        output_text=text,
     )
 
     return {"problems": problems, "confidence": confidence}
-
-
-async def _persist_llm_call(
-    input_tokens: int,
-    output_tokens: int,
-    latency_ms: float,
-    cost_usd: float,
-    output_text: str | None = None,
-) -> None:
-    """Write an LLM call record to the database."""
-    try:
-        from api.database import get_session_factory
-        from api.models.llm_call import LLMCall
-
-        async with get_session_factory()() as db:
-            record = LLMCall(
-                function="image_extract",
-                model=MODEL,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                latency_ms=latency_ms,
-                cost_usd=cost_usd,
-                success=True,
-                retry_count=0,
-                output_text=output_text,
-            )
-            db.add(record)
-            await db.commit()
-    except Exception:
-        logger.exception("Failed to persist image_extract LLM call")

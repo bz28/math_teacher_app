@@ -1,6 +1,5 @@
 """Step-by-step decomposition: Claude generates steps for any math problem."""
 
-import asyncio
 import json
 import logging
 import re
@@ -10,10 +9,16 @@ from dataclasses import dataclass
 from anthropic.types import TextBlock
 
 from api.core.llm_client import get_client
+from api.core.llm_logging import fire_and_forget_persist
+from api.core.llm_utils import strip_markdown_fencing
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+MODEL_SONNET = "claude-sonnet-4-20250514"
+# Sonnet pricing for cost calculation
+COST_PER_INPUT_TOKEN = 3.0 / 1_000_000
+COST_PER_OUTPUT_TOKEN = 15.0 / 1_000_000
 
 SYSTEM_PROMPT = """You are a math tutor generating step-by-step solutions for students.
 
@@ -92,20 +97,9 @@ def _build_prompt(problem: str, problem_type: str) -> str:
     return "\n\n".join(parts)
 
 
-def _strip_markdown_fencing(text: str) -> str:
-    """Strip markdown code fencing from LLM response."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-    return text
-
-
 def _parse_steps(response_text: str) -> tuple[list[Step], list[str]]:
     """Parse Claude's JSON response into Step objects and distractors."""
-    text = _strip_markdown_fencing(response_text)
+    text = strip_markdown_fencing(response_text)
 
     data = json.loads(text)
 
@@ -154,7 +148,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
     just the answer. Used for practice mode where steps aren't needed upfront.
     """
     client = get_client()
-    model = "claude-sonnet-4-20250514"
+    model = MODEL_SONNET
 
     for attempt in range(MAX_RETRIES):
         start = time.monotonic()
@@ -171,13 +165,13 @@ async def solve_problem(problem: str) -> tuple[str, str]:
             if not isinstance(first_block, TextBlock):
                 continue
             resp_text = first_block.text.strip()
-            text = _strip_markdown_fencing(resp_text)
+            text = strip_markdown_fencing(resp_text)
 
             data = json.loads(text)
             answer = data["answer"]
             problem_type = data.get("problem_type", "math")
 
-            _log_decomposition_call(
+            _log_and_persist(
                 model=model, function="solve",
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
@@ -197,7 +191,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
 async def generate_similar_problem(problem: str) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
     client = get_client()
-    model = "claude-sonnet-4-20250514"
+    model = MODEL_SONNET
     start = time.monotonic()
     try:
         response = await client.messages.create(
@@ -213,7 +207,7 @@ async def generate_similar_problem(problem: str) -> str:
         latency_ms = round((time.monotonic() - start) * 1000, 2)
         first_block = response.content[0]
         resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
-        _log_decomposition_call(
+        _log_and_persist(
             model=model, function="generate_similar",
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
@@ -238,7 +232,7 @@ async def decompose_problem(problem: str) -> Decomposition:
 
     client = get_client()
 
-    model = "claude-sonnet-4-20250514"
+    model = MODEL_SONNET
     last_error: str | None = None
     for attempt in range(MAX_RETRIES):
         prompt = _build_prompt(problem, problem_type)
@@ -257,7 +251,7 @@ async def decompose_problem(problem: str) -> Decomposition:
             resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
             if not isinstance(first_block, TextBlock):
                 last_error = "Unexpected response type from Claude"
-                _log_decomposition_call(
+                _log_and_persist(
                     model=model, function="decompose",
                     input_tokens=response.usage.input_tokens,
                     output_tokens=response.usage.output_tokens,
@@ -269,7 +263,7 @@ async def decompose_problem(problem: str) -> Decomposition:
 
             if not steps:
                 last_error = "Empty steps returned"
-                _log_decomposition_call(
+                _log_and_persist(
                     model=model, function="decompose",
                     input_tokens=response.usage.input_tokens,
                     output_tokens=response.usage.output_tokens,
@@ -278,7 +272,7 @@ async def decompose_problem(problem: str) -> Decomposition:
                 )
                 continue
 
-            _log_decomposition_call(
+            _log_and_persist(
                 model=model, function="decompose",
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
@@ -322,7 +316,7 @@ async def decompose_problem(problem: str) -> Decomposition:
     raise RuntimeError(f"Failed to decompose problem after {MAX_RETRIES} attempts: {last_error}")
 
 
-def _log_decomposition_call(
+def _log_and_persist(
     model: str,
     function: str,
     input_tokens: int,
@@ -333,27 +327,20 @@ def _log_decomposition_call(
     input_text: str | None = None,
     output_text: str | None = None,
 ) -> None:
-    """Log a Claude call from step_decomposition to the llm_calls table."""
-    from api.core.tutor import COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET, _persist_llm_call
-
-    cost = (input_tokens * COST_PER_INPUT_TOKEN_SONNET) + (output_tokens * COST_PER_OUTPUT_TOKEN_SONNET)
+    """Log a Claude call and persist to the llm_calls table."""
+    cost = (input_tokens * COST_PER_INPUT_TOKEN) + (output_tokens * COST_PER_OUTPUT_TOKEN)
     logger.info(
         "LLM call: function=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
         function, model, input_tokens, output_tokens, cost, latency_ms,
     )
-    try:
-        asyncio.get_running_loop().create_task(
-            _persist_llm_call(
-                model=model, function=function,
-                input_tokens=input_tokens, output_tokens=output_tokens,
-                latency_ms=latency_ms, cost_usd=round(cost, 6),
-                session_id=None, user_id=None,
-                success=success, retry_count=retry_count,
-                input_text=input_text, output_text=output_text,
-            )
-        )
-    except RuntimeError:
-        logger.warning("No running event loop — skipping LLM call persistence")
+    fire_and_forget_persist(
+        model=model, function=function,
+        input_tokens=input_tokens, output_tokens=output_tokens,
+        latency_ms=latency_ms, cost_usd=round(cost, 6),
+        session_id=None, user_id=None,
+        success=success, retry_count=retry_count,
+        input_text=input_text, output_text=output_text,
+    )
 
 
 def _cache_decomposition(decomposition: Decomposition) -> None:
