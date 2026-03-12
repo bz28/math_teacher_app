@@ -1,7 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 
+const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
 const API_BASE = __DEV__
-  ? "http://localhost:8000/v1"
+  ? `http://${DEV_HOST}:8000/v1`
   : "https://math-teacher-api.up.railway.app/v1";
 
 const ACCESS_TOKEN_KEY = "access_token";
