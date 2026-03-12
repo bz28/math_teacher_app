@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -103,11 +104,9 @@ async def extract_problems_from_image(image_base64: str) -> dict[str, Any]:
     logger.info("image_extract raw response: %s", text)
 
     # Extract JSON from response (handle markdown code blocks)
-    if "```" in text:
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip()
+    code_block = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+    if code_block:
+        text = code_block.group(1).strip()
 
     try:
         result = json.loads(text)
@@ -120,6 +119,10 @@ async def extract_problems_from_image(image_base64: str) -> dict[str, Any]:
 
     if not isinstance(problems, list):
         raise ValueError("Invalid extraction result format")
+
+    # Clamp confidence to valid values
+    if confidence not in ("high", "medium", "low"):
+        confidence = "medium"
 
     # Log to llm_calls table for dashboard monitoring
     latency_ms = elapsed * 1000

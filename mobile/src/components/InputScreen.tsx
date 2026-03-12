@@ -63,8 +63,19 @@ export function InputScreen({
     startEdit,
     setEditingText,
     finishEdit,
-    confirmSelection,
+    getSelectedProblems,
   } = useImageExtraction(problemQueue.length, MAX_PROBLEMS, setError);
+
+  const handleConfirmExtraction = () => {
+    const selectedProblems = getSelectedProblems();
+    const remaining = MAX_PROBLEMS - problemQueue.length;
+    const toAdd = selectedProblems.slice(0, remaining);
+    if (toAdd.length > 0) {
+      onProblemQueueChange([...problemQueue, ...toAdd]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    dismissExtraction();
+  };
 
   const {
     startSession,
@@ -335,7 +346,7 @@ export function InputScreen({
         onStartEdit={startEdit}
         onEditText={setEditingText}
         onFinishEdit={finishEdit}
-        onConfirm={() => confirmSelection(problemQueue, onProblemQueueChange)}
+        onConfirm={handleConfirmExtraction}
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
       />

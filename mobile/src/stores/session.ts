@@ -37,8 +37,6 @@ interface PracticeBatch {
   loadingMore: boolean;
   /** Total number of problems requested (original + similar) */
   totalCount: number;
-  /** True when the batch was created from user-supplied problems (no similar generation) */
-  isUserQueue: boolean;
   /** Problems that failed to process and were skipped */
   skippedProblems: string[];
 }
@@ -121,7 +119,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           flags: [false],
           loadingMore: needsMore,
           totalCount: 1 + similarCount,
-          isUserQueue: false,
           skippedProblems: [],
         },
         phase: "awaiting_input",
@@ -183,7 +180,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           flags: [false],
           loadingMore: needsMore,
           totalCount: problems.length,
-          isUserQueue: true,
           skippedProblems: [],
         },
         phase: "awaiting_input",
@@ -340,7 +336,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         flags: new Array(flaggedProblems.length).fill(false),
         loadingMore: false,
         totalCount: flaggedProblems.length,
-        isUserQueue: false,
         skippedProblems: [],
       },
       phase: "awaiting_input",
@@ -429,7 +424,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           flags: new Array(practiceProblemsList.length).fill(false),
           loadingMore: false,
           totalCount: practiceProblemsList.length,
-          isUserQueue: false,
           skippedProblems: [],
         },
         phase: "awaiting_input",
