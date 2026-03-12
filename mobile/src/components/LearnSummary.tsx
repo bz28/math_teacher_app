@@ -36,11 +36,11 @@ export function LearnSummary({ onBack }: LearnSummaryProps) {
     <View style={styles.container}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }}>
+          <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }} accessibilityRole="button" accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
             <Text style={styles.backText}>Back</Text>
           </AnimatedPressable>
-          <Text style={styles.title}>Learning Complete</Text>
+          <Text style={styles.title} accessibilityRole="header">Learning Complete</Text>
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.content}>

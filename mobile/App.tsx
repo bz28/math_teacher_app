@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   ScrollView,
   StyleSheet,
@@ -47,6 +49,11 @@ export default function App() {
   const isLoading = sessionPhase === "loading";
   const displayError = error ?? sessionError;
 
+  const navigateTo = (next: Screen) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setScreen(next);
+  };
+
   // On launch, check onboarding status and try to restore auth session
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -87,15 +94,17 @@ export default function App() {
     // If generation failed, go back to input screen
     const { phase } = useSessionStore.getState();
     if (phase === "error") {
-      setScreen("input");
+      navigateTo("input");
       setError(useSessionStore.getState().error ?? "Something went wrong");
+    } else {
+      navigateTo("session");
     }
   };
 
   const handleOnboardingComplete = async () => {
     await SecureStore.setItemAsync(ONBOARDING_KEY, "true");
     setFromOnboarding(true);
-    setScreen("auth");
+    navigateTo("auth");
   };
 
   // Show nothing while checking onboarding status
@@ -115,7 +124,7 @@ export default function App() {
   if (screen === "auth") {
     return (
       <SafeAreaProvider>
-        <AuthScreen onAuth={() => setScreen("home")} defaultToRegister={fromOnboarding} />
+        <AuthScreen onAuth={() => navigateTo("home")} defaultToRegister={fromOnboarding} />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -125,11 +134,20 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <HomeScreen
-          onSelect={() => setScreen("mode-select")}
-          onLogout={async () => {
-            await clearAuth();
-            setFromOnboarding(false);
-            setScreen("auth");
+          onSelect={() => navigateTo("mode-select")}
+          onLogout={() => {
+            Alert.alert("Log Out", "Are you sure you want to log out?", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Log Out",
+                style: "destructive",
+                onPress: async () => {
+                  await clearAuth();
+                  setFromOnboarding(false);
+                  navigateTo("auth");
+                },
+              },
+            ]);
           }}
         />
         <StatusBar style="auto" />
@@ -143,9 +161,9 @@ export default function App() {
         <ModeSelectScreen
           onSelect={(selectedMode) => {
             setMode(selectedMode);
-            setScreen("input");
+            navigateTo("input");
           }}
-          onBack={() => setScreen("home")}
+          onBack={() => navigateTo("home")}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
@@ -158,7 +176,7 @@ export default function App() {
         <SessionScreen
           onBack={() => {
             setInput("");
-            setScreen("input");
+            navigateTo("input");
           }}
         />
         <StatusBar style="auto" />
@@ -182,7 +200,9 @@ export default function App() {
           >
             <AnimatedPressable
               style={styles.backButton}
-              onPress={() => setScreen("mode-select")}
+              onPress={() => navigateTo("mode-select")}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
             >
               <Ionicons name="chevron-back" size={20} color={colors.primary} />
               <Text style={styles.backText}>Back</Text>

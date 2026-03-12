@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
+  const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean } | null>(null);
   const {
     session,
     phase,
@@ -67,6 +69,16 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     }
   }, [lastResponse]);
 
+  // Animate step transitions in learn mode
+  const prevStep = useRef(session?.current_step);
+  useEffect(() => {
+    if (session && session.current_step !== prevStep.current) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setSelectedChoice(null);
+      prevStep.current = session.current_step;
+    }
+  }, [session?.current_step]);
+
   // Loading state — skeleton placeholders that mimic the real layout
   if (phase === "loading") {
     return (
@@ -78,7 +90,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   // Practice batch mode
   if (isBatchMode) {
-    const { problems, currentIndex, results } = practiceBatch;
+    const { problems, currentIndex, results, totalCount } = practiceBatch;
     const currentProblem = problems[currentIndex];
 
     const handlePracticeSubmit = async () => {
@@ -111,13 +123,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
       >
         <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
           <View style={styles.header}>
-            <AnimatedPressable onPress={handleBack} style={styles.backWrap}>
+            <AnimatedPressable onPress={handleBack} style={styles.backWrap} accessibilityRole="button" accessibilityLabel="Go back">
               <Ionicons name="chevron-back" size={20} color={colors.primary} />
               <Text style={styles.backText}>Back</Text>
             </AnimatedPressable>
-            <View style={styles.headerBadge}>
+            <View style={styles.headerBadge} accessibilityRole="text" accessibilityLabel={`Problem ${currentIndex + 1} of ${totalCount}`}>
               <Text style={styles.headerBadgeText}>
-                {currentIndex + 1}/{problems.length}
+                {currentIndex + 1}/{totalCount}
               </Text>
             </View>
           </View>
@@ -130,12 +142,12 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
               <View
                 style={[
                   styles.progressBar,
-                  { width: `${(currentIndex / problems.length) * 100}%` },
+                  { width: `${(currentIndex / totalCount) * 100}%` },
                 ]}
               />
             </View>
             <Text style={styles.progressLabel}>
-              {currentIndex}/{problems.length}
+              {currentIndex}/{totalCount}
             </Text>
           </View>
         </View>
@@ -256,11 +268,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     >
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <AnimatedPressable onPress={handleBack} style={styles.backWrap}>
+          <AnimatedPressable onPress={handleBack} style={styles.backWrap} accessibilityRole="button" accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
             <Text style={styles.backText}>Back</Text>
           </AnimatedPressable>
-          <View style={styles.headerBadge}>
+          <View style={styles.headerBadge} accessibilityRole="text">
             <Text style={styles.headerBadgeText}>
               {isLearnQueue && learnQueue
                 ? `${learnQueue.currentIndex + 1}/${learnQueue.problems.length}`
@@ -333,19 +345,56 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             </Text>
             {currentStep.choices && (
               <View style={styles.choicesContainer}>
-                {currentStep.choices.map((choice, i) => (
-                  <AnimatedPressable
-                    key={i}
-                    style={[styles.choiceButton, shadows.sm, phase === "thinking" && styles.buttonDisabled]}
-                    onPress={() => submitAnswer(choice)}
-                    disabled={phase === "thinking"}
-                  >
-                    <View style={styles.choiceLetter}>
-                      <Text style={styles.choiceLetterText}>{String.fromCharCode(65 + i)}</Text>
-                    </View>
-                    <Text style={styles.choiceText}>{choice}</Text>
-                  </AnimatedPressable>
-                ))}
+                {currentStep.choices.map((choice, i) => {
+                  const isSelected = selectedChoice?.index === i;
+                  const showCorrect = selectedChoice && choice.trim().toLowerCase() === currentStep.after.trim().toLowerCase();
+                  const showWrong = isSelected && selectedChoice && !selectedChoice.correct;
+
+                  return (
+                    <AnimatedPressable
+                      key={i}
+                      style={[
+                        styles.choiceButton,
+                        shadows.sm,
+                        !!selectedChoice && styles.buttonDisabled,
+                        showCorrect && styles.choiceCorrect,
+                        showWrong && styles.choiceWrong,
+                      ]}
+                      onPress={() => {
+                        if (selectedChoice) return;
+                        const isCorrect = choice.trim().toLowerCase() === currentStep.after.trim().toLowerCase();
+                        setSelectedChoice({ index: i, correct: isCorrect });
+                        Haptics.notificationAsync(
+                          isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
+                        );
+                        // Fire backend call in background
+                        submitAnswer(choice);
+                      }}
+                      disabled={!!selectedChoice}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choice ${String.fromCharCode(65 + i)}: ${choice}`}
+                    >
+                      <View style={[
+                        styles.choiceLetter,
+                        showCorrect && styles.choiceLetterCorrect,
+                        showWrong && styles.choiceLetterWrong,
+                      ]}>
+                        {showCorrect ? (
+                          <Ionicons name="checkmark" size={14} color={colors.success} />
+                        ) : showWrong ? (
+                          <Ionicons name="close" size={14} color={colors.error} />
+                        ) : (
+                          <Text style={styles.choiceLetterText}>{String.fromCharCode(65 + i)}</Text>
+                        )}
+                      </View>
+                      <Text style={[
+                        styles.choiceText,
+                        showCorrect && { color: colors.success },
+                        showWrong && { color: colors.error },
+                      ]}>{choice}</Text>
+                    </AnimatedPressable>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -399,7 +448,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             onPress={switchToLearnMode}
           >
             <LinearGradient
-              colors={["#1565c0", "#1976d2"]}
+              colors={gradients.primary}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.switchModeButton}
@@ -774,6 +823,20 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
     color: colors.primary,
+  },
+  choiceCorrect: {
+    borderColor: colors.success,
+    backgroundColor: colors.successLight,
+  },
+  choiceWrong: {
+    borderColor: colors.error,
+    backgroundColor: colors.errorLight,
+  },
+  choiceLetterCorrect: {
+    backgroundColor: colors.successLight,
+  },
+  choiceLetterWrong: {
+    backgroundColor: colors.errorLight,
   },
   progressRow: {
     flexDirection: "row",

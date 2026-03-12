@@ -35,6 +35,8 @@ interface PracticeBatch {
   flags: boolean[];
   /** True while remaining problems are being generated in the background */
   loadingMore: boolean;
+  /** Total number of problems requested (original + similar) */
+  totalCount: number;
 }
 
 interface LearnQueue {
@@ -114,6 +116,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           results: [],
           flags: [false],
           loadingMore: needsMore,
+          totalCount: 1 + similarCount,
         },
         phase: "awaiting_input",
       });
@@ -260,6 +263,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         results: [],
         flags: new Array(flaggedProblems.length).fill(false),
         loadingMore: false,
+        totalCount: flaggedProblems.length,
       },
       phase: "awaiting_input",
       error: null,
@@ -377,6 +381,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           results: [],
           flags: new Array(practiceProblemsList.length).fill(false),
           loadingMore: false,
+          totalCount: practiceProblemsList.length,
         },
         phase: "awaiting_input",
       });

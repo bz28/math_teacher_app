@@ -46,17 +46,17 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
     <View style={styles.container}>
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }}>
+          <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }} accessibilityRole="button" accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
             <Text style={styles.backText}>Back</Text>
           </AnimatedPressable>
-          <Text style={styles.title}>Practice Complete</Text>
+          <Text style={styles.title} accessibilityRole="header">Practice Complete</Text>
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Results</Text>
-          <Text style={styles.summaryScore}>
+          <Text style={styles.summaryScore} accessibilityLabel={`${correct} out of ${results.length} correct`}>
             {correct}/{results.length} correct
           </Text>
           <Text style={styles.summaryEncouragement}>{encouragement}</Text>
