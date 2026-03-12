@@ -37,6 +37,8 @@ interface PracticeBatch {
   loadingMore: boolean;
   /** Total number of problems requested (original + similar) */
   totalCount: number;
+  /** True when the batch was created from user-supplied problems (no similar generation) */
+  isUserQueue: boolean;
 }
 
 interface LearnQueue {
@@ -61,6 +63,7 @@ interface SessionState {
   // Actions
   startSession: (problem: string, mode?: string) => Promise<void>;
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
+  startPracticeQueue: (problems: string[]) => Promise<void>;
   startLearnQueue: (problems: string[]) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
@@ -69,7 +72,6 @@ interface SessionState {
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
   retryFlaggedProblems: () => void;
-  learnSimilarProblem: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
   switchToLearnMode: () => Promise<void>;
@@ -117,6 +119,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           flags: [false],
           loadingMore: needsMore,
           totalCount: 1 + similarCount,
+          isUserQueue: false,
         },
         phase: "awaiting_input",
       });
@@ -148,6 +151,66 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           })
           .catch(() => {
             // Background generation failed — continue with what we have
+            const { practiceBatch } = get();
+            if (practiceBatch) {
+              set({ practiceBatch: { ...practiceBatch, loadingMore: false } });
+            }
+          });
+      }
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  startPracticeQueue: async (problems) => {
+    if (problems.length === 0) return;
+    set({ ...initialState, phase: "loading" });
+    try {
+      // Solve first problem immediately so the student can start
+      const { problems: first } = await generatePracticeProblems(problems[0], 0);
+      const firstProblem = first[0];
+      if (!firstProblem) throw new Error("Failed to generate practice problem");
+
+      const needsMore = problems.length > 1;
+      set({
+        practiceBatch: {
+          problems: [firstProblem],
+          currentIndex: 0,
+          results: [],
+          flags: [false],
+          loadingMore: needsMore,
+          totalCount: problems.length,
+          isUserQueue: true,
+        },
+        phase: "awaiting_input",
+      });
+
+      // Solve remaining problems in the background
+      if (needsMore) {
+        Promise.all(
+          problems.slice(1).map((p) => generatePracticeProblems(p, 0)),
+        )
+          .then((results) => {
+            const { practiceBatch } = get();
+            if (!practiceBatch) return;
+            const remaining: PracticeProblem[] = results
+              .map((r, i) => ({
+                question: problems[i + 1],
+                answer: r.problems[0]?.answer ?? "unknown",
+              }));
+            set({
+              practiceBatch: {
+                ...practiceBatch,
+                problems: [...practiceBatch.problems, ...remaining],
+                flags: [
+                  ...practiceBatch.flags,
+                  ...new Array(remaining.length).fill(false),
+                ],
+                loadingMore: false,
+              },
+            });
+          })
+          .catch(() => {
             const { practiceBatch } = get();
             if (practiceBatch) {
               set({ practiceBatch: { ...practiceBatch, loadingMore: false } });
@@ -264,6 +327,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         flags: new Array(flaggedProblems.length).fill(false),
         loadingMore: false,
         totalCount: flaggedProblems.length,
+        isUserQueue: false,
       },
       phase: "awaiting_input",
       error: null,
@@ -285,37 +349,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           problems,
           currentIndex: 0,
           flags: new Array(problems.length).fill(false),
-        },
-      });
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
-    }
-  },
-
-  learnSimilarProblem: async () => {
-    const { session, learnQueue } = get();
-    if (!session || !learnQueue) return;
-
-    set({ phase: "loading", error: null });
-    try {
-      const { similar_problem: similar } = await getSimilarProblem(session.id);
-
-      // Insert similar problem after current index
-      const insertAt = learnQueue.currentIndex + 1;
-      const newProblems = [...learnQueue.problems];
-      newProblems.splice(insertAt, 0, similar);
-      const newFlags = [...learnQueue.flags];
-      newFlags.splice(insertAt, 0, false);
-
-      const newSession = await createSession(similar, "learn");
-      set({
-        session: newSession,
-        phase: "awaiting_input",
-        lastResponse: null,
-        learnQueue: {
-          problems: newProblems,
-          currentIndex: insertAt,
-          flags: newFlags,
         },
       });
     } catch (e) {
@@ -382,6 +415,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           flags: new Array(practiceProblemsList.length).fill(false),
           loadingMore: false,
           totalCount: practiceProblemsList.length,
+          isUserQueue: false,
         },
         phase: "awaiting_input",
       });

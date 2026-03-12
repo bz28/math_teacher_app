@@ -9,11 +9,13 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import { AnimatedPressable } from "./src/components/AnimatedPressable";
 import { AuthScreen } from "./src/components/AuthScreen";
@@ -36,11 +38,14 @@ export default function App() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("learn");
   const [practiceCount, setPracticeCount] = useState(3);
+  const [problemQueue, setProblemQueue] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const {
     startSession,
     startPracticeBatch,
+    startPracticeQueue,
+    startLearnQueue,
     phase: sessionPhase,
     error: sessionError,
   } = useSessionStore();
@@ -75,18 +80,54 @@ export default function App() {
     inputRef.current?.focus();
   };
 
-  const handleGo = async () => {
+  const MAX_PROBLEMS = 10;
+
+  const handleAddToQueue = () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || problemQueue.length >= MAX_PROBLEMS) return;
+    setProblemQueue([...problemQueue, text]);
+    setInput("");
+    setError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    inputRef.current?.focus();
+  };
+
+  const handleRemoveFromQueue = (index: number) => {
+    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleEditFromQueue = (index: number) => {
+    setInput(problemQueue[index]);
+    handleRemoveFromQueue(index);
+    inputRef.current?.focus();
+  };
+
+  const handleGo = async () => {
+    // Collect all problems: queue + any text currently in the input
+    const allProblems = [...problemQueue];
+    const text = input.trim();
+    if (text) allProblems.push(text);
+    if (allProblems.length === 0) return;
     setError(null);
 
     // Navigate immediately — session screen shows skeleton while loading
     setScreen("session");
 
-    if (mode === "practice") {
-      await startPracticeBatch(text, practiceCount);
+    if (allProblems.length === 1) {
+      // Single problem — existing behavior
+      if (mode === "practice") {
+        await startPracticeBatch(allProblems[0], practiceCount);
+      } else {
+        await startSession(allProblems[0], mode);
+      }
     } else {
-      await startSession(text, mode);
+      // Multi-problem queue
+      if (mode === "practice") {
+        await startPracticeQueue(allProblems);
+      } else {
+        await startLearnQueue(allProblems);
+      }
     }
 
     // If generation failed, go back to input screen
@@ -95,6 +136,7 @@ export default function App() {
       navigateTo("input");
       setError(useSessionStore.getState().error ?? "Something went wrong");
     } else {
+      setProblemQueue([]);
       navigateTo("session");
     }
   };
@@ -174,6 +216,7 @@ export default function App() {
         <SessionScreen
           onBack={() => {
             setInput("");
+            setProblemQueue([]);
             navigateTo("input");
           }}
         />
@@ -184,6 +227,11 @@ export default function App() {
 
   const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Exam";
   const modeIcon = mode === "learn" ? "book-outline" : mode === "practice" ? "pencil-outline" : "document-text-outline";
+  const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
+  const hasNoProblems = totalProblems === 0;
+  const goButtonLabel = problemQueue.length > 0
+    ? `Start ${modeLabel} (${totalProblems})`
+    : "Go";
 
   return (
     <SafeAreaProvider>
@@ -198,7 +246,10 @@ export default function App() {
           >
             <AnimatedPressable
               style={styles.backButton}
-              onPress={() => navigateTo("mode-select")}
+              onPress={() => {
+                setProblemQueue([]);
+                navigateTo("mode-select");
+              }}
               accessibilityRole="button"
               accessibilityLabel="Go back"
             >
@@ -216,27 +267,67 @@ export default function App() {
 
             <View style={styles.inputWrapper}>
               <Text style={styles.inputLabel}>Math problem</Text>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                value={input}
-                onChangeText={(text) => {
-                  setInput(text);
-                  setError(null);
-                }}
-                placeholder="e.g. 2x + 6 = 12"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="go"
-                onSubmitEditing={handleGo}
-                inputAccessoryViewID="math-input"
-              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  ref={inputRef}
+                  style={styles.inputField}
+                  value={input}
+                  onChangeText={(text) => {
+                    setInput(text);
+                    setError(null);
+                  }}
+                  placeholder="e.g. 2x + 6 = 12"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType={problemQueue.length > 0 ? "next" : "go"}
+                  onSubmitEditing={problemQueue.length > 0 ? handleAddToQueue : handleGo}
+                  inputAccessoryViewID="math-input"
+                />
+                <AnimatedPressable
+                  style={[styles.addButton, (!input.trim() || problemQueue.length >= MAX_PROBLEMS) && styles.addButtonDisabled]}
+                  onPress={handleAddToQueue}
+                  disabled={!input.trim() || problemQueue.length >= MAX_PROBLEMS}
+                  scaleDown={0.85}
+                >
+                  <Ionicons
+                    name="add-circle"
+                    size={32}
+                    color={input.trim() && problemQueue.length < MAX_PROBLEMS ? colors.primary : colors.textMuted}
+                  />
+                </AnimatedPressable>
+              </View>
             </View>
+
+            {problemQueue.length > 0 && (
+              <View style={[styles.queueContainer, shadows.sm]}>
+                {problemQueue.map((problem, i) => (
+                  <TouchableOpacity
+                    key={`${i}-${problem}`}
+                    style={styles.queueRow}
+                    onPress={() => handleEditFromQueue(i)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.queueIndex}>{i + 1}.</Text>
+                    <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveFromQueue(i)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.queueRemove}
+                    >
+                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+                {problemQueue.length >= MAX_PROBLEMS && (
+                  <Text style={styles.queueMaxHint}>Maximum {MAX_PROBLEMS} problems</Text>
+                )}
+              </View>
+            )}
 
             <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
-            {mode === "practice" && (
+            {mode === "practice" && problemQueue.length === 0 && (
               <View style={[styles.countPicker, shadows.sm]}>
                 <Text style={styles.countLabel}>Similar problems to generate:</Text>
                 <View style={styles.stepper}>
@@ -265,9 +356,9 @@ export default function App() {
             )}
 
             <AnimatedPressable
-              style={[(!input.trim() || isLoading) && styles.buttonDisabled]}
+              style={[hasNoProblems && styles.buttonDisabled]}
               onPress={handleGo}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || hasNoProblems}
             >
               <LinearGradient
                 colors={gradients.primary}
@@ -278,7 +369,7 @@ export default function App() {
                 {isLoading ? (
                   <ActivityIndicator color={colors.white} size="small" />
                 ) : (
-                  <Text style={styles.goText}>Go</Text>
+                  <Text style={styles.goText}>{goButtonLabel}</Text>
                 )}
               </LinearGradient>
             </AnimatedPressable>
@@ -343,8 +434,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  input: {
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
     width: "100%",
+  },
+  inputField: {
+    flex: 1,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -352,6 +449,47 @@ const styles = StyleSheet.create({
     fontSize: 17,
     backgroundColor: colors.inputBg,
     color: colors.text,
+  },
+  addButton: {
+    padding: spacing.xs,
+  },
+  addButtonDisabled: {
+    opacity: 0.4,
+  },
+  queueContainer: {
+    width: "100%",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  queueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  queueIndex: {
+    ...typography.label,
+    color: colors.textMuted,
+  },
+  queueText: {
+    ...typography.body,
+    color: colors.text,
+    flex: 1,
+  },
+  queueRemove: {
+    padding: spacing.xs,
+  },
+  queueMaxHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   goButton: {
     borderRadius: radii.md,
