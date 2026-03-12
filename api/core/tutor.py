@@ -470,7 +470,7 @@ async def _call_claude_json(
             first_block = response.content[0]
             if not hasattr(first_block, "text"):
                 raise ValueError("Unexpected response type from Claude")
-            resp_text = first_block.text  # type: ignore[union-attr]
+            resp_text = first_block.text
             _log_llm_call(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,

@@ -1,7 +1,5 @@
 """Shared LLM utilities: markdown stripping, response parsing."""
 
-import json
-
 
 def strip_markdown_fencing(text: str) -> str:
     """Strip markdown code fencing from LLM response text."""
