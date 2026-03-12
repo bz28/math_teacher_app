@@ -26,7 +26,7 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
 
   if (!practiceBatch) return null;
 
-  const { results, flags, problems } = practiceBatch;
+  const { results, flags, problems, skippedProblems } = practiceBatch;
   const correct = results.filter((r) => r.isCorrect).length;
   const pct = correct / results.length;
   const encouragement =
@@ -105,6 +105,20 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
             </AnimatedPressable>
           </View>
         ))}
+
+        {skippedProblems.length > 0 && (
+          <View style={styles.skippedCard}>
+            <View style={styles.skippedHeader}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.warningDark} />
+              <Text style={styles.skippedTitle}>
+                {skippedProblems.length} problem{skippedProblems.length > 1 ? "s" : ""} couldn't be processed
+              </Text>
+            </View>
+            {skippedProblems.map((p, i) => (
+              <Text key={i} style={styles.skippedProblem}>• {p}</Text>
+            ))}
+          </View>
+        )}
 
         {flaggedCount > 0 && (
           <AnimatedPressable
