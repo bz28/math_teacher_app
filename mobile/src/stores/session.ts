@@ -62,7 +62,13 @@ interface SessionState {
   // Learn queue state
   learnQueue: LearnQueue | null;
 
+  // Problem input state (shared between App and InputScreen)
+  problemQueue: string[];
+  practiceCount: number;
+
   // Actions
+  setProblemQueue: (queue: string[]) => void;
+  setPracticeCount: (count: number) => void;
   startSession: (problem: string, mode?: string) => Promise<void>;
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
   startPracticeQueue: (problems: string[]) => Promise<void>;
@@ -89,6 +95,8 @@ const initialState = {
   error: null as string | null,
   practiceBatch: null as PracticeBatch | null,
   learnQueue: null as LearnQueue | null,
+  problemQueue: [] as string[],
+  practiceCount: 3,
 };
 
 type StoreGet = () => SessionState;
@@ -117,6 +125,9 @@ function _waitForChecksAndShowSummary(get: StoreGet, set: StoreSet) {
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   ...initialState,
+
+  setProblemQueue: (queue) => set({ problemQueue: queue }),
+  setPracticeCount: (count) => set({ practiceCount: count }),
 
   startSession: async (problem, mode = "learn") => {
     set({ phase: "loading", error: null });

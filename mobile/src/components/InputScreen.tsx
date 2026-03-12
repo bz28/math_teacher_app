@@ -24,10 +24,6 @@ const MAX_PROBLEMS = 10;
 
 interface Props {
   mode: Mode;
-  practiceCount: number;
-  problemQueue: string[];
-  onPracticeCountChange: (count: number) => void;
-  onProblemQueueChange: (queue: string[]) => void;
   onBack: () => void;
   onSessionStart: () => void;
   onSessionError: () => void;
@@ -35,14 +31,12 @@ interface Props {
 
 export function InputScreen({
   mode,
-  practiceCount,
-  problemQueue,
-  onPracticeCountChange,
-  onProblemQueueChange,
   onBack,
   onSessionStart,
   onSessionError,
 }: Props) {
+  const problemQueue = useSessionStore((s) => s.problemQueue);
+  const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +68,7 @@ export function InputScreen({
     const remaining = MAX_PROBLEMS - problemQueue.length;
     const toAdd = selected.slice(0, remaining);
     if (toAdd.length > 0) {
-      onProblemQueueChange([...problemQueue, ...toAdd]);
+      setProblemQueue([...problemQueue, ...toAdd]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     dismissExtraction();
@@ -100,7 +94,7 @@ export function InputScreen({
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text || problemQueue.length >= MAX_PROBLEMS) return;
-    onProblemQueueChange([...problemQueue, text]);
+    setProblemQueue([...problemQueue, text]);
     setInput("");
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -108,13 +102,13 @@ export function InputScreen({
   };
 
   const handleRemoveFromQueue = (index: number) => {
-    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
+    setProblemQueue(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEditFromQueue = (index: number) => {
     setInput(problemQueue[index]);
-    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
+    setProblemQueue(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
   };
@@ -165,7 +159,7 @@ export function InputScreen({
     if (phase === "error") {
       onSessionError();
     } else {
-      onProblemQueueChange([]);
+      setProblemQueue([]);
     }
   };
 

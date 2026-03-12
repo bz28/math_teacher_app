@@ -15,6 +15,7 @@ import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { useSessionStore } from "./src/stores/session";
 import { colors } from "./src/theme";
 
 const ONBOARDING_KEY = "onboarding_completed";
@@ -24,9 +25,8 @@ type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "sessio
 export default function App() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [mode, setMode] = useState<Mode>("learn");
-  const [practiceCount, setPracticeCount] = useState(3);
-  const [problemQueue, setProblemQueue] = useState<string[]>([]);
   const [fromOnboarding, setFromOnboarding] = useState(false);
+  const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -132,10 +132,6 @@ export default function App() {
         >
           <InputScreen
             mode={mode}
-            practiceCount={practiceCount}
-            problemQueue={problemQueue}
-            onPracticeCountChange={setPracticeCount}
-            onProblemQueueChange={setProblemQueue}
             onBack={() => {
               setProblemQueue([]);
               setScreen("mode-select");
