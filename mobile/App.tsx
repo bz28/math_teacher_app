@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -84,7 +85,6 @@ export default function App() {
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text || problemQueue.length >= MAX_PROBLEMS) return;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setProblemQueue([...problemQueue, text]);
     setInput("");
     setError(null);
@@ -93,7 +93,6 @@ export default function App() {
   };
 
   const handleRemoveFromQueue = (index: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setProblemQueue(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -303,22 +302,22 @@ export default function App() {
             {problemQueue.length > 0 && (
               <View style={[styles.queueContainer, shadows.sm]}>
                 {problemQueue.map((problem, i) => (
-                  <View key={`${i}-${problem}`} style={styles.queueRow}>
-                    <AnimatedPressable
-                      style={styles.queueProblem}
-                      onPress={() => handleEditFromQueue(i)}
-                    >
-                      <Text style={styles.queueIndex}>{i + 1}.</Text>
-                      <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
-                    </AnimatedPressable>
-                    <AnimatedPressable
+                  <TouchableOpacity
+                    key={`${i}-${problem}`}
+                    style={styles.queueRow}
+                    onPress={() => handleEditFromQueue(i)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.queueIndex}>{i + 1}.</Text>
+                    <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
+                    <TouchableOpacity
                       onPress={() => handleRemoveFromQueue(i)}
-                      scaleDown={0.85}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       style={styles.queueRemove}
                     >
                       <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                    </AnimatedPressable>
-                  </View>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
                 ))}
                 {problemQueue.length >= MAX_PROBLEMS && (
                   <Text style={styles.queueMaxHint}>Maximum {MAX_PROBLEMS} problems</Text>
@@ -471,17 +470,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-  },
-  queueProblem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
     gap: spacing.sm,
   },
   queueIndex: {
     ...typography.label,
     color: colors.textMuted,
-    minWidth: 20,
   },
   queueText: {
     ...typography.body,
