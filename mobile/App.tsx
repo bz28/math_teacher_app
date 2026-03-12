@@ -432,30 +432,32 @@ export default function App() {
 
             <View style={styles.scanRow}>
               <TouchableOpacity
-                style={styles.scanButton}
+                style={[styles.scanButton, extracting && styles.scanButtonDisabled]}
                 onPress={() => handlePickImage("camera")}
                 disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
                 activeOpacity={0.6}
               >
-                <Ionicons name="camera-outline" size={20} color={colors.primary} />
-                <Text style={styles.scanButtonText}>Scan</Text>
+                <Ionicons name="camera-outline" size={20} color={extracting ? colors.textMuted : colors.primary} />
+                <Text style={[styles.scanButtonText, extracting && styles.scanButtonTextDisabled]}>Scan</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.scanButton}
+                style={[styles.scanButton, extracting && styles.scanButtonDisabled]}
                 onPress={() => handlePickImage("gallery")}
                 disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
                 activeOpacity={0.6}
               >
-                <Ionicons name="image-outline" size={20} color={colors.primary} />
-                <Text style={styles.scanButtonText}>Gallery</Text>
+                <Ionicons name="image-outline" size={20} color={extracting ? colors.textMuted : colors.primary} />
+                <Text style={[styles.scanButtonText, extracting && styles.scanButtonTextDisabled]}>Gallery</Text>
               </TouchableOpacity>
-              {extracting && (
-                <View style={styles.extractingRow}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.extractingText}>Extracting problems...</Text>
-                </View>
-              )}
             </View>
+
+            {extracting && (
+              <View style={[styles.extractingCard, shadows.sm]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.extractingTitle}>Reading your problems...</Text>
+                <Text style={styles.extractingSubtitle}>This usually takes a few seconds</Text>
+              </View>
+            )}
 
             {problemQueue.length > 0 && (
               <View style={[styles.queueContainer, shadows.sm]}>
@@ -766,15 +768,34 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.primary,
   },
-  extractingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginLeft: spacing.xs,
+  scanButtonDisabled: {
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    opacity: 0.5,
   },
-  extractingText: {
+  scanButtonTextDisabled: {
+    color: colors.textMuted,
+  },
+  extractingCard: {
+    width: "100%",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginTop: spacing.lg,
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.md,
+  },
+  extractingTitle: {
+    ...typography.bodyBold,
+    color: colors.text,
+    marginTop: spacing.sm,
+  },
+  extractingSubtitle: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   queueContainer: {
     width: "100%",
