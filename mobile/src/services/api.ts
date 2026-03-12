@@ -222,3 +222,9 @@ export const checkPracticeAnswer = (question: string, correctAnswer: string, use
     user_answer: userAnswer,
   });
 
+// Image API
+export const extractProblemsFromImage = (imageBase64: string) =>
+  apiPost<{ problems: string[]; confidence: string }>("/image/extract", {
+    image_base64: imageBase64,
+  });
+
