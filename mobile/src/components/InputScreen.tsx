@@ -169,8 +169,8 @@ export function InputScreen({
     }
   };
 
-  const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Exam";
-  const modeIcon = mode === "learn" ? "book-outline" : mode === "practice" ? "pencil-outline" : "document-text-outline";
+  const modeLabel = mode === "learn" ? "Learn" : "Practice";
+  const modeIcon = mode === "learn" ? ("book-outline" as const) : ("pencil-outline" as const);
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const hasNoProblems = totalProblems === 0;
   const goButtonLabel = problemQueue.length > 0
@@ -196,7 +196,7 @@ export function InputScreen({
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Enter a Problem</Text>
           <View style={styles.modeChip}>
-            <Ionicons name={modeIcon as any} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
+            <Ionicons name={modeIcon} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
             <Text style={styles.modeChipText}>{modeLabel}</Text>
           </View>
         </View>
