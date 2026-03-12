@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { MathKeyboard } from "./MathKeyboard";
 import { PracticeSummary } from "./PracticeSummary";
+import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { useSessionStore } from "../stores/session";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
@@ -66,19 +67,11 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     }
   }, [lastResponse]);
 
-  // Loading state
+  // Loading state — skeleton placeholders that mimic the real layout
   if (phase === "loading") {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <View style={styles.loadingInner}>
-          <LinearGradient colors={gradients.primary} style={styles.loadingIcon}>
-            <Ionicons name="sparkles" size={32} color={colors.white} />
-          </LinearGradient>
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
-          <Text style={styles.loadingText}>
-            {isBatchMode ? "Generating practice problems..." : "Generating problem..."}
-          </Text>
-        </View>
+        {isBatchMode ? <PracticeSkeleton /> : <SessionSkeleton />}
       </SafeAreaView>
     );
   }
@@ -695,17 +688,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingInner: {
-    alignItems: "center",
-  },
-  loadingIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: { marginTop: spacing.lg, ...typography.body, color: colors.textSecondary },
   container: { flex: 1, backgroundColor: colors.background },
   stickyHeader: { paddingHorizontal: spacing.xl, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: spacing.sm },

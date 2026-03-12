@@ -75,15 +75,20 @@ export default function App() {
     if (!text) return;
     setError(null);
 
+    // Navigate immediately — session screen shows skeleton while loading
+    setScreen("session");
+
     if (mode === "practice") {
       await startPracticeBatch(text, practiceCount);
     } else {
       await startSession(text, mode);
     }
 
+    // If generation failed, go back to input screen
     const { phase } = useSessionStore.getState();
-    if (phase !== "error") {
-      setScreen("session");
+    if (phase === "error") {
+      setScreen("input");
+      setError(useSessionStore.getState().error ?? "Something went wrong");
     }
   };
 
