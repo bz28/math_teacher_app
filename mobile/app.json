@@ -25,6 +25,17 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "@sentry/react-native",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Math Teacher to use your camera to scan math problems.",
+          "photosPermission": "Allow Math Teacher to access your photos to scan math problems."
+        }
+      ]
+    ]
   }
 }

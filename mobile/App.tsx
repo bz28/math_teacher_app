@@ -16,6 +16,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
 import { AnimatedPressable } from "./src/components/AnimatedPressable";
 import { AuthScreen } from "./src/components/AuthScreen";
@@ -24,7 +25,7 @@ import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
-import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { clearAuth, extractProblemsFromImage, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
 import { colors, spacing, radii, typography, shadows, gradients } from "./src/theme";
 
@@ -41,6 +42,8 @@ export default function App() {
   const [problemQueue, setProblemQueue] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedProblems, setExtractedProblems] = useState<string[] | null>(null);
   const {
     startSession,
     startPracticeBatch,
@@ -101,6 +104,54 @@ export default function App() {
     setInput(problemQueue[index]);
     handleRemoveFromQueue(index);
     inputRef.current?.focus();
+  };
+
+  const handlePickImage = async (source: "camera" | "gallery") => {
+    // Request permissions
+    if (source === "camera") {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Camera Access", "Please enable camera access in Settings to scan problems.");
+        return;
+      }
+    }
+
+    const options: ImagePicker.ImagePickerOptions = {
+      base64: true,
+      quality: 0.7,
+      allowsEditing: false,
+    };
+
+    const result = source === "camera"
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
+
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+
+    const base64 = result.assets[0].base64;
+    setExtracting(true);
+    setError(null);
+
+    try {
+      const { problems } = await extractProblemsFromImage(base64);
+      if (problems.length === 0) {
+        setError("No math problems found. Try a clearer photo.");
+        setExtracting(false);
+        return;
+      }
+      if (problems.length === 1) {
+        // Single problem — put directly in input for quick edit
+        setInput(problems[0]);
+        inputRef.current?.focus();
+      } else {
+        // Multiple problems — show confirmation modal
+        setExtractedProblems(problems);
+      }
+    } catch (e) {
+      setError((e as Error).message || "Failed to extract problems from image");
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const handleGo = async () => {
@@ -299,6 +350,33 @@ export default function App() {
               </View>
             </View>
 
+            <View style={styles.scanRow}>
+              <TouchableOpacity
+                style={styles.scanButton}
+                onPress={() => handlePickImage("camera")}
+                disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+                activeOpacity={0.6}
+              >
+                <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                <Text style={styles.scanButtonText}>Scan</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.scanButton}
+                onPress={() => handlePickImage("gallery")}
+                disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+                activeOpacity={0.6}
+              >
+                <Ionicons name="image-outline" size={20} color={colors.primary} />
+                <Text style={styles.scanButtonText}>Gallery</Text>
+              </TouchableOpacity>
+              {extracting && (
+                <View style={styles.extractingRow}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.extractingText}>Extracting problems...</Text>
+                </View>
+              )}
+            </View>
+
             {problemQueue.length > 0 && (
               <View style={[styles.queueContainer, shadows.sm]}>
                 {problemQueue.map((problem, i) => (
@@ -455,6 +533,38 @@ const styles = StyleSheet.create({
   },
   addButtonDisabled: {
     opacity: 0.4,
+  },
+  scanRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    width: "100%",
+  },
+  scanButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  scanButtonText: {
+    ...typography.label,
+    color: colors.primary,
+  },
+  extractingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+  extractingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   queueContainer: {
     width: "100%",
