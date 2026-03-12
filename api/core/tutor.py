@@ -24,6 +24,7 @@ from enum import Enum
 import anthropic
 
 from api.config import settings
+from api.core.llm_client import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -442,7 +443,7 @@ async def _call_claude_stream(
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
 
     use_model = model or MODEL_REASON
-    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+    client = get_client()
     last_error: Exception | None = None
 
     for attempt in range(MAX_RETRIES):
@@ -505,7 +506,7 @@ async def _call_claude_json(
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
 
     use_model = model or MODEL_CLASSIFY
-    client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+    client = get_client()
     last_error: Exception | None = None
 
     for attempt in range(MAX_RETRIES):
