@@ -6,9 +6,7 @@ import json
 import logging
 import time
 
-from anthropic import AsyncAnthropic
-
-from api.config import settings
+from api.core.llm_client import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ async def extract_problems_from_image(image_base64: str) -> dict:
     else:
         media_type = "image/jpeg"  # default fallback
 
-    client = AsyncAnthropic(api_key=settings.claude_api_key)
+    client = get_client()
 
     start = time.monotonic()
     response = await client.messages.create(
