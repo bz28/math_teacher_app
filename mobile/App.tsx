@@ -1,73 +1,32 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Linking,
-  Modal,
   Platform,
-  ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
 import * as SecureStore from "expo-secure-store";
-import { AnimatedPressable } from "./src/components/AnimatedPressable";
 import { AuthScreen } from "./src/components/AuthScreen";
-import { MathKeyboard } from "./src/components/MathKeyboard";
+import { HomeScreen } from "./src/components/HomeScreen";
+import { InputScreen } from "./src/components/InputScreen";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
-import { HomeScreen } from "./src/components/HomeScreen";
-import { clearAuth, extractProblemsFromImage, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
-import { useSessionStore } from "./src/stores/session";
-import { colors, spacing, radii, typography, shadows, gradients } from "./src/theme";
+import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { colors } from "./src/theme";
 
 const ONBOARDING_KEY = "onboarding_completed";
 
 type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session";
 
 export default function App() {
-  const inputRef = useRef<TextInput>(null);
   const [screen, setScreen] = useState<Screen | null>(null);
-  const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("learn");
   const [practiceCount, setPracticeCount] = useState(3);
-  const [problemQueue, setProblemQueue] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [extractedProblems, setExtractedProblems] = useState<string[] | null>(null);
-  const [extractionConfidence, setExtractionConfidence] = useState<string>("high");
-  const [selectedExtracted, setSelectedExtracted] = useState<boolean[]>([]);
-  const [editingExtractedIndex, setEditingExtractedIndex] = useState<number | null>(null);
-  const [editingExtractedText, setEditingExtractedText] = useState("");
-  const [lastImageSource, setLastImageSource] = useState<"camera" | "gallery" | null>(null);
-  const {
-    startSession,
-    startPracticeBatch,
-    startPracticeQueue,
-    startLearnQueue,
-    phase: sessionPhase,
-    error: sessionError,
-  } = useSessionStore();
 
-  const isLoading = sessionPhase === "loading";
-  const displayError = error ?? sessionError;
-
-  const navigateTo = (next: Screen) => {
-    setScreen(next);
-  };
-
-  // On launch, check onboarding status and try to restore auth session
   useEffect(() => {
     setOnSessionExpired(() => {
       setScreen("auth");
@@ -79,214 +38,23 @@ export default function App() {
         setScreen("onboarding");
         return;
       }
-      // Try to restore a previous session
       const restored = await loadStoredAuth();
       setScreen(restored ? "home" : "auth");
     });
   }, []);
 
-  const handleInsert = (value: string) => {
-    setInput(input + value);
-    inputRef.current?.focus();
-  };
-
-  const MAX_PROBLEMS = 10;
-
-  const handleAddToQueue = () => {
-    const text = input.trim();
-    if (!text || problemQueue.length >= MAX_PROBLEMS) return;
-    setProblemQueue([...problemQueue, text]);
-    setInput("");
-    setError(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    inputRef.current?.focus();
-  };
-
-  const handleRemoveFromQueue = (index: number) => {
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const handleEditFromQueue = (index: number) => {
-    setInput(problemQueue[index]);
-    handleRemoveFromQueue(index);
-    inputRef.current?.focus();
-  };
-
-  const handlePickImage = async (source: "camera" | "gallery") => {
-    // Request permissions
-    if (source === "camera") {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Camera Access Required",
-          "Please enable camera access in Settings to scan math problems.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
-          ],
-        );
-        return;
-      }
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Photo Access Required",
-          "Please enable photo library access in Settings to select images.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
-          ],
-        );
-        return;
-      }
-    }
-
-    const options: ImagePicker.ImagePickerOptions = {
-      base64: true,
-      quality: 0.7,
-      allowsEditing: false,
-    };
-
-    const result = source === "camera"
-      ? await ImagePicker.launchCameraAsync(options)
-      : await ImagePicker.launchImageLibraryAsync(options);
-
-    if (result.canceled || !result.assets?.[0]?.base64) return;
-
-    setLastImageSource(source);
-    const base64 = result.assets[0].base64;
-    setExtracting(true);
-    setError(null);
-
-    try {
-      const { problems, confidence } = await extractProblemsFromImage(base64);
-      if (problems.length === 0) {
-        setError("No math problems found. Try a clearer photo.");
-        return;
-      }
-      // Show confirmation modal for all extracted problems
-      setExtractedProblems(problems);
-      setExtractionConfidence(confidence);
-      setSelectedExtracted(problems.map(() => true));
-      setEditingExtractedIndex(null);
-    } catch (e) {
-      const msg = (e as Error).message || "";
-      if (msg.includes("Network") || msg.includes("fetch")) {
-        setError("Network error — check your connection and try again.");
-      } else {
-        setError(msg || "Failed to extract problems from image.");
-      }
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const handleDismissExtraction = () => {
-    setExtractedProblems(null);
-    setExtractionConfidence("high");
-    setSelectedExtracted([]);
-    setEditingExtractedIndex(null);
-  };
-
-  const handleRetryExtraction = () => {
-    handleDismissExtraction();
-    if (lastImageSource) {
-      handlePickImage(lastImageSource);
-    }
-  };
-
-  const handleToggleExtracted = (index: number) => {
-    setSelectedExtracted((prev) => prev.map((v, i) => (i === index ? !v : v)));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const handleStartEditExtracted = (index: number) => {
-    setEditingExtractedIndex(index);
-    setEditingExtractedText(extractedProblems![index]);
-  };
-
-  const handleFinishEditExtracted = () => {
-    if (editingExtractedIndex === null || !extractedProblems) return;
-    const text = editingExtractedText.trim();
-    if (text) {
-      setExtractedProblems((prev) =>
-        prev!.map((p, i) => (i === editingExtractedIndex ? text : p))
-      );
-    }
-    setEditingExtractedIndex(null);
-    setEditingExtractedText("");
-  };
-
-  const handleAddExtracted = () => {
-    if (!extractedProblems) return;
-    const selected = extractedProblems.filter((_, i) => selectedExtracted[i]);
-    const remaining = MAX_PROBLEMS - problemQueue.length;
-    const toAdd = selected.slice(0, remaining);
-    if (toAdd.length > 0) {
-      setProblemQueue([...problemQueue, ...toAdd]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    handleDismissExtraction();
-  };
-
-  const selectedCount = selectedExtracted.filter(Boolean).length;
-  const canAddMore = problemQueue.length < MAX_PROBLEMS;
-
-  const handleGo = async () => {
-    // Collect all problems: queue + any text currently in the input
-    const allProblems = [...problemQueue];
-    const text = input.trim();
-    if (text) allProblems.push(text);
-    if (allProblems.length === 0) return;
-    setError(null);
-
-    // Navigate immediately — session screen shows skeleton while loading
-    setScreen("session");
-
-    if (allProblems.length === 1) {
-      // Single problem — existing behavior
-      if (mode === "practice") {
-        await startPracticeBatch(allProblems[0], practiceCount);
-      } else {
-        await startSession(allProblems[0], mode);
-      }
-    } else {
-      // Multi-problem queue
-      if (mode === "practice") {
-        await startPracticeQueue(allProblems);
-      } else {
-        await startLearnQueue(allProblems);
-      }
-    }
-
-    // If generation failed, go back to input screen
-    const { phase } = useSessionStore.getState();
-    if (phase === "error") {
-      navigateTo("input");
-      setError(useSessionStore.getState().error ?? "Something went wrong");
-    } else {
-      setProblemQueue([]);
-      navigateTo("session");
-    }
-  };
-
-  const handleOnboardingComplete = async () => {
-    await SecureStore.setItemAsync(ONBOARDING_KEY, "true");
-    setFromOnboarding(true);
-    navigateTo("auth");
-  };
-
-  // Show nothing while checking onboarding status
-  if (screen === null) {
-    return null;
-  }
+  if (screen === null) return null;
 
   if (screen === "onboarding") {
     return (
       <SafeAreaProvider>
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
+        <OnboardingScreen
+          onComplete={async () => {
+            await SecureStore.setItemAsync(ONBOARDING_KEY, "true");
+            setFromOnboarding(true);
+            setScreen("auth");
+          }}
+        />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -295,7 +63,7 @@ export default function App() {
   if (screen === "auth") {
     return (
       <SafeAreaProvider>
-        <AuthScreen onAuth={() => navigateTo("home")} defaultToRegister={fromOnboarding} />
+        <AuthScreen onAuth={() => setScreen("home")} defaultToRegister={fromOnboarding} />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -305,7 +73,7 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <HomeScreen
-          onSelect={() => navigateTo("mode-select")}
+          onSelect={() => setScreen("mode-select")}
           onLogout={() => {
             Alert.alert("Log Out", "Are you sure you want to log out?", [
               { text: "Cancel", style: "cancel" },
@@ -315,7 +83,7 @@ export default function App() {
                 onPress: async () => {
                   await clearAuth();
                   setFromOnboarding(false);
-                  navigateTo("auth");
+                  setScreen("auth");
                 },
               },
             ]);
@@ -332,9 +100,9 @@ export default function App() {
         <ModeSelectScreen
           onSelect={(selectedMode) => {
             setMode(selectedMode);
-            navigateTo("input");
+            setScreen("input");
           }}
-          onBack={() => navigateTo("home")}
+          onBack={() => setScreen("home")}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
@@ -344,26 +112,13 @@ export default function App() {
   if (screen === "session") {
     return (
       <SafeAreaProvider>
-        <SessionScreen
-          onBack={() => {
-            setInput("");
-            setProblemQueue([]);
-            navigateTo("input");
-          }}
-        />
+        <SessionScreen onBack={() => setScreen("input")} />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
   }
 
-  const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Exam";
-  const modeIcon = mode === "learn" ? "book-outline" : mode === "practice" ? "pencil-outline" : "document-text-outline";
-  const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
-  const hasNoProblems = totalProblems === 0;
-  const goButtonLabel = problemQueue.length > 0
-    ? `Start ${modeLabel} (${totalProblems})`
-    : "Go";
-
+  // screen === "input"
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
@@ -371,308 +126,15 @@ export default function App() {
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <AnimatedPressable
-              style={styles.backButton}
-              onPress={() => {
-                setProblemQueue([]);
-                navigateTo("mode-select");
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Ionicons name="chevron-back" size={20} color={colors.primary} />
-              <Text style={styles.backText}>Back</Text>
-            </AnimatedPressable>
-
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Enter a Problem</Text>
-              <View style={styles.modeChip}>
-                <Ionicons name={modeIcon as any} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
-                <Text style={styles.modeChipText}>{modeLabel}</Text>
-              </View>
-            </View>
-
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>Math problem</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  ref={inputRef}
-                  style={styles.inputField}
-                  value={input}
-                  onChangeText={(text) => {
-                    setInput(text);
-                    setError(null);
-                  }}
-                  placeholder="e.g. 2x + 6 = 12"
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType={problemQueue.length > 0 ? "next" : "go"}
-                  onSubmitEditing={problemQueue.length > 0 ? handleAddToQueue : handleGo}
-                  inputAccessoryViewID="math-input"
-                />
-                <AnimatedPressable
-                  style={[styles.addButton, (!input.trim() || problemQueue.length >= MAX_PROBLEMS) && styles.addButtonDisabled]}
-                  onPress={handleAddToQueue}
-                  disabled={!input.trim() || problemQueue.length >= MAX_PROBLEMS}
-                  scaleDown={0.85}
-                >
-                  <Ionicons
-                    name="add-circle"
-                    size={32}
-                    color={input.trim() && problemQueue.length < MAX_PROBLEMS ? colors.primary : colors.textMuted}
-                  />
-                </AnimatedPressable>
-              </View>
-            </View>
-
-            <View style={styles.scanRow}>
-              <TouchableOpacity
-                style={[styles.scanButton, extracting && styles.scanButtonDisabled]}
-                onPress={() => handlePickImage("camera")}
-                disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
-                activeOpacity={0.6}
-              >
-                <Ionicons name="camera-outline" size={20} color={extracting ? colors.textMuted : colors.primary} />
-                <Text style={[styles.scanButtonText, extracting && styles.scanButtonTextDisabled]}>Scan</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.scanButton, extracting && styles.scanButtonDisabled]}
-                onPress={() => handlePickImage("gallery")}
-                disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
-                activeOpacity={0.6}
-              >
-                <Ionicons name="image-outline" size={20} color={extracting ? colors.textMuted : colors.primary} />
-                <Text style={[styles.scanButtonText, extracting && styles.scanButtonTextDisabled]}>Gallery</Text>
-              </TouchableOpacity>
-            </View>
-
-            {extracting && (
-              <View style={[styles.extractingCard, shadows.sm]}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.extractingTitle}>Reading your problems...</Text>
-                <Text style={styles.extractingSubtitle}>This usually takes a few seconds</Text>
-              </View>
-            )}
-
-            {problemQueue.length > 0 && (
-              <View style={[styles.queueContainer, shadows.sm]}>
-                {problemQueue.map((problem, i) => (
-                  <TouchableOpacity
-                    key={`${i}-${problem}`}
-                    style={styles.queueRow}
-                    onPress={() => handleEditFromQueue(i)}
-                    activeOpacity={0.6}
-                  >
-                    <Text style={styles.queueIndex}>{i + 1}.</Text>
-                    <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
-                    <TouchableOpacity
-                      onPress={() => handleRemoveFromQueue(i)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={styles.queueRemove}
-                    >
-                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
-                {problemQueue.length >= MAX_PROBLEMS && (
-                  <Text style={styles.queueMaxHint}>Maximum {MAX_PROBLEMS} problems</Text>
-                )}
-              </View>
-            )}
-
-            <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
-
-            {mode === "practice" && problemQueue.length === 0 && (
-              <View style={[styles.countPicker, shadows.sm]}>
-                <Text style={styles.countLabel}>Similar problems to generate:</Text>
-                <View style={styles.stepper}>
-                  <AnimatedPressable
-                    scaleDown={0.9}
-                    onPress={() => setPracticeCount(Math.max(0, practiceCount - 1))}
-                  >
-                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                      <Ionicons name="remove" size={20} color={colors.white} />
-                    </LinearGradient>
-                  </AnimatedPressable>
-                  <Text style={styles.countValue}>{practiceCount}</Text>
-                  <AnimatedPressable
-                    scaleDown={0.9}
-                    onPress={() => setPracticeCount(Math.min(20, practiceCount + 1))}
-                  >
-                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                      <Ionicons name="add" size={20} color={colors.white} />
-                    </LinearGradient>
-                  </AnimatedPressable>
-                </View>
-                <Text style={styles.countHint}>
-                  Total: {1 + practiceCount} problem{practiceCount > 0 ? "s" : ""}
-                </Text>
-              </View>
-            )}
-
-            <AnimatedPressable
-              style={[hasNoProblems && styles.buttonDisabled]}
-              onPress={handleGo}
-              disabled={isLoading || hasNoProblems}
-            >
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.goButton}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <Text style={styles.goText}>{goButtonLabel}</Text>
-                )}
-              </LinearGradient>
-            </AnimatedPressable>
-
-            {displayError && (
-              <View style={styles.errorWrap}>
-                <Ionicons name="alert-circle" size={16} color={colors.error} />
-                <Text style={styles.error}>{displayError}</Text>
-                {lastImageSource && (
-                  <TouchableOpacity onPress={() => { setError(null); handlePickImage(lastImageSource); }}>
-                    <Text style={styles.retryLink}>Retry</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </ScrollView>
+          <InputScreen
+            mode={mode}
+            practiceCount={practiceCount}
+            onPracticeCountChange={setPracticeCount}
+            onBack={() => setScreen("mode-select")}
+            onSessionStart={() => setScreen("session")}
+          />
         </KeyboardAvoidingView>
         <StatusBar style="auto" />
-
-        {/* Extraction confirmation modal */}
-        <Modal
-          visible={extractedProblems !== null}
-          animationType="slide"
-          transparent
-          onRequestClose={handleDismissExtraction}
-        >
-          <KeyboardAvoidingView
-            style={styles.modalOverlay}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-          >
-            <View style={[styles.modalContent, shadows.lg]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  Found {extractedProblems?.length ?? 0} problem{(extractedProblems?.length ?? 0) !== 1 ? "s" : ""}
-                </Text>
-                <TouchableOpacity onPress={handleDismissExtraction} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="close" size={24} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              {extractionConfidence !== "high" && (
-                <View style={[
-                  styles.confidenceBadge,
-                  extractionConfidence === "low" ? styles.confidenceLow : styles.confidenceMedium,
-                ]}>
-                  <Ionicons
-                    name={extractionConfidence === "low" ? "warning" : "alert-circle-outline"}
-                    size={16}
-                    color={extractionConfidence === "low" ? colors.warningDark : colors.warning}
-                  />
-                  <Text style={[
-                    styles.confidenceText,
-                    extractionConfidence === "low" && styles.confidenceTextLow,
-                  ]}>
-                    {extractionConfidence === "low"
-                      ? "Image was hard to read — please review carefully"
-                      : "Some parts were unclear — double-check the results"}
-                  </Text>
-                  <TouchableOpacity onPress={handleRetryExtraction} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                    <Text style={styles.retryText}>Retry</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              <Text style={styles.modalHint}>Tap to edit · Uncheck to skip</Text>
-
-              <ScrollView style={styles.modalList} bounces={false}>
-                {extractedProblems?.map((problem, i) => (
-                  <View key={`ext-${i}`} style={styles.extractedRow}>
-                    <TouchableOpacity
-                      onPress={() => handleToggleExtracted(i)}
-                      style={styles.checkbox}
-                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                    >
-                      <Ionicons
-                        name={selectedExtracted[i] ? "checkbox" : "square-outline"}
-                        size={24}
-                        color={selectedExtracted[i] ? colors.primary : colors.textMuted}
-                      />
-                    </TouchableOpacity>
-                    {editingExtractedIndex === i ? (
-                      <TextInput
-                        style={styles.extractedEditInput}
-                        value={editingExtractedText}
-                        onChangeText={setEditingExtractedText}
-                        onBlur={handleFinishEditExtracted}
-                        onSubmitEditing={handleFinishEditExtracted}
-                        autoFocus
-                        returnKeyType="done"
-                        selectTextOnFocus
-                      />
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.extractedTextWrap}
-                        onPress={() => handleStartEditExtracted(i)}
-                        activeOpacity={0.6}
-                      >
-                        <Text
-                          style={[
-                            styles.extractedText,
-                            !selectedExtracted[i] && styles.extractedTextDeselected,
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {problem}
-                        </Text>
-                        <Ionicons name="pencil-outline" size={14} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-
-              {!canAddMore && (
-                <Text style={styles.modalWarning}>
-                  Queue is full ({MAX_PROBLEMS} problems max)
-                </Text>
-              )}
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.modalCancelBtn} onPress={handleDismissExtraction}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalAddBtn, selectedCount === 0 && styles.buttonDisabled]}
-                  onPress={handleAddExtracted}
-                  disabled={selectedCount === 0}
-                >
-                  <LinearGradient
-                    colors={gradients.primary}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.modalAddGradient}
-                  >
-                    <Text style={styles.modalAddText}>
-                      Add Selected ({selectedCount})
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -684,330 +146,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   flex: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: spacing.xxl + 4,
-    paddingBottom: spacing.xl,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  backText: { color: colors.primary, ...typography.bodyBold },
-  header: {
-    alignItems: "center",
-    marginBottom: spacing.xxl,
-  },
-  headerTitle: {
-    ...typography.title,
-    color: colors.text,
-    marginBottom: 10,
-  },
-  modeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.primaryBg,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  modeChipText: { ...typography.label, color: colors.primary },
-  inputWrapper: {
-    width: "100%",
-    marginBottom: spacing.xs,
-  },
-  inputLabel: {
-    ...typography.label,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    width: "100%",
-  },
-  inputField: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: 14,
-    fontSize: 17,
-    backgroundColor: colors.inputBg,
-    color: colors.text,
-  },
-  addButton: {
-    padding: spacing.xs,
-  },
-  addButtonDisabled: {
-    opacity: 0.4,
-  },
-  scanRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginTop: spacing.md,
-    width: "100%",
-  },
-  scanButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
-  },
-  scanButtonText: {
-    ...typography.label,
-    color: colors.primary,
-  },
-  scanButtonDisabled: {
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    opacity: 0.5,
-  },
-  scanButtonTextDisabled: {
-    color: colors.textMuted,
-  },
-  extractingCard: {
-    width: "100%",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.xxxl,
-    paddingHorizontal: spacing.xxl,
-    gap: spacing.md,
-  },
-  extractingTitle: {
-    ...typography.bodyBold,
-    color: colors.text,
-    marginTop: spacing.sm,
-  },
-  extractingSubtitle: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  queueContainer: {
-    width: "100%",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  queueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-  },
-  queueIndex: {
-    ...typography.label,
-    color: colors.textMuted,
-  },
-  queueText: {
-    ...typography.body,
-    color: colors.text,
-    flex: 1,
-  },
-  queueRemove: {
-    padding: spacing.xs,
-  },
-  queueMaxHint: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: "center",
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  goButton: {
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    marginTop: spacing.md,
-    width: "100%",
-    alignItems: "center",
-  },
-  goText: { color: colors.white, ...typography.button, fontSize: 17 },
-  errorWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    justifyContent: "center",
-    marginTop: spacing.md,
-  },
-  error: { color: colors.error, fontSize: 14, flex: 1 },
-  retryLink: {
-    ...typography.label,
-    color: colors.primary,
-    marginLeft: spacing.sm,
-  },
-  countPicker: {
-    width: "100%",
-    alignItems: "center",
-    marginTop: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  countLabel: { ...typography.label, color: colors.textSecondary, marginBottom: 10 },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xl,
-  },
-  stepperButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  countValue: { fontSize: 26, fontWeight: "bold", color: colors.text, minWidth: 30, textAlign: "center" },
-  countHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
-  buttonDisabled: { opacity: 0.4 },
-  // Extraction confirmation modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    paddingTop: spacing.xxl,
-    paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.xxxl,
-    maxHeight: "75%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  modalTitle: {
-    ...typography.heading,
-    color: colors.text,
-  },
-  confidenceBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.sm,
-    marginBottom: spacing.md,
-  },
-  confidenceMedium: {
-    backgroundColor: colors.warningBg,
-  },
-  confidenceLow: {
-    backgroundColor: colors.errorLight,
-  },
-  confidenceText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  confidenceTextLow: {
-    color: colors.warningDark,
-  },
-  retryText: {
-    ...typography.label,
-    color: colors.primary,
-  },
-  modalHint: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginBottom: spacing.lg,
-  },
-  modalList: {
-    flexGrow: 0,
-    marginBottom: spacing.lg,
-  },
-  extractedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    gap: spacing.md,
-  },
-  checkbox: {
-    flexShrink: 0,
-  },
-  extractedTextWrap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  extractedText: {
-    ...typography.body,
-    color: colors.text,
-    flex: 1,
-  },
-  extractedTextDeselected: {
-    color: colors.textMuted,
-    textDecorationLine: "line-through",
-  },
-  extractedEditInput: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radii.sm,
-    padding: spacing.sm,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.inputBg,
-  },
-  modalWarning: {
-    ...typography.caption,
-    color: colors.warningDark,
-    textAlign: "center",
-    marginBottom: spacing.md,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: spacing.lg,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-  },
-  modalCancelText: {
-    ...typography.button,
-    color: colors.textSecondary,
-  },
-  modalAddBtn: {
-    flex: 2,
-    borderRadius: radii.md,
-    overflow: "hidden",
-  },
-  modalAddGradient: {
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-  },
-  modalAddText: {
-    ...typography.button,
-    color: colors.white,
-  },
 });
