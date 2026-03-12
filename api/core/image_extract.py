@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import time
+from typing import Any
 
 from api.core.llm_client import get_client
 
@@ -36,7 +37,7 @@ Set confidence to:
 """
 
 
-async def extract_problems_from_image(image_base64: str) -> dict:
+async def extract_problems_from_image(image_base64: str) -> dict[str, Any]:
     """Extract math problems from a base64-encoded image.
 
     Returns dict with 'problems' (list[str]) and 'confidence' (str).
@@ -70,7 +71,7 @@ async def extract_problems_from_image(image_base64: str) -> dict:
             {
                 "role": "user",
                 "content": [
-                    {
+                    {  # type: ignore[list-item]
                         "type": "image",
                         "source": {
                             "type": "base64",
@@ -89,7 +90,7 @@ async def extract_problems_from_image(image_base64: str) -> dict:
     elapsed = time.monotonic() - start
 
     # Parse response
-    text = response.content[0].text
+    text = response.content[0].text  # type: ignore[union-attr]
     input_tokens = response.usage.input_tokens
     output_tokens = response.usage.output_tokens
 
