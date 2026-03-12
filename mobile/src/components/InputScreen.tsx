@@ -24,21 +24,26 @@ const MAX_PROBLEMS = 10;
 interface Props {
   mode: Mode;
   practiceCount: number;
+  problemQueue: string[];
+  onProblemQueueChange: (queue: string[]) => void;
   onPracticeCountChange: (count: number) => void;
   onBack: () => void;
   onSessionStart: () => void;
+  onSessionError: () => void;
 }
 
 export function InputScreen({
   mode,
   practiceCount,
+  problemQueue,
+  onProblemQueueChange,
   onPracticeCountChange,
   onBack,
   onSessionStart,
+  onSessionError,
 }: Props) {
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
-  const [problemQueue, setProblemQueue] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -81,7 +86,7 @@ export function InputScreen({
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text || problemQueue.length >= MAX_PROBLEMS) return;
-    setProblemQueue([...problemQueue, text]);
+    onProblemQueueChange([...problemQueue, text]);
     setInput("");
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -89,13 +94,13 @@ export function InputScreen({
   };
 
   const handleRemoveFromQueue = (index: number) => {
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEditFromQueue = (index: number) => {
     setInput(problemQueue[index]);
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
   };
@@ -106,6 +111,9 @@ export function InputScreen({
     if (text) allProblems.push(text);
     if (allProblems.length === 0) return;
     setError(null);
+
+    // Navigate immediately — session screen shows skeleton while loading
+    onSessionStart();
 
     if (allProblems.length === 1) {
       if (mode === "practice") {
@@ -121,12 +129,13 @@ export function InputScreen({
       }
     }
 
-    const { phase, error: storeError } = useSessionStore.getState();
+    // If generation failed, go back to input — queue is preserved in App state
+    const { phase } = useSessionStore.getState();
     if (phase === "error") {
-      setError(storeError ?? "Something went wrong");
+      onSessionError();
     } else {
-      setProblemQueue([]);
-      onSessionStart();
+      onProblemQueueChange([]);
+      setInput("");
     }
   };
 
@@ -326,7 +335,7 @@ export function InputScreen({
         onStartEdit={startEdit}
         onEditText={setEditingText}
         onFinishEdit={finishEdit}
-        onConfirm={() => confirmSelection(problemQueue, setProblemQueue)}
+        onConfirm={() => confirmSelection(problemQueue, onProblemQueueChange)}
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
       />
