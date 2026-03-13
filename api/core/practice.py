@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 # Problem generation
 # ---------------------------------------------------------------------------
 
+_SOLVE_PROBLEM_PROMPT = """You are a math tutor. Solve the given problem and provide the answer.
+
+Respond with ONLY valid JSON:
+{"problems": [{"question": "the original problem text", "answer": "the correct answer"}]}
+
+Rules:
+- Return the EXACT original problem text as the question
+- The answer must be correct and simplified
+- Return exactly one problem"""
+
 _GENERATE_PROBLEMS_PROMPT = """You are a math tutor generating practice problems.
 
 Given one or more original math problems, generate similar problems with different
@@ -37,17 +47,26 @@ async def generate_practice_problems(
 ) -> list[dict[str, str]]:
     """Generate the original + count similar problems with answers.
 
+    When count=0, solves and returns the original problem.
+    When count>0, generates count new similar problems (excluding original).
+
     Returns list of {"question": ..., "answer": ...} dicts.
     """
-    user_msg = (
-        f"Original problem: {problem}\n\n"
-        f"Generate {1 + count} similar problems (do not include the original). "
-        f"Each must have a correct answer."
-    )
+    if count == 0:
+        # Just solve the original problem
+        user_msg = f"Solve this problem:\n{problem}"
+        system_prompt = _SOLVE_PROBLEM_PROMPT
+    else:
+        user_msg = (
+            f"Original problem: {problem}\n\n"
+            f"Generate {count} similar problems (do not include the original). "
+            f"Each must have a correct answer."
+        )
+        system_prompt = _GENERATE_PROBLEMS_PROMPT
 
     try:
         result = await call_claude_json(
-            _GENERATE_PROBLEMS_PROMPT,
+            system_prompt,
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,

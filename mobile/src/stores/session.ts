@@ -178,7 +178,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   startPracticeBatch: async (problem, similarCount) => {
     set({ ...initialState, phase: "loading" });
     try {
-      // Generate just 1 problem first so the student can start immediately
+      // Solve the original problem to get the correct answer
       const { problems: firstBatch } = await generatePracticeProblems(problem, 0);
       const firstProblem = firstBatch[0];
       if (!firstProblem) throw new Error("Failed to generate practice problem");
@@ -186,7 +186,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const needsMore = similarCount > 0;
       set({
         practiceBatch: {
-          problems: [firstProblem],
+          problems: [{ question: problem, answer: firstProblem.answer }],
           currentIndex: 0,
           results: [],
           flags: [false],
@@ -248,7 +248,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const needsMore = problems.length > 1;
       set({
         practiceBatch: {
-          problems: [firstProblem],
+          problems: [{ question: problems[0], answer: firstProblem.answer }],
           currentIndex: 0,
           results: [],
           flags: [false],
