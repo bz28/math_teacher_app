@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from anthropic.types import TextBlock
 
 from api.config import settings
+from api.core.cost_tracker import cost_tracker as _cost_tracker
 from api.core.llm_client import get_client
 from api.core.llm_logging import fire_and_forget_persist
 from api.core.llm_utils import strip_markdown_fencing
@@ -148,6 +149,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
     Lighter-weight alternative to decompose_problem — no step breakdown,
     just the answer. Used for practice mode where steps aren't needed upfront.
     """
+    _cost_tracker.check_limit()
     client = get_client()
     model = MODEL_SONNET
 
@@ -194,6 +196,7 @@ async def solve_problem(problem: str) -> tuple[str, str]:
 
 async def generate_similar_problem(problem: str) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
+    _cost_tracker.check_limit()
     client = get_client()
     model = MODEL_SONNET
     start = time.monotonic()
@@ -222,8 +225,8 @@ async def generate_similar_problem(problem: str) -> str:
             return first_block.text.strip()
     except Exception:
         latency_ms = round((time.monotonic() - start) * 1000, 2)
-        logger.warning("Failed to generate similar problem, returning original")
-    return problem
+        logger.exception("Failed to generate similar problem")
+        raise RuntimeError("Failed to generate similar problem")
 
 
 async def decompose_problem(problem: str) -> Decomposition:
@@ -234,6 +237,7 @@ async def decompose_problem(problem: str) -> Decomposition:
     """
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
 
+    _cost_tracker.check_limit()
     client = get_client()
 
     model = MODEL_SONNET
@@ -331,8 +335,9 @@ def _log_and_persist(
     input_text: str | None = None,
     output_text: str | None = None,
 ) -> None:
-    """Log a Claude call and persist to the llm_calls table."""
+    """Log a Claude call, track cost, and persist to the llm_calls table."""
     cost = (input_tokens * COST_PER_INPUT_TOKEN) + (output_tokens * COST_PER_OUTPUT_TOKEN)
+    _cost_tracker.add(cost)
     logger.info(
         "LLM call: function=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
         function, model, input_tokens, output_tokens, cost, latency_ms,

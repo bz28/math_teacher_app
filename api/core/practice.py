@@ -53,10 +53,9 @@ async def generate_practice_problems(
                 if isinstance(p, dict)
             ]
     except Exception:
-        logger.warning("Failed to generate problems via LLM, using fallback")
+        logger.exception("Failed to generate practice problems")
 
-    # Fallback: return original only
-    return [{"question": problem, "answer": ""}]
+    raise RuntimeError("Failed to generate practice problems")
 
 
 # ---------------------------------------------------------------------------

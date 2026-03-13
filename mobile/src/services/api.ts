@@ -178,14 +178,10 @@ export const getSession = (id: string) =>
 export const respondToStep = (
   id: string,
   studentResponse: string,
-  requestHint = false,
-  requestShowStep = false,
   requestAdvance = false,
 ) =>
   apiPost<StepResponse>(`/session/${id}/respond`, {
     student_response: studentResponse,
-    request_hint: requestHint,
-    request_show_step: requestShowStep,
     request_advance: requestAdvance,
   });
 

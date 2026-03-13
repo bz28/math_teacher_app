@@ -1,15 +1,11 @@
-"""LLM Tutor Layer: evaluator, explainer, and prober modes.
+"""LLM Tutor Layer: converse and step-chat modes.
 
-Each mode uses the same Claude model with different system prompts.
-Streaming is used only for explain(); all JSON calls use non-streaming.
-Includes retry with exponential backoff, circuit breaker, prompt caching,
-and per-call logging with token/cost tracking.
+All calls use non-streaming JSON. Includes retry with exponential backoff,
+circuit breaker, prompt caching, and per-call logging with token/cost tracking.
 
 Cost optimizations:
-- Haiku for classification/eval tasks (converse, probe, evaluate, practice_eval)
-- Sonnet for reasoning-heavy tasks (explain)
+- Haiku for classification/eval tasks
 - Prompt caching via cache_control on static system prompts
-- Non-streaming for JSON responses (lower overhead than stream-then-collect)
 - Trimmed conversation history (last 6 exchanges instead of 10)
 """
 
@@ -17,13 +13,13 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
 
 import anthropic
 
 from api.config import settings
+from api.core.cost_tracker import cost_tracker as _cost_tracker
 from api.core.llm_client import get_client
 from api.core.llm_logging import fire_and_forget_persist
 from api.core.llm_utils import strip_markdown_fencing
@@ -34,7 +30,6 @@ MODEL_SONNET = settings.llm_model_sonnet
 MODEL_HAIKU = settings.llm_model_haiku
 # Haiku for simple classification/eval; Sonnet for reasoning-heavy tasks
 MODEL_CLASSIFY = MODEL_HAIKU
-MODEL_REASON = MODEL_SONNET
 MAX_RETRIES = 3
 # Sonnet pricing
 COST_PER_INPUT_TOKEN_SONNET = 3.0 / 1_000_000
@@ -47,11 +42,6 @@ _PRICING = {
     MODEL_SONNET: (COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET),
     MODEL_HAIKU: (COST_PER_INPUT_TOKEN_HAIKU, COST_PER_OUTPUT_TOKEN_HAIKU),
 }
-
-# Backward-compat aliases for existing imports/tests
-MODEL = MODEL_SONNET
-COST_PER_INPUT_TOKEN = COST_PER_INPUT_TOKEN_SONNET
-COST_PER_OUTPUT_TOKEN = COST_PER_OUTPUT_TOKEN_SONNET
 
 # Max recent exchanges sent to converse() — trimmed from 10 to 6
 CONVERSE_HISTORY_LIMIT = 6
@@ -100,100 +90,8 @@ _circuit = CircuitBreaker()
 
 
 # ---------------------------------------------------------------------------
-# Daily cost tracker
-# ---------------------------------------------------------------------------
-
-@dataclass
-class CostTracker:
-    _total_usd: float = field(default=0.0, init=False)
-    _reset_day: int = field(default=0, init=False)
-
-    def _maybe_reset(self) -> None:
-        import datetime
-        today = datetime.date.today().toordinal()
-        if today != self._reset_day:
-            self._total_usd = 0.0
-            self._reset_day = today
-
-    def check_limit(self) -> None:
-        """Raise if daily cost limit has been reached."""
-        self._maybe_reset()
-        if self._total_usd >= settings.daily_cost_limit_usd:
-            raise RuntimeError(
-                f"Daily cost limit reached "
-                f"(${self._total_usd:.2f} >= ${settings.daily_cost_limit_usd:.2f})"
-            )
-
-    def add(self, amount: float) -> None:
-        self._maybe_reset()
-        self._total_usd += amount
-        if self._total_usd >= settings.daily_cost_limit_usd:
-            logger.error(
-                "Daily cost limit exceeded: $%.2f >= $%.2f",
-                self._total_usd,
-                settings.daily_cost_limit_usd,
-            )
-
-    @property
-    def total_usd(self) -> float:
-        self._maybe_reset()
-        return self._total_usd
-
-
-_cost_tracker = CostTracker()
-
-
-# ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
-
-EVALUATOR_PROMPT = """You are a math tutor evaluating a student's response to a step in solving a problem.
-
-You will receive full context about the current step:
-- The problem being solved
-- The current expression (what the student is starting from)
-- The expected operation (what they should do)
-- The expected result (what the expression becomes after the operation)
-- The student's response
-
-The student's response may be:
-1. A description of an operation (e.g., "add 12 to both sides")
-2. A mathematical result (e.g., "6x = 16")
-3. A mix of both (e.g., "add 12 to get 6x = 16")
-
-Respond with ONLY valid JSON:
-{
-  "is_correct": true/false,
-  "feedback": "Brief feedback explaining why correct or what went wrong"
-}
-
-Rules:
-- If the student describes an operation: check if it matches the expected operation and would produce the correct result
-- If the student gives a result: check if it's mathematically equivalent to the expected result
-- Accept mathematically equivalent answers (e.g., 2/4 and 1/2 are the same)
-- If the student describes the WRONG operation (e.g., "subtract" when they should
-  "add"), mark incorrect and explain what they should do instead. Never give the answer
-- If partially correct (right approach, arithmetic error), acknowledge the approach
-- Keep feedback concise (1-2 sentences)
-- Be encouraging but honest
-- NEVER reveal the correct answer or the next step in your feedback
-- For "translate" or "set up equation" steps, accept equivalent equation formulations
-  (e.g., "d = 60*3" and "60*3 = d" are both correct)"""
-
-EXPLAINER_PROMPT = """You are a math tutor explaining a concept to a student.
-
-Given:
-- The step being worked on
-- What went wrong (if applicable)
-- The student's grade level
-
-Rules:
-- Calibrate language to the grade level
-- Use concrete examples and analogies appropriate for the age
-- Keep explanations clear and concise (2-4 sentences)
-- Focus on WHY, not just WHAT
-- Never give away the full answer — guide the student toward understanding
-- Use standard math notation (e.g., x^2 not x²)"""
 
 CONVERSATIONAL_TUTOR_PROMPT = """\
 You are a math tutor having a conversation with a student solving a problem step by step.
@@ -238,43 +136,9 @@ Rules:
   the student to explain the step or prompt for the next step — the app
   handles navigation automatically."""
 
-PROBER_PROMPT = """You are a math tutor assessing whether a student truly understands a step.
-
-Given:
-- The math step that was completed
-- The student's explanation in their own words
-
-Respond with ONLY valid JSON:
-{
-  "understanding": "clear" | "partial" | "wrong",
-  "follow_up": "A follow-up question or null if understanding is clear"
-}
-
-Rubric:
-- "clear": Student shows they understand the step. Identifying the operation and
-  its purpose (e.g., "divided by 5 to isolate x") is SUFFICIENT — they do NOT
-  need to give a deep mathematical justification.
-- "partial": Student's explanation is vague or generic with no mention of the
-  specific operation (e.g., "I just did the math")
-- "wrong": Student's explanation contradicts the step or is incoherent
-
-Rules:
-- Default to "clear" when in doubt — the goal is confirming basic understanding,
-  not testing for textbook precision
-- Stating the operation + a simple reason ("to isolate x", "to simplify",
-  "to get rid of the 5") counts as clear understanding
-- Only use "partial" if the explanation is truly vague or empty
-- Keep follow_up questions short and specific"""
-
-
 # ---------------------------------------------------------------------------
 # Response types
 # ---------------------------------------------------------------------------
-
-@dataclass
-class EvalResult:
-    is_correct: bool
-    feedback: str
 
 
 @dataclass
@@ -283,12 +147,6 @@ class ConverseResult:
     is_correct: bool
     steps_completed: int | None
     feedback: str
-
-
-@dataclass
-class ProbeResult:
-    understanding: str  # "clear" | "partial" | "wrong"
-    follow_up: str | None
 
 
 @dataclass
@@ -381,70 +239,6 @@ def _system_with_cache(
 # Core LLM calls
 # ---------------------------------------------------------------------------
 
-async def _call_claude_stream(
-    system_prompt: str,
-    user_message: str,
-    mode: str,
-    session_id: str | None = None,
-    user_id: str | None = None,
-    model: str | None = None,
-) -> AsyncIterator[str]:
-    """Stream a Claude response with retry and circuit breaker.
-
-    Used only for streaming responses (explain). For JSON responses,
-    use _call_claude_json which is non-streaming and lower-overhead.
-    """
-    if not _circuit.allow_request():
-        raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
-    _cost_tracker.check_limit()
-
-    use_model = model or MODEL_REASON
-    client = get_client()
-    last_error: Exception | None = None
-
-    for attempt in range(MAX_RETRIES):
-        start = time.monotonic()
-        try:
-            async with client.messages.stream(
-                model=use_model,
-                max_tokens=512,
-                system=_system_with_cache(system_prompt),
-                messages=[{"role": "user", "content": user_message}],
-                timeout=30.0,
-            ) as stream:
-                async for text in stream.text_stream:
-                    yield text
-
-                response = await stream.get_final_message()
-                latency_ms = round((time.monotonic() - start) * 1000, 2)
-                resp_text = "".join(
-                    b.text for b in response.content if hasattr(b, "text")
-                )
-                _log_llm_call(
-                    use_model, mode,
-                    response.usage.input_tokens, response.usage.output_tokens,
-                    latency_ms, session_id, user_id,
-                    success=True, retry_count=attempt,
-                    input_text=user_message, output_text=resp_text,
-                )
-                _circuit.record_success()
-                return
-
-        except anthropic.APITimeoutError as e:
-            last_error = e
-            _circuit.record_failure()
-            logger.warning("Claude timeout (attempt %d): %s", attempt + 1, e)
-        except anthropic.APIError as e:
-            last_error = e
-            _circuit.record_failure()
-            logger.warning("Claude API error (attempt %d): %s", attempt + 1, e)
-
-        if attempt < MAX_RETRIES - 1:
-            await asyncio.sleep(2**attempt)
-
-    raise RuntimeError(f"Claude API failed after {MAX_RETRIES} retries: {last_error}")
-
-
 async def _call_claude_json(
     system_prompt: str,
     user_message: str,
@@ -512,68 +306,6 @@ async def _call_claude_json(
 # ---------------------------------------------------------------------------
 # Public API: tutor modes
 # ---------------------------------------------------------------------------
-
-async def evaluate(
-    problem: str,
-    step_before: str,
-    step_operation: str,
-    step_after: str,
-    student_response: str,
-    session_id: str | None = None,
-    user_id: str | None = None,
-) -> EvalResult:
-    """Evaluate a student's response against the correct step."""
-    prompt = (
-        f"Problem: {problem}\n"
-        f"Current expression: {step_before}\n"
-        f"Expected operation: {step_operation}\n"
-        f"Expected result: {step_after}\n"
-        f"Student's response: {student_response}"
-    )
-    data = await _call_claude_json(EVALUATOR_PROMPT, prompt, "evaluator", session_id, user_id)
-    return EvalResult(is_correct=bool(data["is_correct"]), feedback=str(data["feedback"]))
-
-
-async def explain(
-    step: str,
-    error: str | None,
-    grade_level: int,
-    session_id: str | None = None,
-    user_id: str | None = None,
-) -> AsyncIterator[str]:
-    """Stream an explanation for a step (optionally addressing an error).
-
-    Uses Sonnet (MODEL_REASON) since explanations require nuanced reasoning.
-    """
-    parts = [f"Step: {step}", f"Grade level: {grade_level}"]
-    if error:
-        parts.append(f"Student's error: {error}")
-    prompt = "\n".join(parts)
-
-    async for chunk in _call_claude_stream(
-        EXPLAINER_PROMPT, prompt, "explainer", session_id, user_id,
-        model=MODEL_REASON,
-    ):
-        yield chunk
-
-
-async def probe(
-    step: str,
-    student_explanation: str,
-    session_id: str | None = None,
-    user_id: str | None = None,
-) -> ProbeResult:
-    """Assess a student's own-words explanation of a step."""
-    prompt = (
-        f"Math step: {step}\n"
-        f"Student's explanation: {student_explanation}"
-    )
-    data = await _call_claude_json(PROBER_PROMPT, prompt, "prober", session_id, user_id)
-    return ProbeResult(
-        understanding=str(data["understanding"]),
-        follow_up=str(data["follow_up"]) if data.get("follow_up") else None,
-    )
-
 
 async def converse(
     problem: str,

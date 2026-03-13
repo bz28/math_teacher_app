@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.session import (
     RateLimitError,
     SessionError,
-    StepResponse,
     create_session,
     get_session,
     respond_to_step,
@@ -104,14 +103,10 @@ async def respond(
 
     try:
         result = await respond_to_step(
-            db, session, body.student_response, body.request_hint,
-            body.request_show_step, body.request_advance,
+            db, session, body.student_response, body.request_advance,
         )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    if not isinstance(result, StepResponse):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unexpected response type")
 
     return StepResponseSchema(
         action=result.action,
@@ -142,7 +137,14 @@ async def similar(
     if session.status != "completed":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
 
-    problem = await generate_similar_problem(session.problem)
+    try:
+        problem = await generate_similar_problem(session.problem)
+    except Exception:
+        logger.exception("Failed to generate similar problem")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate similar problem",
+        )
     return {"similar_problem": problem}
 
 

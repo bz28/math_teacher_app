@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 from api.config import settings
+from api.core.cost_tracker import cost_tracker as _cost_tracker
 from api.core.llm_client import get_client
 from api.core.llm_logging import fire_and_forget_persist
 
@@ -63,6 +64,7 @@ async def extract_problems_from_image(image_base64: str) -> dict[str, Any]:
     else:
         media_type = "image/jpeg"  # default fallback
 
+    _cost_tracker.check_limit()
     client = get_client()
 
     start = time.monotonic()
@@ -130,6 +132,7 @@ async def extract_problems_from_image(image_base64: str) -> dict[str, Any]:
     cost = (input_tokens * COST_PER_INPUT_TOKEN) + (
         output_tokens * COST_PER_OUTPUT_TOKEN
     )
+    _cost_tracker.add(cost)
     fire_and_forget_persist(
         model=MODEL,
         function="image_extract",

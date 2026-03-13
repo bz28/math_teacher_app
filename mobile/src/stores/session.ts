@@ -535,7 +535,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     set({ phase: "thinking", error: null });
     try {
-      const resp = await respondToStep(session.id, "", false, false, true);
+      const resp = await respondToStep(session.id, "", true);
       const updated = await getSession(session.id);
       set({ session: updated, lastResponse: null, phase: "awaiting_input" });
     } catch (e) {

@@ -5,7 +5,6 @@ and per-user daily request caps.
 """
 
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC
 from typing import Any
@@ -14,12 +13,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.step_decomposition import Step, decompose_problem, solve_problem
+from api.core.step_decomposition import decompose_problem, solve_problem
 from api.core.tutor import _call_claude_json, converse, step_chat
 from api.models.session import Session
 
-MAX_ATTEMPTS_PER_STEP = 5
-MAX_HINTS_PER_STEP = 3
 RECENT_EXCHANGES_LIMIT = 10
 
 
@@ -51,65 +48,6 @@ async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
     cap = settings.daily_request_cap_free
     if count >= cap:
         raise RateLimitError(f"Daily session limit reached ({cap})")
-
-
-# ---------------------------------------------------------------------------
-# Step-size validation
-# ---------------------------------------------------------------------------
-
-def _find_matching_steps(response: str, steps: list[Step], current_idx: int) -> list[int]:
-    """Check which future steps the student's response matches.
-
-    Returns list of matching step indices via direct string comparison.
-    """
-    response_clean = response.strip()
-    matches: list[int] = []
-    for i in range(current_idx, len(steps)):
-        after = steps[i].after.strip()
-        if response_clean == after:
-            matches.append(i)
-    return matches
-
-
-def _validate_step_size(response: str, steps: list[Step], current_idx: int) -> tuple[bool, str | None]:
-    """Validate that the response doesn't skip steps.
-
-    Returns (is_valid, message). If the student's response matches a step
-    2+ ahead of the current step, reject and ask for intermediate work.
-    """
-    matches = _find_matching_steps(response, steps, current_idx)
-    if matches:
-        furthest = max(matches)
-        skipped = furthest - current_idx
-        if skipped >= 2:
-            return False, (
-                "That's the right answer, but you skipped some steps. "
-                "Can you walk me through how you got there?"
-            )
-    return True, None
-
-
-# ---------------------------------------------------------------------------
-# Hint generation
-# ---------------------------------------------------------------------------
-
-def _generate_hint(step: Step, hint_level: int) -> str:
-    """Generate a progressive hint for the current step.
-
-    hint_level 0: vague direction
-    hint_level 1: specific operation
-    hint_level 2: most of the answer (80% ceiling)
-    """
-    if hint_level == 0:
-        return f"Think about what operation you need to do next. Look at: {step.before}"
-    elif hint_level == 1:
-        return f"You need to perform: {step.operation}. Start from: {step.before}"
-    else:
-        # 80% ceiling: give the operation and partial result, but not the full answer
-        return (
-            f"Apply {step.operation} to {step.before}. "
-            f"The result should simplify things significantly."
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -417,21 +355,15 @@ async def respond_to_step(
     db: AsyncSession,
     session: Session,
     student_response: str,
-    request_hint: bool = False,
-    request_show_step: bool = False,
     request_advance: bool = False,
-) -> StepResponse | AsyncIterator[str]:
-    """Process a student's response or action for the current step.
-
-    Returns a StepResponse for JSON actions, or an AsyncIterator[str] for
-    streamed explanations.
-    """
+) -> StepResponse:
+    """Process a student's response or action for the current step."""
     if session.status not in ("active", "completed"):
         raise SessionError("Session is not active")
 
     # Allow conversation on completed sessions ("I still have questions")
     if session.current_step >= session.total_steps:
-        if student_response and not request_hint and not request_show_step:
+        if student_response:
             return await _converse_completed(db, session, student_response)
         raise SessionError("All steps completed")
 

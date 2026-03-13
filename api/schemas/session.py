@@ -10,8 +10,6 @@ class CreateSessionRequest(BaseModel):
 
 class RespondRequest(BaseModel):
     student_response: str = Field("", max_length=2000)
-    request_hint: bool = False
-    request_show_step: bool = False
     request_advance: bool = False
 
 
