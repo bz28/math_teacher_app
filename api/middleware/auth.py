@@ -21,9 +21,3 @@ async def get_current_user(
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     return CurrentUser(user_id=uuid.UUID(str(payload["sub"])), role=str(payload["role"]))
-
-
-async def require_teacher(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    if user.role != "teacher":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher access required")
-    return user
