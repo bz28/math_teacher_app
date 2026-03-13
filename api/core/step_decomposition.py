@@ -124,7 +124,7 @@ Rules:
 - Do NOT include any explanation, just the JSON"""
 
 
-async def solve_problem(problem: str) -> tuple[str, str]:
+async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[str, str]:
     """Solve a math problem and return (final_answer, problem_type).
 
     Lighter-weight alternative to decompose_problem — no step breakdown,
@@ -136,11 +136,12 @@ async def solve_problem(problem: str) -> tuple[str, str]:
         mode="solve",
         model=MODEL_REASON,
         max_tokens=256,
+        user_id=user_id,
     )
     return str(data["answer"]), str(data.get("problem_type", "math"))
 
 
-async def generate_similar_problem(problem: str) -> str:
+async def generate_similar_problem(problem: str, *, user_id: str | None = None) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
     system = (
         "Generate a similar math problem with the same structure "
@@ -155,6 +156,7 @@ async def generate_similar_problem(problem: str) -> str:
             model=MODEL_REASON,
             max_tokens=256,
             max_retries=1,
+            user_id=user_id,
         )
         return str(data.get("problem", problem))
     except Exception:
@@ -162,7 +164,7 @@ async def generate_similar_problem(problem: str) -> str:
         raise RuntimeError("Failed to generate similar problem")
 
 
-async def decompose_problem(problem: str) -> Decomposition:
+async def decompose_problem(problem: str, *, user_id: str | None = None) -> Decomposition:
     """Generate step-by-step decomposition for a math problem."""
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
     prompt = _build_prompt(problem, problem_type)
@@ -173,6 +175,7 @@ async def decompose_problem(problem: str) -> Decomposition:
         mode="decompose",
         model=MODEL_REASON,
         max_tokens=1024,
+        user_id=user_id,
     )
 
     steps, distractors = _parse_steps(data)

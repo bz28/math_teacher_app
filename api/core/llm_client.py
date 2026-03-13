@@ -228,9 +228,15 @@ async def call_claude_json(
             return result
 
         except (anthropic.APITimeoutError, anthropic.APIError) as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = e
             _circuit.record_failure()
             logger.warning("Claude API error (attempt %d): %s", attempt + 1, e)
+            _log_and_persist(
+                use_model, mode, 0, 0, latency_ms, session_id, user_id,
+                success=False, retry_count=attempt,
+                input_text=user_message,
+            )
         except json.JSONDecodeError as e:
             last_error = e
             logger.warning("JSON parse error (attempt %d): %s", attempt + 1, e)
@@ -288,7 +294,12 @@ async def call_claude_vision(
         return result
 
     except (anthropic.APITimeoutError, anthropic.APIError) as e:
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
         _circuit.record_failure()
+        _log_and_persist(
+            use_model, mode, 0, 0, latency_ms,
+            session_id=None, user_id=None, success=False,
+        )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
     except (json.JSONDecodeError, ValueError) as e:
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e

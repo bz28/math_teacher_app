@@ -19,6 +19,7 @@ from api.core.tutor import check_answer_equivalence, converse, step_chat
 from api.models.session import Session
 
 RECENT_EXCHANGES_LIMIT = 10
+MAX_STUDENT_MESSAGES_PER_SESSION = 10
 
 
 class SessionError(Exception):
@@ -63,7 +64,7 @@ async def create_session(
 
     if mode == "practice":
         # Lightweight: just solve for the answer, no step decomposition
-        answer, problem_type = await solve_problem(problem)
+        answer, problem_type = await solve_problem(problem, user_id=str(user_id))
         steps_data = [
             {
                 "description": "Final answer",
@@ -74,7 +75,7 @@ async def create_session(
         ]
     else:
         # Full decomposition for learn mode
-        decomposition = await decompose_problem(problem)
+        decomposition = await decompose_problem(problem, user_id=str(user_id))
         problem_type = decomposition.problem_type
         steps_data = []
         for i, s in enumerate(decomposition.steps):
@@ -142,6 +143,10 @@ async def _converse_completed(
     student_response: str,
 ) -> StepResponse:
     """Allow the student to keep asking questions after completing a problem."""
+    student_msgs = sum(1 for e in session.exchanges if e.get("role") == "student")
+    if student_msgs >= MAX_STUDENT_MESSAGES_PER_SESSION:
+        raise SessionError("Session message limit reached")
+
     _add_exchange(session, "student", student_response)
 
     converse_result = await converse(
@@ -150,6 +155,7 @@ async def _converse_completed(
         exchanges=session.exchanges,
         student_input=student_response,
         session_id=str(session.id),
+        user_id=str(session.user_id),
     )
 
     _add_exchange(session, "tutor", converse_result.feedback)
@@ -199,6 +205,7 @@ async def _respond_practice_mode(
         is_correct = await check_answer_equivalence(
             session.problem, correct_answer,
             student_response, str(session.id),
+            user_id=str(session.user_id),
         )
 
     if is_correct:
@@ -273,6 +280,7 @@ async def _respond_learn_mode(
             exchanges=session.exchanges,
             student_input=student_response,
             session_id=str(session.id),
+            user_id=str(session.user_id),
         )
         _add_exchange(session, "tutor", chat_result.feedback)
         await db.commit()

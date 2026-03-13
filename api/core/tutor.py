@@ -9,9 +9,12 @@ Cost optimizations:
 - Trimmed conversation history (last 6 exchanges instead of 10)
 """
 
+import logging
 from dataclasses import dataclass
 
 from api.core.llm_client import MODEL_REASON, call_claude_json
+
+logger = logging.getLogger(__name__)
 
 # Max recent exchanges sent to converse() — trimmed from 10 to 6
 CONVERSE_HISTORY_LIMIT = 6
@@ -155,7 +158,7 @@ async def converse(
     return ConverseResult(
         input_type=str(data.get("input_type", "unclear")),
         is_correct=bool(data.get("is_correct", False)),
-        steps_completed=int(str(data["steps_completed"])) if data.get("steps_completed") is not None else None,
+        steps_completed=int(float(str(data["steps_completed"]))) if data.get("steps_completed") is not None else None,
         feedback=str(data.get("feedback", "")),
     )
 
@@ -195,6 +198,8 @@ async def check_answer_equivalence(
     correct_answer: str,
     student_response: str,
     session_id: str | None = None,
+    *,
+    user_id: str | None = None,
 ) -> bool:
     """Check if a student's answer is mathematically equivalent to the correct answer."""
     user_msg = (
@@ -205,8 +210,9 @@ async def check_answer_equivalence(
     try:
         result = await call_claude_json(
             _ANSWER_EQUIVALENCE_PROMPT, user_msg,
-            mode="practice_eval", session_id=session_id,
+            mode="practice_eval", session_id=session_id, user_id=user_id,
         )
         return bool(result.get("is_correct", False))
     except Exception:
+        logger.exception("Answer equivalence check failed")
         return False

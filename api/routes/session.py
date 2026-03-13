@@ -133,7 +133,7 @@ async def similar(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
 
     try:
-        problem = await generate_similar_problem(session.problem)
+        problem = await generate_similar_problem(session.problem, user_id=str(current_user.user_id))
     except Exception:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(

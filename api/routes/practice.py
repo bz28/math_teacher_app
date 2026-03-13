@@ -29,7 +29,7 @@ async def generate(
 ) -> PracticeGenerateResponse:
     """Generate similar practice problems for a given problem."""
     try:
-        problems = await generate_practice_problems(body.problem, body.count)
+        problems = await generate_practice_problems(body.problem, body.count, user_id=str(current_user.user_id))
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -47,5 +47,5 @@ async def check(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PracticeCheckResponse:
     """Check if a user's answer is correct."""
-    is_correct = await check_answer(body.question, body.correct_answer, body.user_answer)
+    is_correct = await check_answer(body.question, body.correct_answer, body.user_answer, user_id=str(current_user.user_id))
     return PracticeCheckResponse(is_correct=is_correct)
