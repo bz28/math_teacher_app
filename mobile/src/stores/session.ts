@@ -625,6 +625,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ ...initialState, phase: "loading" });
     try {
       let questions: PracticeProblem[];
+      const errors: string[] = [];
 
       if (generateCount > 0) {
         // "Generate similar" mode — generate new questions from seeds
@@ -644,11 +645,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               question: problems[i],
               answer: outcome.value.problems[0].answer,
             });
+          } else if (outcome.status === "rejected") {
+            errors.push(`Q${i + 1}: ${(outcome.reason as Error).message ?? "Unknown error"}`);
           }
         }
       }
 
-      if (questions.length === 0) throw new Error("Failed to generate exam questions");
+      if (questions.length === 0) {
+        throw new Error(
+          errors.length > 0
+            ? `Failed to generate exam: ${errors.join("; ")}`
+            : "Failed to generate exam questions",
+        );
+      }
 
       set({
         mockTest: {

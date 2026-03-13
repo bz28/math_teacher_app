@@ -5,7 +5,7 @@ import logging
 
 import anthropic
 
-from api.core.llm_client import LLMMode, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 from api.core.tutor import check_answer_equivalence
 
 logger = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ async def generate_practice_problems(
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
+            model=MODEL_REASON,
         )
         problems = result.get("problems")
         if isinstance(problems, list):
