@@ -235,6 +235,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                           isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
                         );
                         submitAnswer(choice);
+                        if (!isCorrect) {
+                          setTimeout(() => setSelectedChoice(null), 1200);
+                        }
                       }}
                       disabled={!!selectedChoice}
                       accessibilityRole="button"
