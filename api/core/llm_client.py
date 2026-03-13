@@ -27,6 +27,19 @@ from api.core.llm_utils import strip_markdown_fencing
 
 logger = logging.getLogger(__name__)
 
+
+class LLMMode:
+    """Labels for LLM call modes used in logging and persistence."""
+
+    DECOMPOSE = "decompose"
+    SOLVE = "solve"
+    CONVERSE = "converse"
+    STEP_CHAT = "step_chat"
+    PRACTICE_GENERATE = "practice_generate"
+    PRACTICE_EVAL = "practice_eval"
+    GENERATE_SIMILAR = "generate_similar"
+    IMAGE_EXTRACT = "image_extract"
+
 _client: anthropic.AsyncAnthropic | None = None
 
 MODEL_SONNET = settings.llm_model_sonnet

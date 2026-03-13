@@ -419,8 +419,8 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
     session_id = create_resp.json()["id"]
 
     # Submit intermediate step (2x = 6) — not the final answer
-    with patch("api.core.session.check_answer_equivalence", new_callable=AsyncMock) as mock_llm:
-        mock_llm.return_value = False
+    with patch("api.core.session.check_answer", new_callable=AsyncMock) as mock_check:
+        mock_check.return_value = False
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
             json={"student_response": "2x = 6"},
@@ -445,8 +445,8 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
     session_id = create_resp.json()["id"]
 
     # Submit wrong answer — no symbolic match, LLM also says wrong
-    with patch("api.core.session.check_answer_equivalence", new_callable=AsyncMock) as mock_llm:
-        mock_llm.return_value = False
+    with patch("api.core.session.check_answer", new_callable=AsyncMock) as mock_check:
+        mock_check.return_value = False
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
             json={"student_response": "x = 99"},

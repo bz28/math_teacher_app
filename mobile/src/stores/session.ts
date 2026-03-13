@@ -112,15 +112,22 @@ function _maybeShowSummary(get: StoreGet, set: StoreSet) {
   }
 }
 
-/** Wait for pending checks then show summary */
+/** Subscribe to store changes and show summary when all checks complete */
 function _waitForChecksAndShowSummary(get: StoreGet, set: StoreSet) {
   const { practiceBatch } = get();
   if (!practiceBatch) return;
   if (practiceBatch.pendingChecks <= 0) {
     set({ phase: "practice_summary" });
-  } else {
-    setTimeout(() => _waitForChecksAndShowSummary(get, set), 200);
+    return;
   }
+  // Subscribe to state changes instead of polling
+  const unsub = useSessionStore.subscribe((state) => {
+    if (!state.practiceBatch) { unsub(); return; }
+    if (state.practiceBatch.pendingChecks <= 0) {
+      unsub();
+      set({ phase: "practice_summary" });
+    }
+  });
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -310,22 +317,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         },
         phase: "loading",
       });
-      const waitForMore = () => {
-        const { practiceBatch: batch } = get();
-        if (!batch) return;
-        if (batch.problems.length > nextIndex) {
+      // Subscribe to state changes instead of polling
+      const unsub = useSessionStore.subscribe((state) => {
+        if (!state.practiceBatch) { unsub(); return; }
+        if (state.practiceBatch.problems.length > nextIndex) {
+          unsub();
           set({
-            practiceBatch: { ...batch, currentIndex: nextIndex },
+            practiceBatch: { ...state.practiceBatch, currentIndex: nextIndex },
             phase: "awaiting_input",
           });
-        } else if (!batch.loadingMore) {
-          // No more problems coming — wait for pending checks then show summary
+        } else if (!state.practiceBatch.loadingMore) {
+          unsub();
           _waitForChecksAndShowSummary(get, set);
-        } else {
-          setTimeout(waitForMore, 200);
         }
-      };
-      setTimeout(waitForMore, 200);
+      });
     } else {
       // Last problem answered — wait for all checks to finish
       set({

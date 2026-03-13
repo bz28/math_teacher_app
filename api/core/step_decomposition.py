@@ -6,7 +6,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from api.core.llm_client import MODEL_REASON, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 
 _MAX_CACHED_PROBLEM_TYPES = 20
 
@@ -142,7 +142,7 @@ async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[st
     data = await call_claude_json(
         SOLVE_SYSTEM_PROMPT,
         f"Problem: {problem}",
-        mode="solve",
+        mode=LLMMode.SOLVE,
         model=MODEL_REASON,
         max_tokens=256,
         user_id=user_id,
@@ -161,7 +161,7 @@ async def generate_similar_problem(problem: str, *, user_id: str | None = None) 
         data = await call_claude_json(
             system,
             f"Original problem: {problem}",
-            mode="generate_similar",
+            mode=LLMMode.GENERATE_SIMILAR,
             model=MODEL_REASON,
             max_tokens=256,
             max_retries=1,
@@ -181,7 +181,7 @@ async def decompose_problem(problem: str, *, user_id: str | None = None) -> Deco
     data = await call_claude_json(
         SYSTEM_PROMPT,
         prompt,
-        mode="decompose",
+        mode=LLMMode.DECOMPOSE,
         model=MODEL_REASON,
         max_tokens=1024,
         user_id=user_id,

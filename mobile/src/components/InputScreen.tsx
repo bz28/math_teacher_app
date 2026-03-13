@@ -13,6 +13,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { BackButton } from "./BackButton";
+import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { MathKeyboard } from "./MathKeyboard";
 import { type Mode } from "./ModeSelectScreen";
@@ -177,15 +179,9 @@ export function InputScreen({
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <AnimatedPressable
-          style={styles.backButton}
-          onPress={onBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="chevron-back" size={20} color={colors.primary} />
-          <Text style={styles.backText}>Back</Text>
-        </AnimatedPressable>
+        <View style={styles.backButton}>
+          <BackButton onPress={onBack} />
+        </View>
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Enter a Problem</Text>
@@ -286,24 +282,13 @@ export function InputScreen({
 
         <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
-        <AnimatedPressable
-          style={[hasNoProblems && styles.buttonDisabled]}
+        <GradientButton
           onPress={handleGo}
-          disabled={isLoading || hasNoProblems}
-        >
-          <LinearGradient
-            colors={gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.goButton}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Text style={styles.goText}>{goButtonLabel}</Text>
-            )}
-          </LinearGradient>
-        </AnimatedPressable>
+          label={goButtonLabel}
+          loading={isLoading}
+          disabled={hasNoProblems}
+          style={styles.goButton}
+        />
 
         {displayError && (
           <View style={styles.errorWrap}>

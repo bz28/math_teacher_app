@@ -34,8 +34,6 @@ export interface StepResponse {
   current_step: number;
   total_steps: number;
   is_correct: boolean;
-  similar_problem: string | null;
-  step_description: string | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;

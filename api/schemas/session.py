@@ -38,5 +38,3 @@ class StepResponseSchema(BaseModel):
     current_step: int
     total_steps: int
     is_correct: bool = False
-    similar_problem: str | None = None
-    step_description: str | None = None

@@ -12,7 +12,7 @@ Cost optimizations:
 import logging
 from dataclasses import dataclass
 
-from api.core.llm_client import MODEL_REASON, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ async def converse(
         f"Student's latest input: {student_input}"
     )
     data = await call_claude_json(
-        CONVERSATIONAL_TUTOR_PROMPT, prompt, "converse",
+        CONVERSATIONAL_TUTOR_PROMPT, prompt, LLMMode.CONVERSE,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     # Parse steps_completed safely — LLM may return int, float, or string
@@ -196,7 +196,7 @@ async def step_chat(
         f"Student's question: {student_input}"
     )
     data = await call_claude_json(
-        STEP_CHAT_PROMPT, prompt, "step_chat",
+        STEP_CHAT_PROMPT, prompt, LLMMode.STEP_CHAT,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
@@ -219,7 +219,7 @@ async def check_answer_equivalence(
     try:
         result = await call_claude_json(
             _ANSWER_EQUIVALENCE_PROMPT, user_msg,
-            mode="practice_eval", session_id=session_id, user_id=user_id,
+            mode=LLMMode.PRACTICE_EVAL, session_id=session_id, user_id=user_id,
         )
         return bool(result.get("is_correct", False))
     except Exception:

@@ -56,7 +56,9 @@ async def create(
         session = await create_session(db, current_user.user_id, body.problem, body.mode)
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
-    except (RuntimeError, SessionError) as e:
+    except SessionError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except (RuntimeError, ValueError) as e:
         logger.exception("Failed to create session")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -108,8 +110,6 @@ async def respond(
         current_step=result.current_step,
         total_steps=result.total_steps,
         is_correct=result.is_correct,
-        similar_problem=result.similar_problem,
-        step_description=result.step_description,
     )
 
 
@@ -132,7 +132,7 @@ async def similar(
 
     try:
         problem = await generate_similar_problem(session.problem, user_id=str(current_user.user_id))
-    except Exception:
+    except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
