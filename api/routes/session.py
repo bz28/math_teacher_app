@@ -155,7 +155,7 @@ async def similar(
     except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate similar problem",
         )
     return {"similar_problem": problem}
