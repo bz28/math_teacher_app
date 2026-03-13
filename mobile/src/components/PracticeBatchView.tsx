@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -9,12 +8,13 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { BackButton } from "./BackButton";
+import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { colors, spacing, shadows } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface PracticeBatchViewProps {
@@ -63,10 +63,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
     >
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <AnimatedPressable onPress={handleBack} style={styles.backWrap} accessibilityRole="button" accessibilityLabel="Go back">
-            <Ionicons name="chevron-back" size={20} color={colors.primary} />
-            <Text style={styles.backText}>Back</Text>
-          </AnimatedPressable>
+          <BackButton onPress={handleBack} />
           <View style={styles.headerBadge} accessibilityRole="text" accessibilityLabel={`Problem ${currentIndex + 1} of ${totalCount}`}>
             <Text style={styles.headerBadgeText}>
               {currentIndex + 1}/{totalCount}
@@ -123,24 +120,13 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
         </View>
 
         <View style={styles.buttons}>
-          <AnimatedPressable
-            style={[(phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
+          <GradientButton
             onPress={handlePracticeSubmit}
-            disabled={phase === "thinking" || !input.trim()}
-          >
-            <LinearGradient
-              colors={gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.button, styles.submitButton]}
-            >
-              {phase === "thinking" ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.submitText}>Answer</Text>
-              )}
-            </LinearGradient>
-          </AnimatedPressable>
+            label="Answer"
+            loading={phase === "thinking"}
+            disabled={!input.trim()}
+            style={styles.submitButton}
+          />
           <AnimatedPressable
             style={[styles.button, styles.flagButton, practiceBatch.flags[currentIndex] && styles.flagButtonActive]}
             onPress={() => togglePracticeFlag(currentIndex)}

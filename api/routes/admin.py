@@ -3,23 +3,17 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Date, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user
+from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.session import Session, SessionStatus
 from api.models.user import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-def _require_admin(current_user: CurrentUser) -> CurrentUser:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
-    return current_user
 
 
 def _date_range(days: int) -> datetime:
@@ -33,11 +27,9 @@ def _date_range(days: int) -> datetime:
 
 @router.get("/overview")
 async def overview(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _require_admin(current_user)
-
     now = datetime.now(UTC)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
@@ -150,11 +142,9 @@ async def llm_calls(
     function: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _require_admin(current_user)
-
     since = _date_range(days)
 
     # Aggregated stats
@@ -266,11 +256,9 @@ async def sessions(
     days: int = Query(default=30, ge=1, le=90),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _require_admin(current_user)
-
     since = _date_range(days)
 
     # Completion rate over time (by day)
@@ -410,11 +398,9 @@ async def sessions(
 @router.get("/users")
 async def users(
     days: int = Query(default=30, ge=1, le=90),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _require_admin(current_user)
-
     since = _date_range(days)
 
     # Total users

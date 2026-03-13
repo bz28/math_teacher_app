@@ -1,8 +1,10 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
-from sqlalchemy import text
+from sqlalchemy import delete, or_, text, update
 
 from api.config import settings
 from api.middleware.setup import configure_middleware
@@ -12,6 +14,46 @@ from api.routes.health import router as health_router
 from api.routes.image import router as image_router
 from api.routes.practice import router as practice_router
 from api.routes.session import router as session_router
+
+logger = logging.getLogger(__name__)
+
+STALE_SESSION_HOURS = 1
+
+
+async def _cleanup_stale_sessions() -> None:
+    """Mark sessions with no activity for 1 hour as abandoned."""
+    from api.database import get_session_factory
+    from api.models.session import Session, SessionStatus
+
+    cutoff = datetime.now(UTC) - timedelta(hours=STALE_SESSION_HOURS)
+    async with get_session_factory()() as db:
+        result = await db.execute(
+            update(Session)
+            .where(Session.status == SessionStatus.ACTIVE, Session.updated_at < cutoff)
+            .values(status=SessionStatus.ABANDONED)
+        )
+        await db.commit()
+        if result.rowcount:  # type: ignore[attr-defined]
+            logger.info("Marked %d stale sessions as abandoned", result.rowcount)  # type: ignore[attr-defined]
+
+
+async def _cleanup_expired_tokens() -> None:
+    """Delete revoked and expired refresh tokens."""
+    from api.database import get_session_factory
+    from api.models.user import RefreshToken
+
+    async with get_session_factory()() as db:
+        result = await db.execute(
+            delete(RefreshToken).where(
+                or_(
+                    RefreshToken.is_revoked.is_(True),
+                    RefreshToken.expires_at < datetime.now(UTC),
+                )
+            )
+        )
+        await db.commit()
+        if result.rowcount:  # type: ignore[attr-defined]
+            logger.info("Cleaned up %d expired/revoked refresh tokens", result.rowcount)  # type: ignore[attr-defined]
 
 
 @asynccontextmanager
@@ -31,6 +73,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
+
+    # Run cleanup on startup
+    await _cleanup_stale_sessions()
+    await _cleanup_expired_tokens()
 
     yield
 

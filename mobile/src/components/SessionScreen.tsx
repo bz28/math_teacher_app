@@ -13,7 +13,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { BackButton } from "./BackButton";
 import { CompletedCard } from "./CompletedCard";
+import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { PracticeBatchView } from "./PracticeBatchView";
 import { PracticeSummary } from "./PracticeSummary";
@@ -136,10 +138,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     >
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <AnimatedPressable onPress={handleBack} style={styles.backWrap} accessibilityRole="button" accessibilityLabel="Go back">
-            <Ionicons name="chevron-back" size={20} color={colors.primary} />
-            <Text style={styles.backText}>Back</Text>
-          </AnimatedPressable>
+          <BackButton onPress={handleBack} />
           <View style={styles.headerBadge} accessibilityRole="text">
             <Text style={styles.headerBadgeText}>
               {isLearnQueue && learnQueue
@@ -177,7 +176,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         {isLearn && completedSteps.length > 0 && (
           <View style={styles.historySection}>
             {completedSteps.map((step, i) => (
-              <View key={i} style={[styles.historyRow, shadows.sm]}>
+              <View key={`step-${i}-${step.operation}`} style={[styles.historyRow, shadows.sm]}>
                 <View style={styles.historyCheckWrap}>
                   <Ionicons name="checkmark" size={14} color={colors.success} />
                 </View>
@@ -220,7 +219,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
                   return (
                     <AnimatedPressable
-                      key={i}
+                      key={`choice-${i}-${choice}`}
                       style={[
                         styles.choiceButton,
                         shadows.sm,
@@ -236,6 +235,9 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                           isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
                         );
                         submitAnswer(choice);
+                        if (!isCorrect) {
+                          setTimeout(() => setSelectedChoice(null), 1200);
+                        }
                       }}
                       disabled={!!selectedChoice}
                       accessibilityRole="button"
@@ -355,24 +357,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             </View>
 
             <View style={styles.buttons}>
-              <AnimatedPressable
-                style={[(phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
+              <GradientButton
                 onPress={handleAsk}
-                disabled={phase === "thinking" || !input.trim()}
-              >
-                <LinearGradient
-                  colors={gradients.primary}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.button, styles.submitButton]}
-                >
-                  {phase === "thinking" ? (
-                    <ActivityIndicator color={colors.white} size="small" />
-                  ) : (
-                    <Text style={styles.submitText}>Ask</Text>
-                  )}
-                </LinearGradient>
-              </AnimatedPressable>
+                label="Ask"
+                loading={phase === "thinking"}
+                disabled={!input.trim()}
+                style={styles.submitButton}
+              />
             </View>
           </>
         )}
@@ -402,43 +393,19 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
                 <View style={styles.buttons}>
                   {input.trim() ? (
-                    <AnimatedPressable
-                      style={[phase === "thinking" && styles.buttonDisabled]}
+                    <GradientButton
                       onPress={handleAsk}
-                      disabled={phase === "thinking"}
-                    >
-                      <LinearGradient
-                        colors={gradients.primary}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[styles.button, styles.submitButton]}
-                      >
-                        {phase === "thinking" ? (
-                          <ActivityIndicator color={colors.white} size="small" />
-                        ) : (
-                          <Text style={styles.submitText}>Ask</Text>
-                        )}
-                      </LinearGradient>
-                    </AnimatedPressable>
+                      label="Ask"
+                      loading={phase === "thinking"}
+                      style={styles.submitButton}
+                    />
                   ) : (
-                    <AnimatedPressable
-                      style={[phase === "thinking" && styles.buttonDisabled]}
+                    <GradientButton
                       onPress={advanceStep}
-                      disabled={phase === "thinking"}
-                    >
-                      <LinearGradient
-                        colors={gradients.primary}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[styles.button, styles.submitButton]}
-                      >
-                        {phase === "thinking" ? (
-                          <ActivityIndicator color={colors.white} size="small" />
-                        ) : (
-                          <Text style={styles.submitText}>I Understand</Text>
-                        )}
-                      </LinearGradient>
-                    </AnimatedPressable>
+                      label="I Understand"
+                      loading={phase === "thinking"}
+                      style={styles.submitButton}
+                    />
                   )}
                 </View>
               </>
@@ -465,24 +432,13 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
                 </View>
 
                 <View style={styles.buttons}>
-                  <AnimatedPressable
-                    style={[(phase === "thinking" || !input.trim()) && styles.buttonDisabled]}
+                  <GradientButton
                     onPress={handleSubmit}
-                    disabled={phase === "thinking" || !input.trim()}
-                  >
-                    <LinearGradient
-                      colors={gradients.primary}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={[styles.button, styles.submitButton]}
-                    >
-                      {phase === "thinking" ? (
-                        <ActivityIndicator color={colors.white} size="small" />
-                      ) : (
-                        <Text style={styles.submitText}>Answer</Text>
-                      )}
-                    </LinearGradient>
-                  </AnimatedPressable>
+                    label="Answer"
+                    loading={phase === "thinking"}
+                    disabled={!input.trim()}
+                    style={styles.submitButton}
+                  />
                 </View>
               </>
             )}

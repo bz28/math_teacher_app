@@ -27,6 +27,19 @@ from api.core.llm_utils import strip_markdown_fencing
 
 logger = logging.getLogger(__name__)
 
+
+class LLMMode:
+    """Labels for LLM call modes used in logging and persistence."""
+
+    DECOMPOSE = "decompose"
+    SOLVE = "solve"
+    CONVERSE = "converse"
+    STEP_CHAT = "step_chat"
+    PRACTICE_GENERATE = "practice_generate"
+    PRACTICE_EVAL = "practice_eval"
+    GENERATE_SIMILAR = "generate_similar"
+    IMAGE_EXTRACT = "image_extract"
+
 _client: anthropic.AsyncAnthropic | None = None
 
 MODEL_SONNET = settings.llm_model_sonnet
@@ -109,7 +122,7 @@ def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return (input_tokens * input_price) + (output_tokens * output_price)
 
 
-def _log_and_persist(
+async def _log_and_persist(
     model: str,
     mode: str,
     input_tokens: int,
@@ -124,7 +137,7 @@ def _log_and_persist(
 ) -> None:
     """Track cost, log, and persist an LLM call to the database."""
     cost = _calc_cost(model, input_tokens, output_tokens)
-    cost_tracker.add(cost)
+    await cost_tracker.add(cost)
 
     logger.info(
         "LLM call: mode=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
@@ -220,7 +233,7 @@ async def call_claude_json(
             if not hasattr(first_block, "text"):
                 raise ValueError("Unexpected response type from Claude")
             resp_text = first_block.text
-            _log_and_persist(
+            await _log_and_persist(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
                 latency_ms, session_id, user_id,
@@ -238,7 +251,7 @@ async def call_claude_json(
             last_error = e
             _circuit.record_failure()
             logger.warning("Claude API error (attempt %d): %s", attempt + 1, e)
-            _log_and_persist(
+            await _log_and_persist(
                 use_model, mode, 0, 0, latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
                 input_text=user_message,
@@ -246,8 +259,11 @@ async def call_claude_json(
         except json.JSONDecodeError as e:
             last_error = e
             logger.warning("JSON parse error (attempt %d): %s", attempt + 1, e)
-            _log_and_persist(
-                use_model, mode, 0, 0, latency_ms, session_id, user_id,
+            # Log actual tokens — the API call succeeded, tokens were consumed
+            await _log_and_persist(
+                use_model, mode,
+                response.usage.input_tokens, response.usage.output_tokens,
+                latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
                 input_text=user_message, output_text=resp_text,
             )
@@ -293,7 +309,7 @@ async def call_claude_vision(
             raise ValueError("Unexpected response type from Claude")
         resp_text = first_block.text
 
-        _log_and_persist(
+        await _log_and_persist(
             use_model, mode,
             response.usage.input_tokens, response.usage.output_tokens,
             latency_ms, session_id=session_id, user_id=user_id,
@@ -309,7 +325,7 @@ async def call_claude_vision(
     except (anthropic.APITimeoutError, anthropic.APIError) as e:
         latency_ms = round((time.monotonic() - start) * 1000, 2)
         _circuit.record_failure()
-        _log_and_persist(
+        await _log_and_persist(
             use_model, mode, 0, 0, latency_ms,
             session_id=session_id, user_id=user_id, success=False,
         )

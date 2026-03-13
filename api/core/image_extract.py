@@ -3,7 +3,7 @@
 import base64
 import logging
 
-from api.core.llm_client import call_claude_vision
+from api.core.llm_client import LLMMode, call_claude_vision
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ async def extract_problems_from_image(
         },
     ]
 
-    result = await call_claude_vision(user_content, mode="image_extract", user_id=user_id)
+    result = await call_claude_vision(user_content, mode=LLMMode.IMAGE_EXTRACT, user_id=user_id)
 
     problems = result.get("problems", [])
     confidence = result.get("confidence", "medium")

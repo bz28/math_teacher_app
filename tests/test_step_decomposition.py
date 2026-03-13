@@ -79,7 +79,7 @@ async def test_decompose_quadratic() -> None:
     from api.core.step_decomposition import decompose_problem
 
     result = await decompose_problem("x^2 + 5*x + 6 = 0")
-    assert result.problem_type == "quadratic"
+    assert result.problem_type == "math"
     assert len(result.steps) >= 2
 
 

@@ -37,20 +37,33 @@ class CostTracker:
                     f"(${self._total_usd:.2f} >= ${settings.daily_cost_limit_usd:.2f})"
                 )
 
-    def add(self, amount: float) -> None:
-        self._maybe_reset()
-        self._total_usd += amount
-        if self._total_usd >= settings.daily_cost_limit_usd:
-            logger.error(
-                "Daily cost limit exceeded: $%.2f >= $%.2f",
-                self._total_usd,
-                settings.daily_cost_limit_usd,
-            )
+    async def add(self, amount: float) -> None:
+        """Track cost under lock to prevent concurrent modifications.
+
+        Note: there is still a TOCTOU window between check_limit() and add()
+        (the API call sits in between), so concurrent requests can overshoot
+        the limit by up to N_concurrent * max_single_call_cost. For a $50
+        daily limit this is bounded and acceptable.
+        """
+        async with self._lock:
+            self._maybe_reset()
+            self._total_usd += amount
+            if self._total_usd >= settings.daily_cost_limit_usd:
+                logger.error(
+                    "Daily cost limit exceeded: $%.2f >= $%.2f",
+                    self._total_usd,
+                    settings.daily_cost_limit_usd,
+                )
 
     @property
     def total_usd(self) -> float:
         self._maybe_reset()
         return self._total_usd
+
+    def remaining_budget(self) -> float:
+        """Return remaining daily budget in USD."""
+        self._maybe_reset()
+        return max(0.0, settings.daily_cost_limit_usd - self._total_usd)
 
 
 cost_tracker = CostTracker()

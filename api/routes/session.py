@@ -32,7 +32,23 @@ router = APIRouter(prefix="/session", tags=["session"])
 
 
 def _session_to_response(session: SessionModel) -> SessionResponse:
-    """Convert a Session model to a SessionResponse schema."""
+    """Convert a Session model to a SessionResponse schema.
+
+    In learn mode, the final step's answer is hidden while the session
+    is active so students can't inspect network traffic to cheat.
+    """
+    steps: list[StepDetail] = []
+    for i, step in enumerate(session.steps):
+        detail = StepDetail(**step)
+        is_final = i == len(session.steps) - 1
+        if (
+            session.mode == "learn"
+            and is_final
+            and session.status != SessionStatus.COMPLETED
+        ):
+            detail.after = ""
+        steps.append(detail)
+
     return SessionResponse(
         id=session.id,
         problem=session.problem,
@@ -41,7 +57,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
         total_steps=session.total_steps,
         status=session.status,
         mode=session.mode,
-        steps=[StepDetail(**step) for step in session.steps],
+        steps=steps,
     )
 
 
@@ -53,12 +69,16 @@ async def create(
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
     try:
-        session = await create_session(db, current_user.user_id, body.problem, body.mode)
+        session = await create_session(db, current_user.user_id, body.problem, body.mode, current_user.role)
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
-    except (RuntimeError, SessionError) as e:
+    except SessionError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except RuntimeError as e:
         logger.exception("Failed to create session")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return _session_to_response(session)
 
@@ -101,6 +121,8 @@ async def respond(
         )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
     return StepResponseSchema(
         action=result.action,
@@ -108,8 +130,6 @@ async def respond(
         current_step=result.current_step,
         total_steps=result.total_steps,
         is_correct=result.is_correct,
-        similar_problem=result.similar_problem,
-        step_description=result.step_description,
     )
 
 
@@ -132,10 +152,10 @@ async def similar(
 
     try:
         problem = await generate_similar_problem(session.problem, user_id=str(current_user.user_id))
-    except Exception:
+    except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate similar problem",
         )
     return {"similar_problem": problem}

@@ -14,8 +14,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.practice import check_answer
 from api.core.step_decomposition import decompose_problem, solve_problem
-from api.core.tutor import check_answer_equivalence, converse, step_chat
+from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
 
 RECENT_EXCHANGES_LIMIT = 10
@@ -34,8 +35,8 @@ class RateLimitError(SessionError):
 # Per-user daily request cap
 # ---------------------------------------------------------------------------
 
-async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
-    """Enforce per-user daily session creation cap."""
+async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID, role: str) -> None:
+    """Enforce per-user daily session creation cap based on user role."""
     today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
     result = await db.execute(
         select(func.count(Session.id)).where(
@@ -44,7 +45,11 @@ async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
         )
     )
     count = result.scalar() or 0
-    cap = settings.daily_request_cap_free
+    cap = (
+        settings.daily_request_cap_school
+        if role == "school"
+        else settings.daily_request_cap_free
+    )
     if count >= cap:
         raise RateLimitError(f"Daily session limit reached ({cap})")
 
@@ -58,9 +63,10 @@ async def create_session(
     user_id: uuid.UUID,
     problem: str,
     mode: str = SessionMode.LEARN,
+    role: str = "student",
 ) -> Session:
     """Create a new tutoring session for a problem."""
-    await _check_daily_cap(db, user_id)
+    await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
         # Lightweight: just solve for the answer, no step decomposition
@@ -143,8 +149,6 @@ class StepResponse:
     current_step: int
     total_steps: int
     is_correct: bool = False
-    similar_problem: str | None = None
-    step_description: str | None = None
 
 
 async def _converse_completed(
@@ -159,7 +163,7 @@ async def _converse_completed(
 
     _add_exchange(session, "student", student_response)
 
-    converse_result = await converse(
+    chat_result = await completed_chat(
         problem=session.problem,
         steps=session.steps,
         exchanges=session.exchanges,
@@ -168,23 +172,27 @@ async def _converse_completed(
         user_id=str(session.user_id),
     )
 
-    _add_exchange(session, "tutor", converse_result.feedback)
+    _add_exchange(session, "tutor", chat_result.feedback)
     await db.commit()
     return StepResponse(
         action="conversation",
-        feedback=converse_result.feedback,
+        feedback=chat_result.feedback,
         current_step=session.current_step,
         total_steps=session.total_steps,
     )
 
 
-async def _complete_practice(
+async def _complete_session(
     db: AsyncSession, session: Session,
 ) -> StepResponse:
-    """Mark a practice session as completed."""
+    """Mark a session as completed (works for both learn and practice modes)."""
     session.current_step = session.total_steps
     session.status = SessionStatus.COMPLETED
-    feedback = "Correct! Problem complete!"
+    feedback = (
+        "Correct! Problem complete!"
+        if session.mode == SessionMode.PRACTICE
+        else "Correct! You've solved the problem!"
+    )
     _add_exchange(session, "tutor", feedback)
     await db.commit()
     return StepResponse(
@@ -207,19 +215,13 @@ async def _respond_practice_mode(
 
     _add_exchange(session, "student", student_response)
 
-    # 1. Direct string match
-    is_correct = student_response.strip() == correct_answer.strip()
-
-    # 2. LLM check if string match fails
-    if not is_correct:
-        is_correct = await check_answer_equivalence(
-            session.problem, correct_answer,
-            student_response, str(session.id),
-            user_id=str(session.user_id),
-        )
+    is_correct = await check_answer(
+        session.problem, correct_answer, student_response,
+        session_id=str(session.id), user_id=str(session.user_id),
+    )
 
     if is_correct:
-        return await _complete_practice(db, session)
+        return await _complete_session(db, session)
 
     # Wrong answer
     feedback = "Incorrect, try again."
@@ -231,24 +233,6 @@ async def _respond_practice_mode(
         current_step=session.current_step,
         total_steps=session.total_steps,
         is_correct=False,
-    )
-
-
-async def _complete_learn(
-    db: AsyncSession, session: Session,
-) -> StepResponse:
-    """Mark a learn session as completed."""
-    session.current_step = session.total_steps
-    session.status = SessionStatus.COMPLETED
-    feedback = "Correct! You've solved the problem!"
-    _add_exchange(session, "tutor", feedback)
-    await db.commit()
-    return StepResponse(
-        action="completed",
-        feedback=feedback,
-        current_step=session.current_step,
-        total_steps=session.total_steps,
-        is_correct=True,
     )
 
 
@@ -312,7 +296,7 @@ async def _respond_learn_mode(
     is_correct = student_response.strip() == correct_answer.strip()
 
     if is_correct:
-        return await _complete_learn(db, session)
+        return await _complete_session(db, session)
 
     # Wrong answer
     feedback = "Not quite. Review the steps above and try again."
@@ -356,10 +340,9 @@ async def respond_to_step(
 # ---------------------------------------------------------------------------
 
 def _add_exchange(session: Session, role: str, content: str) -> None:
-    """Append an exchange to session history."""
+    """Append an exchange to session history, keeping only the most recent."""
     exchanges = list(session.exchanges)
     exchanges.append({"role": role, "content": content, "timestamp": time.time()})
-    # Trim gradually to avoid losing too many messages at once
-    if len(exchanges) > RECENT_EXCHANGES_LIMIT + 5:
+    if len(exchanges) > RECENT_EXCHANGES_LIMIT:
         exchanges = exchanges[-RECENT_EXCHANGES_LIMIT:]
     session.exchanges = exchanges

@@ -1,8 +1,11 @@
 """Practice mode: generate similar problems and check answers."""
 
+import json
 import logging
 
-from api.core.llm_client import call_claude_json
+import anthropic
+
+from api.core.llm_client import LLMMode, call_claude_json
 from api.core.tutor import check_answer_equivalence
 
 logger = logging.getLogger(__name__)
@@ -44,7 +47,7 @@ async def generate_practice_problems(
         result = await call_claude_json(
             _GENERATE_PROBLEMS_PROMPT,
             user_msg,
-            mode="practice_generate",
+            mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
         )
         problems = result.get("problems")
@@ -54,7 +57,7 @@ async def generate_practice_problems(
                 for p in problems
                 if isinstance(p, dict)
             ]
-    except Exception:
+    except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
         logger.exception("Failed to generate practice problems")
 
     raise RuntimeError("Failed to generate practice problems")
@@ -66,7 +69,12 @@ async def generate_practice_problems(
 
 
 async def check_answer(
-    question: str, correct_answer: str, user_answer: str, *, user_id: str | None = None,
+    question: str,
+    correct_answer: str,
+    user_answer: str,
+    *,
+    session_id: str | None = None,
+    user_id: str | None = None,
 ) -> bool:
     """Check if user's answer matches the correct answer.
 
@@ -74,4 +82,7 @@ async def check_answer(
     """
     if user_answer.strip() == correct_answer.strip():
         return True
-    return await check_answer_equivalence(question, correct_answer, user_answer, user_id=user_id)
+    return await check_answer_equivalence(
+        question, correct_answer, user_answer,
+        session_id=session_id, user_id=user_id,
+    )
