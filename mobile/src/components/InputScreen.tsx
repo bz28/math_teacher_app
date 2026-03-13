@@ -45,6 +45,13 @@ export function InputScreen({
   const [showMorePrompt, setShowMorePrompt] = useState(false);
   const [similarCount, setSimilarCount] = useState(0);
 
+  // Mock test config state
+  const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
+  const [mockGenerateCount, setMockGenerateCount] = useState(5);
+  const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
+  const [mockUntimed, setMockUntimed] = useState(false);
+  const startMockTest = useSessionStore((s) => s.startMockTest);
+
   const {
     extracting,
     problems: extractedProblems,
@@ -127,6 +134,21 @@ export function InputScreen({
     if (allProblems.length === 0) return;
     setError(null);
 
+    // Mock test mode — start exam directly
+    if (mode === "mock_test") {
+      onSessionStart();
+      const generateCount = mockExamType === "generate_similar" ? mockGenerateCount : 0;
+      const timeLimitMinutes = mockUntimed ? null : mockTimeLimitMinutes;
+      await startMockTest(allProblems, generateCount, timeLimitMinutes);
+      const postPhase = useSessionStore.getState().phase;
+      if (postPhase === "error") {
+        onSessionError();
+      } else {
+        setProblemQueue([]);
+      }
+      return;
+    }
+
     // Single problem in practice mode — ask if they want similar problems
     if (mode === "practice" && allProblems.length === 1) {
       setSimilarCount(0);
@@ -169,13 +191,20 @@ export function InputScreen({
     }
   };
 
-  const modeLabel = mode === "learn" ? "Learn" : "Practice";
-  const modeIcon = mode === "learn" ? ("book-outline" as const) : ("pencil-outline" as const);
+  const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Test";
+  const modeIcon = mode === "learn" ? ("book-outline" as const) : mode === "practice" ? ("pencil-outline" as const) : ("document-text-outline" as const);
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const hasNoProblems = totalProblems === 0;
-  const goButtonLabel = problemQueue.length > 0
-    ? `Start ${modeLabel} (${totalProblems})`
-    : "Go";
+
+  const getGoButtonLabel = () => {
+    if (mode === "mock_test" && totalProblems > 0) {
+      const examCount = mockExamType === "generate_similar" ? mockGenerateCount : totalProblems;
+      return `Start Exam (${examCount})`;
+    }
+    if (problemQueue.length > 0) return `Start ${modeLabel} (${totalProblems})`;
+    return "Go";
+  };
+  const goButtonLabel = getGoButtonLabel();
 
   return (
     <>
@@ -285,6 +314,94 @@ export function InputScreen({
         )}
 
         <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
+
+        {/* Mock test config */}
+        {mode === "mock_test" && totalProblems > 0 && (
+          <View style={[styles.mockConfigContainer, shadows.sm]}>
+            <Text style={styles.mockConfigTitle}>Exam Settings</Text>
+
+            {/* Exam type toggle */}
+            <View style={styles.mockSegment}>
+              <AnimatedPressable
+                style={[styles.mockSegmentBtn, mockExamType === "use_as_exam" && styles.mockSegmentBtnActive]}
+                onPress={() => setMockExamType("use_as_exam")}
+              >
+                <Text style={[styles.mockSegmentText, mockExamType === "use_as_exam" && styles.mockSegmentTextActive]}>
+                  Use as Exam
+                </Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                style={[styles.mockSegmentBtn, mockExamType === "generate_similar" && styles.mockSegmentBtnActive]}
+                onPress={() => setMockExamType("generate_similar")}
+              >
+                <Text style={[styles.mockSegmentText, mockExamType === "generate_similar" && styles.mockSegmentTextActive]}>
+                  Generate Similar
+                </Text>
+              </AnimatedPressable>
+            </View>
+
+            {/* Question count stepper (only for generate similar) */}
+            {mockExamType === "generate_similar" && (
+              <View style={styles.mockStepperRow}>
+                <Text style={styles.mockStepperLabel}>Questions</Text>
+                <View style={styles.stepper}>
+                  <AnimatedPressable
+                    scaleDown={0.9}
+                    onPress={() => setMockGenerateCount(Math.max(1, mockGenerateCount - 1))}
+                  >
+                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
+                      <Ionicons name="remove" size={20} color={colors.white} />
+                    </LinearGradient>
+                  </AnimatedPressable>
+                  <Text style={styles.countValue}>{mockGenerateCount}</Text>
+                  <AnimatedPressable
+                    scaleDown={0.9}
+                    onPress={() => setMockGenerateCount(Math.min(15, mockGenerateCount + 1))}
+                  >
+                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
+                      <Ionicons name="add" size={20} color={colors.white} />
+                    </LinearGradient>
+                  </AnimatedPressable>
+                </View>
+              </View>
+            )}
+
+            {/* Time limit */}
+            <View style={styles.mockTimeRow}>
+              <Text style={styles.mockStepperLabel}>Time Limit</Text>
+              <AnimatedPressable
+                style={[styles.mockUntimedToggle, mockUntimed && styles.mockUntimedToggleActive]}
+                onPress={() => setMockUntimed(!mockUntimed)}
+              >
+                <Text style={[styles.mockUntimedText, mockUntimed && styles.mockUntimedTextActive]}>Untimed</Text>
+              </AnimatedPressable>
+            </View>
+            {!mockUntimed && (
+              <View style={styles.mockTimeInputRow}>
+                <View style={styles.stepper}>
+                  <AnimatedPressable
+                    scaleDown={0.9}
+                    onPress={() => setMockTimeLimitMinutes(Math.max(1, mockTimeLimitMinutes - 5))}
+                  >
+                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
+                      <Ionicons name="remove" size={20} color={colors.white} />
+                    </LinearGradient>
+                  </AnimatedPressable>
+                  <Text style={styles.countValue}>{mockTimeLimitMinutes}</Text>
+                  <AnimatedPressable
+                    scaleDown={0.9}
+                    onPress={() => setMockTimeLimitMinutes(Math.min(180, mockTimeLimitMinutes + 5))}
+                  >
+                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
+                      <Ionicons name="add" size={20} color={colors.white} />
+                    </LinearGradient>
+                  </AnimatedPressable>
+                </View>
+                <Text style={styles.mockMinutesLabel}>minutes</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <GradientButton
           onPress={handleGo}
@@ -611,5 +728,85 @@ const styles = StyleSheet.create({
   promptPrimaryText: {
     ...typography.button,
     color: colors.white,
+  },
+  // Mock test config styles
+  mockConfigContainer: {
+    width: "100%",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginTop: spacing.md,
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  mockConfigTitle: {
+    ...typography.bodyBold,
+    color: colors.text,
+  },
+  mockSegment: {
+    flexDirection: "row" as const,
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.md,
+    padding: spacing.xs,
+  },
+  mockSegmentBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.sm,
+    alignItems: "center" as const,
+  },
+  mockSegmentBtnActive: {
+    backgroundColor: colors.white,
+  },
+  mockSegmentText: {
+    ...typography.label,
+    color: colors.textSecondary,
+  },
+  mockSegmentTextActive: {
+    color: colors.primary,
+  },
+  mockStepperRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
+  mockStepperLabel: {
+    ...typography.bodyBold,
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  mockTimeRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
+  mockUntimedToggle: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  mockUntimedToggleActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  mockUntimedText: {
+    ...typography.label,
+    color: colors.textSecondary,
+  },
+  mockUntimedTextActive: {
+    color: colors.primary,
+  },
+  mockTimeInputRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: spacing.md,
+  },
+  mockMinutesLabel: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
   },
 });
