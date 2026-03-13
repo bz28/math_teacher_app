@@ -19,5 +19,10 @@ def strip_markdown_fencing(text: str) -> str:
     if match:
         return match.group(1).strip()
 
-    # No fence found — return as-is for json.loads to attempt
+    # No fence — try to find a JSON object anywhere in the text
+    json_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if json_match:
+        return json_match.group(0).strip()
+
+    # Nothing found — return as-is for json.loads to attempt
     return text
