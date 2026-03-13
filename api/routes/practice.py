@@ -29,7 +29,7 @@ async def generate(
         problems = await generate_practice_problems(body.problem, body.count, user_id=str(current_user.user_id))
     except RuntimeError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate practice problems",
         )
 
@@ -52,7 +52,7 @@ async def check(
     except RuntimeError:
         logger.exception("Answer check failed")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to check answer",
         )
     return PracticeCheckResponse(is_correct=is_correct)
