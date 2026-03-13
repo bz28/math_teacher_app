@@ -325,17 +325,11 @@ export function InputScreen({
 
             {/* Exam type segmented control */}
             <View style={styles.mockSection}>
-              <View style={[styles.mockSegment, shadows.sm]}>
+              <View style={styles.mockSegment}>
                 <AnimatedPressable
                   style={[styles.mockSegmentBtn, mockExamType === "use_as_exam" && [styles.mockSegmentBtnActive, shadows.sm]]}
                   onPress={() => setMockExamType("use_as_exam")}
                 >
-                  <Ionicons
-                    name="document-text-outline"
-                    size={15}
-                    color={mockExamType === "use_as_exam" ? colors.primary : colors.textMuted}
-                    style={{ marginBottom: 2 }}
-                  />
                   <Text style={[styles.mockSegmentText, mockExamType === "use_as_exam" && styles.mockSegmentTextActive]}>
                     Use as Exam
                   </Text>
@@ -344,12 +338,6 @@ export function InputScreen({
                   style={[styles.mockSegmentBtn, mockExamType === "generate_similar" && [styles.mockSegmentBtnActive, shadows.sm]]}
                   onPress={() => setMockExamType("generate_similar")}
                 >
-                  <Ionicons
-                    name="shuffle-outline"
-                    size={15}
-                    color={mockExamType === "generate_similar" ? colors.primary : colors.textMuted}
-                    style={{ marginBottom: 2 }}
-                  />
                   <Text style={[styles.mockSegmentText, mockExamType === "generate_similar" && styles.mockSegmentTextActive]}>
                     Generate Similar
                   </Text>
@@ -401,44 +389,44 @@ export function InputScreen({
                 <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
                 <Text style={styles.mockSettingText}>Time Limit</Text>
               </View>
-              {mockUntimed ? (
-                <AnimatedPressable
-                  style={styles.mockUntimedChip}
-                  onPress={() => setMockUntimed(false)}
-                >
-                  <Ionicons name="infinite-outline" size={14} color={colors.primary} />
-                  <Text style={styles.mockUntimedChipText}>Untimed</Text>
-                </AnimatedPressable>
-              ) : (
-                <View style={styles.mockTimeGroup}>
-                  <View style={styles.mockMiniStepper}>
-                    <AnimatedPressable
-                      style={[styles.mockMiniBtn, mockTimeLimitMinutes <= 1 && styles.mockMiniBtnDisabled]}
-                      onPress={() => setMockTimeLimitMinutes(Math.max(1, mockTimeLimitMinutes - 5))}
-                      scaleDown={0.9}
-                      disabled={mockTimeLimitMinutes <= 1}
-                    >
-                      <Ionicons name="remove" size={16} color={mockTimeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
-                    </AnimatedPressable>
-                    <Text style={styles.mockMiniValue}>{mockTimeLimitMinutes}<Text style={styles.mockMiniUnit}> min</Text></Text>
-                    <AnimatedPressable
-                      style={[styles.mockMiniBtn, mockTimeLimitMinutes >= 180 && styles.mockMiniBtnDisabled]}
-                      onPress={() => setMockTimeLimitMinutes(Math.min(180, mockTimeLimitMinutes + 5))}
-                      scaleDown={0.9}
-                      disabled={mockTimeLimitMinutes >= 180}
-                    >
-                      <Ionicons name="add" size={16} color={mockTimeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
-                    </AnimatedPressable>
-                  </View>
+              <AnimatedPressable
+                style={[styles.mockToggleChip, !mockUntimed && styles.mockToggleChipActive]}
+                onPress={() => setMockUntimed(!mockUntimed)}
+              >
+                <Ionicons
+                  name={mockUntimed ? "infinite-outline" : "timer-outline"}
+                  size={14}
+                  color={!mockUntimed ? colors.primary : colors.textMuted}
+                />
+                <Text style={[styles.mockToggleChipText, !mockUntimed && styles.mockToggleChipTextActive]}>
+                  {mockUntimed ? "Off" : "On"}
+                </Text>
+              </AnimatedPressable>
+            </View>
+            {!mockUntimed && (
+              <View style={styles.mockTimeStepperRow}>
+                <View style={styles.mockMiniStepper}>
                   <AnimatedPressable
-                    style={styles.mockUntimedLink}
-                    onPress={() => setMockUntimed(true)}
+                    style={[styles.mockMiniBtn, mockTimeLimitMinutes <= 1 && styles.mockMiniBtnDisabled]}
+                    onPress={() => setMockTimeLimitMinutes(Math.max(1, mockTimeLimitMinutes - 5))}
+                    scaleDown={0.9}
+                    disabled={mockTimeLimitMinutes <= 1}
                   >
-                    <Text style={styles.mockUntimedLinkText}>No limit</Text>
+                    <Ionicons name="remove" size={16} color={mockTimeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
+                  </AnimatedPressable>
+                  <Text style={styles.mockMiniValue}>{mockTimeLimitMinutes}</Text>
+                  <AnimatedPressable
+                    style={[styles.mockMiniBtn, mockTimeLimitMinutes >= 180 && styles.mockMiniBtnDisabled]}
+                    onPress={() => setMockTimeLimitMinutes(Math.min(180, mockTimeLimitMinutes + 5))}
+                    scaleDown={0.9}
+                    disabled={mockTimeLimitMinutes >= 180}
+                  >
+                    <Ionicons name="add" size={16} color={mockTimeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
                   </AnimatedPressable>
                 </View>
-              )}
-            </View>
+                <Text style={styles.mockTimeUnit}>minutes</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -797,21 +785,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputBg,
     borderRadius: radii.md,
     padding: 3,
-    gap: 3,
   },
   mockSegmentBtn: {
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: radii.sm + 1,
     alignItems: "center" as const,
-    gap: 2,
+    justifyContent: "center" as const,
   },
   mockSegmentBtnActive: {
     backgroundColor: colors.white,
   },
   mockSegmentText: {
     ...typography.label,
-    fontSize: 12,
     color: colors.textMuted,
   },
   mockSegmentTextActive: {
@@ -869,37 +855,35 @@ const styles = StyleSheet.create({
     textAlign: "center" as const,
     fontSize: 15,
   },
-  mockMiniUnit: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontWeight: "400" as const,
-    fontSize: 12,
-  },
-  mockUntimedChip: {
+  mockToggleChip: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: spacing.xs,
-    backgroundColor: colors.primaryBg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: 6,
     borderRadius: radii.pill,
+    backgroundColor: colors.inputBg,
   },
-  mockUntimedChipText: {
+  mockToggleChipActive: {
+    backgroundColor: colors.primaryBg,
+  },
+  mockToggleChipText: {
     ...typography.label,
-    color: colors.primary,
     fontSize: 12,
+    color: colors.textMuted,
   },
-  mockTimeGroup: {
+  mockToggleChipTextActive: {
+    color: colors.primary,
+  },
+  mockTimeStepperRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: spacing.md,
+    justifyContent: "flex-end" as const,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-  mockUntimedLink: {
-    paddingVertical: spacing.xs,
-  },
-  mockUntimedLinkText: {
+  mockTimeUnit: {
     ...typography.caption,
-    color: colors.primary,
-    textDecorationLine: "underline" as const,
+    color: colors.textMuted,
   },
 });
