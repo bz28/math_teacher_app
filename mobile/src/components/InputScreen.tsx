@@ -318,88 +318,127 @@ export function InputScreen({
         {/* Mock test config */}
         {mode === "mock_test" && totalProblems > 0 && (
           <View style={[styles.mockConfigContainer, shadows.sm]}>
-            <Text style={styles.mockConfigTitle}>Exam Settings</Text>
+            <View style={styles.mockConfigHeader}>
+              <Ionicons name="settings-outline" size={16} color={colors.primary} />
+              <Text style={styles.mockConfigTitle}>Exam Settings</Text>
+            </View>
 
-            {/* Exam type toggle */}
-            <View style={styles.mockSegment}>
-              <AnimatedPressable
-                style={[styles.mockSegmentBtn, mockExamType === "use_as_exam" && styles.mockSegmentBtnActive]}
-                onPress={() => setMockExamType("use_as_exam")}
-              >
-                <Text style={[styles.mockSegmentText, mockExamType === "use_as_exam" && styles.mockSegmentTextActive]}>
-                  Use as Exam
-                </Text>
-              </AnimatedPressable>
-              <AnimatedPressable
-                style={[styles.mockSegmentBtn, mockExamType === "generate_similar" && styles.mockSegmentBtnActive]}
-                onPress={() => setMockExamType("generate_similar")}
-              >
-                <Text style={[styles.mockSegmentText, mockExamType === "generate_similar" && styles.mockSegmentTextActive]}>
-                  Generate Similar
-                </Text>
-              </AnimatedPressable>
+            {/* Exam type segmented control */}
+            <View style={styles.mockSection}>
+              <View style={[styles.mockSegment, shadows.sm]}>
+                <AnimatedPressable
+                  style={[styles.mockSegmentBtn, mockExamType === "use_as_exam" && [styles.mockSegmentBtnActive, shadows.sm]]}
+                  onPress={() => setMockExamType("use_as_exam")}
+                >
+                  <Ionicons
+                    name="document-text-outline"
+                    size={15}
+                    color={mockExamType === "use_as_exam" ? colors.primary : colors.textMuted}
+                    style={{ marginBottom: 2 }}
+                  />
+                  <Text style={[styles.mockSegmentText, mockExamType === "use_as_exam" && styles.mockSegmentTextActive]}>
+                    Use as Exam
+                  </Text>
+                </AnimatedPressable>
+                <AnimatedPressable
+                  style={[styles.mockSegmentBtn, mockExamType === "generate_similar" && [styles.mockSegmentBtnActive, shadows.sm]]}
+                  onPress={() => setMockExamType("generate_similar")}
+                >
+                  <Ionicons
+                    name="shuffle-outline"
+                    size={15}
+                    color={mockExamType === "generate_similar" ? colors.primary : colors.textMuted}
+                    style={{ marginBottom: 2 }}
+                  />
+                  <Text style={[styles.mockSegmentText, mockExamType === "generate_similar" && styles.mockSegmentTextActive]}>
+                    Generate Similar
+                  </Text>
+                </AnimatedPressable>
+              </View>
+              <Text style={styles.mockSegmentHint}>
+                {mockExamType === "use_as_exam"
+                  ? `Your ${totalProblems} problem${totalProblems > 1 ? "s" : ""} will be the exam`
+                  : "New problems generated from your inputs"}
+              </Text>
             </View>
 
             {/* Question count stepper (only for generate similar) */}
             {mockExamType === "generate_similar" && (
-              <View style={styles.mockStepperRow}>
-                <Text style={styles.mockStepperLabel}>Questions</Text>
-                <View style={styles.stepper}>
-                  <AnimatedPressable
-                    scaleDown={0.9}
-                    onPress={() => setMockGenerateCount(Math.max(1, mockGenerateCount - 1))}
-                  >
-                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                      <Ionicons name="remove" size={20} color={colors.white} />
-                    </LinearGradient>
-                  </AnimatedPressable>
-                  <Text style={styles.countValue}>{mockGenerateCount}</Text>
-                  <AnimatedPressable
-                    scaleDown={0.9}
-                    onPress={() => setMockGenerateCount(Math.min(15, mockGenerateCount + 1))}
-                  >
-                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                      <Ionicons name="add" size={20} color={colors.white} />
-                    </LinearGradient>
-                  </AnimatedPressable>
+              <>
+                <View style={styles.mockDivider} />
+                <View style={styles.mockSettingRow}>
+                  <View style={styles.mockSettingLabel}>
+                    <Ionicons name="help-circle-outline" size={16} color={colors.textSecondary} />
+                    <Text style={styles.mockSettingText}>Questions</Text>
+                  </View>
+                  <View style={styles.mockMiniStepper}>
+                    <AnimatedPressable
+                      style={[styles.mockMiniBtn, mockGenerateCount <= 1 && styles.mockMiniBtnDisabled]}
+                      onPress={() => setMockGenerateCount(Math.max(1, mockGenerateCount - 1))}
+                      scaleDown={0.9}
+                      disabled={mockGenerateCount <= 1}
+                    >
+                      <Ionicons name="remove" size={16} color={mockGenerateCount <= 1 ? colors.textMuted : colors.primary} />
+                    </AnimatedPressable>
+                    <Text style={styles.mockMiniValue}>{mockGenerateCount}</Text>
+                    <AnimatedPressable
+                      style={[styles.mockMiniBtn, mockGenerateCount >= 15 && styles.mockMiniBtnDisabled]}
+                      onPress={() => setMockGenerateCount(Math.min(15, mockGenerateCount + 1))}
+                      scaleDown={0.9}
+                      disabled={mockGenerateCount >= 15}
+                    >
+                      <Ionicons name="add" size={16} color={mockGenerateCount >= 15 ? colors.textMuted : colors.primary} />
+                    </AnimatedPressable>
+                  </View>
                 </View>
-              </View>
+              </>
             )}
 
             {/* Time limit */}
-            <View style={styles.mockTimeRow}>
-              <Text style={styles.mockStepperLabel}>Time Limit</Text>
-              <AnimatedPressable
-                style={[styles.mockUntimedToggle, mockUntimed && styles.mockUntimedToggleActive]}
-                onPress={() => setMockUntimed(!mockUntimed)}
-              >
-                <Text style={[styles.mockUntimedText, mockUntimed && styles.mockUntimedTextActive]}>Untimed</Text>
-              </AnimatedPressable>
-            </View>
-            {!mockUntimed && (
-              <View style={styles.mockTimeInputRow}>
-                <View style={styles.stepper}>
+            <View style={styles.mockDivider} />
+            <View style={styles.mockSettingRow}>
+              <View style={styles.mockSettingLabel}>
+                <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+                <Text style={styles.mockSettingText}>Time Limit</Text>
+              </View>
+              {mockUntimed ? (
+                <AnimatedPressable
+                  style={styles.mockUntimedChip}
+                  onPress={() => setMockUntimed(false)}
+                >
+                  <Ionicons name="infinite-outline" size={14} color={colors.primary} />
+                  <Text style={styles.mockUntimedChipText}>Untimed</Text>
+                </AnimatedPressable>
+              ) : (
+                <View style={styles.mockTimeGroup}>
+                  <View style={styles.mockMiniStepper}>
+                    <AnimatedPressable
+                      style={[styles.mockMiniBtn, mockTimeLimitMinutes <= 1 && styles.mockMiniBtnDisabled]}
+                      onPress={() => setMockTimeLimitMinutes(Math.max(1, mockTimeLimitMinutes - 5))}
+                      scaleDown={0.9}
+                      disabled={mockTimeLimitMinutes <= 1}
+                    >
+                      <Ionicons name="remove" size={16} color={mockTimeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
+                    </AnimatedPressable>
+                    <Text style={styles.mockMiniValue}>{mockTimeLimitMinutes}<Text style={styles.mockMiniUnit}> min</Text></Text>
+                    <AnimatedPressable
+                      style={[styles.mockMiniBtn, mockTimeLimitMinutes >= 180 && styles.mockMiniBtnDisabled]}
+                      onPress={() => setMockTimeLimitMinutes(Math.min(180, mockTimeLimitMinutes + 5))}
+                      scaleDown={0.9}
+                      disabled={mockTimeLimitMinutes >= 180}
+                    >
+                      <Ionicons name="add" size={16} color={mockTimeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
+                    </AnimatedPressable>
+                  </View>
                   <AnimatedPressable
-                    scaleDown={0.9}
-                    onPress={() => setMockTimeLimitMinutes(Math.max(1, mockTimeLimitMinutes - 5))}
+                    style={styles.mockUntimedLink}
+                    onPress={() => setMockUntimed(true)}
                   >
-                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                      <Ionicons name="remove" size={20} color={colors.white} />
-                    </LinearGradient>
-                  </AnimatedPressable>
-                  <Text style={styles.countValue}>{mockTimeLimitMinutes}</Text>
-                  <AnimatedPressable
-                    scaleDown={0.9}
-                    onPress={() => setMockTimeLimitMinutes(Math.min(180, mockTimeLimitMinutes + 5))}
-                  >
-                    <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                      <Ionicons name="add" size={20} color={colors.white} />
-                    </LinearGradient>
+                    <Text style={styles.mockUntimedLinkText}>No limit</Text>
                   </AnimatedPressable>
                 </View>
-                <Text style={styles.mockMinutesLabel}>minutes</Text>
-              </View>
-            )}
+              )}
+            </View>
           </View>
         )}
 
@@ -736,77 +775,131 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     padding: spacing.xl,
-    gap: spacing.lg,
+  },
+  mockConfigHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   mockConfigTitle: {
     ...typography.bodyBold,
     color: colors.text,
+    fontSize: 15,
+  },
+  mockSection: {
+    marginBottom: spacing.xs,
   },
   mockSegment: {
     flexDirection: "row" as const,
     backgroundColor: colors.inputBg,
     borderRadius: radii.md,
-    padding: spacing.xs,
+    padding: 3,
+    gap: 3,
   },
   mockSegmentBtn: {
     flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radii.sm + 1,
     alignItems: "center" as const,
+    gap: 2,
   },
   mockSegmentBtnActive: {
     backgroundColor: colors.white,
   },
   mockSegmentText: {
     ...typography.label,
-    color: colors.textSecondary,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   mockSegmentTextActive: {
     color: colors.primary,
   },
-  mockStepperRow: {
+  mockSegmentHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center" as const,
+    marginTop: spacing.sm,
+  },
+  mockDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: spacing.lg,
+  },
+  mockSettingRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
   },
-  mockStepperLabel: {
-    ...typography.bodyBold,
-    color: colors.textSecondary,
+  mockSettingLabel: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: spacing.sm,
+  },
+  mockSettingText: {
+    ...typography.body,
+    color: colors.text,
     fontSize: 14,
   },
-  mockTimeRow: {
+  mockMiniStepper: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    justifyContent: "space-between" as const,
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.sm,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    gap: 0,
   },
-  mockUntimedToggle: {
-    paddingHorizontal: spacing.lg,
+  mockMiniBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm - 2,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  mockMiniBtnDisabled: {
+    opacity: 0.35,
+  },
+  mockMiniValue: {
+    ...typography.bodyBold,
+    color: colors.text,
+    minWidth: 36,
+    textAlign: "center" as const,
+    fontSize: 15,
+  },
+  mockMiniUnit: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontWeight: "400" as const,
+    fontSize: 12,
+  },
+  mockUntimedChip: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: colors.border,
   },
-  mockUntimedToggleActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
-  },
-  mockUntimedText: {
+  mockUntimedChipText: {
     ...typography.label,
-    color: colors.textSecondary,
-  },
-  mockUntimedTextActive: {
     color: colors.primary,
+    fontSize: 12,
   },
-  mockTimeInputRow: {
+  mockTimeGroup: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: spacing.md,
   },
-  mockMinutesLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    fontSize: 14,
+  mockUntimedLink: {
+    paddingVertical: spacing.xs,
+  },
+  mockUntimedLinkText: {
+    ...typography.caption,
+    color: colors.primary,
+    textDecorationLine: "underline" as const,
   },
 });
