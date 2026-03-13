@@ -195,6 +195,7 @@ export function InputScreen({
   const modeIcon = mode === "learn" ? ("book-outline" as const) : mode === "practice" ? ("pencil-outline" as const) : ("document-text-outline" as const);
   const modeColor = mode === "learn" ? colors.primary : mode === "practice" ? colors.success : colors.warningDark;
   const modeBg = mode === "learn" ? colors.primaryBg : mode === "practice" ? colors.successLight : colors.warningBg;
+  const modeGradient = (mode === "learn" ? "primary" : mode === "practice" ? "success" : "warning") as keyof typeof gradients;
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const hasNoProblems = totalProblems === 0;
 
@@ -254,7 +255,7 @@ export function InputScreen({
               <Ionicons
                 name="add-circle"
                 size={32}
-                color={input.trim() && problemQueue.length < MAX_PROBLEMS ? colors.primary : colors.textMuted}
+                color={input.trim() && problemQueue.length < MAX_PROBLEMS ? modeColor : colors.textMuted}
               />
             </AnimatedPressable>
           </View>
@@ -262,28 +263,28 @@ export function InputScreen({
 
         <View style={styles.scanRow}>
           <TouchableOpacity
-            style={[styles.scanButton, extracting && styles.scanButtonDisabled]}
+            style={[styles.scanButton, { borderColor: modeColor, backgroundColor: modeBg }, extracting && styles.scanButtonDisabled]}
             onPress={() => pickImage("camera")}
             disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
             activeOpacity={0.6}
           >
-            <Ionicons name="camera-outline" size={20} color={extracting ? colors.textMuted : colors.primary} />
-            <Text style={[styles.scanButtonText, extracting && styles.scanButtonTextDisabled]}>Scan</Text>
+            <Ionicons name="camera-outline" size={20} color={extracting ? colors.textMuted : modeColor} />
+            <Text style={[styles.scanButtonText, { color: modeColor }, extracting && styles.scanButtonTextDisabled]}>Scan</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.scanButton, extracting && styles.scanButtonDisabled]}
+            style={[styles.scanButton, { borderColor: modeColor, backgroundColor: modeBg }, extracting && styles.scanButtonDisabled]}
             onPress={() => pickImage("gallery")}
             disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
             activeOpacity={0.6}
           >
-            <Ionicons name="image-outline" size={20} color={extracting ? colors.textMuted : colors.primary} />
-            <Text style={[styles.scanButtonText, extracting && styles.scanButtonTextDisabled]}>Gallery</Text>
+            <Ionicons name="image-outline" size={20} color={extracting ? colors.textMuted : modeColor} />
+            <Text style={[styles.scanButtonText, { color: modeColor }, extracting && styles.scanButtonTextDisabled]}>Gallery</Text>
           </TouchableOpacity>
         </View>
 
         {extracting && (
           <View style={[styles.extractingCard, shadows.sm]}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={modeColor} />
             <Text style={styles.extractingTitle}>Reading your problems...</Text>
             <Text style={styles.extractingSubtitle}>This usually takes a few seconds</Text>
           </View>
@@ -439,6 +440,7 @@ export function InputScreen({
           label={goButtonLabel}
           loading={isLoading}
           disabled={hasNoProblems}
+          gradient={modeGradient}
           style={styles.goButton}
         />
 
@@ -561,12 +563,11 @@ const styles = StyleSheet.create({
   modeChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.primaryBg,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  modeChipText: { ...typography.label, color: colors.primary },
+  modeChipText: { ...typography.label },
   inputWrapper: {
     width: "100%",
     marginBottom: spacing.xs,
@@ -613,12 +614,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.md,
     borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
   },
   scanButtonText: {
     ...typography.label,
-    color: colors.primary,
   },
   scanButtonDisabled: {
     borderColor: colors.border,
