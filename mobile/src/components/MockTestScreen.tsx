@@ -105,13 +105,10 @@ export function MockTestScreen({ onBack }: Props) {
   };
 
   const handleSubmit = () => {
-    // Save current answer first
-    if (localAnswer.trim()) {
-      saveMockTestAnswer(currentIndex, localAnswer.trim());
-    }
+    // Save current answer (or clear if emptied)
+    saveMockTestAnswer(currentIndex, localAnswer.trim());
 
-    // Count after saving current answer
-    const latestAnswers = { ...answers, ...(localAnswer.trim() ? { [currentIndex]: localAnswer.trim() } : {}) };
+    const latestAnswers = { ...answers, [currentIndex]: localAnswer.trim() };
     const answeredCount = questions.filter((_, i) => latestAnswers[i]?.trim()).length;
     const unansweredCount = questions.length - answeredCount;
 

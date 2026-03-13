@@ -621,13 +621,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         questions = generated;
       } else {
         // "Use as exam" mode — solve each problem to get correct answers
-        const results = await Promise.all(
+        const outcomes = await Promise.allSettled(
           problems.map((p) => generatePracticeProblems(p, 0)),
         );
-        questions = results.map((r, i) => ({
-          question: problems[i],
-          answer: r.problems[0]?.answer ?? "unknown",
-        }));
+        questions = [];
+        for (let i = 0; i < outcomes.length; i++) {
+          const outcome = outcomes[i];
+          if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
+            questions.push({
+              question: problems[i],
+              answer: outcome.value.problems[0].answer,
+            });
+          }
+        }
       }
 
       if (questions.length === 0) throw new Error("Failed to generate exam questions");

@@ -41,8 +41,8 @@ async def generate_practice_problems(
     """
     user_msg = (
         f"Original problem: {problem}\n\n"
-        f"Generate {1 + count} problems total (include the original reworded, "
-        f"plus {count} similar ones). Each must have a correct answer."
+        f"Generate {1 + count} similar problems (do not include the original). "
+        f"Each must have a correct answer."
     )
 
     try:
