@@ -33,8 +33,8 @@ async def _cleanup_stale_sessions() -> None:
             .values(status=SessionStatus.ABANDONED)
         )
         await db.commit()
-        if result.rowcount:  # type: ignore[union-attr]
-            logger.info("Marked %d stale sessions as abandoned", result.rowcount)
+        if result.rowcount:  # type: ignore[attr-defined]
+            logger.info("Marked %d stale sessions as abandoned", result.rowcount)  # type: ignore[attr-defined]
 
 
 async def _cleanup_expired_tokens() -> None:
@@ -52,8 +52,8 @@ async def _cleanup_expired_tokens() -> None:
             )
         )
         await db.commit()
-        if result.rowcount:  # type: ignore[union-attr]
-            logger.info("Cleaned up %d expired/revoked refresh tokens", result.rowcount)
+        if result.rowcount:  # type: ignore[attr-defined]
+            logger.info("Cleaned up %d expired/revoked refresh tokens", result.rowcount)  # type: ignore[attr-defined]
 
 
 @asynccontextmanager
