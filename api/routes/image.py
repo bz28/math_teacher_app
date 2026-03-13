@@ -16,7 +16,9 @@ async def extract(
 ) -> ImageExtractResponse:
     """Extract math problems from a photo of a worksheet, textbook, etc."""
     try:
-        result = await extract_problems_from_image(body.image_base64)
+        result = await extract_problems_from_image(
+            body.image_base64, user_id=str(current_user.user_id),
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -48,6 +48,7 @@ class RequestSizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Fast-reject if Content-Length is declared and too large
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
         if content_length and int(content_length) > self.max_size:
@@ -59,4 +60,28 @@ class RequestSizeLimitMiddleware:
             await response(scope, receive, send)
             return
 
-        await self.app(scope, receive, send)
+        # Track actual bytes received (catches chunked transfers without Content-Length)
+        bytes_received = 0
+        max_size = self.max_size
+
+        async def receive_with_limit() -> Any:
+            nonlocal bytes_received
+            message = await receive()
+            if message["type"] == "http.request":
+                bytes_received += len(message.get("body", b""))
+                if bytes_received > max_size:
+                    raise ValueError("Request body too large")
+            return message
+
+        try:
+            await self.app(scope, receive_with_limit, send)
+        except ValueError as e:
+            if "Request body too large" in str(e):
+                response = Response(
+                    content='{"detail":"Request body too large"}',
+                    status_code=413,
+                    media_type="application/json",
+                )
+                await response(scope, receive, send)
+            else:
+                raise

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.llm_call import LLMCall
-from api.models.session import Session
+from api.models.session import Session, SessionStatus
 from api.models.user import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -80,7 +80,7 @@ async def overview(
     completed_sessions_week = (await db.execute(
         select(func.count()).where(
             Session.created_at >= week_ago,
-            Session.status == "completed",
+            Session.status == SessionStatus.COMPLETED,
         )
     )).scalar() or 0
 
@@ -278,7 +278,7 @@ async def sessions(
         select(
             cast(Session.created_at, Date).label("day"),
             func.count().label("total"),
-            func.sum(case((Session.status == "completed", 1), else_=0)).label("completed"),
+            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
         .where(Session.created_at >= since)
         .group_by("day")
@@ -290,7 +290,7 @@ async def sessions(
         select(
             Session.mode,
             func.count().label("count"),
-            func.sum(case((Session.status == "completed", 1), else_=0)).label("completed"),
+            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
         .where(Session.created_at >= since)
         .group_by(Session.mode)
@@ -310,7 +310,7 @@ async def sessions(
         select(
             Session.problem,
             func.count().label("count"),
-            func.sum(case((Session.status == "completed", 1), else_=0)).label("completed"),
+            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
         .where(Session.created_at >= since)
         .group_by(Session.problem)
@@ -332,7 +332,7 @@ async def sessions(
         select(Session)
         .where(
             Session.created_at >= since,
-            Session.status == "abandoned",
+            Session.status == SessionStatus.ABANDONED,
         )
         .order_by(Session.created_at.desc())
         .limit(10)

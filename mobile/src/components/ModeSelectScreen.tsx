@@ -1,17 +1,20 @@
+import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
-export type Mode = "learn" | "practice" | "mock_exam";
+export type Mode = "learn" | "practice";
 
 interface ModeSelectScreenProps {
   onSelect: (mode: Mode) => void;
   onBack: () => void;
 }
 
-const MODES: { id: Mode; label: string; icon: string; iconColor: string; iconBg: string; description: string }[] = [
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+
+const MODES: { id: Mode; label: string; icon: IoniconsName; iconColor: string; iconBg: string; description: string }[] = [
   {
     id: "learn",
     label: "Learn",
@@ -27,14 +30,6 @@ const MODES: { id: Mode; label: string; icon: string; iconColor: string; iconBg:
     iconColor: colors.success,
     iconBg: colors.successLight,
     description: "Solve problems on your own",
-  },
-  {
-    id: "mock_exam",
-    label: "Mock Exam",
-    icon: "document-text-outline",
-    iconColor: colors.warningDark,
-    iconBg: colors.warningBg,
-    description: "Timed exam simulation",
   },
 ];
 
@@ -59,7 +54,7 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
             onPress={() => onSelect(mode.id)}
           >
             <View style={[styles.iconWrap, { backgroundColor: mode.iconBg }]}>
-              <Ionicons name={mode.icon as any} size={24} color={mode.iconColor} />
+              <Ionicons name={mode.icon} size={24} color={mode.iconColor} />
             </View>
             <View style={styles.cardText}>
               <Text style={styles.label}>{mode.label}</Text>

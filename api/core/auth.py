@@ -94,7 +94,7 @@ async def rotate_refresh_token(db: AsyncSession, raw_token: str) -> tuple[str, s
     return access_token, new_refresh, user.id
 
 
-async def check_lockout(user: User) -> bool:
+def check_lockout(user: User) -> bool:
     """Returns True if user is currently locked out."""
     if user.locked_until and user.locked_until > datetime.now(UTC):
         return True

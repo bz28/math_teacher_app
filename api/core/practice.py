@@ -2,7 +2,8 @@
 
 import logging
 
-from api.core.tutor import _call_claude_json
+from api.core.llm_client import call_claude_json
+from api.core.tutor import check_answer_equivalence
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ Rules:
 
 
 async def generate_practice_problems(
-    problem: str, count: int,
+    problem: str, count: int, *, user_id: str | None = None,
 ) -> list[dict[str, str]]:
     """Generate the original + count similar problems with answers.
 
@@ -40,10 +41,11 @@ async def generate_practice_problems(
     )
 
     try:
-        result = await _call_claude_json(
+        result = await call_claude_json(
             _GENERATE_PROBLEMS_PROMPT,
             user_msg,
             mode="practice_generate",
+            user_id=user_id,
         )
         problems = result.get("problems")
         if isinstance(problems, list):
@@ -53,54 +55,23 @@ async def generate_practice_problems(
                 if isinstance(p, dict)
             ]
     except Exception:
-        logger.warning("Failed to generate problems via LLM, using fallback")
+        logger.exception("Failed to generate practice problems")
 
-    # Fallback: return original only
-    return [{"question": problem, "answer": ""}]
+    raise RuntimeError("Failed to generate practice problems")
 
 
 # ---------------------------------------------------------------------------
 # Answer checking
 # ---------------------------------------------------------------------------
 
-_CHECK_ANSWER_PROMPT = """You are a strict math tutor checking a student's answer.
-
-Determine if the student's answer is MATHEMATICALLY EQUIVALENT to the correct answer.
-Allow differences in formatting or notation (e.g., "x=3" vs "x = 3", "6" vs "x = 6"),
-but the answer must be completely correct.
-
-Be STRICT:
-- "35" does NOT match "35x^4" — the variable/exponent is missing
-- Partial answers or answers missing terms are WRONG
-
-Respond with ONLY valid JSON:
-{"is_correct": true or false}"""
-
 
 async def check_answer(
-    question: str, correct_answer: str, user_answer: str,
+    question: str, correct_answer: str, user_answer: str, *, user_id: str | None = None,
 ) -> bool:
     """Check if user's answer matches the correct answer.
 
-    Uses string match first, then LLM fallback.
+    Uses string match first, then LLM fallback via shared check_answer_equivalence.
     """
-    user_clean = user_answer.strip()
-    correct_clean = correct_answer.strip()
-
-    # 1. Direct string match
-    if user_clean == correct_clean:
+    if user_answer.strip() == correct_answer.strip():
         return True
-
-    # 2. LLM check
-    try:
-        user_msg = (
-            f"Problem: {question}\n"
-            f"Correct answer: {correct_clean}\n"
-            f"Student's answer: {user_clean}"
-        )
-        result = await _call_claude_json(
-            _CHECK_ANSWER_PROMPT, user_msg, mode="practice_check",
-        )
-        return bool(result.get("is_correct", False))
-    except Exception:
-        return False
+    return await check_answer_equivalence(question, correct_answer, user_answer, user_id=user_id)

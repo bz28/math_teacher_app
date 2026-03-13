@@ -9,13 +9,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from api.core.session import (
-    _find_matching_steps,
-    _generate_hint,
-    _validate_step_size,
-)
+from api.core.llm_client import _circuit
 from api.core.step_decomposition import Step
-from api.core.tutor import CircuitState, _circuit
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -54,16 +49,6 @@ def _mock_word_problem_decomposition():
         problem_type="word_problem",
         distractors=["d = 120", "d = 60", "d = 200"],
     )
-
-
-def _mock_eval_correct():
-    from api.core.tutor import EvalResult
-    return EvalResult(is_correct=True, feedback="Correct!")
-
-
-def _mock_eval_wrong():
-    from api.core.tutor import EvalResult
-    return EvalResult(is_correct=False, feedback="Not quite. Try again.")
 
 
 def _mock_converse_correct(steps_completed: int = 0):
@@ -109,79 +94,7 @@ def _auth_headers(token: str) -> dict[str, str]:
 @pytest.fixture(autouse=True)
 def _reset_circuit_breaker() -> None:
     """Reset the global circuit breaker before each test."""
-    _circuit._failure_count = 0
-    _circuit._state = CircuitState.CLOSED
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: step-size validation
-# ---------------------------------------------------------------------------
-
-
-THREE_STEPS = [
-    Step("Subtract 9", "subtraction", "3x + 9 = 18", "3x = 9"),
-    Step("Divide by 3", "division", "3x = 9", "x = 3"),
-    Step("Simplify", "simplification", "x = 3", "3"),
-]
-
-
-class TestStepSizeValidation:
-    def test_valid_single_step(self) -> None:
-        is_valid, msg = _validate_step_size("2x = 6", MOCK_STEPS, 0)
-        assert is_valid is True
-
-    def test_rejects_skipped_steps(self) -> None:
-        # Student jumps from step 0 directly to step 2's answer "3"
-        is_valid, msg = _validate_step_size("3", THREE_STEPS, 0)
-        assert is_valid is False
-        assert "skipped" in (msg or "").lower()
-
-    def test_accepts_one_step_ahead(self) -> None:
-        # Jumping 1 step is allowed (not >= 2)
-        is_valid, msg = _validate_step_size("x = 3", MOCK_STEPS, 0)
-        assert is_valid is True
-
-    def test_accepts_current_step_answer(self) -> None:
-        is_valid, msg = _validate_step_size("x = 3", MOCK_STEPS, 1)
-        assert is_valid is True
-
-    def test_non_matching_response(self) -> None:
-        is_valid, msg = _validate_step_size("x = 99", MOCK_STEPS, 0)
-        assert is_valid is True
-
-
-class TestFindMatchingSteps:
-    def test_finds_exact_match(self) -> None:
-        matches = _find_matching_steps("2x = 6", MOCK_STEPS, 0)
-        assert 0 in matches
-
-    def test_finds_later_step(self) -> None:
-        matches = _find_matching_steps("x = 3", MOCK_STEPS, 0)
-        assert 1 in matches
-
-    def test_no_match(self) -> None:
-        matches = _find_matching_steps("x = 99", MOCK_STEPS, 0)
-        assert matches == []
-
-
-# ---------------------------------------------------------------------------
-# Unit tests: hint generation
-# ---------------------------------------------------------------------------
-
-
-class TestHintGeneration:
-    def test_hint_level_0_is_vague(self) -> None:
-        hint = _generate_hint(MOCK_STEPS[0], 0)
-        assert "operation" in hint.lower()
-
-    def test_hint_level_1_is_specific(self) -> None:
-        hint = _generate_hint(MOCK_STEPS[0], 1)
-        assert "subtraction" in hint.lower()
-
-    def test_hint_level_2_never_reveals_answer(self) -> None:
-        hint = _generate_hint(MOCK_STEPS[0], 2)
-        # Should not contain the actual answer "2x = 6"
-        assert "2x = 6" not in hint
+    _circuit.reset()
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +419,7 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
     session_id = create_resp.json()["id"]
 
     # Submit intermediate step (2x = 6) — not the final answer
-    with patch("api.core.session._llm_check_final_answer", new_callable=AsyncMock) as mock_llm:
+    with patch("api.core.session.check_answer_equivalence", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = False
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
@@ -532,7 +445,7 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
     session_id = create_resp.json()["id"]
 
     # Submit wrong answer — no symbolic match, LLM also says wrong
-    with patch("api.core.session._llm_check_final_answer", new_callable=AsyncMock) as mock_llm:
+    with patch("api.core.session.check_answer_equivalence", new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = False
         resp = await client.post(
             f"/v1/session/{session_id}/respond",

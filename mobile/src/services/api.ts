@@ -26,7 +26,6 @@ export interface SessionData {
   status: string;
   mode: string;
   steps: StepDetail[];
-  step_tracking: Record<string, { attempts: number; hints_used: number }>;
 }
 
 export interface StepResponse {
@@ -39,10 +38,19 @@ export interface StepResponse {
   step_description: string | null;
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+const LLM_TIMEOUT_MS = 30_000;
+
 let _authToken: string | null = null;
 let _refreshToken: string | null = null;
 let _refreshPromise: Promise<boolean> | null = null;
 let _onSessionExpired: (() => void) | null = null;
+
+function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
+}
 
 export function setOnSessionExpired(callback: () => void) {
   _onSessionExpired = callback;
@@ -67,7 +75,7 @@ export async function loadStoredAuth(): Promise<boolean> {
   _refreshToken = refresh;
   // Verify the access token is still valid
   try {
-    const resp = await fetch(`${API_BASE}/auth/me`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${access}` },
     });
     if (resp.ok) return true;
@@ -101,7 +109,7 @@ async function _tryRefresh(): Promise<boolean> {
 
 async function _doRefresh(): Promise<boolean> {
   try {
-    const resp = await fetch(`${API_BASE}/auth/refresh`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: _refreshToken }),
@@ -130,14 +138,14 @@ function extractError(data: Record<string, unknown> | null, status: number): str
   return `Request failed (${status})`;
 }
 
-async function _fetchWithRefresh(url: string, init: RequestInit): Promise<Response> {
-  let resp = await fetch(url, init);
+async function _fetchWithRefresh(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  let resp = await fetchWithTimeout(url, init, timeoutMs);
   if (resp.status === 401 && _refreshToken) {
     const refreshed = await _tryRefresh();
     if (refreshed) {
       // Retry with new token
       const newInit = { ...init, headers: authHeaders() };
-      resp = await fetch(url, newInit);
+      resp = await fetchWithTimeout(url, newInit, timeoutMs);
     } else {
       await clearAuth();
       _onSessionExpired?.();
@@ -146,12 +154,12 @@ async function _fetchWithRefresh(url: string, init: RequestInit): Promise<Respon
   return resp;
 }
 
-async function apiPost<T>(path: string, body: object): Promise<T> {
+async function apiPost<T>(path: string, body: object, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const resp = await _fetchWithRefresh(`${API_BASE}${path}`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(body),
-  });
+  }, timeoutMs);
   if (!resp.ok) {
     const data = await resp.json().catch(() => null);
     throw new Error(extractError(data, resp.status));
@@ -168,9 +176,9 @@ async function apiGet<T>(path: string): Promise<T> {
   return resp.json();
 }
 
-// Session API
+// Session API — LLM-backed endpoints use longer timeout
 export const createSession = (problem: string, mode: string = "learn") =>
-  apiPost<SessionData>("/session", { problem, mode });
+  apiPost<SessionData>("/session", { problem, mode }, LLM_TIMEOUT_MS);
 
 export const getSession = (id: string) =>
   apiGet<SessionData>(`/session/${id}`);
@@ -178,14 +186,10 @@ export const getSession = (id: string) =>
 export const respondToStep = (
   id: string,
   studentResponse: string,
-  requestHint = false,
-  requestShowStep = false,
   requestAdvance = false,
 ) =>
   apiPost<StepResponse>(`/session/${id}/respond`, {
     student_response: studentResponse,
-    request_hint: requestHint,
-    request_show_step: requestShowStep,
     request_advance: requestAdvance,
   });
 
@@ -213,7 +217,7 @@ export interface PracticeProblem {
 }
 
 export const generatePracticeProblems = (problem: string, count: number) =>
-  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count });
+  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count }, LLM_TIMEOUT_MS);
 
 export const checkPracticeAnswer = (question: string, correctAnswer: string, userAnswer: string) =>
   apiPost<{ is_correct: boolean }>("/practice/check", {
@@ -222,9 +226,9 @@ export const checkPracticeAnswer = (question: string, correctAnswer: string, use
     user_answer: userAnswer,
   });
 
-// Image API
+// Image API — vision calls can be slow
 export const extractProblemsFromImage = (imageBase64: string) =>
   apiPost<{ problems: string[]; confidence: string }>("/image/extract", {
     image_base64: imageBase64,
-  });
+  }, LLM_TIMEOUT_MS);
 

@@ -24,10 +24,6 @@ const MAX_PROBLEMS = 10;
 
 interface Props {
   mode: Mode;
-  practiceCount: number;
-  problemQueue: string[];
-  onPracticeCountChange: (count: number) => void;
-  onProblemQueueChange: (queue: string[]) => void;
   onBack: () => void;
   onSessionStart: () => void;
   onSessionError: () => void;
@@ -35,14 +31,12 @@ interface Props {
 
 export function InputScreen({
   mode,
-  practiceCount,
-  problemQueue,
-  onPracticeCountChange,
-  onProblemQueueChange,
   onBack,
   onSessionStart,
   onSessionError,
 }: Props) {
+  const problemQueue = useSessionStore((s) => s.problemQueue);
+  const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +68,7 @@ export function InputScreen({
     const remaining = MAX_PROBLEMS - problemQueue.length;
     const toAdd = selected.slice(0, remaining);
     if (toAdd.length > 0) {
-      onProblemQueueChange([...problemQueue, ...toAdd]);
+      setProblemQueue([...problemQueue, ...toAdd]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     dismissExtraction();
@@ -100,7 +94,7 @@ export function InputScreen({
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text || problemQueue.length >= MAX_PROBLEMS) return;
-    onProblemQueueChange([...problemQueue, text]);
+    setProblemQueue([...problemQueue, text]);
     setInput("");
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -108,13 +102,13 @@ export function InputScreen({
   };
 
   const handleRemoveFromQueue = (index: number) => {
-    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
+    setProblemQueue(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEditFromQueue = (index: number) => {
     setInput(problemQueue[index]);
-    onProblemQueueChange(problemQueue.filter((_, i) => i !== index));
+    setProblemQueue(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
   };
@@ -165,12 +159,12 @@ export function InputScreen({
     if (phase === "error") {
       onSessionError();
     } else {
-      onProblemQueueChange([]);
+      setProblemQueue([]);
     }
   };
 
-  const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Exam";
-  const modeIcon = mode === "learn" ? "book-outline" : mode === "practice" ? "pencil-outline" : "document-text-outline";
+  const modeLabel = mode === "learn" ? "Learn" : "Practice";
+  const modeIcon = mode === "learn" ? ("book-outline" as const) : ("pencil-outline" as const);
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const hasNoProblems = totalProblems === 0;
   const goButtonLabel = problemQueue.length > 0
@@ -196,7 +190,7 @@ export function InputScreen({
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Enter a Problem</Text>
           <View style={styles.modeChip}>
-            <Ionicons name={modeIcon as any} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
+            <Ionicons name={modeIcon} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
             <Text style={styles.modeChipText}>{modeLabel}</Text>
           </View>
         </View>

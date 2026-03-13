@@ -8,25 +8,32 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
+import * as Sentry from "@sentry/react-native";
 import { AuthScreen } from "./src/components/AuthScreen";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { HomeScreen } from "./src/components/HomeScreen";
 import { InputScreen } from "./src/components/InputScreen";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { useSessionStore } from "./src/stores/session";
 import { colors } from "./src/theme";
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? "",
+  enabled: !__DEV__,
+});
 
 const ONBOARDING_KEY = "onboarding_completed";
 
 type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session";
 
-export default function App() {
+function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [mode, setMode] = useState<Mode>("learn");
-  const [practiceCount, setPracticeCount] = useState(3);
-  const [problemQueue, setProblemQueue] = useState<string[]>([]);
   const [fromOnboarding, setFromOnboarding] = useState(false);
+  const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -132,10 +139,6 @@ export default function App() {
         >
           <InputScreen
             mode={mode}
-            practiceCount={practiceCount}
-            problemQueue={problemQueue}
-            onPracticeCountChange={setPracticeCount}
-            onProblemQueueChange={setProblemQueue}
             onBack={() => {
               setProblemQueue([]);
               setScreen("mode-select");
@@ -149,6 +152,14 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+export default Sentry.wrap(function App() {
+  return (
+    <ErrorBoundary>
+      <AppRoot />
+    </ErrorBoundary>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

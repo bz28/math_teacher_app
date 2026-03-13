@@ -1,19 +1,16 @@
 """Step-by-step decomposition: Claude generates steps for any math problem."""
 
-import asyncio
 import json
 import logging
 import re
-import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
-from anthropic.types import TextBlock
+from api.core.llm_client import MODEL_REASON, call_claude_json
 
-from api.core.llm_client import get_client
+_MAX_CACHED_PROBLEM_TYPES = 20
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 3
 
 SYSTEM_PROMPT = """You are a math tutor generating step-by-step solutions for students.
 
@@ -64,16 +61,18 @@ class Decomposition:
     distractors: list[str]
 
 
-# In-memory few-shot cache: problem_type → list of example decompositions
-_few_shot_cache: dict[str, list[Decomposition]] = {}
+# In-memory few-shot cache: problem_type → list of example decompositions (LRU, capped)
+_few_shot_cache: OrderedDict[str, list[Decomposition]] = OrderedDict()
 
 
 def _build_prompt(problem: str, problem_type: str) -> str:
     """Build the user prompt, optionally with few-shot examples."""
     parts: list[str] = []
 
-    # Include few-shot example if available
+    # Include few-shot example if available (touch for LRU)
     examples = _few_shot_cache.get(problem_type, [])
+    if examples:
+        _few_shot_cache.move_to_end(problem_type)
     if examples:
         ex = examples[0]
         steps_json = json.dumps([
@@ -92,30 +91,13 @@ def _build_prompt(problem: str, problem_type: str) -> str:
     return "\n\n".join(parts)
 
 
-def _strip_markdown_fencing(text: str) -> str:
-    """Strip markdown code fencing from LLM response."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-    return text
-
-
-def _parse_steps(response_text: str) -> tuple[list[Step], list[str]]:
+def _parse_steps(data: dict[str, object]) -> tuple[list[Step], list[str]]:
     """Parse Claude's JSON response into Step objects and distractors."""
-    text = _strip_markdown_fencing(response_text)
+    steps_data = data["steps"]
+    distractors = data.get("distractors", [])
 
-    data = json.loads(text)
-
-    # Support both formats: {"steps": [...], "distractors": [...]} and bare [...]
-    if isinstance(data, list):
-        steps_data = data
-        distractors = []
-    else:
-        steps_data = data["steps"]
-        distractors = data.get("distractors", [])
+    if not isinstance(steps_data, list):
+        raise ValueError("Expected 'steps' to be a list")
 
     steps = [
         Step(
@@ -126,12 +108,16 @@ def _parse_steps(response_text: str) -> tuple[list[Step], list[str]]:
         )
         for s in steps_data
     ]
-    return steps, distractors
+    return steps, list(distractors) if isinstance(distractors, list) else []
+
+
+_MATH_FUNCTION_NAMES = {"sin", "cos", "tan", "log", "ln", "abs", "max", "min", "mod", "gcd", "lcm", "sqrt"}
 
 
 def _is_word_problem(text: str) -> bool:
     """Detect whether text is a word problem vs pure math notation."""
-    return bool(re.search(r"[a-zA-Z]{2,}", text))
+    words = re.findall(r"[a-zA-Z]{3,}", text)
+    return any(w.lower() not in _MATH_FUNCTION_NAMES for w in words)
 
 
 SOLVE_SYSTEM_PROMPT = """You are a math tutor solving a problem.
@@ -147,217 +133,83 @@ Rules:
 - Do NOT include any explanation, just the JSON"""
 
 
-async def solve_problem(problem: str) -> tuple[str, str]:
+async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[str, str]:
     """Solve a math problem and return (final_answer, problem_type).
 
     Lighter-weight alternative to decompose_problem — no step breakdown,
     just the answer. Used for practice mode where steps aren't needed upfront.
     """
-    client = get_client()
-    model = "claude-sonnet-4-20250514"
-
-    for attempt in range(MAX_RETRIES):
-        start = time.monotonic()
-        try:
-            response = await client.messages.create(
-                model=model,
-                max_tokens=256,
-                system=SOLVE_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": f"Problem: {problem}"}],
-            )
-            latency_ms = round((time.monotonic() - start) * 1000, 2)
-
-            first_block = response.content[0]
-            if not isinstance(first_block, TextBlock):
-                continue
-            resp_text = first_block.text.strip()
-            text = _strip_markdown_fencing(resp_text)
-
-            data = json.loads(text)
-            answer = data["answer"]
-            problem_type = data.get("problem_type", "math")
-
-            _log_decomposition_call(
-                model=model, function="solve",
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                latency_ms=latency_ms, success=True, retry_count=attempt,
-                input_text=f"Problem: {problem}", output_text=resp_text,
-            )
-            logger.info("solve_problem succeeded on attempt %d", attempt + 1)
-            return answer, problem_type
-
-        except (json.JSONDecodeError, KeyError, Exception) as e:
-            latency_ms = round((time.monotonic() - start) * 1000, 2)
-            logger.warning("solve_problem attempt %d failed: %s", attempt + 1, e)
-
-    raise RuntimeError(f"Failed to solve problem after {MAX_RETRIES} attempts")
+    data = await call_claude_json(
+        SOLVE_SYSTEM_PROMPT,
+        f"Problem: {problem}",
+        mode="solve",
+        model=MODEL_REASON,
+        max_tokens=256,
+        user_id=user_id,
+    )
+    return str(data["answer"]), str(data.get("problem_type", "math"))
 
 
-async def generate_similar_problem(problem: str) -> str:
+async def generate_similar_problem(problem: str, *, user_id: str | None = None) -> str:
     """Use Claude to generate a similar math problem with different numbers/context."""
-    client = get_client()
-    model = "claude-sonnet-4-20250514"
-    start = time.monotonic()
+    system = (
+        "Generate a similar math problem with the same structure "
+        "but different numbers and context. Respond with ONLY valid JSON:\n"
+        '{"problem": "<the new problem text>"}'
+    )
     try:
-        response = await client.messages.create(
-            model=model,
+        data = await call_claude_json(
+            system,
+            f"Original problem: {problem}",
+            mode="generate_similar",
+            model=MODEL_REASON,
             max_tokens=256,
-            system=(
-                "Generate a similar math problem with the same structure "
-                "but different numbers and context. Respond with ONLY the new "
-                "problem text, nothing else."
-            ),
-            messages=[{"role": "user", "content": f"Original problem: {problem}"}],
+            max_retries=1,
+            user_id=user_id,
         )
-        latency_ms = round((time.monotonic() - start) * 1000, 2)
-        first_block = response.content[0]
-        resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
-        _log_decomposition_call(
-            model=model, function="generate_similar",
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            latency_ms=latency_ms, success=True, retry_count=0,
-            input_text=f"Original problem: {problem}", output_text=resp_text,
-        )
-        if isinstance(first_block, TextBlock):
-            return first_block.text.strip()
-    except Exception:
-        latency_ms = round((time.monotonic() - start) * 1000, 2)
-        logger.warning("Failed to generate similar problem, returning original")
-    return problem
+        return str(data.get("problem", problem))
+    except Exception as e:
+        logger.exception("Failed to generate similar problem")
+        raise RuntimeError("Failed to generate similar problem") from e
 
 
-async def decompose_problem(problem: str) -> Decomposition:
-    """Generate step-by-step decomposition for a math problem.
-
-    Claude generates the steps directly. Retries only on JSON parse
-    or API errors.
-    """
+async def decompose_problem(problem: str, *, user_id: str | None = None) -> Decomposition:
+    """Generate step-by-step decomposition for a math problem."""
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
+    prompt = _build_prompt(problem, problem_type)
 
-    client = get_client()
-
-    model = "claude-sonnet-4-20250514"
-    last_error: str | None = None
-    for attempt in range(MAX_RETRIES):
-        prompt = _build_prompt(problem, problem_type)
-        start = time.monotonic()
-
-        try:
-            response = await client.messages.create(
-                model=model,
-                max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            latency_ms = round((time.monotonic() - start) * 1000, 2)
-
-            first_block = response.content[0]
-            resp_text = first_block.text if isinstance(first_block, TextBlock) else ""
-            if not isinstance(first_block, TextBlock):
-                last_error = "Unexpected response type from Claude"
-                _log_decomposition_call(
-                    model=model, function="decompose",
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
-                    latency_ms=latency_ms, success=False, retry_count=attempt,
-                    input_text=prompt, output_text=resp_text,
-                )
-                continue
-            steps, distractors = _parse_steps(first_block.text)
-
-            if not steps:
-                last_error = "Empty steps returned"
-                _log_decomposition_call(
-                    model=model, function="decompose",
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
-                    latency_ms=latency_ms, success=False, retry_count=attempt,
-                    input_text=prompt, output_text=resp_text,
-                )
-                continue
-
-            _log_decomposition_call(
-                model=model, function="decompose",
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                latency_ms=latency_ms, success=True, retry_count=attempt,
-                input_text=prompt, output_text=resp_text,
-            )
-
-            decomposition = Decomposition(
-                problem=problem,
-                steps=steps,
-                final_answer=steps[-1].after,
-                problem_type=problem_type,
-                distractors=distractors,
-            )
-            _cache_decomposition(decomposition)
-
-            logger.info(
-                "Decomposition succeeded on attempt %d for %s",
-                attempt + 1,
-                problem,
-                extra={"problem_type": problem_type, "num_steps": len(steps)},
-            )
-            return decomposition
-
-        except json.JSONDecodeError as e:
-            latency_ms = round((time.monotonic() - start) * 1000, 2)
-            last_error = f"JSON parse error: {e}"
-            logger.warning("Attempt %d: %s", attempt + 1, last_error)
-        except Exception as e:
-            latency_ms = round((time.monotonic() - start) * 1000, 2)
-            last_error = f"API error: {e}"
-            logger.warning("Attempt %d: %s", attempt + 1, last_error)
-
-    # All retries exhausted — this should be rare
-    logger.error(
-        "All %d attempts failed for '%s'. Last error: %s.",
-        MAX_RETRIES,
-        problem,
-        last_error,
+    data = await call_claude_json(
+        SYSTEM_PROMPT,
+        prompt,
+        mode="decompose",
+        model=MODEL_REASON,
+        max_tokens=1024,
+        user_id=user_id,
     )
-    raise RuntimeError(f"Failed to decompose problem after {MAX_RETRIES} attempts: {last_error}")
 
+    steps, distractors = _parse_steps(data)
+    if not steps:
+        raise RuntimeError("Empty steps returned from decomposition")
 
-def _log_decomposition_call(
-    model: str,
-    function: str,
-    input_tokens: int,
-    output_tokens: int,
-    latency_ms: float,
-    success: bool,
-    retry_count: int,
-    input_text: str | None = None,
-    output_text: str | None = None,
-) -> None:
-    """Log a Claude call from step_decomposition to the llm_calls table."""
-    from api.core.tutor import COST_PER_INPUT_TOKEN_SONNET, COST_PER_OUTPUT_TOKEN_SONNET, _persist_llm_call
+    decomposition = Decomposition(
+        problem=problem,
+        steps=steps,
+        final_answer=steps[-1].after,
+        problem_type=problem_type,
+        distractors=distractors,
+    )
+    _cache_decomposition(decomposition)
 
-    cost = (input_tokens * COST_PER_INPUT_TOKEN_SONNET) + (output_tokens * COST_PER_OUTPUT_TOKEN_SONNET)
     logger.info(
-        "LLM call: function=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
-        function, model, input_tokens, output_tokens, cost, latency_ms,
+        "Decomposition succeeded for %s",
+        problem,
+        extra={"problem_type": problem_type, "num_steps": len(steps)},
     )
-    try:
-        asyncio.get_running_loop().create_task(
-            _persist_llm_call(
-                model=model, function=function,
-                input_tokens=input_tokens, output_tokens=output_tokens,
-                latency_ms=latency_ms, cost_usd=round(cost, 6),
-                session_id=None, user_id=None,
-                success=success, retry_count=retry_count,
-                input_text=input_text, output_text=output_text,
-            )
-        )
-    except RuntimeError:
-        logger.warning("No running event loop — skipping LLM call persistence")
+    return decomposition
 
 
 def _cache_decomposition(decomposition: Decomposition) -> None:
-    """Cache a successful decomposition as a few-shot example."""
+    """Cache a successful decomposition as a few-shot example (LRU, bounded)."""
     key = decomposition.problem_type
     if key not in _few_shot_cache:
         _few_shot_cache[key] = []
@@ -365,3 +217,7 @@ def _cache_decomposition(decomposition: Decomposition) -> None:
     if len(_few_shot_cache[key]) >= 3:
         _few_shot_cache[key].pop(0)
     _few_shot_cache[key].append(decomposition)
+    # Move to end (most recently used) and evict oldest types if over cap
+    _few_shot_cache.move_to_end(key)
+    while len(_few_shot_cache) > _MAX_CACHED_PROBLEM_TYPES:
+        _few_shot_cache.popitem(last=False)

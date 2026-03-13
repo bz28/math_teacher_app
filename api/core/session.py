@@ -1,26 +1,25 @@
 """Session orchestration: manages the tutoring loop.
 
-Handles step advancement, hint system, step-size validation,
-and per-user daily request caps.
+Handles step advancement and per-user daily request caps.
 """
 
+import random
+import time
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.step_decomposition import Step, decompose_problem, solve_problem
-from api.core.tutor import _call_claude_json, converse, step_chat
-from api.models.session import Session
+from api.core.step_decomposition import decompose_problem, solve_problem
+from api.core.tutor import check_answer_equivalence, converse, step_chat
+from api.models.session import Session, SessionMode, SessionStatus
 
-MAX_ATTEMPTS_PER_STEP = 5
-MAX_HINTS_PER_STEP = 3
 RECENT_EXCHANGES_LIMIT = 10
+MAX_STUDENT_MESSAGES = 10
 
 
 class SessionError(Exception):
@@ -37,8 +36,6 @@ class RateLimitError(SessionError):
 
 async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
     """Enforce per-user daily session creation cap."""
-    from datetime import date, datetime
-
     today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
     result = await db.execute(
         select(func.count(Session.id)).where(
@@ -47,69 +44,9 @@ async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
         )
     )
     count = result.scalar() or 0
-    # Use school cap as default; role-based logic can be added later
     cap = settings.daily_request_cap_free
     if count >= cap:
         raise RateLimitError(f"Daily session limit reached ({cap})")
-
-
-# ---------------------------------------------------------------------------
-# Step-size validation
-# ---------------------------------------------------------------------------
-
-def _find_matching_steps(response: str, steps: list[Step], current_idx: int) -> list[int]:
-    """Check which future steps the student's response matches.
-
-    Returns list of matching step indices via direct string comparison.
-    """
-    response_clean = response.strip()
-    matches: list[int] = []
-    for i in range(current_idx, len(steps)):
-        after = steps[i].after.strip()
-        if response_clean == after:
-            matches.append(i)
-    return matches
-
-
-def _validate_step_size(response: str, steps: list[Step], current_idx: int) -> tuple[bool, str | None]:
-    """Validate that the response doesn't skip steps.
-
-    Returns (is_valid, message). If the student's response matches a step
-    2+ ahead of the current step, reject and ask for intermediate work.
-    """
-    matches = _find_matching_steps(response, steps, current_idx)
-    if matches:
-        furthest = max(matches)
-        skipped = furthest - current_idx
-        if skipped >= 2:
-            return False, (
-                "That's the right answer, but you skipped some steps. "
-                "Can you walk me through how you got there?"
-            )
-    return True, None
-
-
-# ---------------------------------------------------------------------------
-# Hint generation
-# ---------------------------------------------------------------------------
-
-def _generate_hint(step: Step, hint_level: int) -> str:
-    """Generate a progressive hint for the current step.
-
-    hint_level 0: vague direction
-    hint_level 1: specific operation
-    hint_level 2: most of the answer (80% ceiling)
-    """
-    if hint_level == 0:
-        return f"Think about what operation you need to do next. Look at: {step.before}"
-    elif hint_level == 1:
-        return f"You need to perform: {step.operation}. Start from: {step.before}"
-    else:
-        # 80% ceiling: give the operation and partial result, but not the full answer
-        return (
-            f"Apply {step.operation} to {step.before}. "
-            f"The result should simplify things significantly."
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -120,14 +57,14 @@ async def create_session(
     db: AsyncSession,
     user_id: uuid.UUID,
     problem: str,
-    mode: str = "learn",
+    mode: str = SessionMode.LEARN,
 ) -> Session:
     """Create a new tutoring session for a problem."""
     await _check_daily_cap(db, user_id)
 
-    if mode == "practice":
+    if mode == SessionMode.PRACTICE:
         # Lightweight: just solve for the answer, no step decomposition
-        answer, problem_type = await solve_problem(problem)
+        answer, problem_type = await solve_problem(problem, user_id=str(user_id))
         steps_data = [
             {
                 "description": "Final answer",
@@ -138,7 +75,7 @@ async def create_session(
         ]
     else:
         # Full decomposition for learn mode
-        decomposition = await decompose_problem(problem)
+        decomposition = await decompose_problem(problem, user_id=str(user_id))
         problem_type = decomposition.problem_type
         steps_data = []
         for i, s in enumerate(decomposition.steps):
@@ -150,7 +87,6 @@ async def create_session(
             }
             # Attach shuffled multiple-choice options to the final step
             if i == len(decomposition.steps) - 1 and decomposition.distractors:
-                import random
                 choices = [s.after] + decomposition.distractors[:3]
                 random.shuffle(choices)
                 step_dict["choices"] = choices
@@ -163,9 +99,8 @@ async def create_session(
         steps=steps_data,
         current_step=0,
         total_steps=len(steps_data),
-        status="active",
+        status=SessionStatus.ACTIVE,
         mode=mode,
-        step_tracking={},
         exchanges=[],
     )
     db.add(session)
@@ -187,14 +122,23 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session:
     return session
 
 
+async def get_owned_session(
+    db: AsyncSession, session_id: uuid.UUID, user_id: uuid.UUID,
+) -> Session:
+    """Retrieve a session and verify ownership. Raises SessionError / PermissionError."""
+    session = await get_session(db, session_id)
+    if session.user_id != user_id:
+        raise PermissionError("Not your session")
+    return session
+
+
 # ---------------------------------------------------------------------------
 # Respond to a step
 # ---------------------------------------------------------------------------
 
 @dataclass
 class StepResponse:
-    # "advance", "hint", "completed", "error", "conversation", "show_step"
-    action: str
+    action: str  # "advance" | "completed" | "error" | "conversation"
     feedback: str
     current_step: int
     total_steps: int
@@ -209,6 +153,10 @@ async def _converse_completed(
     student_response: str,
 ) -> StepResponse:
     """Allow the student to keep asking questions after completing a problem."""
+    student_msgs = sum(1 for e in session.exchanges if e.get("role") == "student")
+    if student_msgs >= MAX_STUDENT_MESSAGES:
+        raise SessionError("Session message limit reached")
+
     _add_exchange(session, "student", student_response)
 
     converse_result = await converse(
@@ -217,6 +165,7 @@ async def _converse_completed(
         exchanges=session.exchanges,
         student_input=student_response,
         session_id=str(session.id),
+        user_id=str(session.user_id),
     )
 
     _add_exchange(session, "tutor", converse_result.feedback)
@@ -234,7 +183,7 @@ async def _complete_practice(
 ) -> StepResponse:
     """Mark a practice session as completed."""
     session.current_step = session.total_steps
-    session.status = "completed"
+    session.status = SessionStatus.COMPLETED
     feedback = "Correct! Problem complete!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -245,43 +194,6 @@ async def _complete_practice(
         total_steps=session.total_steps,
         is_correct=True,
     )
-
-
-_PRACTICE_FINAL_EVAL_PROMPT = """You are a strict math tutor checking a student's final answer.
-
-Determine if the student's answer is MATHEMATICALLY EQUIVALENT to the correct
-final answer. Allow differences in formatting or notation (e.g., "x=3" vs
-"x = 3", "6" vs "x = 6"), but the answer must be completely correct.
-
-Be STRICT:
-- "35" does NOT match "35x^4" — the variable/exponent is missing
-- Partial answers or answers missing terms are WRONG
-
-Respond with ONLY valid JSON:
-{"is_correct": <true/false>}"""
-
-
-async def _llm_check_final_answer(
-    problem: str,
-    correct_answer: str,
-    student_response: str,
-    session_id: str,
-) -> bool:
-    """Use LLM to check if student's response matches the final answer."""
-    user_msg = (
-        f"Problem: {problem}\n"
-        f"Correct final answer: {correct_answer}\n"
-        f"Student's answer: {student_response}"
-    )
-
-    try:
-        result = await _call_claude_json(
-            _PRACTICE_FINAL_EVAL_PROMPT, user_msg,
-            mode="practice_eval", session_id=session_id,
-        )
-        return bool(result.get("is_correct", False))
-    except Exception:
-        return False
 
 
 async def _respond_practice_mode(
@@ -300,9 +212,10 @@ async def _respond_practice_mode(
 
     # 2. LLM check if string match fails
     if not is_correct:
-        is_correct = await _llm_check_final_answer(
+        is_correct = await check_answer_equivalence(
             session.problem, correct_answer,
             student_response, str(session.id),
+            user_id=str(session.user_id),
         )
 
     if is_correct:
@@ -326,7 +239,7 @@ async def _complete_learn(
 ) -> StepResponse:
     """Mark a learn session as completed."""
     session.current_step = session.total_steps
-    session.status = "completed"
+    session.status = SessionStatus.COMPLETED
     feedback = "Correct! You've solved the problem!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -377,6 +290,7 @@ async def _respond_learn_mode(
             exchanges=session.exchanges,
             student_input=student_response,
             session_id=str(session.id),
+            user_id=str(session.user_id),
         )
         _add_exchange(session, "tutor", chat_result.feedback)
         await db.commit()
@@ -417,26 +331,20 @@ async def respond_to_step(
     db: AsyncSession,
     session: Session,
     student_response: str,
-    request_hint: bool = False,
-    request_show_step: bool = False,
     request_advance: bool = False,
-) -> StepResponse | AsyncIterator[str]:
-    """Process a student's response or action for the current step.
-
-    Returns a StepResponse for JSON actions, or an AsyncIterator[str] for
-    streamed explanations.
-    """
-    if session.status not in ("active", "completed"):
+) -> StepResponse:
+    """Process a student's response or action for the current step."""
+    if session.status not in (SessionStatus.ACTIVE, SessionStatus.COMPLETED):
         raise SessionError("Session is not active")
 
     # Allow conversation on completed sessions ("I still have questions")
     if session.current_step >= session.total_steps:
-        if student_response and not request_hint and not request_show_step:
+        if student_response:
             return await _converse_completed(db, session, student_response)
         raise SessionError("All steps completed")
 
     # Practice mode: skip step enforcement and scaffolding
-    if session.mode == "practice":
+    if session.mode == SessionMode.PRACTICE:
         return await _respond_practice_mode(db, session, student_response)
 
     # Learn mode: steps shown upfront, chat scoped to step, final answer eval
@@ -449,10 +357,9 @@ async def respond_to_step(
 
 def _add_exchange(session: Session, role: str, content: str) -> None:
     """Append an exchange to session history."""
-    import time
     exchanges = list(session.exchanges)
     exchanges.append({"role": role, "content": content, "timestamp": time.time()})
-    # Keep only recent exchanges
-    if len(exchanges) > RECENT_EXCHANGES_LIMIT * 2:
+    # Trim gradually to avoid losing too many messages at once
+    if len(exchanges) > RECENT_EXCHANGES_LIMIT + 5:
         exchanges = exchanges[-RECENT_EXCHANGES_LIMIT:]
     session.exchanges = exchanges
