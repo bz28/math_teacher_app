@@ -71,6 +71,7 @@ async def generate_practice_problems(
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
             model=MODEL_REASON,
+            max_tokens=2048,
         )
         problems = result.get("problems")
         if isinstance(problems, list):

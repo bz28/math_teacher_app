@@ -242,6 +242,13 @@ async def call_claude_json(
             )
             _circuit.record_success()
 
+            # If response was truncated, don't retry — a longer response
+            # will just hit the same token limit
+            if response.stop_reason == "max_tokens":
+                raise RuntimeError(
+                    f"Response truncated (hit {max_tokens} token limit)"
+                )
+
             text = strip_markdown_fencing(resp_text)
             result: dict[str, object] = json.loads(text)
             return result
