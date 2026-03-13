@@ -290,3 +290,5 @@ async def call_claude_vision(
     except (anthropic.APITimeoutError, anthropic.APIError) as e:
         _circuit.record_failure()
         raise RuntimeError(f"Claude Vision API error: {e}") from e
+    except (json.JSONDecodeError, ValueError) as e:
+        raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e

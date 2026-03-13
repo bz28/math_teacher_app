@@ -10,7 +10,7 @@ import pytest
 from httpx import AsyncClient
 
 from api.core.step_decomposition import Step
-from api.core.tutor import CircuitState, _circuit
+from api.core.llm_client import CircuitState, _circuit
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -11,8 +11,7 @@ Cost optimizations:
 
 from dataclasses import dataclass
 
-from api.core.cost_tracker import cost_tracker
-from api.core.llm_client import call_claude_json
+from api.core.llm_client import MODEL_REASON, call_claude_json
 
 # Max recent exchanges sent to converse() — trimmed from 10 to 6
 CONVERSE_HISTORY_LIMIT = 6
@@ -151,7 +150,7 @@ async def converse(
     )
     data = await call_claude_json(
         CONVERSATIONAL_TUTOR_PROMPT, prompt, "converse",
-        session_id=session_id, user_id=user_id,
+        session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return ConverseResult(
         input_type=str(data.get("input_type", "unclear")),
@@ -186,7 +185,7 @@ async def step_chat(
     )
     data = await call_claude_json(
         STEP_CHAT_PROMPT, prompt, "step_chat",
-        session_id=session_id, user_id=user_id,
+        session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
 
@@ -211,8 +210,3 @@ async def check_answer_equivalence(
         return bool(result.get("is_correct", False))
     except Exception:
         return False
-
-
-def get_daily_cost() -> float:
-    """Return the current day's total estimated Claude API cost."""
-    return cost_tracker.total_usd

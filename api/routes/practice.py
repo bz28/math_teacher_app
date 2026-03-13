@@ -31,7 +31,6 @@ async def generate(
     try:
         problems = await generate_practice_problems(body.problem, body.count)
     except Exception:
-        logger.exception("Failed to generate practice problems")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate practice problems",
