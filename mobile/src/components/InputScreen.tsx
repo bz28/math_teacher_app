@@ -193,6 +193,8 @@ export function InputScreen({
 
   const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Test";
   const modeIcon = mode === "learn" ? ("book-outline" as const) : mode === "practice" ? ("pencil-outline" as const) : ("document-text-outline" as const);
+  const modeColor = mode === "learn" ? colors.primary : mode === "practice" ? colors.success : colors.warningDark;
+  const modeBg = mode === "learn" ? colors.primaryBg : mode === "practice" ? colors.successLight : colors.warningBg;
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const hasNoProblems = totalProblems === 0;
 
@@ -218,9 +220,9 @@ export function InputScreen({
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Enter a Problem</Text>
-          <View style={styles.modeChip}>
-            <Ionicons name={modeIcon} size={16} color={colors.primary} style={{ marginRight: spacing.xs }} />
-            <Text style={styles.modeChipText}>{modeLabel}</Text>
+          <View style={[styles.modeChip, { backgroundColor: modeBg }]}>
+            <Ionicons name={modeIcon} size={16} color={modeColor} style={{ marginRight: spacing.xs }} />
+            <Text style={[styles.modeChipText, { color: modeColor }]}>{modeLabel}</Text>
           </View>
         </View>
 
