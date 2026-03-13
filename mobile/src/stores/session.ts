@@ -113,7 +113,6 @@ interface SessionState {
   navigateMockQuestion: (index: number) => void;
   toggleMockTestFlag: (index: number) => void;
   submitMockTest: () => Promise<void>;
-  mockTestTimeUp: () => Promise<void>;
   reset: () => void;
 }
 
@@ -707,11 +706,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
-  },
-
-  mockTestTimeUp: async () => {
-    const { submitMockTest } = get();
-    await submitMockTest();
   },
 
   tryPracticeProblem: async () => {

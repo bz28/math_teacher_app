@@ -50,7 +50,6 @@ export function InputScreen({
   const [mockGenerateCount, setMockGenerateCount] = useState(5);
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(false);
-  const startMockTest = useSessionStore((s) => s.startMockTest);
 
   const {
     extracting,
@@ -88,6 +87,7 @@ export function InputScreen({
     startPracticeBatch,
     startPracticeQueue,
     startLearnQueue,
+    startMockTest,
     phase: sessionPhase,
     error: sessionError,
   } = useSessionStore();
@@ -550,7 +550,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     marginBottom: spacing.sm,
   },
-  backText: { color: colors.primary, ...typography.bodyBold },
   header: {
     alignItems: "center",
     marginBottom: spacing.xxl,
@@ -689,7 +688,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
-  goText: { color: colors.white, ...typography.button },
   errorWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -703,7 +701,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: spacing.sm,
   },
-  buttonDisabled: { opacity: 0.4 },
   // "Want more practice?" prompt
   promptOverlay: {
     flex: 1,

@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -79,7 +79,6 @@ export function MockTestScreen({ onBack }: Props) {
 
   const { questions, answers, flags, currentIndex } = mockTest;
   const currentQuestion = questions[currentIndex];
-  const currentAnswer = answers[currentIndex] ?? "";
 
   // Sync local answer when navigating
   useEffect(() => {
@@ -111,8 +110,9 @@ export function MockTestScreen({ onBack }: Props) {
       saveMockTestAnswer(currentIndex, localAnswer.trim());
     }
 
-    const answeredCount = Object.values({ ...answers, ...(localAnswer.trim() ? { [currentIndex]: localAnswer.trim() } : {}) })
-      .filter((a) => a && a.trim()).length;
+    // Count after saving current answer
+    const latestAnswers = { ...answers, ...(localAnswer.trim() ? { [currentIndex]: localAnswer.trim() } : {}) };
+    const answeredCount = questions.filter((_, i) => latestAnswers[i]?.trim()).length;
     const unansweredCount = questions.length - answeredCount;
 
     const message = unansweredCount > 0
