@@ -81,10 +81,10 @@ async def rotate_refresh_token(db: AsyncSession, raw_token: str) -> tuple[str, s
     old_rt.is_revoked = True
     await db.flush()
 
-    # Get user for access token
+    # Get user for access token — also reject deactivated users
     user_result = await db.execute(select(User).where(User.id == old_rt.user_id))
     user = user_result.scalar_one_or_none()
-    if user is None:
+    if user is None or not user.is_active:
         return None
 
     # Issue new tokens
