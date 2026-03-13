@@ -1,12 +1,13 @@
 """Session orchestration: manages the tutoring loop.
 
-Handles step advancement, hint system, step-size validation,
-and per-user daily request caps.
+Handles step advancement and per-user daily request caps.
 """
 
+import random
+import time
 import uuid
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.step_decomposition import decompose_problem, solve_problem
-from api.core.tutor import _call_claude_json, converse, step_chat
+from api.core.tutor import check_answer_equivalence, converse, step_chat
 from api.models.session import Session
 
 RECENT_EXCHANGES_LIMIT = 10
@@ -34,8 +35,6 @@ class RateLimitError(SessionError):
 
 async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
     """Enforce per-user daily session creation cap."""
-    from datetime import date, datetime
-
     today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
     result = await db.execute(
         select(func.count(Session.id)).where(
@@ -44,7 +43,6 @@ async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
         )
     )
     count = result.scalar() or 0
-    # Use school cap as default; role-based logic can be added later
     cap = settings.daily_request_cap_free
     if count >= cap:
         raise RateLimitError(f"Daily session limit reached ({cap})")
@@ -88,7 +86,6 @@ async def create_session(
             }
             # Attach shuffled multiple-choice options to the final step
             if i == len(decomposition.steps) - 1 and decomposition.distractors:
-                import random
                 choices = [s.after] + decomposition.distractors[:3]
                 random.shuffle(choices)
                 step_dict["choices"] = choices
@@ -103,7 +100,6 @@ async def create_session(
         total_steps=len(steps_data),
         status="active",
         mode=mode,
-        step_tracking={},
         exchanges=[],
     )
     db.add(session)
@@ -131,8 +127,7 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session:
 
 @dataclass
 class StepResponse:
-    # "advance", "hint", "completed", "error", "conversation", "show_step"
-    action: str
+    action: str  # "advance" | "completed" | "error" | "conversation"
     feedback: str
     current_step: int
     total_steps: int
@@ -185,43 +180,6 @@ async def _complete_practice(
     )
 
 
-_PRACTICE_FINAL_EVAL_PROMPT = """You are a strict math tutor checking a student's final answer.
-
-Determine if the student's answer is MATHEMATICALLY EQUIVALENT to the correct
-final answer. Allow differences in formatting or notation (e.g., "x=3" vs
-"x = 3", "6" vs "x = 6"), but the answer must be completely correct.
-
-Be STRICT:
-- "35" does NOT match "35x^4" — the variable/exponent is missing
-- Partial answers or answers missing terms are WRONG
-
-Respond with ONLY valid JSON:
-{"is_correct": <true/false>}"""
-
-
-async def _llm_check_final_answer(
-    problem: str,
-    correct_answer: str,
-    student_response: str,
-    session_id: str,
-) -> bool:
-    """Use LLM to check if student's response matches the final answer."""
-    user_msg = (
-        f"Problem: {problem}\n"
-        f"Correct final answer: {correct_answer}\n"
-        f"Student's answer: {student_response}"
-    )
-
-    try:
-        result = await _call_claude_json(
-            _PRACTICE_FINAL_EVAL_PROMPT, user_msg,
-            mode="practice_eval", session_id=session_id,
-        )
-        return bool(result.get("is_correct", False))
-    except Exception:
-        return False
-
-
 async def _respond_practice_mode(
     db: AsyncSession,
     session: Session,
@@ -238,7 +196,7 @@ async def _respond_practice_mode(
 
     # 2. LLM check if string match fails
     if not is_correct:
-        is_correct = await _llm_check_final_answer(
+        is_correct = await check_answer_equivalence(
             session.problem, correct_answer,
             student_response, str(session.id),
         )
@@ -381,7 +339,6 @@ async def respond_to_step(
 
 def _add_exchange(session: Session, role: str, content: str) -> None:
     """Append an exchange to session history."""
-    import time
     exchanges = list(session.exchanges)
     exchanges.append({"role": role, "content": content, "timestamp": time.time()})
     # Keep only recent exchanges

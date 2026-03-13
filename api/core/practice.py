@@ -2,7 +2,7 @@
 
 import logging
 
-from api.core.tutor import _call_claude_json
+from api.core.llm_client import call_claude_json
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ async def generate_practice_problems(
     )
 
     try:
-        result = await _call_claude_json(
+        result = await call_claude_json(
             _GENERATE_PROBLEMS_PROMPT,
             user_msg,
             mode="practice_generate",
@@ -97,7 +97,7 @@ async def check_answer(
             f"Correct answer: {correct_clean}\n"
             f"Student's answer: {user_clean}"
         )
-        result = await _call_claude_json(
+        result = await call_claude_json(
             _CHECK_ANSWER_PROMPT, user_msg, mode="practice_check",
         )
         return bool(result.get("is_correct", False))

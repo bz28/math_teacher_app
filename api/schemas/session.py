@@ -21,11 +21,6 @@ class StepDetail(BaseModel):
     choices: list[str] | None = None
 
 
-class StepTrackingInfo(BaseModel):
-    attempts: int = 0
-    hints_used: int = 0
-
-
 class SessionResponse(BaseModel):
     id: uuid.UUID
     problem: str
@@ -35,7 +30,6 @@ class SessionResponse(BaseModel):
     status: str
     mode: str
     steps: list[StepDetail]
-    step_tracking: dict[str, StepTrackingInfo]
 
 
 class StepResponseSchema(BaseModel):

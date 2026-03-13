@@ -26,7 +26,6 @@ export interface SessionData {
   status: string;
   mode: string;
   steps: StepDetail[];
-  step_tracking: Record<string, { attempts: number; hints_used: number }>;
 }
 
 export interface StepResponse {

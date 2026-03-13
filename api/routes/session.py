@@ -23,7 +23,6 @@ from api.schemas.session import (
     SessionResponse,
     StepDetail,
     StepResponseSchema,
-    StepTrackingInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,19 +32,15 @@ router = APIRouter(prefix="/session", tags=["session"])
 
 def _session_to_response(session: SessionModel) -> SessionResponse:
     """Convert a Session model to a SessionResponse schema."""
-    s = session
     return SessionResponse(
-        id=s.id,
-        problem=s.problem,
-        problem_type=s.problem_type,
-        current_step=s.current_step,
-        total_steps=s.total_steps,
-        status=s.status,
-        mode=s.mode,
-        steps=[StepDetail(**step) for step in s.steps],
-        step_tracking={
-            k: StepTrackingInfo(**v) for k, v in s.step_tracking.items()
-        },
+        id=session.id,
+        problem=session.problem,
+        problem_type=session.problem_type,
+        current_step=session.current_step,
+        total_steps=session.total_steps,
+        status=session.status,
+        mode=session.mode,
+        steps=[StepDetail(**step) for step in session.steps],
     )
 
 
@@ -146,5 +141,3 @@ async def similar(
             detail="Failed to generate similar problem",
         )
     return {"similar_problem": problem}
-
-
