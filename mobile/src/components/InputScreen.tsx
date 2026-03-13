@@ -326,22 +326,24 @@ export function InputScreen({
             {/* Exam type segmented control */}
             <View style={styles.mockSection}>
               <View style={styles.mockSegment}>
-                <AnimatedPressable
+                <TouchableOpacity
                   style={[styles.mockSegmentBtn, mockExamType === "use_as_exam" && [styles.mockSegmentBtnActive, shadows.sm]]}
                   onPress={() => setMockExamType("use_as_exam")}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.mockSegmentText, mockExamType === "use_as_exam" && styles.mockSegmentTextActive]}>
                     Use as Exam
                   </Text>
-                </AnimatedPressable>
-                <AnimatedPressable
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[styles.mockSegmentBtn, mockExamType === "generate_similar" && [styles.mockSegmentBtnActive, shadows.sm]]}
                   onPress={() => setMockExamType("generate_similar")}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.mockSegmentText, mockExamType === "generate_similar" && styles.mockSegmentTextActive]}>
                     Generate Similar
                   </Text>
-                </AnimatedPressable>
+                </TouchableOpacity>
               </View>
               <Text style={styles.mockSegmentHint}>
                 {mockExamType === "use_as_exam"
