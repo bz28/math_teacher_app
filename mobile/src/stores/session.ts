@@ -662,18 +662,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         );
       }
 
-      // Record session for analytics (fire-and-forget)
-      let sessionId: string | null = null;
-      try {
-        const { id } = await createMockTestSession(problems.join(" | "));
-        sessionId = id;
-      } catch {
-        // Non-critical — don't block the exam
-      }
-
       set({
         mockTest: {
-          sessionId,
+          sessionId: null,
           questions,
           answers: {},
           flags: new Array(questions.length).fill(false),
@@ -685,6 +676,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         },
         phase: "mock_test_active",
       });
+
+      // Fire-and-forget: track session for analytics without blocking exam start
+      const problemText = questions.map((q) => q.question).join("\n");
+      createMockTestSession(problemText)
+        .then(({ id }) => {
+          const current = get().mockTest;
+          if (current) set({ mockTest: { ...current, sessionId: id } });
+        })
+        .catch(() => {});
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }

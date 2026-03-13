@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CreateSessionRequest(BaseModel):
@@ -15,6 +15,12 @@ class CreateMockTestRequest(BaseModel):
 class CompleteMockTestRequest(BaseModel):
     total_questions: int = Field(..., ge=1)
     correct_count: int = Field(..., ge=0)
+
+    @model_validator(mode="after")
+    def check_correct_within_total(self) -> "CompleteMockTestRequest":
+        if self.correct_count > self.total_questions:
+            raise ValueError("correct_count cannot exceed total_questions")
+        return self
 
 
 class RespondRequest(BaseModel):

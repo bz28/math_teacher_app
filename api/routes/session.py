@@ -183,7 +183,6 @@ async def create_mock_test(
     )
     db.add(session)
     await db.commit()
-    await db.refresh(session)
     return {"id": str(session.id)}
 
 
@@ -201,6 +200,11 @@ async def complete_mock_test(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
+
+    if session.mode != SessionMode.MOCK_TEST:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a mock test session")
+    if session.status == SessionStatus.COMPLETED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already completed")
 
     session.status = SessionStatus.COMPLETED
     session.total_steps = body.total_questions
