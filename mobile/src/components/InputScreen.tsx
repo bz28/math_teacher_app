@@ -53,6 +53,7 @@ export function InputScreen({
 
   const {
     extracting,
+    extractionProgress,
     problems: extractedProblems,
     confidence,
     selected,
@@ -286,7 +287,11 @@ export function InputScreen({
           <View style={[styles.extractingCard, shadows.sm]}>
             <ActivityIndicator size="large" color={modeColor} />
             <Text style={styles.extractingTitle}>Reading your problems...</Text>
-            <Text style={styles.extractingSubtitle}>This usually takes a few seconds</Text>
+            <Text style={styles.extractingSubtitle}>
+              {extractionProgress
+                ? `Processing image ${extractionProgress.done + 1} of ${extractionProgress.total}`
+                : "This usually takes a few seconds"}
+            </Text>
           </View>
         )}
 
