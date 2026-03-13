@@ -17,14 +17,16 @@ logger = logging.getLogger(__name__)
 
 _GENERATE_PROBLEMS_PROMPT = """You are a math tutor generating practice problems.
 
-Given an original math problem, generate similar problems with different
+Given one or more original math problems, generate similar problems with different
 numbers and context but the same underlying math structure.
 
 Respond with ONLY valid JSON:
 {"problems": [{"question": "the problem text", "answer": "the correct answer"}]}
 
 Rules:
-- Each problem must be solvable with the same type of math as the original
+- Each problem must be solvable with the same type of math as the originals
+- Do NOT repeat or rephrase the original problems — generate entirely new ones
+- If multiple original problems are given, generate at least 1 problem of each type
 - Vary the numbers, names, and context
 - Answers must be correct
 - Keep problems at the same difficulty level"""
@@ -39,8 +41,8 @@ async def generate_practice_problems(
     """
     user_msg = (
         f"Original problem: {problem}\n\n"
-        f"Generate {1 + count} problems total (include the original reworded, "
-        f"plus {count} similar ones). Each must have a correct answer."
+        f"Generate {1 + count} similar problems (do not include the original). "
+        f"Each must have a correct answer."
     )
 
     try:

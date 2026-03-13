@@ -112,5 +112,6 @@ export const gradients = {
   primary: ["#6C5CE7", "#A29BFE"] as const,
   header: ["#6C5CE7", "#8B7CF7"] as const,
   success: ["#00B894", "#55EFC4"] as const,
+  warning: ["#E17055", "#FDCB6E"] as const,
   card: ["#F8F7FF", "#F0EDFF"] as const,
 } as const;

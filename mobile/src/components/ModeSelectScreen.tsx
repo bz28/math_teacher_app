@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
-export type Mode = "learn" | "practice";
+export type Mode = "learn" | "practice" | "mock_test";
 
 interface ModeSelectScreenProps {
   onSelect: (mode: Mode) => void;
@@ -30,6 +30,14 @@ const MODES: { id: Mode; label: string; icon: IoniconsName; iconColor: string; i
     iconColor: colors.success,
     iconBg: colors.successLight,
     description: "Solve problems on your own",
+  },
+  {
+    id: "mock_test",
+    label: "Mock Test",
+    icon: "document-text-outline",
+    iconColor: colors.warningDark,
+    iconBg: colors.warningBg,
+    description: "Timed exam simulation",
   },
 ];
 

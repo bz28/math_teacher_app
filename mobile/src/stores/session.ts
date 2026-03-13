@@ -19,6 +19,8 @@ type SessionPhase =
   | "completed"
   | "practice_summary"
   | "learn_summary"
+  | "mock_test_active"
+  | "mock_test_summary"
   | "error";
 
 export interface PracticeResult {
@@ -49,6 +51,24 @@ interface LearnQueue {
   flags: boolean[];
 }
 
+export interface MockTestResult {
+  question: string;
+  userAnswer: string | null;
+  correctAnswer: string;
+  isCorrect: boolean | null;
+}
+
+export interface MockTest {
+  questions: PracticeProblem[];
+  answers: Record<number, string>;
+  flags: boolean[];
+  currentIndex: number;
+  timeLimitSeconds: number | null;
+  startedAt: number;
+  submittedAt: number | null;
+  results: MockTestResult[] | null;
+}
+
 interface SessionState {
   // Learn mode state
   session: SessionData | null;
@@ -61,6 +81,9 @@ interface SessionState {
 
   // Learn queue state
   learnQueue: LearnQueue | null;
+
+  // Mock test state
+  mockTest: MockTest | null;
 
   // Problem input state (shared between App and InputScreen)
   problemQueue: string[];
@@ -85,6 +108,11 @@ interface SessionState {
   switchToLearnMode: () => Promise<void>;
   continueAsking: () => void;
   tryPracticeProblem: () => Promise<void>;
+  startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
+  saveMockTestAnswer: (index: number, answer: string) => void;
+  navigateMockQuestion: (index: number) => void;
+  toggleMockTestFlag: (index: number) => void;
+  submitMockTest: () => Promise<void>;
   reset: () => void;
 }
 
@@ -95,6 +123,7 @@ const initialState = {
   error: null as string | null,
   practiceBatch: null as PracticeBatch | null,
   learnQueue: null as LearnQueue | null,
+  mockTest: null as MockTest | null,
   problemQueue: [] as string[],
   practiceCount: 3,
 };
@@ -578,6 +607,111 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   continueAsking: () => {
     set({ phase: "awaiting_input", lastResponse: null });
+  },
+
+  startMockTest: async (problems, generateCount, timeLimitMinutes) => {
+    set({ ...initialState, phase: "loading" });
+    try {
+      let questions: PracticeProblem[];
+
+      if (generateCount > 0) {
+        // "Generate similar" mode — generate new questions from seeds
+        const seedText = problems.map((p, i) => `Problem ${i + 1}: ${p}`).join("\n");
+        const { problems: generated } = await generatePracticeProblems(seedText, generateCount - 1);
+        questions = generated;
+      } else {
+        // "Use as exam" mode — solve each problem to get correct answers
+        const outcomes = await Promise.allSettled(
+          problems.map((p) => generatePracticeProblems(p, 0)),
+        );
+        questions = [];
+        for (let i = 0; i < outcomes.length; i++) {
+          const outcome = outcomes[i];
+          if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
+            questions.push({
+              question: problems[i],
+              answer: outcome.value.problems[0].answer,
+            });
+          }
+        }
+      }
+
+      if (questions.length === 0) throw new Error("Failed to generate exam questions");
+
+      set({
+        mockTest: {
+          questions,
+          answers: {},
+          flags: new Array(questions.length).fill(false),
+          currentIndex: 0,
+          timeLimitSeconds: timeLimitMinutes != null ? timeLimitMinutes * 60 : null,
+          startedAt: Date.now(),
+          submittedAt: null,
+          results: null,
+        },
+        phase: "mock_test_active",
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  saveMockTestAnswer: (index, answer) => {
+    const { mockTest } = get();
+    if (!mockTest) return;
+    set({
+      mockTest: {
+        ...mockTest,
+        answers: { ...mockTest.answers, [index]: answer },
+      },
+    });
+  },
+
+  navigateMockQuestion: (index) => {
+    const { mockTest } = get();
+    if (!mockTest) return;
+    set({ mockTest: { ...mockTest, currentIndex: index } });
+  },
+
+  toggleMockTestFlag: (index) => {
+    const { mockTest } = get();
+    if (!mockTest) return;
+    const newFlags = [...mockTest.flags];
+    newFlags[index] = !newFlags[index];
+    set({ mockTest: { ...mockTest, flags: newFlags } });
+  },
+
+  submitMockTest: async () => {
+    const { mockTest } = get();
+    if (!mockTest) return;
+
+    set({ phase: "loading" });
+    try {
+      // Batch check all answered questions
+      const checkPromises = mockTest.questions.map(async (q, i) => {
+        const userAnswer = mockTest.answers[i];
+        if (!userAnswer) {
+          return { question: q.question, userAnswer: null, correctAnswer: q.answer, isCorrect: null };
+        }
+        try {
+          const { is_correct } = await checkPracticeAnswer(q.question, q.answer, userAnswer);
+          return { question: q.question, userAnswer, correctAnswer: q.answer, isCorrect: is_correct };
+        } catch {
+          return { question: q.question, userAnswer, correctAnswer: q.answer, isCorrect: false };
+        }
+      });
+
+      const results: MockTestResult[] = await Promise.all(checkPromises);
+      const currentMockTest = get().mockTest;
+      if (!currentMockTest) return;
+
+      set({
+        mockTest: { ...currentMockTest, results, submittedAt: Date.now() },
+        phase: "mock_test_summary",
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
   },
 
   tryPracticeProblem: async () => {
