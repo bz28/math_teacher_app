@@ -17,7 +17,7 @@ from api.core.step_decomposition import generate_similar_problem
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
-from api.models.session import SessionStatus
+from api.models.session import SessionMode, SessionStatus
 from api.schemas.session import (
     CreateSessionRequest,
     RespondRequest,
@@ -159,3 +159,49 @@ async def similar(
             detail="Failed to generate similar problem",
         )
     return {"similar_problem": problem}
+
+
+@router.post("/mock-test", status_code=status.HTTP_201_CREATED)
+async def create_mock_test(
+    body: CreateSessionRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Record a mock test session for analytics (no LLM calls)."""
+    session = SessionModel(
+        user_id=current_user.user_id,
+        problem=body.problem,
+        problem_type="mock_test",
+        mode=SessionMode.MOCK_TEST,
+        status=SessionStatus.ACTIVE,
+        total_steps=0,
+        current_step=0,
+        steps=[],
+        exchanges=[],
+    )
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    return {"id": str(session.id)}
+
+
+@router.post("/mock-test/{session_id}/complete")
+async def complete_mock_test(
+    session_id: uuid.UUID,
+    body: dict,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Mark a mock test session as completed with score."""
+    try:
+        session = await get_owned_session(db, session_id, current_user.user_id)
+    except SessionError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
+
+    session.status = SessionStatus.COMPLETED
+    session.total_steps = body.get("total_questions", 0)
+    session.current_step = body.get("correct_count", 0)
+    await db.commit()
+    return {"status": "ok"}

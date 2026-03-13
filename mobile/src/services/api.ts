@@ -194,6 +194,15 @@ export const respondToStep = (
 export const getSimilarProblem = (sessionId: string) =>
   apiPost<{ similar_problem: string }>(`/session/${sessionId}/similar`, {});
 
+export const createMockTestSession = (problem: string) =>
+  apiPost<{ id: string }>("/session/mock-test", { problem, mode: "mock_test" });
+
+export const completeMockTestSession = (id: string, totalQuestions: number, correctCount: number) =>
+  apiPost<{ status: string }>(`/session/mock-test/${id}/complete`, {
+    total_questions: totalQuestions,
+    correct_count: correctCount,
+  });
+
 // Auth API
 export const login = (email: string, password: string) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });
