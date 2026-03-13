@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -42,9 +40,6 @@ export function InputScreen({
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [showMorePrompt, setShowMorePrompt] = useState(false);
-  const [similarCount, setSimilarCount] = useState(0);
-
   // Mock test config state
   const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [mockGenerateCount, setMockGenerateCount] = useState(5);
@@ -85,8 +80,6 @@ export function InputScreen({
 
   const {
     startSession,
-    startPracticeBatch,
-    startPracticeQueue,
     startLearnQueue,
     startMockTest,
     phase: sessionPhase,
@@ -150,34 +143,19 @@ export function InputScreen({
       return;
     }
 
-    // Single problem in practice mode — ask if they want similar problems
-    if (mode === "practice" && allProblems.length === 1) {
-      setSimilarCount(0);
-      setShowMorePrompt(true);
-      return;
-    }
-
-    await startProblems(allProblems, 0);
+    await startProblems(allProblems);
   };
 
-  const startProblems = async (allProblems: string[], count: number) => {
+  const startProblems = async (allProblems: string[]) => {
     setError(null);
 
     // Navigate immediately — session screen shows skeleton while loading
     onSessionStart();
 
     if (allProblems.length === 1) {
-      if (mode === "practice") {
-        await startPracticeBatch(allProblems[0], count);
-      } else {
-        await startSession(allProblems[0], mode);
-      }
+      await startSession(allProblems[0], mode);
     } else {
-      if (mode === "practice") {
-        await startPracticeQueue(allProblems);
-      } else {
-        await startLearnQueue(allProblems);
-      }
+      await startLearnQueue(allProblems);
     }
 
     // After the async actions complete, sessionPhase reflects the latest state
@@ -192,11 +170,11 @@ export function InputScreen({
     }
   };
 
-  const modeLabel = mode === "learn" ? "Learn" : mode === "practice" ? "Practice" : "Mock Test";
-  const modeIcon = mode === "learn" ? ("book-outline" as const) : mode === "practice" ? ("pencil-outline" as const) : ("document-text-outline" as const);
-  const modeColor = mode === "learn" ? colors.primary : mode === "practice" ? colors.success : colors.warningDark;
-  const modeBg = mode === "learn" ? colors.primaryBg : mode === "practice" ? colors.successLight : colors.warningBg;
-  const modeGradient = (mode === "learn" ? "primary" : mode === "practice" ? "success" : "warning") as keyof typeof gradients;
+  const modeLabel = mode === "learn" ? "Learn" : "Mock Test";
+  const modeIcon = mode === "learn" ? ("book-outline" as const) : ("document-text-outline" as const);
+  const modeColor = mode === "learn" ? colors.primary : colors.warningDark;
+  const modeBg = mode === "learn" ? colors.primaryBg : colors.warningBg;
+  const modeGradient = (mode === "learn" ? "primary" : "warning") as keyof typeof gradients;
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const hasNoProblems = totalProblems === 0;
 
@@ -480,64 +458,6 @@ export function InputScreen({
         onRetry={retryExtraction}
       />
 
-      {/* "Want more practice?" prompt */}
-      <Modal
-        visible={showMorePrompt}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowMorePrompt(false)}
-      >
-        <View style={styles.promptOverlay}>
-          <View style={[styles.promptContent, shadows.lg]}>
-            <Text style={styles.promptTitle}>Want more practice?</Text>
-            <Text style={styles.promptSubtitle}>
-              Generate similar problems to practice with
-            </Text>
-
-            <View style={styles.stepper}>
-              <AnimatedPressable
-                scaleDown={0.9}
-                onPress={() => setSimilarCount(Math.max(0, similarCount - 1))}
-              >
-                <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                  <Ionicons name="remove" size={20} color={colors.white} />
-                </LinearGradient>
-              </AnimatedPressable>
-              <Text style={styles.countValue}>{similarCount}</Text>
-              <AnimatedPressable
-                scaleDown={0.9}
-                onPress={() => setSimilarCount(Math.min(20, similarCount + 1))}
-              >
-                <LinearGradient colors={gradients.primary} style={styles.stepperButton}>
-                  <Ionicons name="add" size={20} color={colors.white} />
-                </LinearGradient>
-              </AnimatedPressable>
-            </View>
-            <Text style={styles.countHint}>
-              Total: {1 + similarCount} problem{similarCount > 0 ? "s" : ""}
-            </Text>
-
-            <TouchableOpacity
-              style={styles.promptStartBtn}
-              onPress={() => {
-                setShowMorePrompt(false);
-                startProblems(collectProblems(), similarCount);
-              }}
-            >
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.promptPrimaryGradient}
-              >
-                <Text style={styles.promptPrimaryText}>
-                  {similarCount > 0 ? `Start Practice (${1 + similarCount})` : "Just this one"}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
@@ -705,60 +625,6 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.primary,
     marginLeft: spacing.sm,
-  },
-  // "Want more practice?" prompt
-  promptOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: spacing.xxl,
-  },
-  promptContent: {
-    width: "100%",
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    padding: spacing.xxl,
-    alignItems: "center",
-  },
-  promptTitle: {
-    ...typography.heading,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  promptSubtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginBottom: spacing.xxl,
-  },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xl,
-  },
-  stepperButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  countValue: { ...typography.title, color: colors.text, minWidth: 30, textAlign: "center" as const },
-  countHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
-  promptStartBtn: {
-    width: "100%",
-    borderRadius: radii.md,
-    overflow: "hidden" as const,
-    marginTop: spacing.xxl,
-  },
-  promptPrimaryGradient: {
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-  },
-  promptPrimaryText: {
-    ...typography.button,
-    color: colors.white,
   },
   // Mock test config styles
   mockConfigContainer: {

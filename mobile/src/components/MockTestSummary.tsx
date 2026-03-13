@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function MockTestSummary({ onBack }: Props) {
-  const { mockTest, startLearnQueue, startPracticeQueue, reset } = useSessionStore();
+  const { mockTest, startLearnQueue, reset } = useSessionStore();
 
   if (!mockTest || !mockTest.results) return null;
 
@@ -45,11 +45,6 @@ export function MockTestSummary({ onBack }: Props) {
   const handleLearnFlagged = async () => {
     if (flaggedQuestions.length === 0) return;
     await startLearnQueue(flaggedQuestions.map((q) => q.question));
-  };
-
-  const handlePracticeFlagged = async () => {
-    if (flaggedQuestions.length === 0) return;
-    await startPracticeQueue(flaggedQuestions.map((q) => q.question));
   };
 
   const handleNewExam = () => {
@@ -156,18 +151,11 @@ export function MockTestSummary({ onBack }: Props) {
             <Text style={styles.sectionTitle}>
               Flagged Questions ({flaggedQuestions.length})
             </Text>
-            <View style={styles.flaggedActions}>
-              <GradientButton
-                onPress={handleLearnFlagged}
-                label="Learn These"
-                style={styles.flaggedBtn}
-              />
-              <GradientButton
-                onPress={handlePracticeFlagged}
-                label="Practice These"
-                style={styles.flaggedBtn}
-              />
-            </View>
+            <GradientButton
+              onPress={handleLearnFlagged}
+              label="Learn These"
+              style={styles.flaggedBtn}
+            />
           </View>
         )}
 
@@ -330,12 +318,7 @@ const styles = StyleSheet.create({
   flaggedSection: {
     marginTop: spacing.xl,
   },
-  flaggedActions: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
   flaggedBtn: {
-    flex: 1,
     borderRadius: radii.md,
     padding: spacing.lg,
     alignItems: "center",
