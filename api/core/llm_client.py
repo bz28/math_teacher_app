@@ -90,6 +90,12 @@ class CircuitBreaker:
             return True
         return False
 
+    def reset(self) -> None:
+        """Reset to closed state. Used by tests."""
+        self._failure_count = 0
+        self._state = CircuitState.CLOSED
+        self._last_failure_time = 0.0
+
 
 _circuit = CircuitBreaker()
 
@@ -251,6 +257,8 @@ async def call_claude_vision(
     user_content: list[Any],
     mode: str,
     *,
+    session_id: str | None = None,
+    user_id: str | None = None,
     model: str | None = None,
     max_tokens: int = 1024,
 ) -> dict[str, object]:
@@ -283,7 +291,7 @@ async def call_claude_vision(
         _log_and_persist(
             use_model, mode,
             response.usage.input_tokens, response.usage.output_tokens,
-            latency_ms, session_id=None, user_id=None,
+            latency_ms, session_id=session_id, user_id=user_id,
             success=True, retry_count=0,
             output_text=resp_text,
         )
@@ -298,7 +306,7 @@ async def call_claude_vision(
         _circuit.record_failure()
         _log_and_persist(
             use_model, mode, 0, 0, latency_ms,
-            session_id=None, user_id=None, success=False,
+            session_id=session_id, user_id=user_id, success=False,
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
     except (json.JSONDecodeError, ValueError) as e:

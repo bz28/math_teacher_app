@@ -164,9 +164,9 @@ async def generate_similar_problem(problem: str, *, user_id: str | None = None) 
             user_id=user_id,
         )
         return str(data.get("problem", problem))
-    except Exception:
+    except Exception as e:
         logger.exception("Failed to generate similar problem")
-        raise RuntimeError("Failed to generate similar problem")
+        raise RuntimeError("Failed to generate similar problem") from e
 
 
 async def decompose_problem(problem: str, *, user_id: str | None = None) -> Decomposition:

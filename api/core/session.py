@@ -359,7 +359,7 @@ def _add_exchange(session: Session, role: str, content: str) -> None:
     """Append an exchange to session history."""
     exchanges = list(session.exchanges)
     exchanges.append({"role": role, "content": content, "timestamp": time.time()})
-    # Keep only recent exchanges
-    if len(exchanges) > RECENT_EXCHANGES_LIMIT * 2:
+    # Trim gradually to avoid losing too many messages at once
+    if len(exchanges) > RECENT_EXCHANGES_LIMIT + 5:
         exchanges = exchanges[-RECENT_EXCHANGES_LIMIT:]
     session.exchanges = exchanges

@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,13 +45,14 @@ class Session(Base):
     status: Mapped[str] = mapped_column(String(20), default=SessionStatus.ACTIVE, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default=SessionMode.LEARN)
 
-    # Per-step tracking (JSON: {step_index: {attempts: int, hints_used: int}})
-    step_tracking: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-
     # Conversation history (JSON array of {role, content, timestamp})
     exchanges: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_sessions_user_id_created_at", "user_id", "created_at"),
     )

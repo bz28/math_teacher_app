@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from api.core.llm_client import CircuitState, _circuit
+from api.core.llm_client import _circuit
 from api.core.step_decomposition import Step
 
 # ---------------------------------------------------------------------------
@@ -94,8 +94,7 @@ def _auth_headers(token: str) -> dict[str, str]:
 @pytest.fixture(autouse=True)
 def _reset_circuit_breaker() -> None:
     """Reset the global circuit breaker before each test."""
-    _circuit._failure_count = 0
-    _circuit._state = CircuitState.CLOSED
+    _circuit.reset()
 
 
 # ---------------------------------------------------------------------------

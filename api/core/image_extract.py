@@ -28,7 +28,11 @@ Set confidence to:
 """
 
 
-async def extract_problems_from_image(image_base64: str) -> dict[str, object]:
+async def extract_problems_from_image(
+    image_base64: str,
+    *,
+    user_id: str | None = None,
+) -> dict[str, object]:
     """Extract math problems from a base64-encoded image.
 
     Returns dict with 'problems' (list[str]) and 'confidence' (str).
@@ -67,7 +71,7 @@ async def extract_problems_from_image(image_base64: str) -> dict[str, object]:
         },
     ]
 
-    result = await call_claude_vision(user_content, mode="image_extract")
+    result = await call_claude_vision(user_content, mode="image_extract", user_id=user_id)
 
     problems = result.get("problems", [])
     confidence = result.get("confidence", "medium")

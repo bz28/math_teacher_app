@@ -155,10 +155,19 @@ async def converse(
         CONVERSATIONAL_TUTOR_PROMPT, prompt, "converse",
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
+    # Parse steps_completed safely — LLM may return int, float, or string
+    raw_steps = data.get("steps_completed")
+    steps_completed: int | None = None
+    if raw_steps is not None:
+        try:
+            steps_completed = int(raw_steps)
+        except (ValueError, TypeError):
+            logger.warning("Invalid steps_completed from LLM: %r", raw_steps)
+
     return ConverseResult(
         input_type=str(data.get("input_type", "unclear")),
         is_correct=bool(data.get("is_correct", False)),
-        steps_completed=int(float(str(data["steps_completed"]))) if data.get("steps_completed") is not None else None,
+        steps_completed=steps_completed,
         feedback=str(data.get("feedback", "")),
     )
 

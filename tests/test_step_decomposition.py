@@ -14,36 +14,36 @@ from api.core.step_decomposition import (
 
 
 class TestParseSteps:
-    def test_parse_valid_json_bare_array(self) -> None:
-        raw = '''[
-            {"description": "Subtract 6", "operation": "subtraction", "before": "2x + 6 = 12", "after": "2x = 6"},
-            {"description": "Divide by 2", "operation": "division", "before": "2x = 6", "after": "x = 3"}
-        ]'''
-        steps, distractors = _parse_steps(raw)
+    def test_parse_steps_dict(self) -> None:
+        data = {
+            "steps": [
+                {"description": "Subtract 6", "operation": "subtraction", "before": "2x + 6 = 12", "after": "2x = 6"},
+                {"description": "Divide by 2", "operation": "division", "before": "2x = 6", "after": "x = 3"},
+            ],
+        }
+        steps, distractors = _parse_steps(data)
         assert len(steps) == 2
         assert steps[0].description == "Subtract 6"
         assert steps[1].after == "x = 3"
         assert distractors == []
 
-    def test_parse_valid_json_with_distractors(self) -> None:
-        raw = (
-            '{"steps": [{"description": "d", "operation": "o",'
-            ' "before": "a", "after": "x = 3"}],'
-            ' "distractors": ["x = 2", "x = 4", "x = -3"]}'
-        )
-        steps, distractors = _parse_steps(raw)
+    def test_parse_steps_with_distractors(self) -> None:
+        data = {
+            "steps": [{"description": "d", "operation": "o", "before": "a", "after": "x = 3"}],
+            "distractors": ["x = 2", "x = 4", "x = -3"],
+        }
+        steps, distractors = _parse_steps(data)
         assert len(steps) == 1
         assert steps[0].after == "x = 3"
         assert distractors == ["x = 2", "x = 4", "x = -3"]
 
-    def test_parse_strips_markdown_fencing(self) -> None:
-        raw = '```json\n[{"description": "step", "operation": "op", "before": "a", "after": "b"}]\n```'
-        steps, _ = _parse_steps(raw)
-        assert len(steps) == 1
+    def test_parse_steps_invalid_type_raises(self) -> None:
+        with pytest.raises((KeyError, TypeError, ValueError)):
+            _parse_steps({"steps": "not a list"})
 
-    def test_parse_invalid_json_raises(self) -> None:
-        with pytest.raises(Exception):
-            _parse_steps("not json at all")
+    def test_parse_steps_missing_key_raises(self) -> None:
+        with pytest.raises(KeyError):
+            _parse_steps({})
 
 
 class TestDecompositionDataclass:
