@@ -7,6 +7,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Truncate stored text to 10KB to prevent unbounded growth
+_MAX_TEXT_LENGTH = 10 * 1024
+
+
+def _truncate(text: str | None) -> str | None:
+    if text is None or len(text) <= _MAX_TEXT_LENGTH:
+        return text
+    return text[:_MAX_TEXT_LENGTH] + "... [truncated]"
+
 
 async def persist_llm_call(
     model: str,
@@ -41,8 +50,8 @@ async def persist_llm_call(
                 user_id=_uuid.UUID(user_id) if user_id else None,
                 success=success,
                 retry_count=retry_count,
-                input_text=input_text,
-                output_text=output_text,
+                input_text=_truncate(input_text),
+                output_text=_truncate(output_text),
             )
             db.add(record)
             await db.commit()

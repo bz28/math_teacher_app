@@ -60,5 +60,10 @@ class CostTracker:
         self._maybe_reset()
         return self._total_usd
 
+    def remaining_budget(self) -> float:
+        """Return remaining daily budget in USD."""
+        self._maybe_reset()
+        return max(0.0, settings.daily_cost_limit_usd - self._total_usd)
+
 
 cost_tracker = CostTracker()
