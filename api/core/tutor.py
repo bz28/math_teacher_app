@@ -12,7 +12,7 @@ Cost optimizations:
 import logging
 from dataclasses import dataclass
 
-from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,7 @@ async def step_chat(
     )
     data = await call_claude_json(
         STEP_CHAT_PROMPT, prompt, LLMMode.STEP_CHAT,
-        session_id=session_id, user_id=user_id, model=MODEL_REASON,
+        session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
 
