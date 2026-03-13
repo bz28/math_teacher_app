@@ -19,7 +19,7 @@ from api.core.tutor import check_answer_equivalence, converse, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
 
 RECENT_EXCHANGES_LIMIT = 10
-MAX_STUDENT_MESSAGES_PER_SESSION = 10
+MAX_STUDENT_MESSAGES = 10
 
 
 class SessionError(Exception):
@@ -154,7 +154,7 @@ async def _converse_completed(
 ) -> StepResponse:
     """Allow the student to keep asking questions after completing a problem."""
     student_msgs = sum(1 for e in session.exchanges if e.get("role") == "student")
-    if student_msgs >= MAX_STUDENT_MESSAGES_PER_SESSION:
+    if student_msgs >= MAX_STUDENT_MESSAGES:
         raise SessionError("Session message limit reached")
 
     _add_exchange(session, "student", student_response)

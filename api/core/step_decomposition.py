@@ -111,9 +111,13 @@ def _parse_steps(data: dict[str, object]) -> tuple[list[Step], list[str]]:
     return steps, list(distractors) if isinstance(distractors, list) else []
 
 
+_MATH_FUNCTION_NAMES = {"sin", "cos", "tan", "log", "ln", "abs", "max", "min", "mod", "gcd", "lcm", "sqrt"}
+
+
 def _is_word_problem(text: str) -> bool:
     """Detect whether text is a word problem vs pure math notation."""
-    return bool(re.search(r"[a-zA-Z]{2,}", text))
+    words = re.findall(r"[a-zA-Z]{3,}", text)
+    return any(w.lower() not in _MATH_FUNCTION_NAMES for w in words)
 
 
 SOLVE_SYSTEM_PROMPT = """You are a math tutor solving a problem.

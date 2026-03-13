@@ -199,7 +199,7 @@ async def call_claude_json(
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
-    cost_tracker.check_limit()
+    await cost_tracker.check_limit()
 
     use_model = model or MODEL_CLASSIFY
     client = get_client()
@@ -246,6 +246,11 @@ async def call_claude_json(
         except json.JSONDecodeError as e:
             last_error = e
             logger.warning("JSON parse error (attempt %d): %s", attempt + 1, e)
+            _log_and_persist(
+                use_model, mode, 0, 0, latency_ms, session_id, user_id,
+                success=False, retry_count=attempt,
+                input_text=user_message, output_text=resp_text,
+            )
 
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
@@ -269,7 +274,7 @@ async def call_claude_vision(
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
-    cost_tracker.check_limit()
+    await cost_tracker.check_limit()
 
     use_model = model or MODEL_REASON
     client = get_client()

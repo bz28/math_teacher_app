@@ -54,7 +54,7 @@ async def extract_problems_from_image(
     elif raw[:2] == b"\xff\xd8":
         media_type = "image/jpeg"
     else:
-        media_type = "image/jpeg"  # default fallback
+        raise ValueError("Unsupported image format (only JPEG and PNG are accepted)")
 
     user_content: list[dict[str, object]] = [
         {
