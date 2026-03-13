@@ -726,8 +726,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const currentMockTest = get().mockTest;
       if (!currentMockTest) return;
 
+      // Auto-flag incorrect and skipped questions
+      const newFlags = [...currentMockTest.flags];
+      results.forEach((r, i) => {
+        if (r.isCorrect !== true) newFlags[i] = true;
+      });
+
       set({
-        mockTest: { ...currentMockTest, results, submittedAt: Date.now() },
+        mockTest: { ...currentMockTest, results, flags: newFlags, submittedAt: Date.now() },
         phase: "mock_test_summary",
       });
     } catch (e) {

@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function MockTestSummary({ onBack }: Props) {
-  const { mockTest, startLearnQueue, reset } = useSessionStore();
+  const { mockTest, startLearnQueue, toggleMockTestFlag, reset } = useSessionStore();
 
   if (!mockTest || !mockTest.results) return null;
 
@@ -119,9 +119,14 @@ export function MockTestSummary({ onBack }: Props) {
                   />
                 </View>
                 <Text style={styles.resultIndex}>Q{i + 1}</Text>
-                {isFlagged && (
-                  <Ionicons name="flag" size={12} color={colors.warningDark} />
-                )}
+                <AnimatedPressable
+                  style={[styles.flagToggle, isFlagged && styles.flagToggleActive]}
+                  onPress={() => toggleMockTestFlag(i)}
+                >
+                  <Text style={[styles.flagToggleText, isFlagged && styles.flagToggleTextActive]}>
+                    {isFlagged ? "Flagged" : "Flag"}
+                  </Text>
+                </AnimatedPressable>
               </View>
               <Text style={styles.resultQuestion} numberOfLines={2}>
                 {result.question}
@@ -290,6 +295,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     flex: 1,
   },
+  flagToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    minHeight: 36,
+    justifyContent: "center" as const,
+  },
+  flagToggleActive: {
+    backgroundColor: colors.warningBg,
+    borderColor: colors.warning,
+  },
+  flagToggleText: { ...typography.label, color: colors.textMuted },
+  flagToggleTextActive: { color: colors.warningDark },
   resultQuestion: {
     ...typography.body,
     color: colors.text,
