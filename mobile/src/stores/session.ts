@@ -102,7 +102,7 @@ interface SessionState {
   askAboutStep: (question: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
-  retryFlaggedProblems: () => void;
+  retryFlaggedProblems: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
   switchToLearnMode: () => Promise<void>;
@@ -425,32 +425,43 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
   },
 
-  retryFlaggedProblems: () => {
+  retryFlaggedProblems: async () => {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
 
-    const flaggedProblems = practiceBatch.problems
+    const flaggedQuestions = practiceBatch.problems
       .filter((_, i) => practiceBatch.flags[i])
-      .map((p): PracticeProblem => ({
-        question: p.question,
-        answer: p.answer,
-      }));
-    if (flaggedProblems.length === 0) return;
+      .map((p) => p.question);
+    if (flaggedQuestions.length === 0) return;
 
-    set({
-      practiceBatch: {
-        problems: flaggedProblems,
-        currentIndex: 0,
-        results: [],
-        flags: new Array(flaggedProblems.length).fill(false),
-        loadingMore: false,
-        totalCount: flaggedProblems.length,
-        skippedProblems: [],
-        pendingChecks: 0,
-      },
-      phase: "awaiting_input",
-      error: null,
-    });
+    set({ ...initialState, phase: "loading" });
+    try {
+      // Generate 1 similar problem per flagged question
+      const results = await Promise.all(
+        flaggedQuestions.map((q) => generatePracticeProblems(q, 1)),
+      );
+      const similarProblems: PracticeProblem[] = results.map((r) => {
+        const similar = r.problems[1] ?? r.problems[0];
+        return { question: similar.question, answer: similar.answer };
+      });
+
+      set({
+        practiceBatch: {
+          problems: similarProblems,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(similarProblems.length).fill(false),
+          loadingMore: false,
+          totalCount: similarProblems.length,
+          skippedProblems: [],
+          pendingChecks: 0,
+        },
+        phase: "awaiting_input",
+        error: null,
+      });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
   },
 
   // --- Learn queue actions ---
@@ -517,14 +528,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     set({ ...initialState, phase: "loading" });
     try {
-      // Solve each flagged problem to get answers (parallel calls)
+      // Generate 1 similar problem per flagged topic
       const results = await Promise.all(
-        flaggedProblems.map((p) => generatePracticeProblems(p, 0)),
+        flaggedProblems.map((p) => generatePracticeProblems(p, 1)),
       );
-      const practiceProblemsList: PracticeProblem[] = results.map((r, i) => ({
-        question: flaggedProblems[i],
-        answer: r.problems[0]?.answer ?? "unknown",
-      }));
+      const practiceProblemsList: PracticeProblem[] = results.map((r) => {
+        // Use the generated similar problem (index 1), fall back to original (index 0)
+        const similar = r.problems[1] ?? r.problems[0];
+        return { question: similar.question, answer: similar.answer };
+      });
 
       set({
         practiceBatch: {

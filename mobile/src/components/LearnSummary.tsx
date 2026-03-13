@@ -72,7 +72,7 @@ export function LearnSummary({ onBack }: LearnSummaryProps) {
             onPress={practiceFlaggedFromLearnQueue}
           >
             <Text style={styles.learnFlaggedText}>
-              Practice {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
+              Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
             </Text>
           </AnimatedPressable>
         )}

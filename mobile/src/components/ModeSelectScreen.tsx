@@ -23,15 +23,7 @@ const MODES: { id: Mode; label: string; icon: IoniconsName; iconColor: string; i
     iconBg: colors.primaryBg,
     description: "Step-by-step guided learning",
   },
-  {
-    id: "practice",
-    label: "Practice",
-    icon: "pencil-outline",
-    iconColor: colors.success,
-    iconBg: colors.successLight,
-    description: "Solve problems on your own",
-  },
-  {
+{
     id: "mock_test",
     label: "Mock Test",
     icon: "document-text-outline",

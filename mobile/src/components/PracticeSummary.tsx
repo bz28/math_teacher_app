@@ -126,7 +126,7 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
             onPress={retryFlaggedProblems}
           >
             <Text style={styles.retryText}>
-              Retry {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
+              Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
             </Text>
           </AnimatedPressable>
         )}
