@@ -17,6 +17,8 @@ import { BackButton } from "./BackButton";
 import { CompletedCard } from "./CompletedCard";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
+import { MockTestScreen } from "./MockTestScreen";
+import { MockTestSummary } from "./MockTestSummary";
 import { PracticeBatchView } from "./PracticeBatchView";
 import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
@@ -40,6 +42,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     lastResponse,
     error,
     practiceBatch,
+    mockTest,
     submitAnswer,
     advanceStep,
     askAboutStep,
@@ -86,6 +89,12 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         ) : isBatchMode ? <PracticeSkeleton /> : <SessionSkeleton />}
       </SafeAreaView>
     );
+  }
+
+  // Mock test mode
+  if (mockTest) {
+    if (phase === "mock_test_summary") return <MockTestSummary onBack={onBack} />;
+    return <MockTestScreen onBack={onBack} />;
   }
 
   // Practice batch mode
