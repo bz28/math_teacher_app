@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.step_decomposition import decompose_problem, solve_problem
 from api.core.tutor import check_answer_equivalence, converse, step_chat
-from api.models.session import Session
+from api.models.session import Session, SessionMode, SessionStatus
 
 RECENT_EXCHANGES_LIMIT = 10
 MAX_STUDENT_MESSAGES_PER_SESSION = 10
@@ -57,12 +57,12 @@ async def create_session(
     db: AsyncSession,
     user_id: uuid.UUID,
     problem: str,
-    mode: str = "learn",
+    mode: str = SessionMode.LEARN,
 ) -> Session:
     """Create a new tutoring session for a problem."""
     await _check_daily_cap(db, user_id)
 
-    if mode == "practice":
+    if mode == SessionMode.PRACTICE:
         # Lightweight: just solve for the answer, no step decomposition
         answer, problem_type = await solve_problem(problem, user_id=str(user_id))
         steps_data = [
@@ -99,7 +99,7 @@ async def create_session(
         steps=steps_data,
         current_step=0,
         total_steps=len(steps_data),
-        status="active",
+        status=SessionStatus.ACTIVE,
         mode=mode,
         exchanges=[],
     )
@@ -119,6 +119,16 @@ async def get_session(db: AsyncSession, session_id: uuid.UUID) -> Session:
     session = result.scalar_one_or_none()
     if session is None:
         raise SessionError("Session not found")
+    return session
+
+
+async def get_owned_session(
+    db: AsyncSession, session_id: uuid.UUID, user_id: uuid.UUID,
+) -> Session:
+    """Retrieve a session and verify ownership. Raises SessionError / PermissionError."""
+    session = await get_session(db, session_id)
+    if session.user_id != user_id:
+        raise PermissionError("Not your session")
     return session
 
 
@@ -173,7 +183,7 @@ async def _complete_practice(
 ) -> StepResponse:
     """Mark a practice session as completed."""
     session.current_step = session.total_steps
-    session.status = "completed"
+    session.status = SessionStatus.COMPLETED
     feedback = "Correct! Problem complete!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -229,7 +239,7 @@ async def _complete_learn(
 ) -> StepResponse:
     """Mark a learn session as completed."""
     session.current_step = session.total_steps
-    session.status = "completed"
+    session.status = SessionStatus.COMPLETED
     feedback = "Correct! You've solved the problem!"
     _add_exchange(session, "tutor", feedback)
     await db.commit()
@@ -324,7 +334,7 @@ async def respond_to_step(
     request_advance: bool = False,
 ) -> StepResponse:
     """Process a student's response or action for the current step."""
-    if session.status not in ("active", "completed"):
+    if session.status not in (SessionStatus.ACTIVE, SessionStatus.COMPLETED):
         raise SessionError("Session is not active")
 
     # Allow conversation on completed sessions ("I still have questions")
@@ -334,7 +344,7 @@ async def respond_to_step(
         raise SessionError("All steps completed")
 
     # Practice mode: skip step enforcement and scaffolding
-    if session.mode == "practice":
+    if session.mode == SessionMode.PRACTICE:
         return await _respond_practice_mode(db, session, student_response)
 
     # Learn mode: steps shown upfront, chat scoped to step, final answer eval

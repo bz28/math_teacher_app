@@ -10,13 +10,14 @@ from api.core.session import (
     RateLimitError,
     SessionError,
     create_session,
-    get_session,
+    get_owned_session,
     respond_to_step,
 )
 from api.core.step_decomposition import generate_similar_problem
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
+from api.models.session import SessionStatus
 from api.schemas.session import (
     CreateSessionRequest,
     RespondRequest,
@@ -70,11 +71,10 @@ async def get(
 ) -> SessionResponse:
     """Get the current state of a tutoring session."""
     try:
-        session = await get_session(db, session_id)
+        session = await get_owned_session(db, session_id, current_user.user_id)
     except SessionError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-
-    if session.user_id != current_user.user_id:
+    except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     return _session_to_response(session)
@@ -89,11 +89,10 @@ async def respond(
 ) -> StepResponseSchema:
     """Submit a response for the current step or request a hint."""
     try:
-        session = await get_session(db, session_id)
+        session = await get_owned_session(db, session_id, current_user.user_id)
     except SessionError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-
-    if session.user_id != current_user.user_id:
+    except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     try:
@@ -122,14 +121,13 @@ async def similar(
 ) -> dict[str, str]:
     """Generate a similar problem on demand (only after session is completed)."""
     try:
-        session = await get_session(db, session_id)
+        session = await get_owned_session(db, session_id, current_user.user_id)
     except SessionError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-
-    if session.user_id != current_user.user_id:
+    except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
-    if session.status != "completed":
+    if session.status != SessionStatus.COMPLETED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
 
     try:

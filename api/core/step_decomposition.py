@@ -3,9 +3,12 @@
 import json
 import logging
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from api.core.llm_client import MODEL_REASON, call_claude_json
+
+_MAX_CACHED_PROBLEM_TYPES = 20
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +61,18 @@ class Decomposition:
     distractors: list[str]
 
 
-# In-memory few-shot cache: problem_type → list of example decompositions
-_few_shot_cache: dict[str, list[Decomposition]] = {}
+# In-memory few-shot cache: problem_type → list of example decompositions (LRU, capped)
+_few_shot_cache: OrderedDict[str, list[Decomposition]] = OrderedDict()
 
 
 def _build_prompt(problem: str, problem_type: str) -> str:
     """Build the user prompt, optionally with few-shot examples."""
     parts: list[str] = []
 
-    # Include few-shot example if available
+    # Include few-shot example if available (touch for LRU)
     examples = _few_shot_cache.get(problem_type, [])
+    if examples:
+        _few_shot_cache.move_to_end(problem_type)
     if examples:
         ex = examples[0]
         steps_json = json.dumps([
@@ -200,7 +205,7 @@ async def decompose_problem(problem: str, *, user_id: str | None = None) -> Deco
 
 
 def _cache_decomposition(decomposition: Decomposition) -> None:
-    """Cache a successful decomposition as a few-shot example."""
+    """Cache a successful decomposition as a few-shot example (LRU, bounded)."""
     key = decomposition.problem_type
     if key not in _few_shot_cache:
         _few_shot_cache[key] = []
@@ -208,3 +213,7 @@ def _cache_decomposition(decomposition: Decomposition) -> None:
     if len(_few_shot_cache[key]) >= 3:
         _few_shot_cache[key].pop(0)
     _few_shot_cache[key].append(decomposition)
+    # Move to end (most recently used) and evict oldest types if over cap
+    _few_shot_cache.move_to_end(key)
+    while len(_few_shot_cache) > _MAX_CACHED_PROBLEM_TYPES:
+        _few_shot_cache.popitem(last=False)

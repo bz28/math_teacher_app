@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
@@ -9,6 +10,17 @@ from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
+
+
+class SessionStatus(StrEnum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+
+
+class SessionMode(StrEnum):
+    LEARN = "learn"
+    PRACTICE = "practice"
 
 
 class Session(Base):
@@ -30,8 +42,8 @@ class Session(Base):
     # Progress
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active, completed, abandoned
-    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="learn")
+    status: Mapped[str] = mapped_column(String(20), default=SessionStatus.ACTIVE, index=True)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default=SessionMode.LEARN)
 
     # Per-step tracking (JSON: {step_index: {attempts: int, hints_used: int}})
     step_tracking: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)

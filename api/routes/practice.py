@@ -3,10 +3,8 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.practice import check_answer, generate_practice_problems
-from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.schemas.practice import (
     PracticeCheckRequest,
@@ -25,7 +23,6 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 async def generate(
     body: PracticeGenerateRequest,
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> PracticeGenerateResponse:
     """Generate similar practice problems for a given problem."""
     try:
@@ -47,5 +44,8 @@ async def check(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PracticeCheckResponse:
     """Check if a user's answer is correct."""
-    is_correct = await check_answer(body.question, body.correct_answer, body.user_answer, user_id=str(current_user.user_id))
+    is_correct = await check_answer(
+        body.question, body.correct_answer, body.user_answer,
+        user_id=str(current_user.user_id),
+    )
     return PracticeCheckResponse(is_correct=is_correct)
