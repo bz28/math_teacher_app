@@ -1,6 +1,9 @@
 """Practice mode: generate similar problems and check answers."""
 
+import json
 import logging
+
+import anthropic
 
 from api.core.llm_client import LLMMode, call_claude_json
 from api.core.tutor import check_answer_equivalence
@@ -54,7 +57,7 @@ async def generate_practice_problems(
                 for p in problems
                 if isinstance(p, dict)
             ]
-    except Exception:
+    except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
         logger.exception("Failed to generate practice problems")
 
     raise RuntimeError("Failed to generate practice problems")

@@ -9,8 +9,11 @@ Cost optimizations:
 - Trimmed conversation history (last 6 exchanges instead of 10)
 """
 
+import json
 import logging
 from dataclasses import dataclass
+
+import anthropic
 
 from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
 
@@ -222,6 +225,6 @@ async def check_answer_equivalence(
             mode=LLMMode.PRACTICE_EVAL, session_id=session_id, user_id=user_id,
         )
         return bool(result.get("is_correct", False))
-    except Exception:
+    except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
         logger.exception("Answer equivalence check failed")
         return False
