@@ -140,12 +140,18 @@ async def overview(
 async def llm_calls(
     days: int = Query(default=7, ge=1, le=90),
     function: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     since = _date_range(days)
+
+    # Build base filter conditions
+    base_filters = [LLMCall.created_at >= since]
+    if user_id:
+        base_filters.append(LLMCall.user_id == user_id)
 
     # Aggregated stats
     stats_query = (
@@ -157,7 +163,7 @@ async def llm_calls(
             func.avg(LLMCall.input_tokens).label("avg_input_tokens"),
             func.avg(LLMCall.output_tokens).label("avg_output_tokens"),
         )
-        .where(LLMCall.created_at >= since)
+        .where(*base_filters)
         .group_by(LLMCall.function)
         .order_by(func.sum(LLMCall.cost_usd).desc())
     )
@@ -170,7 +176,7 @@ async def llm_calls(
             func.count().label("count"),
             func.sum(LLMCall.cost_usd).label("total_cost"),
         )
-        .where(LLMCall.created_at >= since)
+        .where(*base_filters)
         .group_by(LLMCall.model)
     )).all()
 
@@ -181,24 +187,34 @@ async def llm_calls(
             func.count().label("count"),
             func.sum(LLMCall.cost_usd).label("cost"),
         )
-        .where(LLMCall.created_at >= since)
+        .where(*base_filters)
         .group_by("day")
         .order_by("day")
     )).all()
 
     # Recent calls (paginated)
-    calls_query = (
-        select(LLMCall)
-        .where(LLMCall.created_at >= since)
-    )
+    calls_query = select(LLMCall).where(*base_filters)
     if function:
         calls_query = calls_query.where(LLMCall.function == function)
     calls_query = calls_query.order_by(LLMCall.created_at.desc()).offset(offset).limit(limit)
     calls = (await db.execute(calls_query)).scalars().all()
 
-    total_count = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(LLMCall.created_at >= since)
-    )).scalar() or 0
+    total_query = select(func.count()).select_from(LLMCall).where(*base_filters)
+    if function:
+        total_query = total_query.where(LLMCall.function == function)
+    total_count = (await db.execute(total_query)).scalar() or 0
+
+    # Users who have LLM calls in this period (for filter dropdown)
+    user_rows = (await db.execute(
+        select(User.id, User.email)
+        .where(
+            User.id.in_(
+                select(func.distinct(LLMCall.user_id))
+                .where(LLMCall.created_at >= since, LLMCall.user_id.isnot(None))
+            )
+        )
+        .order_by(User.email)
+    )).all()
 
     return {
         "by_function": [
@@ -238,11 +254,16 @@ async def llm_calls(
                 "input_text": c.input_text,
                 "output_text": c.output_text,
                 "session_id": str(c.session_id) if c.session_id else None,
+                "user_id": str(c.user_id) if c.user_id else None,
                 "created_at": c.created_at.isoformat(),
             }
             for c in calls
         ],
         "total_count": total_count,
+        "users": [
+            {"id": str(r.id), "email": r.email}
+            for r in user_rows
+        ],
     }
 
 

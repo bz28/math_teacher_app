@@ -12,11 +12,12 @@ export default function LLMCalls() {
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [days, setDays] = useState("7");
   const [fnFilter, setFnFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    api.llmCalls({ days, function: fnFilter }).then(setData);
-  }, [days, fnFilter]);
+    api.llmCalls({ days, function: fnFilter, user_id: userFilter }).then(setData);
+  }, [days, fnFilter, userFilter]);
 
   if (!data) return <p>Loading...</p>;
 
@@ -33,6 +34,12 @@ export default function LLMCalls() {
           <option value="14">Last 14 days</option>
           <option value="30">Last 30 days</option>
           <option value="90">Last 90 days</option>
+        </select>
+        <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
+          <option value="">All Users</option>
+          {data.users.map((u) => (
+            <option key={u.id} value={u.id}>{u.email}</option>
+          ))}
         </select>
       </div>
 

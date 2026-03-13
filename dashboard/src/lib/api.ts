@@ -97,9 +97,11 @@ export interface LLMCallsData {
     success: boolean;
     retry_count: number;
     session_id: string | null;
+    user_id: string | null;
     created_at: string;
   }[];
   total_count: number;
+  users: { id: string; email: string }[];
 }
 
 export interface SessionsData {
