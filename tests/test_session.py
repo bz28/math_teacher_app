@@ -75,6 +75,11 @@ def _mock_converse_question():
     )
 
 
+def _mock_completed_chat():
+    from api.core.tutor import StepChatResult
+    return StepChatResult(feedback="We subtracted 6 first to isolate the variable term.")
+
+
 @pytest.fixture
 async def auth_token(client: AsyncClient) -> str:
     """Register a test user and return their access token."""
@@ -290,8 +295,8 @@ async def test_continue_asking_after_completion(client: AsyncClient, auth_token:
     )
 
     # Now ask a question on the completed session
-    with patch("api.core.session.converse", new_callable=AsyncMock) as mock_converse:
-        mock_converse.return_value = _mock_converse_question()
+    with patch("api.core.session.completed_chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = _mock_completed_chat()
         resp = await client.post(
             f"/v1/session/{session_id}/respond",
             json={"student_response": "why did we subtract 6 first?"},

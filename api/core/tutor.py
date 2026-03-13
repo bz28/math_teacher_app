@@ -17,6 +17,9 @@ import anthropic
 
 from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
 
+# Max recent exchanges sent to post-completion chat
+_COMPLETED_HISTORY_LIMIT = 6
+
 logger = logging.getLogger(__name__)
 
 # Max recent exchanges sent to converse() — trimmed from 10 to 6
@@ -94,6 +97,23 @@ Rules:
 - NEVER reveal the final answer to the problem
 - NEVER skip ahead to future steps — only discuss the current step
 - If the student asks about something unrelated to this step, gently redirect"""
+
+_COMPLETED_CHAT_PROMPT = """\
+You are a math tutor. The student has already solved the problem correctly and
+is now asking follow-up questions to deepen their understanding.
+
+You will receive:
+- The problem and its solution steps
+- The conversation history
+- The student's question
+
+Respond with ONLY valid JSON:
+{"feedback": "Your helpful response"}
+
+Rules:
+- Answer clearly and concisely (1-3 sentences)
+- You may freely reference any step or the final answer since the problem is solved
+- If the student asks something unrelated to the problem, gently redirect"""
 
 _ANSWER_EQUIVALENCE_PROMPT = """You are a strict math tutor checking a student's final answer.
 
@@ -200,6 +220,37 @@ async def step_chat(
     )
     data = await call_claude_json(
         STEP_CHAT_PROMPT, prompt, LLMMode.STEP_CHAT,
+        session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
+    )
+    return StepChatResult(feedback=str(data.get("feedback", "")))
+
+
+async def completed_chat(
+    problem: str,
+    steps: list[dict[str, str]],
+    exchanges: list[dict[str, str]],
+    student_input: str,
+    session_id: str | None = None,
+    user_id: str | None = None,
+) -> StepChatResult:
+    """Answer follow-up questions on a completed problem. Uses Haiku for cost."""
+    steps_text = "\n".join(
+        f"  Step {i}: {s['description']} | {s['before']} → {s['after']}"
+        for i, s in enumerate(steps)
+    )
+    history_text = "\n".join(
+        f"  {e['role']}: {e['content']}"
+        for e in exchanges[-_COMPLETED_HISTORY_LIMIT:]
+    ) if exchanges else "(no prior conversation)"
+
+    prompt = (
+        f"Problem: {problem}\n\n"
+        f"Solution steps:\n{steps_text}\n\n"
+        f"Conversation so far:\n{history_text}\n\n"
+        f"Student's question: {student_input}"
+    )
+    data = await call_claude_json(
+        _COMPLETED_CHAT_PROMPT, prompt, LLMMode.STEP_CHAT,
         session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))

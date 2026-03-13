@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.practice import check_answer
 from api.core.step_decomposition import decompose_problem, solve_problem
-from api.core.tutor import converse, step_chat
+from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
 
 RECENT_EXCHANGES_LIMIT = 10
@@ -35,8 +35,8 @@ class RateLimitError(SessionError):
 # Per-user daily request cap
 # ---------------------------------------------------------------------------
 
-async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
-    """Enforce per-user daily session creation cap."""
+async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID, role: str) -> None:
+    """Enforce per-user daily session creation cap based on user role."""
     today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
     result = await db.execute(
         select(func.count(Session.id)).where(
@@ -45,7 +45,11 @@ async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID) -> None:
         )
     )
     count = result.scalar() or 0
-    cap = settings.daily_request_cap_free
+    cap = (
+        settings.daily_request_cap_school
+        if role == "school"
+        else settings.daily_request_cap_free
+    )
     if count >= cap:
         raise RateLimitError(f"Daily session limit reached ({cap})")
 
@@ -59,9 +63,10 @@ async def create_session(
     user_id: uuid.UUID,
     problem: str,
     mode: str = SessionMode.LEARN,
+    role: str = "student",
 ) -> Session:
     """Create a new tutoring session for a problem."""
-    await _check_daily_cap(db, user_id)
+    await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
         # Lightweight: just solve for the answer, no step decomposition
@@ -158,7 +163,7 @@ async def _converse_completed(
 
     _add_exchange(session, "student", student_response)
 
-    converse_result = await converse(
+    chat_result = await completed_chat(
         problem=session.problem,
         steps=session.steps,
         exchanges=session.exchanges,
@@ -167,11 +172,11 @@ async def _converse_completed(
         user_id=str(session.user_id),
     )
 
-    _add_exchange(session, "tutor", converse_result.feedback)
+    _add_exchange(session, "tutor", chat_result.feedback)
     await db.commit()
     return StepResponse(
         action="conversation",
-        feedback=converse_result.feedback,
+        feedback=chat_result.feedback,
         current_step=session.current_step,
         total_steps=session.total_steps,
     )

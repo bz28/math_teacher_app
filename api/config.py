@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Rate Limits
     daily_request_cap_free: int = 50
+    daily_request_cap_school: int = 500
 
     # LLM Models
     llm_model_sonnet: str = "claude-sonnet-4-20250514"
