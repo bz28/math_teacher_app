@@ -8,6 +8,15 @@ class CreateSessionRequest(BaseModel):
     mode: str = Field("learn", pattern=r"^(learn|practice)$")
 
 
+class CreateMockTestRequest(BaseModel):
+    problem: str = Field(..., min_length=1, max_length=5000)
+
+
+class CompleteMockTestRequest(BaseModel):
+    total_questions: int = Field(..., ge=1)
+    correct_count: int = Field(..., ge=0)
+
+
 class RespondRequest(BaseModel):
     student_response: str = Field("", max_length=2000)
     request_advance: bool = False

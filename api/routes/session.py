@@ -19,6 +19,8 @@ from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
 from api.models.session import SessionMode, SessionStatus
 from api.schemas.session import (
+    CompleteMockTestRequest,
+    CreateMockTestRequest,
     CreateSessionRequest,
     RespondRequest,
     SessionResponse,
@@ -163,7 +165,7 @@ async def similar(
 
 @router.post("/mock-test", status_code=status.HTTP_201_CREATED)
 async def create_mock_test(
-    body: CreateSessionRequest,
+    body: CreateMockTestRequest,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -188,7 +190,7 @@ async def create_mock_test(
 @router.post("/mock-test/{session_id}/complete")
 async def complete_mock_test(
     session_id: uuid.UUID,
-    body: dict,
+    body: CompleteMockTestRequest,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -201,7 +203,7 @@ async def complete_mock_test(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
 
     session.status = SessionStatus.COMPLETED
-    session.total_steps = body.get("total_questions", 0)
-    session.current_step = body.get("correct_count", 0)
+    session.total_steps = body.total_questions
+    session.current_step = body.correct_count
     await db.commit()
     return {"status": "ok"}

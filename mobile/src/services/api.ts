@@ -195,7 +195,7 @@ export const getSimilarProblem = (sessionId: string) =>
   apiPost<{ similar_problem: string }>(`/session/${sessionId}/similar`, {});
 
 export const createMockTestSession = (problem: string) =>
-  apiPost<{ id: string }>("/session/mock-test", { problem, mode: "mock_test" });
+  apiPost<{ id: string }>("/session/mock-test", { problem });
 
 export const completeMockTestSession = (id: string, totalQuestions: number, correctCount: number) =>
   apiPost<{ status: string }>(`/session/mock-test/${id}/complete`, {
