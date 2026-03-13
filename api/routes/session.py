@@ -32,7 +32,23 @@ router = APIRouter(prefix="/session", tags=["session"])
 
 
 def _session_to_response(session: SessionModel) -> SessionResponse:
-    """Convert a Session model to a SessionResponse schema."""
+    """Convert a Session model to a SessionResponse schema.
+
+    In learn mode, the final step's answer is hidden while the session
+    is active so students can't inspect network traffic to cheat.
+    """
+    steps: list[StepDetail] = []
+    for i, step in enumerate(session.steps):
+        detail = StepDetail(**step)
+        is_final = i == len(session.steps) - 1
+        if (
+            session.mode == "learn"
+            and is_final
+            and session.status != SessionStatus.COMPLETED
+        ):
+            detail.after = ""
+        steps.append(detail)
+
     return SessionResponse(
         id=session.id,
         problem=session.problem,
@@ -41,7 +57,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
         total_steps=session.total_steps,
         status=session.status,
         mode=session.mode,
-        steps=[StepDetail(**step) for step in session.steps],
+        steps=steps,
     )
 
 
