@@ -157,8 +157,12 @@ export function InputScreen({
       }
     }
 
-    const { phase } = useSessionStore.getState();
-    if (phase === "error") {
+    // After the async actions complete, sessionPhase reflects the latest state
+    // because the store updates trigger a re-render. But since startProblems
+    // is async, we need to read the store directly here (one-time read, not
+    // a subscription — acceptable since we only need the post-action snapshot).
+    const postPhase = useSessionStore.getState().phase;
+    if (postPhase === "error") {
       onSessionError();
     } else {
       setProblemQueue([]);
@@ -404,7 +408,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.title,
     color: colors.text,
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
   modeChip: {
     flexDirection: "row",
@@ -435,8 +439,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radii.md,
-    padding: 14,
-    fontSize: 17,
+    padding: spacing.lg,
+    ...typography.body,
     backgroundColor: colors.inputBg,
     color: colors.text,
   },
@@ -539,7 +543,7 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
-  goText: { color: colors.white, ...typography.button, fontSize: 17 },
+  goText: { color: colors.white, ...typography.button },
   errorWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -547,7 +551,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: spacing.md,
   },
-  error: { color: colors.error, fontSize: 14, flex: 1 },
+  error: { color: colors.error, ...typography.caption, flex: 1 },
   retryLink: {
     ...typography.label,
     color: colors.primary,
@@ -592,7 +596,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  countValue: { fontSize: 26, fontWeight: "bold" as const, color: colors.text, minWidth: 30, textAlign: "center" as const },
+  countValue: { ...typography.title, color: colors.text, minWidth: 30, textAlign: "center" as const },
   countHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   promptStartBtn: {
     width: "100%",
