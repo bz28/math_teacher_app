@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class PracticeGenerateRequest(BaseModel):
     problem: str = Field(..., min_length=1, max_length=5000)
-    count: int = Field(3, ge=1, le=20)
+    count: int = Field(3, ge=0, le=20)
 
 
 class PracticeProblem(BaseModel):
