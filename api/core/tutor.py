@@ -160,7 +160,7 @@ async def converse(
     steps_completed: int | None = None
     if raw_steps is not None:
         try:
-            steps_completed = int(raw_steps)
+            steps_completed = int(raw_steps)  # type: ignore[arg-type]
         except (ValueError, TypeError):
             logger.warning("Invalid steps_completed from LLM: %r", raw_steps)
 
