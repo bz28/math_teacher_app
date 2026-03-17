@@ -21,6 +21,7 @@ class SessionStatus(StrEnum):
 class SessionMode(StrEnum):
     LEARN = "learn"
     PRACTICE = "practice"
+    MOCK_TEST = "mock_test"
 
 
 class Session(Base):

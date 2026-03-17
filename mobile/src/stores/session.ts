@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import {
   checkPracticeAnswer,
+  completeMockTestSession,
+  createMockTestSession,
   createSession,
   generatePracticeProblems,
   getSession,
@@ -59,6 +61,7 @@ export interface MockTestResult {
 }
 
 export interface MockTest {
+  sessionId: string | null;
   questions: PracticeProblem[];
   answers: Record<number, string>;
   flags: boolean[];
@@ -661,6 +664,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       set({
         mockTest: {
+          sessionId: null,
           questions,
           answers: {},
           flags: new Array(questions.length).fill(false),
@@ -672,6 +676,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         },
         phase: "mock_test_active",
       });
+
+      // Fire-and-forget: track session for analytics without blocking exam start
+      const problemText = questions.map((q) => q.question).join("\n");
+      createMockTestSession(problemText)
+        .then(({ id }) => {
+          const current = get().mockTest;
+          if (current) set({ mockTest: { ...current, sessionId: id } });
+        })
+        .catch(() => {});
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
@@ -731,6 +744,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       results.forEach((r, i) => {
         if (r.isCorrect !== true) newFlags[i] = true;
       });
+
+      // Record completion for analytics (fire-and-forget)
+      const correctCount = results.filter((r) => r.isCorrect === true).length;
+      if (currentMockTest.sessionId) {
+        completeMockTestSession(currentMockTest.sessionId, results.length, correctCount).catch(() => {});
+      }
 
       set({
         mockTest: { ...currentMockTest, results, flags: newFlags, submittedAt: Date.now() },
