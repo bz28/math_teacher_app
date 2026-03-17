@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Claude API
     claude_api_key: str
 
+    # OpenAI API
+    openai_api_key: str = ""
+
     # Sentry
     sentry_dsn: str = ""
 
