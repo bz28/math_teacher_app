@@ -1,10 +1,10 @@
-"""Step-by-step decomposition: Claude generates steps for any math problem."""
+"""Step-by-step decomposition: LLM generates steps for any math problem."""
 
 import logging
 import re
 from dataclasses import dataclass
 
-from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_openai_json
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class Decomposition:
 
 
 def _parse_steps(data: dict[str, object]) -> tuple[list[Step], list[str]]:
-    """Parse Claude's JSON response into Step objects and distractors."""
+    """Parse LLM JSON response into Step objects and distractors."""
     steps_data = data["steps"]
     distractors = data.get("distractors", [])
 
@@ -105,31 +105,31 @@ async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[st
     Lighter-weight alternative to decompose_problem — no step breakdown,
     just the answer. Used for practice mode where steps aren't needed upfront.
     """
-    data = await call_claude_json(
+    data = await call_openai_json(
         SOLVE_SYSTEM_PROMPT,
         f"Problem: {problem}",
         mode=LLMMode.SOLVE,
         model=MODEL_REASON,
-        max_tokens=256,
+        max_tokens=2048,
         user_id=user_id,
     )
     return str(data["answer"]), str(data.get("problem_type", "math"))
 
 
 async def generate_similar_problem(problem: str, *, user_id: str | None = None) -> str:
-    """Use Claude to generate a similar math problem with different numbers/context."""
+    """Generate a similar math problem with different numbers/context."""
     system = (
         "Generate a similar math problem with the same structure "
         "but different numbers and context. Respond with ONLY valid JSON:\n"
         '{"problem": "<the new problem text>"}'
     )
     try:
-        data = await call_claude_json(
+        data = await call_openai_json(
             system,
             f"Original problem: {problem}",
             mode=LLMMode.GENERATE_SIMILAR,
             model=MODEL_REASON,
-            max_tokens=256,
+            max_tokens=2048,
             max_retries=1,
             user_id=user_id,
         )
@@ -143,12 +143,12 @@ async def decompose_problem(problem: str, *, user_id: str | None = None) -> Deco
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
     prompt = f"Problem: {problem}"
 
-    data = await call_claude_json(
+    data = await call_openai_json(
         SYSTEM_PROMPT,
         prompt,
         mode=LLMMode.DECOMPOSE,
         model=MODEL_REASON,
-        max_tokens=1024,
+        max_tokens=4096,
         user_id=user_id,
     )
 

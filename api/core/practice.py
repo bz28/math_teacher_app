@@ -3,9 +3,9 @@
 import json
 import logging
 
-import anthropic
+import openai
 
-from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_openai_json
 from api.core.tutor import check_answer_equivalence
 
 logger = logging.getLogger(__name__)
@@ -65,13 +65,13 @@ async def generate_practice_problems(
         system_prompt = _GENERATE_PROBLEMS_PROMPT
 
     try:
-        result = await call_claude_json(
+        result = await call_openai_json(
             system_prompt,
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
             model=MODEL_REASON,
-            max_tokens=2048,
+            max_tokens=4096,
         )
         problems = result.get("problems")
         if isinstance(problems, list):
@@ -80,7 +80,7 @@ async def generate_practice_problems(
                 for p in problems
                 if isinstance(p, dict)
             ]
-    except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
+    except (openai.APIError, openai.APITimeoutError, json.JSONDecodeError, RuntimeError):
         logger.exception("Failed to generate practice problems")
 
     raise RuntimeError("Failed to generate practice problems")

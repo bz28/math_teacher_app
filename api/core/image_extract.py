@@ -1,9 +1,9 @@
-"""Extract math problems from images using Claude Vision."""
+"""Extract math problems from images using OpenAI Vision."""
 
 import base64
 import logging
 
-from api.core.llm_client import LLMMode, call_claude_vision
+from api.core.llm_client import LLMMode, call_openai_vision
 
 logger = logging.getLogger(__name__)
 
@@ -56,22 +56,10 @@ async def extract_problems_from_image(
     else:
         raise ValueError("Unsupported image format (only JPEG and PNG are accepted)")
 
-    user_content: list[dict[str, object]] = [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type,
-                "data": image_base64,
-            },
-        },
-        {
-            "type": "text",
-            "text": EXTRACT_PROMPT,
-        },
-    ]
-
-    result = await call_claude_vision(user_content, mode=LLMMode.IMAGE_EXTRACT, user_id=user_id)
+    result = await call_openai_vision(
+        image_base64, media_type, EXTRACT_PROMPT,
+        mode=LLMMode.IMAGE_EXTRACT, user_id=user_id,
+    )
 
     problems = result.get("problems", [])
     confidence = result.get("confidence", "medium")

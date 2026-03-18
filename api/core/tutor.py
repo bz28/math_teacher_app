@@ -1,11 +1,10 @@
 """LLM Tutor Layer: converse, step-chat, and answer checking modes.
 
-All calls use call_claude_json from llm_client for consistent retry,
-circuit breaker, cost tracking, and logging.
+Converse uses OpenAI (GPT-5) for reasoning; step-chat, completed-chat,
+and answer-checking use Claude Haiku for fast/cheap classification.
 
 Cost optimizations:
 - Haiku for classification/eval tasks
-- Prompt caching via cache_control on static system prompts
 - Trimmed conversation history (last 6 exchanges instead of 10)
 """
 
@@ -15,7 +14,7 @@ from dataclasses import dataclass
 
 import anthropic
 
-from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json, call_openai_json
 
 # Max recent exchanges sent to post-completion chat
 _COMPLETED_HISTORY_LIMIT = 6
@@ -174,9 +173,10 @@ async def converse(
         f"Conversation so far:\n{history_text}\n\n"
         f"Student's latest input: {student_input}"
     )
-    data = await call_claude_json(
+    data = await call_openai_json(
         CONVERSATIONAL_TUTOR_PROMPT, prompt, LLMMode.CONVERSE,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
+        max_tokens=4096,
     )
     # Parse steps_completed safely — LLM may return int, float, or string
     raw_steps = data.get("steps_completed")

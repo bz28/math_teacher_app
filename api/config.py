@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # LLM Models
     llm_model_sonnet: str = "claude-sonnet-4-20250514"
     llm_model_haiku: str = "claude-haiku-4-5-20251001"
+    llm_model_gpt5: str = "gpt-5-2025-08-07"
 
     # Cost Alerting
     daily_cost_limit_usd: float = 50.0
