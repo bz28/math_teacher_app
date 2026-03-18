@@ -8,9 +8,10 @@ import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface CompletedCardProps {
   onBack: () => void;
+  onHome: () => void;
 }
 
-export function CompletedCard({ onBack }: CompletedCardProps) {
+export function CompletedCard({ onBack, onHome }: CompletedCardProps) {
   const {
     session,
     learnQueue,
@@ -30,6 +31,11 @@ export function CompletedCard({ onBack }: CompletedCardProps) {
   const handleBack = () => {
     reset();
     onBack();
+  };
+
+  const handleHome = () => {
+    reset();
+    onHome();
   };
 
   // Learn queue completion
@@ -123,7 +129,14 @@ export function CompletedCard({ onBack }: CompletedCardProps) {
         style={styles.outlineButton}
         onPress={handleBack}
       >
-        <Text style={styles.outlineButtonText}>New Problem</Text>
+        <Text style={styles.outlineButtonText}>{isLearn ? "Learn New Problem" : "New Problem"}</Text>
+      </AnimatedPressable>
+      <AnimatedPressable
+        style={styles.outlineButton}
+        onPress={handleHome}
+      >
+        <Ionicons name="home-outline" size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+        <Text style={styles.outlineButtonText}>Return Home</Text>
       </AnimatedPressable>
     </View>
   );

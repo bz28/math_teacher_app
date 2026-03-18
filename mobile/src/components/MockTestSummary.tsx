@@ -8,9 +8,10 @@ import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface Props {
   onBack: () => void;
+  onHome: () => void;
 }
 
-export function MockTestSummary({ onBack }: Props) {
+export function MockTestSummary({ onBack, onHome }: Props) {
   const { mockTest, startLearnQueue, toggleMockTestFlag, reset } = useSessionStore();
 
   if (!mockTest || !mockTest.results) return null;
@@ -132,18 +133,33 @@ export function MockTestSummary({ onBack }: Props) {
                 {result.question}
               </Text>
               <View style={styles.resultAnswers}>
-                {result.userAnswer != null && (
-                  <Text style={[styles.resultAnswer, result.isCorrect === false && styles.resultAnswerWrong]}>
-                    Your answer: {result.userAnswer}
-                  </Text>
+                {result.isCorrect === true && (
+                  <>
+                    <Text style={styles.resultAnswer}>
+                      Your answer: {result.userAnswer}
+                    </Text>
+                    <Text style={styles.resultCorrectAnswer}>
+                      Correct!
+                    </Text>
+                  </>
                 )}
-                {result.isCorrect !== true && (
-                  <Text style={styles.resultCorrectAnswer}>
-                    Correct: {result.correctAnswer}
-                  </Text>
+                {result.isCorrect === false && (
+                  <>
+                    <Text style={[styles.resultAnswer, styles.resultAnswerWrong]}>
+                      Your answer: {result.userAnswer}
+                    </Text>
+                    <Text style={styles.resultHint}>
+                      Flag this question and learn it to see the answer
+                    </Text>
+                  </>
                 )}
-                {result.userAnswer == null && (
-                  <Text style={styles.resultSkipped}>Unanswered</Text>
+                {result.isCorrect == null && (
+                  <>
+                    <Text style={styles.resultSkipped}>Unanswered</Text>
+                    <Text style={styles.resultHint}>
+                      Flag this question and learn it to see the answer
+                    </Text>
+                  </>
                 )}
               </View>
             </View>
@@ -168,6 +184,12 @@ export function MockTestSummary({ onBack }: Props) {
         <AnimatedPressable style={styles.newExamBtn} onPress={handleNewExam}>
           <Ionicons name="refresh-outline" size={18} color={colors.primary} />
           <Text style={styles.newExamText}>New Exam</Text>
+        </AnimatedPressable>
+
+        {/* Return Home button */}
+        <AnimatedPressable style={styles.newExamBtn} onPress={() => { reset(); onHome(); }}>
+          <Ionicons name="home-outline" size={18} color={colors.primary} />
+          <Text style={styles.newExamText}>Return Home</Text>
         </AnimatedPressable>
       </ScrollView>
     </SafeAreaView>
@@ -331,6 +353,11 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   resultSkipped: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontStyle: "italic",
+  },
+  resultHint: {
     ...typography.caption,
     color: colors.textMuted,
     fontStyle: "italic",
