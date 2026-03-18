@@ -29,9 +29,10 @@ import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface SessionScreenProps {
   onBack: () => void;
+  onHome: () => void;
 }
 
-export function SessionScreen({ onBack }: SessionScreenProps) {
+export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
@@ -48,6 +49,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
     askAboutStep,
     learnQueue,
     switchToLearnMode,
+    finishAsking,
     reset,
   } = useSessionStore();
 
@@ -93,19 +95,19 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
 
   // Mock test mode
   if (mockTest) {
-    if (phase === "mock_test_summary") return <MockTestSummary onBack={onBack} />;
+    if (phase === "mock_test_summary") return <MockTestSummary onBack={onBack} onHome={onHome} />;
     return <MockTestScreen onBack={onBack} />;
   }
 
   // Practice batch mode
   if (isBatchMode) {
-    if (isPracticeSummary) return <PracticeSummary onBack={onBack} />;
+    if (isPracticeSummary) return <PracticeSummary onBack={onBack} onHome={onHome} />;
     return <PracticeBatchView onBack={onBack} />;
   }
 
   // Learn summary screen
   if (isLearnSummary && learnQueue) {
-    return <LearnSummary onBack={onBack} />;
+    return <LearnSummary onBack={onBack} onHome={onHome} />;
   }
 
   if (!session) return null;
@@ -343,7 +345,7 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
         )}
 
         {/* Completed */}
-        {isCompleted && <CompletedCard onBack={onBack} />}
+        {isCompleted && <CompletedCard onBack={onBack} onHome={onHome} />}
 
         {/* Continue asking after completion */}
         {!isCompleted && session.status === "completed" && isLearn && (
@@ -366,13 +368,20 @@ export function SessionScreen({ onBack }: SessionScreenProps) {
             </View>
 
             <View style={styles.buttons}>
-              <GradientButton
-                onPress={handleAsk}
-                label="Ask"
-                loading={phase === "thinking"}
-                disabled={!input.trim()}
-                style={styles.submitButton}
-              />
+              {input.trim() ? (
+                <GradientButton
+                  onPress={handleAsk}
+                  label="Ask"
+                  loading={phase === "thinking"}
+                  style={styles.submitButton}
+                />
+              ) : (
+                <GradientButton
+                  onPress={finishAsking}
+                  label="I Understand Now"
+                  style={styles.submitButton}
+                />
+              )}
             </View>
           </>
         )}
