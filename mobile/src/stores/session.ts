@@ -633,7 +633,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (generateCount > 0) {
         // "Generate similar" mode — generate new questions from seeds
         const seedText = problems.map((p, i) => `Problem ${i + 1}: ${p}`).join("\n");
-        const { problems: generated } = await generatePracticeProblems(seedText, generateCount - 1);
+        const { problems: generated } = await generatePracticeProblems(seedText, generateCount);
         questions = generated;
       } else {
         // "Use as exam" mode — solve each problem to get correct answers
