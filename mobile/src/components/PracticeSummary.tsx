@@ -12,9 +12,10 @@ import { colors, spacing } from "../theme";
 
 interface PracticeSummaryProps {
   onBack: () => void;
+  onHome: () => void;
 }
 
-export function PracticeSummary({ onBack }: PracticeSummaryProps) {
+export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
   const insets = useSafeAreaInsets();
   const {
     practiceBatch,
@@ -149,6 +150,11 @@ export function PracticeSummary({ onBack }: PracticeSummaryProps) {
 
         <AnimatedPressable style={styles.newProblemButton} onPress={handleBack}>
           <Text style={styles.newProblemText}>New Problem</Text>
+        </AnimatedPressable>
+
+        <AnimatedPressable style={styles.homeButton} onPress={() => { reset(); onHome(); }}>
+          <Ionicons name="home-outline" size={18} color={colors.primary} />
+          <Text style={styles.homeButtonText}>Return Home</Text>
         </AnimatedPressable>
       </ScrollView>
     </View>

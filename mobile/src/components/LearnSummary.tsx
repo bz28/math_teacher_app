@@ -12,9 +12,10 @@ import { colors, spacing } from "../theme";
 
 interface LearnSummaryProps {
   onBack: () => void;
+  onHome: () => void;
 }
 
-export function LearnSummary({ onBack }: LearnSummaryProps) {
+export function LearnSummary({ onBack, onHome }: LearnSummaryProps) {
   const insets = useSafeAreaInsets();
   const {
     learnQueue,
@@ -79,6 +80,11 @@ export function LearnSummary({ onBack }: LearnSummaryProps) {
 
         <AnimatedPressable style={styles.newProblemButton} onPress={handleBack}>
           <Text style={styles.newProblemText}>New Problem</Text>
+        </AnimatedPressable>
+
+        <AnimatedPressable style={styles.homeButton} onPress={() => { reset(); onHome(); }}>
+          <Ionicons name="home-outline" size={18} color={colors.primary} />
+          <Text style={styles.homeButtonText}>Return Home</Text>
         </AnimatedPressable>
       </ScrollView>
     </View>

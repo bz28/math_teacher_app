@@ -120,10 +120,16 @@ function AppRoot() {
   if (screen === "session") {
     return (
       <SafeAreaProvider>
-        <SessionScreen onBack={() => {
-          setProblemQueue([]);
-          setScreen("input");
-        }} />
+        <SessionScreen
+          onBack={() => {
+            setProblemQueue([]);
+            setScreen("input");
+          }}
+          onHome={() => {
+            setProblemQueue([]);
+            setScreen("mode-select");
+          }}
+        />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
