@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { getUserName } from "../services/api";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface HomeScreenProps {
@@ -11,6 +12,9 @@ interface HomeScreenProps {
 }
 
 export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
+  const name = getUserName();
+  const greeting = name ? `Hi, ${name}!` : "Hi there!";
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Top bar */}
@@ -33,7 +37,7 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
 
       {/* Greeting */}
       <View style={styles.greetingSection}>
-        <Text style={styles.greeting}>Hi there!</Text>
+        <Text style={styles.greeting}>{greeting}</Text>
         <Text style={styles.subtitle}>Ready to learn something new?</Text>
       </View>
 

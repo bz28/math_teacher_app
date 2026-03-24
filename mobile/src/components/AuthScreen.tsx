@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { checkEmail, login, register, saveTokens } from "../services/api";
+import { checkEmail, login, register, saveTokens, saveUserName } from "../services/api";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AuthScreenProps {
@@ -84,6 +84,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
       await checkEmail(email);
       const resp = await register(email, password, name.trim(), selectedGrade!.value);
       await saveTokens(resp.access_token, resp.refresh_token);
+      await saveUserName(name.trim());
       onAuth();
     } catch (e) {
       setError((e as Error).message);
