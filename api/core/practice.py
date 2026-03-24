@@ -57,13 +57,17 @@ async def generate_practice_problems(
         decomposition = await decompose_problem(problem, user_id=user_id)
         return [{"question": problem, "answer": decomposition.final_answer}]
 
+    # Auto-decompose to get steps if not provided (likely a cache hit)
+    if not steps:
+        decomposition = await decompose_problem(problem, user_id=user_id)
+        steps = [{"description": s} for s in decomposition.steps]
+
     # Step 1: Generate question text only (no answers — they'd be unreliable)
     parts = [f"Original problem: {problem}"]
-    if steps:
-        steps_text = "\n".join(
-            f"  Step {i + 1}: {s['description']}" for i, s in enumerate(steps)
-        )
-        parts.append(f"\nApproach used:\n{steps_text}")
+    steps_text = "\n".join(
+        f"  Step {i + 1}: {s['description']}" for i, s in enumerate(steps)
+    )
+    parts.append(f"\nApproach used:\n{steps_text}")
     parts.append(
         f"\nGenerate {count} similar problems (do not include the original)."
     )
