@@ -26,7 +26,7 @@ import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { useSessionStore } from "../stores/session";
-import { colors, spacing, typography, shadows, gradients } from "../theme";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface SessionScreenProps {
@@ -39,6 +39,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState("");
+  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean; pending: boolean } | null>(null);
   const {
     session,
@@ -138,6 +139,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const handleAsk = async () => {
     if (!input.trim()) return;
     const text = input.trim();
+    setLastQuestion(text);
     setInput("");
     await askAboutStep(text);
   };
@@ -288,8 +290,24 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <Text style={styles.promptText}>Enter your final answer</Text>
         )}
 
+        {/* User's question bubble (for chat conversations) */}
+        {lastQuestion && lastResponse?.action === "conversation" && (
+          <View style={compactStyles.questionBubble}>
+            <Ionicons name="chatbubble" size={14} color={colors.primary} />
+            <Text style={compactStyles.questionText}>{lastQuestion}</Text>
+          </View>
+        )}
+
+        {/* Thinking indicator */}
+        {phase === "thinking" && (
+          <View style={[compactStyles.thinkingCard, shadows.sm]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={compactStyles.thinkingText}>Thinking...</Text>
+          </View>
+        )}
+
         {/* Feedback */}
-        {lastResponse && (
+        {lastResponse && phase !== "thinking" && (
           <View
             style={[
               styles.feedback,
@@ -299,6 +317,14 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
               styles.feedbackWrong,
             ]}
           >
+            {lastResponse.action === "conversation" && (
+              <View style={styles.feedbackHeader}>
+                <View style={[styles.feedbackIconWrap, { backgroundColor: colors.primaryBg }]}>
+                  <Ionicons name="school" size={14} color={colors.primary} />
+                </View>
+                <Text style={[styles.feedbackTitle, { color: colors.primary }]}>Tutor</Text>
+              </View>
+            )}
             {lastResponse.action !== "conversation" && (
               <View style={styles.feedbackHeader}>
                 <View style={[
@@ -542,5 +568,41 @@ const compactStyles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
+  },
+  questionBubble: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    alignSelf: "flex-end",
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.lg,
+    borderBottomRightRadius: 4,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    maxWidth: "85%",
+  },
+  questionText: {
+    ...typography.body,
+    color: colors.primary,
+    fontSize: 14,
+    flex: 1,
+  },
+  thinkingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  thinkingText: {
+    ...typography.bodyBold,
+    color: colors.textMuted,
+    fontSize: 14,
   },
 });
