@@ -55,6 +55,8 @@ interface LearnQueue {
   problems: string[];
   currentIndex: number;
   flags: boolean[];
+  /** Pre-generated sessions for upcoming problems, keyed by queue index */
+  preloadedSessions: Record<number, SessionData>;
 }
 
 export interface MockTestResult {
@@ -505,8 +507,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           problems,
           currentIndex: 0,
           flags: new Array(problems.length).fill(false),
+          preloadedSessions: {},
         },
       });
+
+      // Pre-generate sessions for remaining problems in background
+      if (problems.length > 1) {
+        problems.slice(1).forEach((p, i) => {
+          const queueIndex = i + 1;
+          createSession(p, "learn")
+            .then((s) => {
+              const { learnQueue: lq } = get();
+              if (!lq) return;
+              set({
+                learnQueue: {
+                  ...lq,
+                  preloadedSessions: { ...lq.preloadedSessions, [queueIndex]: s },
+                },
+              });
+            })
+            .catch(() => {
+              // Pre-generation failed — will be created on demand when advancing
+            });
+        });
+      }
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
@@ -519,6 +543,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const nextIndex = learnQueue.currentIndex + 1;
     if (nextIndex >= learnQueue.problems.length) {
       set({ phase: "learn_summary", session: null, lastResponse: null });
+      return;
+    }
+
+    // Use preloaded session if available, otherwise create on demand
+    const preloaded = learnQueue.preloadedSessions[nextIndex];
+    if (preloaded) {
+      set({
+        session: preloaded,
+        phase: "awaiting_input",
+        lastResponse: null,
+        learnQueue: { ...learnQueue, currentIndex: nextIndex },
+      });
       return;
     }
 
