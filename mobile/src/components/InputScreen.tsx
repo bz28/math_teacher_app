@@ -300,26 +300,28 @@ export function InputScreen({
                 {problemQueue.length} problem{problemQueue.length !== 1 ? "s" : ""} queued
               </Text>
             </View>
-            {problemQueue.map((problem, i) => (
-              <TouchableOpacity
-                key={`${i}-${problem}`}
-                style={styles.queueRow}
-                onPress={() => handleEditFromQueue(i)}
-                activeOpacity={0.6}
-              >
-                <View style={styles.queueBadge}>
-                  <Text style={styles.queueBadgeText}>{i + 1}</Text>
-                </View>
-                <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
+            <ScrollView style={styles.queueScroll} nestedScrollEnabled>
+              {problemQueue.map((problem, i) => (
                 <TouchableOpacity
-                  onPress={() => handleRemoveFromQueue(i)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={styles.queueRemove}
+                  key={`${i}-${problem}`}
+                  style={styles.queueRow}
+                  onPress={() => handleEditFromQueue(i)}
+                  activeOpacity={0.6}
                 >
-                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                  <View style={styles.queueBadge}>
+                    <Text style={styles.queueBadgeText}>{i + 1}</Text>
+                  </View>
+                  <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveFromQueue(i)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.queueRemove}
+                  >
+                    <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
+              ))}
+            </ScrollView>
             {problemQueue.length < MAX_PROBLEMS ? (
               <View style={styles.queueAddMore}>
                 <TouchableOpacity
@@ -647,6 +649,9 @@ const styles = StyleSheet.create({
   },
   queueRemove: {
     padding: spacing.xs,
+  },
+  queueScroll: {
+    maxHeight: 180,
   },
   queueHeader: {
     paddingHorizontal: spacing.lg,

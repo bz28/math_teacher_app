@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -24,7 +25,7 @@ import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { useSessionStore } from "../stores/session";
-import { colors, spacing, shadows, gradients } from "../theme";
+import { colors, spacing, typography, shadows, gradients } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface SessionScreenProps {
@@ -183,18 +184,18 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps history (learn mode) */}
+        {/* Completed steps — compact collapsed view */}
         {isLearn && completedSteps.length > 0 && (
-          <View style={styles.historySection}>
+          <View style={compactStyles.historyContainer}>
             {completedSteps.map((step, i) => (
-              <View key={`step-${i}`} style={[styles.historyRow, shadows.sm]}>
-                <View style={styles.historyCheckWrap}>
-                  <Ionicons name="checkmark" size={14} color={colors.success} />
+              <View key={`step-${i}`} style={compactStyles.historyItem}>
+                <View style={compactStyles.historyDot}>
+                  <Ionicons name="checkmark" size={10} color={colors.white} />
                 </View>
-                <View style={styles.historyContent}>
-                  <Text style={styles.historyLabel}>Step {i + 1}</Text>
-                  <Text style={styles.historyDesc}>{step.description}</Text>
-                </View>
+                {i < completedSteps.length - 1 && <View style={compactStyles.historyLine} />}
+                <Text style={compactStyles.historyText} numberOfLines={1}>
+                  Step {i + 1}: {step.description}
+                </Text>
               </View>
             ))}
           </View>
@@ -467,3 +468,40 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     </KeyboardAvoidingView>
   );
 }
+
+const compactStyles = StyleSheet.create({
+  historyContainer: {
+    marginBottom: spacing.md,
+    paddingLeft: spacing.xs,
+  },
+  historyItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+    position: "relative",
+  },
+  historyDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: spacing.md,
+    zIndex: 1,
+  },
+  historyLine: {
+    position: "absolute",
+    left: 9,
+    top: 20,
+    width: 2,
+    height: spacing.sm + 12,
+    backgroundColor: colors.successBorder,
+  },
+  historyText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 13,
+    flex: 1,
+  },
+});
