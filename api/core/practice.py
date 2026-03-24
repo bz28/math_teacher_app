@@ -6,6 +6,7 @@ import logging
 import anthropic
 
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.step_decomposition import decompose_problem
 from api.core.tutor import check_answer_equivalence
 
 logger = logging.getLogger(__name__)
@@ -14,16 +15,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Problem generation
 # ---------------------------------------------------------------------------
-
-_SOLVE_PROBLEM_PROMPT = """You are a math tutor. Solve the given problem and provide the answer.
-
-Respond with ONLY valid JSON:
-{"problems": [{"question": "the original problem text", "answer": "the correct answer"}]}
-
-Rules:
-- Return the EXACT original problem text as the question
-- The answer must be correct and simplified
-- Return exactly one problem"""
 
 _GENERATE_PROBLEMS_PROMPT = """You are a math tutor generating practice problems.
 
@@ -47,26 +38,28 @@ async def generate_practice_problems(
 ) -> list[dict[str, str]]:
     """Generate the original + count similar problems with answers.
 
-    When count=0, solves and returns the original problem.
+    When count=0, solves the original problem using step-by-step decomposition
+    for accuracy, then returns the answer.
     When count>0, generates count new similar problems (excluding original).
 
     Returns list of {"question": ..., "answer": ...} dicts.
     """
     if count == 0:
-        # Just solve the original problem
-        user_msg = f"Solve this problem:\n{problem}"
-        system_prompt = _SOLVE_PROBLEM_PROMPT
-    else:
-        user_msg = (
-            f"Original problem: {problem}\n\n"
-            f"Generate {count} similar problems (do not include the original). "
-            f"Each must have a correct answer."
-        )
-        system_prompt = _GENERATE_PROBLEMS_PROMPT
+        # Use decompose_problem for chain-of-thought reasoning — more accurate
+        # than a simple "solve this" prompt. Steps are discarded here but could
+        # be cached if the student later enters learn mode.
+        decomposition = await decompose_problem(problem, user_id=user_id)
+        return [{"question": problem, "answer": decomposition.final_answer}]
+
+    user_msg = (
+        f"Original problem: {problem}\n\n"
+        f"Generate {count} similar problems (do not include the original). "
+        f"Each must have a correct answer."
+    )
 
     try:
         result = await call_claude_json(
-            system_prompt,
+            _GENERATE_PROBLEMS_PROMPT,
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,

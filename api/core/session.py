@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.practice import check_answer
-from api.core.step_decomposition import decompose_problem, solve_problem
+from api.core.step_decomposition import decompose_problem
 from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
 from api.models.work_submission import WorkSubmission
@@ -70,10 +70,11 @@ async def create_session(
     await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
-        # Lightweight: just solve for the answer, no step decomposition
-        answer, problem_type = await solve_problem(problem, user_id=str(user_id))
+        # Use full decomposition for accuracy — steps cached for learn mode reuse
+        decomp = await decompose_problem(problem, user_id=str(user_id))
+        problem_type = decomp.problem_type
         steps_data: list[dict[str, Any]] = [
-            {"description": "Final answer", "final_answer": answer},
+            {"description": "Final answer", "final_answer": decomp.final_answer},
         ]
     else:
         # Check for prior work submission to personalize learn mode

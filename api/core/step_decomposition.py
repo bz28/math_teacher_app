@@ -71,35 +71,6 @@ def _is_word_problem(text: str) -> bool:
     return any(w.lower() not in _MATH_FUNCTION_NAMES for w in words)
 
 
-SOLVE_SYSTEM_PROMPT = """You are a math tutor solving a problem.
-
-Given a math problem, compute the final answer. Respond with ONLY valid JSON:
-{"answer": "<the final simplified answer>", "problem_type": "word_problem" or "math"}
-
-Rules:
-- The answer must be the fully simplified final result
-- Use standard math notation (e.g., x^2 not x², use * for multiplication)
-- For equations, give the solution (e.g., "x = 3")
-- For expressions, give the simplified form (e.g., "28x")
-- Do NOT include any explanation, just the JSON"""
-
-
-async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[str, str]:
-    """Solve a math problem and return (final_answer, problem_type).
-
-    Lighter-weight alternative to decompose_problem — no step breakdown,
-    just the answer. Used for practice mode where steps aren't needed upfront.
-    """
-    data = await call_claude_json(
-        SOLVE_SYSTEM_PROMPT,
-        f"Problem: {problem}",
-        mode=LLMMode.SOLVE,
-        model=MODEL_REASON,
-        max_tokens=256,
-        user_id=user_id,
-    )
-    return str(data["answer"]), str(data.get("problem_type", "math"))
-
 
 async def generate_similar_problem(
     problem: str,
