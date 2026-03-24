@@ -42,7 +42,6 @@ export function InputScreen({
   const [error, setError] = useState<string | null>(null);
   // Mock test config state
   const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
-  const [mockGenerateCount, setMockGenerateCount] = useState(5);
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(false);
 
@@ -131,7 +130,7 @@ export function InputScreen({
     // Mock test mode — start exam directly
     if (mode === "mock_test") {
       onSessionStart();
-      const generateCount = mockExamType === "generate_similar" ? mockGenerateCount : 0;
+      const generateCount = mockExamType === "generate_similar" ? allProblems.length : 0;
       const timeLimitMinutes = mockUntimed ? null : mockTimeLimitMinutes;
       await startMockTest(allProblems, generateCount, timeLimitMinutes);
       const postPhase = useSessionStore.getState().phase;
@@ -179,12 +178,9 @@ export function InputScreen({
   const hasNoProblems = totalProblems === 0;
 
   const getGoButtonLabel = () => {
-    if (mode === "mock_test" && totalProblems > 0) {
-      const examCount = mockExamType === "generate_similar" ? mockGenerateCount : totalProblems;
-      return `Start Exam (${examCount})`;
-    }
-    if (problemQueue.length > 0) return `Start ${modeLabel} (${totalProblems})`;
-    return "Go";
+    if (totalProblems === 0) return "Go";
+    if (mode === "mock_test") return `Start Exam (${totalProblems})`;
+    return `Start ${modeLabel} (${totalProblems})`;
   };
   const goButtonLabel = getGoButtonLabel();
 
@@ -199,66 +195,43 @@ export function InputScreen({
         </View>
 
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Enter a Problem</Text>
+          <Text style={styles.headerTitle}>Add Problems</Text>
           <View style={[styles.modeChip, { backgroundColor: modeBg }]}>
             <Ionicons name={modeIcon} size={16} color={modeColor} style={{ marginRight: spacing.xs }} />
             <Text style={[styles.modeChipText, { color: modeColor }]}>{modeLabel}</Text>
           </View>
         </View>
 
-        <View style={styles.inputWrapper}>
-          <Text style={styles.inputLabel}>Math problem</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              ref={inputRef}
-              style={styles.inputField}
-              value={input}
-              onChangeText={(text) => {
-                setInput(text);
-                setError(null);
-              }}
-              placeholder="e.g. 2x + 6 = 12"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType={problemQueue.length > 0 ? "next" : "go"}
-              onSubmitEditing={problemQueue.length > 0 ? handleAddToQueue : handleGo}
-              inputAccessoryViewID="math-input"
-            />
+        {/* Primary actions: camera & gallery */}
+        <View style={styles.captureRow}>
+          <View style={styles.captureCardWrap}>
             <AnimatedPressable
-              style={[styles.addButton, (!input.trim() || problemQueue.length >= MAX_PROBLEMS) && styles.addButtonDisabled]}
-              onPress={handleAddToQueue}
-              disabled={!input.trim() || problemQueue.length >= MAX_PROBLEMS}
-              scaleDown={0.85}
+              style={[styles.captureCard, shadows.sm, extracting && styles.captureCardDisabled]}
+              onPress={() => pickImage("camera")}
+              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              scaleDown={0.96}
             >
-              <Ionicons
-                name="add-circle"
-                size={32}
-                color={input.trim() && problemQueue.length < MAX_PROBLEMS ? modeColor : colors.textMuted}
-              />
+              <View style={[styles.captureIconWrap, { backgroundColor: modeBg }]}>
+                <Ionicons name="camera" size={24} color={extracting ? colors.textMuted : modeColor} />
+              </View>
+              <Text style={styles.captureLabel}>Take a photo</Text>
+              <Text style={styles.captureHint}>Snap your homework{"\n"}or textbook</Text>
             </AnimatedPressable>
           </View>
-        </View>
-
-        <View style={styles.scanRow}>
-          <TouchableOpacity
-            style={[styles.scanButton, { borderColor: modeColor, backgroundColor: modeBg }, extracting && styles.scanButtonDisabled]}
-            onPress={() => pickImage("camera")}
-            disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
-            activeOpacity={0.6}
-          >
-            <Ionicons name="camera-outline" size={20} color={extracting ? colors.textMuted : modeColor} />
-            <Text style={[styles.scanButtonText, { color: modeColor }, extracting && styles.scanButtonTextDisabled]}>Scan</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.scanButton, { borderColor: modeColor, backgroundColor: modeBg }, extracting && styles.scanButtonDisabled]}
-            onPress={() => pickImage("gallery")}
-            disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
-            activeOpacity={0.6}
-          >
-            <Ionicons name="image-outline" size={20} color={extracting ? colors.textMuted : modeColor} />
-            <Text style={[styles.scanButtonText, { color: modeColor }, extracting && styles.scanButtonTextDisabled]}>Gallery</Text>
-          </TouchableOpacity>
+          <View style={styles.captureCardWrap}>
+            <AnimatedPressable
+              style={[styles.captureCard, shadows.sm, extracting && styles.captureCardDisabled]}
+              onPress={() => pickImage("gallery")}
+              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              scaleDown={0.96}
+            >
+              <View style={[styles.captureIconWrap, { backgroundColor: modeBg }]}>
+                <Ionicons name="images" size={24} color={extracting ? colors.textMuted : modeColor} />
+              </View>
+              <Text style={styles.captureLabel}>Choose photo</Text>
+              <Text style={styles.captureHint}>Pick from your{"\n"}camera roll</Text>
+            </AnimatedPressable>
+          </View>
         </View>
 
         {extracting && (
@@ -273,8 +246,47 @@ export function InputScreen({
           </View>
         )}
 
+        {/* Divider */}
+        <View style={styles.orRow}>
+          <View style={styles.orLine} />
+          <Text style={styles.orText}>or type it in</Text>
+          <View style={styles.orLine} />
+        </View>
+
+        {/* Secondary action: text input */}
+        <View style={styles.inputWrapper}>
+          <TextInput
+            ref={inputRef}
+            style={styles.inputField}
+            value={input}
+            onChangeText={(text) => {
+              setInput(text);
+              setError(null);
+            }}
+            placeholder="e.g. 2x + 6 = 12"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="next"
+            onSubmitEditing={handleAddToQueue}
+            inputAccessoryViewID="math-input"
+          />
+          {input.trim() && problemQueue.length < MAX_PROBLEMS ? (
+            <TouchableOpacity style={styles.addToQueueBtn} onPress={handleAddToQueue} activeOpacity={0.6}>
+              <Ionicons name="add-circle" size={18} color={modeColor} />
+              <Text style={[styles.addToQueueText, { color: modeColor }]}>Add to queue</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {/* Problem queue */}
         {problemQueue.length > 0 && (
           <View style={[styles.queueContainer, shadows.sm]}>
+            <View style={styles.queueHeader}>
+              <Text style={styles.queueHeaderText}>
+                {problemQueue.length} problem{problemQueue.length !== 1 ? "s" : ""} queued
+              </Text>
+            </View>
             {problemQueue.map((problem, i) => (
               <TouchableOpacity
                 key={`${i}-${problem}`}
@@ -293,7 +305,27 @@ export function InputScreen({
                 </TouchableOpacity>
               </TouchableOpacity>
             ))}
-            {problemQueue.length >= MAX_PROBLEMS && (
+            {problemQueue.length < MAX_PROBLEMS ? (
+              <View style={styles.queueAddMore}>
+                <TouchableOpacity
+                  style={styles.queueAddMoreBtn}
+                  onPress={() => inputRef.current?.focus()}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="create-outline" size={16} color={colors.primary} />
+                  <Text style={styles.queueAddMoreText}>Type another</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.queueAddMoreBtn}
+                  onPress={() => pickImage("camera")}
+                  disabled={extracting}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="camera-outline" size={16} color={colors.primary} />
+                  <Text style={styles.queueAddMoreText}>Scan more</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
               <Text style={styles.queueMaxHint}>Maximum {MAX_PROBLEMS} problems</Text>
             )}
           </View>
@@ -301,8 +333,8 @@ export function InputScreen({
 
         <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
-        {/* Mock test config */}
-        {mode === "mock_test" && totalProblems > 0 && (
+        {/* Mock test config — only show once problems are queued */}
+        {mode === "mock_test" && problemQueue.length > 0 && (
           <View style={[styles.mockConfigContainer, shadows.sm]}>
             <View style={styles.mockConfigHeader}>
               <Ionicons name="settings-outline" size={16} color={colors.primary} />
@@ -333,42 +365,10 @@ export function InputScreen({
               </View>
               <Text style={styles.mockSegmentHint}>
                 {mockExamType === "use_as_exam"
-                  ? `Your ${totalProblems} problem${totalProblems > 1 ? "s" : ""} will be the exam`
-                  : "New problems generated from your inputs"}
+                  ? `Your ${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""} will be the exam`
+                  : `1 similar problem generated per queued problem (${problemQueue.length} total)`}
               </Text>
             </View>
-
-            {/* Question count stepper (only for generate similar) */}
-            {mockExamType === "generate_similar" && (
-              <>
-                <View style={styles.mockDivider} />
-                <View style={styles.mockSettingRow}>
-                  <View style={styles.mockSettingLabel}>
-                    <Ionicons name="help-circle-outline" size={16} color={colors.textSecondary} />
-                    <Text style={styles.mockSettingText}>Questions</Text>
-                  </View>
-                  <View style={styles.mockMiniStepper}>
-                    <AnimatedPressable
-                      style={[styles.mockMiniBtn, mockGenerateCount <= 1 && styles.mockMiniBtnDisabled]}
-                      onPress={() => setMockGenerateCount(Math.max(1, mockGenerateCount - 1))}
-                      scaleDown={0.9}
-                      disabled={mockGenerateCount <= 1}
-                    >
-                      <Ionicons name="remove" size={16} color={mockGenerateCount <= 1 ? colors.textMuted : colors.primary} />
-                    </AnimatedPressable>
-                    <Text style={styles.mockMiniValue}>{mockGenerateCount}</Text>
-                    <AnimatedPressable
-                      style={[styles.mockMiniBtn, mockGenerateCount >= 15 && styles.mockMiniBtnDisabled]}
-                      onPress={() => setMockGenerateCount(Math.min(15, mockGenerateCount + 1))}
-                      scaleDown={0.9}
-                      disabled={mockGenerateCount >= 15}
-                    >
-                      <Ionicons name="add" size={16} color={mockGenerateCount >= 15 ? colors.textMuted : colors.primary} />
-                    </AnimatedPressable>
-                  </View>
-                </View>
-              </>
-            )}
 
             {/* Time limit */}
             <View style={styles.mockDivider} />
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
   },
   headerTitle: {
     ...typography.title,
@@ -492,23 +492,76 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   modeChipText: { ...typography.label },
+
+  // Primary capture cards
+  captureRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    width: "100%",
+    marginBottom: spacing.lg,
+  },
+  captureCardWrap: {
+    flex: 1,
+  },
+  captureCard: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
+  },
+  captureCardDisabled: {
+    opacity: 0.45,
+  },
+  captureIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  captureLabel: {
+    ...typography.bodyBold,
+    color: colors.text,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  captureHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+
+  // "or type it in" divider
+  orRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    width: "100%",
+    marginBottom: spacing.md,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  orText: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+
+  // Text input (secondary)
   inputWrapper: {
     width: "100%",
     marginBottom: spacing.xs,
   },
-  inputLabel: {
-    ...typography.label,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    width: "100%",
-  },
   inputField: {
-    flex: 1,
+    width: "100%",
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -517,39 +570,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputBg,
     color: colors.text,
   },
-  addButton: {
-    padding: spacing.xs,
-  },
-  addButtonDisabled: {
-    opacity: 0.4,
-  },
-  scanRow: {
+  addToQueueBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    marginTop: spacing.md,
-    width: "100%",
-  },
-  scanButton: {
-    flexDirection: "row",
-    alignItems: "center",
+    alignSelf: "flex-start",
     gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  scanButtonText: {
+  addToQueueText: {
     ...typography.label,
+    fontSize: 13,
   },
-  scanButtonDisabled: {
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    opacity: 0.5,
-  },
-  scanButtonTextDisabled: {
-    color: colors.textMuted,
-  },
+
+  // Extracting
   extractingCard: {
     width: "100%",
     alignItems: "center",
@@ -557,7 +591,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
     paddingVertical: spacing.xxxl,
     paddingHorizontal: spacing.xxl,
     gap: spacing.md,
@@ -571,6 +605,8 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
   },
+
+  // Queue
   queueContainer: {
     width: "100%",
     backgroundColor: colors.white,
@@ -598,6 +634,38 @@ const styles = StyleSheet.create({
   },
   queueRemove: {
     padding: spacing.xs,
+  },
+  queueHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  queueHeaderText: {
+    ...typography.label,
+    color: colors.primary,
+  },
+  queueAddMore: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.lg,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    marginTop: spacing.xs,
+  },
+  queueAddMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+  },
+  queueAddMoreText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 13,
   },
   queueMaxHint: {
     ...typography.caption,

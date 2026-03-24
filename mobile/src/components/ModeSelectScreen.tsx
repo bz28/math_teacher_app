@@ -23,13 +23,13 @@ const MODES: { id: Mode; label: string; icon: IoniconsName; iconColor: string; i
     iconBg: colors.primaryBg,
     description: "Step-by-step guided learning",
   },
-{
+  {
     id: "mock_test",
     label: "Mock Test",
     icon: "document-text-outline",
     iconColor: colors.warningDark,
     iconBg: colors.warningBg,
-    description: "Timed exam simulation",
+    description: "Use your own problems or generate an exam",
   },
 ];
 
