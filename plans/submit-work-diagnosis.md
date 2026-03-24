@@ -377,7 +377,7 @@ If no `WorkSubmission` exists for the problem, learn mode works exactly as it do
 
 ## Out of Scope (future work)
 
-- **Error pattern tracking (v2 monetization):** Aggregate `work_submissions` data over time to build a weakness profile. "You make sign errors 35% of the time." Generate targeted practice. This is the paid feature — requires enough data first.
+- **Error pattern tracking (v2 monetization):** Currently, WorkSubmissions are deleted after learn mode consumes them. To enable pattern tracking ("you make sign errors 35% of the time"), add a lightweight `error_log` table that persists just the error types/categories from each diagnosis before deletion. This separates the transient personalization data from the long-term analytics data. Gate the pattern dashboard behind a paywall.
 - **Payment/subscription system:** Gate error pattern features behind a paywall later. The submit-and-diagnose flow stays free for now. Easy to add a feature flag check before the pattern dashboard.
 - **Image storage (R2/S3):** Not needed for v1 — images are processed in-memory and discarded. Add persistent storage if v2 error patterns need to reference original images.
 - **Offline queuing:** Queue work submissions when offline, upload when back online.

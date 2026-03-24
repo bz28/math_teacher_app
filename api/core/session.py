@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -91,6 +91,14 @@ async def create_session(
         ws_row = ws_result.scalar_one_or_none()
         if ws_row is not None:
             prior_diagnosis = ws_row
+            # Clean up — delete all work submissions for this user + problem
+            # The diagnosis has been consumed for personalization
+            await db.execute(
+                delete(WorkSubmission).where(
+                    WorkSubmission.user_id == user_id,
+                    WorkSubmission.problem_text == problem,
+                )
+            )
 
         # Full decomposition for learn mode
         decomposition = await decompose_problem(
