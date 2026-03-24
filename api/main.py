@@ -14,6 +14,7 @@ from api.routes.health import router as health_router
 from api.routes.image import router as image_router
 from api.routes.practice import router as practice_router
 from api.routes.session import router as session_router
+from api.routes.work import router as work_router
 
 logger = logging.getLogger(__name__)
 
@@ -95,4 +96,5 @@ app.include_router(auth_router, prefix="/v1")
 app.include_router(session_router, prefix="/v1")
 app.include_router(practice_router, prefix="/v1")
 app.include_router(image_router, prefix="/v1")
+app.include_router(work_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
