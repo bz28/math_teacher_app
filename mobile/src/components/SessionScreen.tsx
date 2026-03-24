@@ -5,8 +5,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,7 +26,7 @@ import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { useSessionStore } from "../stores/session";
-import { colors, spacing, shadows, gradients } from "../theme";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface SessionScreenProps {
@@ -35,7 +37,9 @@ interface SessionScreenProps {
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState("");
+  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean; pending: boolean } | null>(null);
   const {
     session,
@@ -76,6 +80,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       prevStep.current = session.current_step;
     }
   }, [session?.current_step]);
+
+  // Auto-scroll to bottom when new response arrives or phase changes
+  useEffect(() => {
+    if (lastResponse || phase === "awaiting_input") {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    }
+  }, [lastResponse, phase]);
 
   // Loading state
   if (phase === "loading") {
@@ -128,6 +139,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const handleAsk = async () => {
     if (!input.trim()) return;
     const text = input.trim();
+    setLastQuestion(text);
     setInput("");
     await askAboutStep(text);
   };
@@ -180,22 +192,15 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps history (learn mode) */}
+        {/* Completed steps — tap to expand */}
         {isLearn && completedSteps.length > 0 && (
-          <View style={styles.historySection}>
+          <View style={compactStyles.historyContainer}>
             {completedSteps.map((step, i) => (
-              <View key={`step-${i}`} style={[styles.historyRow, shadows.sm]}>
-                <View style={styles.historyCheckWrap}>
-                  <Ionicons name="checkmark" size={14} color={colors.success} />
-                </View>
-                <View style={styles.historyContent}>
-                  <Text style={styles.historyLabel}>Step {i + 1}</Text>
-                  <Text style={styles.historyDesc}>{step.description}</Text>
-                </View>
-              </View>
+              <CompletedStepRow key={`step-${i}`} index={i} description={step.description} isLast={i === completedSteps.length - 1} />
             ))}
           </View>
         )}
@@ -285,8 +290,24 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <Text style={styles.promptText}>Enter your final answer</Text>
         )}
 
+        {/* User's question bubble (for chat conversations) */}
+        {lastQuestion && lastResponse?.action === "conversation" && (
+          <View style={compactStyles.questionBubble}>
+            <Ionicons name="chatbubble" size={14} color={colors.primary} />
+            <Text style={compactStyles.questionText}>{lastQuestion}</Text>
+          </View>
+        )}
+
+        {/* Thinking indicator */}
+        {phase === "thinking" && (
+          <View style={[compactStyles.thinkingCard, shadows.sm]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={compactStyles.thinkingText}>Thinking...</Text>
+          </View>
+        )}
+
         {/* Feedback */}
-        {lastResponse && (
+        {lastResponse && phase !== "thinking" && (
           <View
             style={[
               styles.feedback,
@@ -296,6 +317,14 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
               styles.feedbackWrong,
             ]}
           >
+            {lastResponse.action === "conversation" && (
+              <View style={styles.feedbackHeader}>
+                <View style={[styles.feedbackIconWrap, { backgroundColor: colors.primaryBg }]}>
+                  <Ionicons name="school" size={14} color={colors.primary} />
+                </View>
+                <Text style={[styles.feedbackTitle, { color: colors.primary }]}>Tutor</Text>
+              </View>
+            )}
             {lastResponse.action !== "conversation" && (
               <View style={styles.feedbackHeader}>
                 <View style={[
@@ -467,3 +496,113 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     </KeyboardAvoidingView>
   );
 }
+
+function CompletedStepRow({ index, description, isLast }: { index: number; description: string; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <TouchableOpacity
+      style={compactStyles.historyItem}
+      onPress={() => setExpanded(!expanded)}
+      activeOpacity={0.6}
+    >
+      <View style={compactStyles.historyDotCol}>
+        <View style={compactStyles.historyDot}>
+          <Ionicons name="checkmark" size={10} color={colors.white} />
+        </View>
+        {!isLast && <View style={compactStyles.historyLine} />}
+      </View>
+      <View style={compactStyles.historyTextWrap}>
+        <Text style={compactStyles.historyLabel}>Step {index + 1}</Text>
+        <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
+          {description}
+        </Text>
+      </View>
+      <Ionicons
+        name={expanded ? "chevron-up" : "chevron-down"}
+        size={14}
+        color={colors.textMuted}
+      />
+    </TouchableOpacity>
+  );
+}
+
+const compactStyles = StyleSheet.create({
+  historyContainer: {
+    marginBottom: spacing.md,
+  },
+  historyItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingBottom: spacing.sm,
+  },
+  historyDotCol: {
+    alignItems: "center",
+    marginRight: spacing.md,
+  },
+  historyDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  historyLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 8,
+    backgroundColor: colors.successBorder,
+    marginTop: 2,
+  },
+  historyTextWrap: {
+    flex: 1,
+    paddingTop: 1,
+  },
+  historyLabel: {
+    ...typography.small,
+    color: colors.success,
+    marginBottom: 2,
+  },
+  historyText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  questionBubble: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    alignSelf: "flex-end",
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.lg,
+    borderBottomRightRadius: 4,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    maxWidth: "85%",
+  },
+  questionText: {
+    ...typography.body,
+    color: colors.primary,
+    fontSize: 14,
+    flex: 1,
+  },
+  thinkingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  thinkingText: {
+    ...typography.bodyBold,
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+});

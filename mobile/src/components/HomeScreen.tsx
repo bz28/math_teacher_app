@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { getUserName } from "../services/api";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface HomeScreenProps {
@@ -10,43 +11,84 @@ interface HomeScreenProps {
   onLogout: () => void;
 }
 
-const SUBJECTS = [
-  { id: "math", label: "Math", icon: "calculator-outline" as const },
-] as const;
-
 export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
+  const name = getUserName();
+  const greeting = name ? `Hi, ${name}!` : "Hi there!";
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* Top bar */}
       <View style={styles.topBar}>
-        <AnimatedPressable style={styles.logoutButton} onPress={onLogout} accessibilityRole="button" accessibilityLabel="Log out">
-          <Ionicons name="log-out-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.logoutText}>Log Out</Text>
+        <View style={styles.topBarLeft}>
+          <LinearGradient colors={gradients.primary} style={styles.logoCircle}>
+            <Ionicons name="school" size={18} color={colors.white} />
+          </LinearGradient>
+          <Text style={styles.appName}>Math Tutor</Text>
+        </View>
+        <AnimatedPressable
+          style={styles.profileButton}
+          onPress={onLogout}
+          accessibilityRole="button"
+          accessibilityLabel="Log out"
+        >
+          <Ionicons name="person-circle-outline" size={28} color={colors.textMuted} />
         </AnimatedPressable>
       </View>
 
-      <View style={styles.center}>
-        <Text style={styles.greeting}>Hi there!</Text>
-        <Text style={styles.subtitle}>What subject would you like to study?</Text>
+      {/* Greeting */}
+      <View style={styles.greetingSection}>
+        <Text style={styles.greeting}>{greeting}</Text>
+        <Text style={styles.subtitle}>Ready to learn something new?</Text>
+      </View>
 
-        <View style={styles.grid}>
-          {SUBJECTS.map((subject) => (
-            <AnimatedPressable
-              key={subject.id}
-              style={[styles.card, shadows.lg]}
-              onPress={() => onSelect(subject.id)}
-              scaleDown={0.94}
-              accessibilityRole="button"
-              accessibilityLabel={`Study ${subject.label}`}
-            >
-              <LinearGradient
-                colors={gradients.primary}
-                style={styles.iconCircle}
-              >
-                <Ionicons name={subject.icon} size={32} color={colors.white} />
-              </LinearGradient>
-              <Text style={styles.label}>{subject.label}</Text>
-            </AnimatedPressable>
-          ))}
+      {/* Subject card */}
+      <Text style={styles.sectionLabel}>SUBJECTS</Text>
+      <AnimatedPressable
+        style={[styles.subjectCard, shadows.md]}
+        onPress={() => onSelect("math")}
+        scaleDown={0.97}
+        accessibilityRole="button"
+        accessibilityLabel="Study Math"
+      >
+        <LinearGradient
+          colors={gradients.primary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.subjectGradient}
+        >
+          <View style={styles.subjectContent}>
+            <View style={styles.subjectIconWrap}>
+              <Ionicons name="calculator" size={28} color={colors.white} />
+            </View>
+            <View style={styles.subjectTextWrap}>
+              <Text style={styles.subjectTitle}>Mathematics</Text>
+              <Text style={styles.subjectDesc}>
+                Algebra, equations, word problems, and more
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />
+          </View>
+        </LinearGradient>
+      </AnimatedPressable>
+
+      {/* Quick tips / what you can do */}
+      <Text style={[styles.sectionLabel, { marginTop: spacing.xxxl }]}>WHAT YOU CAN DO</Text>
+      <View style={styles.tipGrid}>
+        <View style={[styles.tipCard, shadows.sm]}>
+          <Ionicons name="camera-outline" size={22} color={colors.primary} />
+          <Text style={styles.tipText}>Snap a photo of any problem</Text>
+        </View>
+        <View style={[styles.tipCard, shadows.sm]}>
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} />
+          <Text style={styles.tipText}>Chat with your AI tutor</Text>
+        </View>
+        <View style={[styles.tipCard, shadows.sm]}>
+          <Ionicons name="infinite-outline" size={22} color={colors.primary} />
+          <Text style={styles.tipText}>Generate endless practice</Text>
+        </View>
+        <View style={[styles.tipCard, shadows.sm]}>
+          <Ionicons name="document-text-outline" size={22} color={colors.primary} />
+          <Text style={styles.tipText}>Take timed mock exams</Text>
         </View>
       </View>
     </SafeAreaView>
@@ -59,61 +101,113 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingHorizontal: spacing.xxl + 4,
   },
+
+  // Top bar
   topBar: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    paddingVertical: spacing.sm,
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.md,
   },
-  logoutButton: {
+  topBarLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
   },
-  logoutText: { color: colors.textSecondary, fontSize: 14, fontWeight: "600" },
-  center: {
-    flex: 1,
+  logoCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
+  },
+  appName: {
+    ...typography.bodyBold,
+    color: colors.text,
+    fontSize: 17,
+  },
+  profileButton: {
+    padding: spacing.xs,
+  },
+
+  // Greeting
+  greetingSection: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.xxl,
   },
   greeting: {
     ...typography.hero,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
-    marginBottom: 36,
   },
-  grid: {
+
+  // Section label
+  sectionLabel: {
+    ...typography.small,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+    letterSpacing: 1,
+  },
+
+  // Subject card
+  subjectCard: {
+    borderRadius: radii.xl,
+    overflow: "hidden",
+  },
+  subjectGradient: {
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+  },
+  subjectContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  subjectIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: spacing.lg,
+  },
+  subjectTextWrap: {
+    flex: 1,
+  },
+  subjectTitle: {
+    ...typography.heading,
+    color: colors.white,
+    marginBottom: spacing.xs,
+  },
+  subjectDesc: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
+    lineHeight: 18,
+  },
+
+  // Tips grid
+  tipGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "center",
-    gap: spacing.lg,
+    gap: spacing.md,
   },
-  card: {
-    width: 160,
-    height: 160,
+  tipCard: {
+    width: "47%",
     backgroundColor: colors.white,
-    borderRadius: radii.xl,
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.md,
+  tipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
   },
-  label: { ...typography.bodyBold, fontSize: 17, color: colors.text },
 });

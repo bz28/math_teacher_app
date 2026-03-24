@@ -40,10 +40,13 @@ export interface StepResponse {
 const DEFAULT_TIMEOUT_MS = 15_000;
 const LLM_TIMEOUT_MS = 30_000;
 
+const USER_NAME_KEY = "user_name";
+
 let _authToken: string | null = null;
 let _refreshToken: string | null = null;
 let _refreshPromise: Promise<boolean> | null = null;
 let _onSessionExpired: (() => void) | null = null;
+let _userName: string | null = null;
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -64,20 +67,35 @@ export async function saveTokens(access: string, refresh: string) {
   ]);
 }
 
+export async function saveUserName(name: string) {
+  _userName = name;
+  await SecureStore.setItemAsync(USER_NAME_KEY, name);
+}
+
+export function getUserName(): string | null {
+  return _userName;
+}
+
 export async function loadStoredAuth(): Promise<boolean> {
-  const [access, refresh] = await Promise.all([
+  const [access, refresh, storedName] = await Promise.all([
     SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+    SecureStore.getItemAsync(USER_NAME_KEY),
   ]);
   if (!access || !refresh) return false;
   _authToken = access;
   _refreshToken = refresh;
+  _userName = storedName;
   // Verify the access token is still valid
   try {
     const resp = await fetchWithTimeout(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${access}` },
     });
-    if (resp.ok) return true;
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.name) await saveUserName(data.name);
+      return true;
+    }
     if (resp.status === 401) return await _tryRefresh();
     return false;
   } catch {
@@ -88,9 +106,11 @@ export async function loadStoredAuth(): Promise<boolean> {
 export async function clearAuth() {
   _authToken = null;
   _refreshToken = null;
+  _userName = null;
   await Promise.all([
     SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+    SecureStore.deleteItemAsync(USER_NAME_KEY),
   ]);
 }
 
@@ -211,10 +231,11 @@ export const login = (email: string, password: string) =>
 export const checkEmail = (email: string) =>
   apiPost<{ available: boolean }>("/auth/check-email", { email });
 
-export const register = (email: string, password: string, gradeLevel: number) =>
+export const register = (email: string, password: string, name: string, gradeLevel: number) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/register", {
     email,
     password,
+    name,
     grade_level: gradeLevel,
   });
 

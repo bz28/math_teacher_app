@@ -19,18 +19,17 @@ logger = logging.getLogger(__name__)
 
 _GENERATE_QUESTIONS_PROMPT = """You are a worldclass math professor generating practice problems.
 
-Given an original math problem (and optionally the step-by-step approach used to
-solve it), generate similar problems that test the SAME concepts and approach.
+Given one or more math problems, generate similar problems that test the SAME
+concepts and require the SAME approach to solve.
 
 Respond with ONLY valid JSON:
 {"problems": ["problem 1 text", "problem 2 text", ...]}
 
 Rules:
-- Each problem must be solvable with the same type of math and approach as the original
-- The student should be able to apply the exact same steps to solve the new problems
-- Do NOT repeat or rephrase the original problem — generate entirely new ones
-- Vary the numbers, names, and context
-- Keep problems at the same difficulty level
+- Identify the concept and solving approach from the problem text alone
+- Each generated problem must be solvable with the same method as its source
+- Do NOT repeat or rephrase the originals — generate entirely new problems
+- Vary the numbers, names, and context while keeping the same difficulty
 - Return ONLY the problem text — do NOT include answers"""
 
 
@@ -38,7 +37,6 @@ async def generate_practice_problems(
     problem: str,
     count: int,
     *,
-    steps: list[dict[str, str]] | None = None,
     user_id: str | None = None,
 ) -> list[dict[str, str]]:
     """Generate the original + count similar problems with answers.
@@ -48,30 +46,14 @@ async def generate_practice_problems(
     When count>0, generates count new similar problems (excluding original),
     then verifies each answer via decompose_problem for accuracy.
 
-    If steps are provided, the generation prompt includes the solving approach
-    for better-targeted similar problems.
-
     Returns list of {"question": ..., "answer": ...} dicts.
     """
     if count == 0:
         decomposition = await decompose_problem(problem, user_id=user_id)
         return [{"question": problem, "answer": decomposition.final_answer}]
 
-    # Auto-decompose to get steps if not provided (likely a cache hit)
-    if not steps:
-        decomposition = await decompose_problem(problem, user_id=user_id)
-        steps = [{"description": s} for s in decomposition.steps]
-
-    # Step 1: Generate question text only (no answers — they'd be unreliable)
-    parts = [f"Original problem: {problem}"]
-    steps_text = "\n".join(
-        f"  Step {i + 1}: {s['description']}" for i, s in enumerate(steps)
-    )
-    parts.append(f"\nApproach used:\n{steps_text}")
-    parts.append(
-        f"\nGenerate {count} similar problems (do not include the original)."
-    )
-    user_msg = "\n".join(parts)
+    # Generate question text only (no answers — they'd be unreliable)
+    user_msg = f"{problem}\n\nGenerate {count} similar problems (do not include the originals)."
 
     try:
         result = await call_claude_json(

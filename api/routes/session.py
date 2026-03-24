@@ -154,7 +154,7 @@ async def similar(
 
     try:
         problems = await generate_practice_problems(
-            session.problem, 1, steps=session.steps,
+            session.problem, 1,
             user_id=str(current_user.user_id),
         )
         similar = problems[0]["question"] if problems else session.problem

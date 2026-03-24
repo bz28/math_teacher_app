@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { checkEmail, login, register, saveTokens } from "../services/api";
+import { checkEmail, login, register, saveTokens, saveUserName } from "../services/api";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AuthScreenProps {
@@ -23,21 +23,24 @@ interface AuthScreenProps {
 }
 
 const GRADES = [
-  { label: "K-2", range: "Kindergarten - 2nd" },
-  { label: "3-5", range: "3rd - 5th" },
-  { label: "6-8", range: "6th - 8th" },
-  { label: "9-12", range: "9th - 12th" },
+  { label: "K-2", range: "Kindergarten - 2nd", value: 2 },
+  { label: "3-5", range: "3rd - 5th", value: 5 },
+  { label: "6-8", range: "6th - 8th", value: 8 },
+  { label: "9-12", range: "9th - 12th", value: 12 },
 ];
 
-type RegisterStep = "credentials" | "grade";
+type RegisterStep = "name" | "grade" | "credentials";
 
 export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
-  const [registerStep, setRegisterStep] = useState<RegisterStep>("credentials");
+  const [registerStep, setRegisterStep] = useState<RegisterStep>("name");
+
+  // Form state
+  const [name, setName] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState<typeof GRADES[number] | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +48,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setError(null);
     setLoading(true);
     try {
-      const resp = await login(email, password);
+      const resp = await login(email.trim().toLowerCase(), password);
       await saveTokens(resp.access_token, resp.refresh_token);
       onAuth();
     } catch (e) {
@@ -53,59 +56,53 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleNameNext = () => {
+    if (!name.trim()) return;
+    setError(null);
+    setRegisterStep("grade");
+  };
+
+  const handleGradeNext = () => {
+    if (!selectedGrade) return;
+    setError(null);
+    setRegisterStep("credentials");
   };
 
   const handleRegisterSubmit = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const resp = await register(email, password, 8);
-      await saveTokens(resp.access_token, resp.refresh_token);
-      onAuth();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCredentialsNext = async () => {
     if (!email || !password) return;
     setError(null);
-
-    setLoading(true);
-    try {
-      await checkEmail(email);
-    } catch (e) {
-      setError((e as Error).message);
-      setLoading(false);
-      return;
-    }
-    setLoading(false);
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
     }
-    if (!/[A-Z]/.test(password)) {
-      setError("Password must contain an uppercase letter");
-      return;
-    }
-    if (!/\d/.test(password)) {
-      setError("Password must contain a digit");
-      return;
-    }
 
-    setRegisterStep("grade");
+    setLoading(true);
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      await checkEmail(normalizedEmail);
+      const resp = await register(normalizedEmail, password, name.trim(), selectedGrade!.value);
+      await saveTokens(resp.access_token, resp.refresh_token);
+      await saveUserName(name.trim());
+      onAuth();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const switchMode = () => {
     setIsLogin(!isLogin);
-    setRegisterStep("credentials");
+    setRegisterStep("name");
     setError(null);
   };
 
-  // Login view
+  const stepNumber = registerStep === "name" ? 1 : registerStep === "grade" ? 2 : 3;
+
+  // ── Login ──────────────────────────────────────────────
   if (isLogin) {
     return (
       <SafeAreaView style={styles.container}>
@@ -123,9 +120,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
               </LinearGradient>
             </View>
             <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>
-              Sign in to continue learning
-            </Text>
+            <Text style={styles.subtitle}>Sign in to continue learning</Text>
           </View>
 
           <View style={styles.form}>
@@ -165,17 +160,10 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
               </TouchableOpacity>
             </View>
 
-            {error && (
-              <View style={styles.errorWrap}>
-                <Ionicons name="alert-circle" size={16} color={colors.error} />
-                <Text style={styles.error}>{error}</Text>
-              </View>
-            )}
+            {error && <ErrorRow message={error} />}
 
             <AnimatedPressable
-              style={[
-                (loading || !email || !password) && styles.buttonDisabled,
-              ]}
+              style={(loading || !email || !password) && styles.buttonDisabled}
               onPress={handleLogin}
               disabled={loading || !email || !password}
             >
@@ -205,8 +193,8 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     );
   }
 
-  // Register: credentials step
-  if (registerStep === "credentials") {
+  // ── Register Step 1: Name ──────────────────────────────
+  if (registerStep === "name") {
     return (
       <SafeAreaView style={styles.container}>
         <KeyboardAvoidingView
@@ -214,62 +202,30 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Create your account</Text>
-            <View style={styles.stepBadge}>
-              <Text style={styles.stepBadgeText}>Step 1 of 2</Text>
-            </View>
+            <Text style={styles.title}>What's your name?</Text>
+            <StepIndicator current={stepNumber} total={3} />
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+              <Ionicons name="person-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email"
-                autoCapitalize="none"
-                keyboardType="email-address"
+                value={name}
+                onChangeText={setName}
+                placeholder="First name"
+                autoCapitalize="words"
+                autoFocus
                 placeholderTextColor={colors.textMuted}
+                returnKeyType="next"
+                onSubmitEditing={handleNameNext}
               />
             </View>
-
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                secureTextEntry={!showPassword}
-                placeholderTextColor={colors.textMuted}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={20}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {error && (
-              <View style={styles.errorWrap}>
-                <Ionicons name="alert-circle" size={16} color={colors.error} />
-                <Text style={styles.error}>{error}</Text>
-              </View>
-            )}
 
             <AnimatedPressable
-              style={[
-                (loading || !email || !password) && styles.buttonDisabled,
-              ]}
-              onPress={handleCredentialsNext}
-              disabled={loading || !email || !password}
+              style={!name.trim() && styles.buttonDisabled}
+              onPress={handleNameNext}
+              disabled={!name.trim()}
             >
               <LinearGradient
                 colors={gradients.primary}
@@ -277,11 +233,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
                 end={{ x: 1, y: 0 }}
                 style={styles.primaryButton}
               >
-                {loading ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Continue</Text>
-                )}
+                <Text style={styles.primaryButtonText}>Continue</Text>
               </LinearGradient>
             </AnimatedPressable>
           </View>
@@ -297,7 +249,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     );
   }
 
-  // Register: grade step
+  // ── Register Step 2: Grade ─────────────────────────────
   if (registerStep === "grade") {
     return (
       <SafeAreaView style={styles.container}>
@@ -306,7 +258,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
           keyboardShouldPersistTaps="handled"
         >
           <AnimatedPressable
-            onPress={() => setRegisterStep("credentials")}
+            onPress={() => setRegisterStep("name")}
             style={styles.backButton}
           >
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
@@ -315,11 +267,9 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
           <View style={styles.header}>
             <Text style={styles.title}>What grade are you in?</Text>
-            <View style={styles.stepBadge}>
-              <Text style={styles.stepBadgeText}>Step 2 of 2</Text>
-            </View>
+            <StepIndicator current={stepNumber} total={3} />
             <Text style={styles.subtitle}>
-              We'll tailor problems to your level
+              This helps us improve your experience over time
             </Text>
           </View>
 
@@ -330,14 +280,14 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
                 style={[
                   styles.gradeCard,
                   shadows.sm,
-                  selectedGrade === g.label && styles.gradeCardSelected,
+                  selectedGrade?.label === g.label && styles.gradeCardSelected,
                 ]}
-                onPress={() => setSelectedGrade(g.label)}
+                onPress={() => setSelectedGrade(g)}
               >
                 <Text
                   style={[
                     styles.gradeLabel,
-                    selectedGrade === g.label && styles.gradeLabelSelected,
+                    selectedGrade?.label === g.label && styles.gradeLabelSelected,
                   ]}
                 >
                   {g.label}
@@ -345,32 +295,104 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
                 <Text
                   style={[
                     styles.gradeRange,
-                    selectedGrade === g.label && styles.gradeRangeSelected,
+                    selectedGrade?.label === g.label && styles.gradeRangeSelected,
                   ]}
                 >
                   {g.range}
                 </Text>
-                {selectedGrade === g.label && (
+                {selectedGrade?.label === g.label && (
                   <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                 )}
               </AnimatedPressable>
             ))}
           </View>
 
-          {error && (
-            <View style={styles.errorWrap}>
-              <Ionicons name="alert-circle" size={16} color={colors.error} />
-              <Text style={styles.error}>{error}</Text>
-            </View>
-          )}
-
           <AnimatedPressable
             style={[
               { marginTop: spacing.xxl },
-              (loading || !selectedGrade) && styles.buttonDisabled,
+              !selectedGrade && styles.buttonDisabled,
             ]}
+            onPress={handleGradeNext}
+            disabled={!selectedGrade}
+          >
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            </LinearGradient>
+          </AnimatedPressable>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Register Step 3: Credentials ───────────────────────
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <AnimatedPressable
+          onPress={() => setRegisterStep("grade")}
+          style={styles.backButton}
+        >
+          <Ionicons name="chevron-back" size={20} color={colors.primary} />
+          <Text style={styles.backText}>Back</Text>
+        </AnimatedPressable>
+
+        <View style={styles.header}>
+          <Text style={styles.title}>Create your account</Text>
+          <StepIndicator current={stepNumber} total={3} />
+        </View>
+
+        <View style={styles.form}>
+          <View style={styles.inputWrap}>
+            <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              autoCapitalize="none"
+              autoFocus
+              keyboardType="email-address"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+
+          <View style={styles.inputWrap}>
+            <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password (8+ characters)"
+              secureTextEntry={!showPassword}
+              placeholderTextColor={colors.textMuted}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {error && <ErrorRow message={error} />}
+
+          <AnimatedPressable
+            style={(loading || !email || !password) && styles.buttonDisabled}
             onPress={handleRegisterSubmit}
-            disabled={loading || !selectedGrade}
+            disabled={loading || !email || !password}
           >
             <LinearGradient
               colors={gradients.primary}
@@ -385,13 +407,48 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
               )}
             </LinearGradient>
           </AnimatedPressable>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+        </View>
 
-  return null;
+        <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
+          <Text style={styles.switchText}>
+            Already have an account?{" "}
+            <Text style={styles.switchTextBold}>Sign In</Text>
+          </Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 }
+
+/* ── Shared Components ──────────────────────────────────── */
+
+function StepIndicator({ current, total }: { current: number; total: number }) {
+  return (
+    <View style={styles.stepRow}>
+      {Array.from({ length: total }, (_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.stepDot,
+            i + 1 < current && styles.stepDotDone,
+            i + 1 === current && styles.stepDotActive,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ErrorRow({ message }: { message: string }) {
+  return (
+    <View style={styles.errorWrap}>
+      <Ionicons name="alert-circle" size={16} color={colors.error} />
+      <Text style={styles.error}>{message}</Text>
+    </View>
+  );
+}
+
+/* ── Styles ─────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
   container: {
@@ -427,7 +484,7 @@ const styles = StyleSheet.create({
     ...typography.title,
     color: colors.text,
     textAlign: "center",
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   subtitle: {
     ...typography.body,
@@ -435,16 +492,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
   },
-  stepBadge: {
-    backgroundColor: colors.primaryBg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    marginBottom: spacing.sm,
+
+  // Step indicator
+  stepRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
-  stepBadgeText: {
-    ...typography.label,
-    color: colors.primary,
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+  },
+  stepDotActive: {
+    backgroundColor: colors.primary,
+    width: 24,
+    borderRadius: radii.pill,
+  },
+  stepDotDone: {
+    backgroundColor: colors.primaryLight,
   },
 
   // Form
