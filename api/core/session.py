@@ -80,7 +80,7 @@ async def create_session(
         # Check for prior work submission to personalize learn mode
         prior_diagnosis: dict[str, Any] | None = None
         ws_result = await db.execute(
-            select(WorkSubmission.diagnosis)
+            select(WorkSubmission.diagnosis, WorkSubmission.has_issues)
             .where(
                 WorkSubmission.user_id == user_id,
                 WorkSubmission.problem_text == problem,
@@ -88,11 +88,14 @@ async def create_session(
             .order_by(WorkSubmission.created_at.desc())
             .limit(1)
         )
-        ws_row = ws_result.scalar_one_or_none()
+        ws_row = ws_result.one_or_none()
         if ws_row is not None:
-            prior_diagnosis = ws_row
+            diagnosis_data, has_issues = ws_row
+            # Only personalize if there were actual issues — no point
+            # burning a fresh LLM call just to say "good job" at each step
+            if has_issues:
+                prior_diagnosis = diagnosis_data
             # Clean up — delete all work submissions for this user + problem
-            # The diagnosis has been consumed for personalization
             await db.execute(
                 delete(WorkSubmission).where(
                     WorkSubmission.user_id == user_id,
