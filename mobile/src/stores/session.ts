@@ -192,145 +192,119 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   startPracticeBatch: async (problem, similarCount) => {
-    set({ ...initialState, phase: "loading" });
-    try {
-      // Solve the original problem to get the correct answer
-      const { problems: firstBatch } = await generatePracticeProblems(problem, 0);
-      const firstProblem = firstBatch[0];
-      if (!firstProblem) throw new Error("Failed to generate practice problem");
+    // Show the first problem immediately — resolve answer in background
+    const needsMore = similarCount > 0;
+    set({
+      ...initialState,
+      practiceBatch: {
+        problems: [{ question: problem, answer: "" }],
+        currentIndex: 0,
+        results: [],
+        flags: [false],
+        loadingMore: needsMore,
+        totalCount: 1 + similarCount,
+        skippedProblems: [],
+        pendingChecks: 0,
+        workSubmissions: [null],
+      },
+      phase: "awaiting_input",
+    });
 
-      const needsMore = similarCount > 0;
-      set({
-        practiceBatch: {
-          problems: [{ question: problem, answer: firstProblem.answer }],
-          currentIndex: 0,
-          results: [],
-          flags: [false],
-          loadingMore: needsMore,
-          totalCount: 1 + similarCount,
-          skippedProblems: [],
-          pendingChecks: 0,
-          workSubmissions: [null],
-        },
-        phase: "awaiting_input",
+    // Resolve the correct answer in background
+    generatePracticeProblems(problem, 0)
+      .then(({ problems: firstBatch }) => {
+        const { practiceBatch } = get();
+        if (!practiceBatch || !firstBatch[0]) return;
+        const updated = [...practiceBatch.problems];
+        updated[0] = { question: problem, answer: firstBatch[0].answer };
+        set({ practiceBatch: { ...practiceBatch, problems: updated } });
+      })
+      .catch(() => {
+        set({ phase: "error", error: "Failed to solve problem" });
       });
 
-      // Generate remaining problems in the background
-      if (needsMore) {
-        generatePracticeProblems(problem, similarCount)
-          .then(({ problems: remaining }) => {
-            const { practiceBatch } = get();
-            if (!practiceBatch) return;
-            // Append new problems (skip duplicates of the first)
-            const newProblems = [
-              ...practiceBatch.problems,
-              ...remaining.filter(
-                (p) => p.question !== firstProblem.question,
-              ),
-            ];
-            const addedCount = newProblems.length - practiceBatch.problems.length;
-            set({
-              practiceBatch: {
-                ...practiceBatch,
-                problems: newProblems,
-                flags: [
-                  ...practiceBatch.flags,
-                  ...new Array(addedCount).fill(false),
-                ],
-                workSubmissions: [
-                  ...practiceBatch.workSubmissions,
-                  ...new Array(addedCount).fill(null),
-                ],
-                loadingMore: false,
-              },
-            });
-          })
-          .catch(() => {
-            // Background generation failed — continue with what we have
-            const { practiceBatch } = get();
-            if (practiceBatch) {
-              set({ practiceBatch: { ...practiceBatch, loadingMore: false } });
-            }
+    // Generate remaining similar problems in the background
+    if (needsMore) {
+      generatePracticeProblems(problem, similarCount)
+        .then(({ problems: remaining }) => {
+          const { practiceBatch } = get();
+          if (!practiceBatch) return;
+          const newProblems = [
+            ...practiceBatch.problems,
+            ...remaining.filter((p) => p.question !== problem),
+          ];
+          const addedCount = newProblems.length - practiceBatch.problems.length;
+          set({
+            practiceBatch: {
+              ...practiceBatch,
+              problems: newProblems,
+              flags: [
+                ...practiceBatch.flags,
+                ...new Array(addedCount).fill(false),
+              ],
+              workSubmissions: [
+                ...practiceBatch.workSubmissions,
+                ...new Array(addedCount).fill(null),
+              ],
+              loadingMore: false,
+            },
           });
-      }
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
+        })
+        .catch(() => {
+          const { practiceBatch } = get();
+          if (practiceBatch) {
+            set({ practiceBatch: { ...practiceBatch, loadingMore: false } });
+          }
+        });
     }
   },
 
   startPracticeQueue: async (problems) => {
     if (problems.length === 0) return;
-    set({ ...initialState, phase: "loading" });
-    try {
-      // Solve first problem immediately so the student can start
-      const { problems: first } = await generatePracticeProblems(problems[0], 0);
-      const firstProblem = first[0];
-      if (!firstProblem) throw new Error("Failed to generate practice problem");
 
-      const needsMore = problems.length > 1;
-      set({
-        practiceBatch: {
-          problems: [{ question: problems[0], answer: firstProblem.answer }],
-          currentIndex: 0,
-          results: [],
-          flags: [false],
-          loadingMore: needsMore,
-          totalCount: problems.length,
-          skippedProblems: [],
-          pendingChecks: 0,
-          workSubmissions: [null],
-        },
-        phase: "awaiting_input",
+    // Show all problems immediately with empty answers — resolve in background
+    const placeholders: PracticeProblem[] = problems.map((p) => ({ question: p, answer: "" }));
+    set({
+      ...initialState,
+      practiceBatch: {
+        problems: placeholders,
+        currentIndex: 0,
+        results: [],
+        flags: new Array(problems.length).fill(false),
+        loadingMore: false,
+        totalCount: problems.length,
+        skippedProblems: [],
+        pendingChecks: 0,
+        workSubmissions: new Array(problems.length).fill(null),
+      },
+      phase: "awaiting_input",
+    });
+
+    // Resolve all answers in background
+    Promise.allSettled(
+      problems.map((p) => generatePracticeProblems(p, 0)),
+    )
+      .then((outcomes) => {
+        const { practiceBatch } = get();
+        if (!practiceBatch) return;
+        const updated = [...practiceBatch.problems];
+        const skipped: string[] = [];
+        for (let i = 0; i < outcomes.length; i++) {
+          const outcome = outcomes[i];
+          if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
+            updated[i] = { question: problems[i], answer: outcome.value.problems[0].answer };
+          } else {
+            skipped.push(problems[i]);
+          }
+        }
+        set({
+          practiceBatch: {
+            ...practiceBatch,
+            problems: updated,
+            skippedProblems: skipped,
+          },
+        });
       });
-
-      // Solve remaining problems in the background
-      if (needsMore) {
-        Promise.allSettled(
-          problems.slice(1).map((p) => generatePracticeProblems(p, 0)),
-        )
-          .then((outcomes) => {
-            const { practiceBatch } = get();
-            if (!practiceBatch) return;
-            const remaining: PracticeProblem[] = [];
-            const skipped: string[] = [];
-            for (let i = 0; i < outcomes.length; i++) {
-              const outcome = outcomes[i];
-              if (outcome.status === "rejected") {
-                skipped.push(problems[i + 1]);
-                continue;
-              }
-              const solved = outcome.value.problems[0];
-              if (!solved) {
-                skipped.push(problems[i + 1]);
-                continue;
-              }
-              remaining.push({
-                question: problems[i + 1],
-                answer: solved.answer,
-              });
-            }
-            set({
-              practiceBatch: {
-                ...practiceBatch,
-                problems: [...practiceBatch.problems, ...remaining],
-                flags: [
-                  ...practiceBatch.flags,
-                  ...new Array(remaining.length).fill(false),
-                ],
-                workSubmissions: [
-                  ...practiceBatch.workSubmissions,
-                  ...new Array(remaining.length).fill(null),
-                ],
-                totalCount: practiceBatch.problems.length + remaining.length,
-                skippedProblems: skipped,
-                loadingMore: false,
-              },
-            });
-          });
-      }
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
-    }
   },
 
   submitPracticeAnswer: async (answer) => {
@@ -400,8 +374,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Will transition to summary once all checks complete
     }
 
-    // Fire answer check in background
-    checkPracticeAnswer(current.question, current.answer, answer)
+    // Wait for correct answer to be resolved if needed, then check
+    const getCorrectAnswer = (): Promise<string> => {
+      const batch = get().practiceBatch;
+      const correctAnswer = batch?.problems[answerIndex]?.answer;
+      if (correctAnswer) return Promise.resolve(correctAnswer);
+      // Answer not resolved yet — wait for store update
+      return new Promise((resolve) => {
+        const unsub = useSessionStore.subscribe((state) => {
+          const ca = state.practiceBatch?.problems[answerIndex]?.answer;
+          if (ca) { unsub(); resolve(ca); }
+        });
+      });
+    };
+
+    getCorrectAnswer().then((correctAnswer) =>
+    checkPracticeAnswer(current.question, correctAnswer, answer)
       .then(({ is_correct }) => {
         const { practiceBatch: batch } = get();
         if (!batch) return;
@@ -440,7 +428,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           },
         });
         _maybeShowSummary(get, set);
-      });
+      })
+    );
   },
 
   togglePracticeFlag: (index) => {
@@ -689,71 +678,89 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   startMockTest: async (problems, generateCount, timeLimitMinutes) => {
-    set({ ...initialState, phase: "loading" });
-    try {
-      let questions: PracticeProblem[];
-      const errors: string[] = [];
-
-      if (generateCount > 0) {
-        // "Generate similar" mode — generate new questions from seeds
+    if (generateCount > 0) {
+      // "Generate similar" mode — need to wait for questions from LLM
+      set({ ...initialState, phase: "loading" });
+      try {
         const seedText = problems.map((p, i) => `Problem ${i + 1}: ${p}`).join("\n");
         const { problems: generated } = await generatePracticeProblems(seedText, generateCount);
-        questions = generated;
-      } else {
-        // "Use as exam" mode — solve each problem to get correct answers
-        const outcomes = await Promise.allSettled(
-          problems.map((p) => generatePracticeProblems(p, 0)),
-        );
-        questions = [];
-        for (let i = 0; i < outcomes.length; i++) {
-          const outcome = outcomes[i];
-          if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
-            questions.push({
-              question: problems[i],
-              answer: outcome.value.problems[0].answer,
-            });
-          } else if (outcome.status === "rejected") {
-            errors.push(`Q${i + 1}: ${(outcome.reason as Error).message ?? "Unknown error"}`);
-          }
+        if (generated.length === 0) throw new Error("Failed to generate exam questions");
+
+        set({
+          mockTest: {
+            sessionId: null,
+            questions: generated,
+            answers: {},
+            flags: new Array(generated.length).fill(false),
+            currentIndex: 0,
+            timeLimitSeconds: timeLimitMinutes != null ? timeLimitMinutes * 60 : null,
+            startedAt: Date.now(),
+            submittedAt: null,
+            results: null,
+            workImages: new Array(generated.length).fill(null),
+            workSubmissions: new Array(generated.length).fill(null),
+          },
+          phase: "mock_test_active",
+        });
+
+        const problemText = generated.map((q) => q.question).join("\n");
+        createMockTestSession(problemText)
+          .then(({ id }) => {
+            const current = get().mockTest;
+            if (current) set({ mockTest: { ...current, sessionId: id } });
+          })
+          .catch(() => {});
+      } catch (e) {
+        set({ phase: "error", error: (e as Error).message });
+      }
+      return;
+    }
+
+    // "Use as exam" mode — show questions immediately, resolve answers in background
+    const questions: PracticeProblem[] = problems.map((p) => ({ question: p, answer: "" }));
+
+    set({
+      ...initialState,
+      mockTest: {
+        sessionId: null,
+        questions,
+        answers: {},
+        flags: new Array(questions.length).fill(false),
+        currentIndex: 0,
+        timeLimitSeconds: timeLimitMinutes != null ? timeLimitMinutes * 60 : null,
+        startedAt: Date.now(),
+        submittedAt: null,
+        results: null,
+        workImages: new Array(questions.length).fill(null),
+        workSubmissions: new Array(questions.length).fill(null),
+      },
+      phase: "mock_test_active",
+    });
+
+    // Resolve correct answers in background
+    Promise.allSettled(
+      problems.map((p) => generatePracticeProblems(p, 0)),
+    ).then((outcomes) => {
+      const { mockTest: mt } = get();
+      if (!mt) return;
+      const updated = [...mt.questions];
+      for (let i = 0; i < outcomes.length; i++) {
+        const outcome = outcomes[i];
+        if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
+          updated[i] = { question: problems[i], answer: outcome.value.problems[0].answer };
         }
       }
+      set({ mockTest: { ...mt, questions: updated } });
+    });
 
-      if (questions.length === 0) {
-        throw new Error(
-          errors.length > 0
-            ? `Failed to generate exam: ${errors.join("; ")}`
-            : "Failed to generate exam questions",
-        );
-      }
-
-      set({
-        mockTest: {
-          sessionId: null,
-          questions,
-          answers: {},
-          flags: new Array(questions.length).fill(false),
-          currentIndex: 0,
-          timeLimitSeconds: timeLimitMinutes != null ? timeLimitMinutes * 60 : null,
-          startedAt: Date.now(),
-          submittedAt: null,
-          results: null,
-          workImages: new Array(questions.length).fill(null),
-          workSubmissions: new Array(questions.length).fill(null),
-        },
-        phase: "mock_test_active",
-      });
-
-      // Fire-and-forget: track session for analytics without blocking exam start
-      const problemText = questions.map((q) => q.question).join("\n");
-      createMockTestSession(problemText)
-        .then(({ id }) => {
-          const current = get().mockTest;
-          if (current) set({ mockTest: { ...current, sessionId: id } });
-        })
-        .catch(() => {});
-    } catch (e) {
-      set({ phase: "error", error: (e as Error).message });
-    }
+    // Fire-and-forget: track session for analytics without blocking exam start
+    const problemText = questions.map((q) => q.question).join("\n");
+    createMockTestSession(problemText)
+      .then(({ id }) => {
+        const current = get().mockTest;
+        if (current) set({ mockTest: { ...current, sessionId: id } });
+      })
+      .catch(() => {});
   },
 
   saveMockTestAnswer: (index, answer) => {
@@ -787,9 +794,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     set({ phase: "loading" });
     try {
+      // Wait for all correct answers to be resolved (background decompose)
+      const answersResolved = mockTest.questions.every((q) => q.answer !== "");
+      if (!answersResolved) {
+        await new Promise<void>((resolve) => {
+          const unsub = useSessionStore.subscribe((state) => {
+            if (!state.mockTest) { unsub(); resolve(); return; }
+            if (state.mockTest.questions.every((q) => q.answer !== "")) {
+              unsub();
+              resolve();
+            }
+          });
+        });
+      }
+
+      // Re-read after potential wait
+      const mt = get().mockTest;
+      if (!mt) return;
+
       // Batch check all answered questions
-      const checkPromises = mockTest.questions.map(async (q, i) => {
-        const userAnswer = mockTest.answers[i];
+      const checkPromises = mt.questions.map(async (q, i) => {
+        const userAnswer = mt.answers[i];
         if (!userAnswer) {
           return { question: q.question, userAnswer: null, correctAnswer: q.answer, isCorrect: null };
         }
