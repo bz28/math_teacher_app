@@ -1,5 +1,6 @@
 """Practice mode: generate similar problems and check answers."""
 
+import asyncio
 import json
 import logging
 
@@ -16,21 +17,21 @@ logger = logging.getLogger(__name__)
 # Problem generation
 # ---------------------------------------------------------------------------
 
-_GENERATE_PROBLEMS_PROMPT = """You are a math tutor generating practice problems.
+_GENERATE_QUESTIONS_PROMPT = """You are a math tutor generating practice problems.
 
 Given one or more original math problems, generate similar problems with different
 numbers and context but the same underlying math structure.
 
 Respond with ONLY valid JSON:
-{"problems": [{"question": "the problem text", "answer": "the correct answer"}]}
+{"problems": ["problem 1 text", "problem 2 text", ...]}
 
 Rules:
 - Each problem must be solvable with the same type of math as the originals
 - Do NOT repeat or rephrase the original problems — generate entirely new ones
 - If multiple original problems are given, generate at least 1 problem of each type
 - Vary the numbers, names, and context
-- Answers must be correct
-- Keep problems at the same difficulty level"""
+- Keep problems at the same difficulty level
+- Return ONLY the problem text — do NOT include answers"""
 
 
 async def generate_practice_problems(
@@ -40,43 +41,57 @@ async def generate_practice_problems(
 
     When count=0, solves the original problem using step-by-step decomposition
     for accuracy, then returns the answer.
-    When count>0, generates count new similar problems (excluding original).
+    When count>0, generates count new similar problems (excluding original),
+    then verifies each answer via decompose_problem for accuracy.
 
     Returns list of {"question": ..., "answer": ...} dicts.
     """
     if count == 0:
-        # Use decompose_problem for chain-of-thought reasoning — more accurate
-        # than a simple "solve this" prompt. Steps are discarded here but could
-        # be cached if the student later enters learn mode.
         decomposition = await decompose_problem(problem, user_id=user_id)
         return [{"question": problem, "answer": decomposition.final_answer}]
 
+    # Step 1: Generate question text only (no answers — they'd be unreliable)
     user_msg = (
         f"Original problem: {problem}\n\n"
-        f"Generate {count} similar problems (do not include the original). "
-        f"Each must have a correct answer."
+        f"Generate {count} similar problems (do not include the original)."
     )
 
     try:
         result = await call_claude_json(
-            _GENERATE_PROBLEMS_PROMPT,
+            _GENERATE_QUESTIONS_PROMPT,
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
             model=MODEL_REASON,
             max_tokens=2048,
         )
-        problems = result.get("problems")
-        if isinstance(problems, list):
-            return [
-                {"question": str(p.get("question", "")), "answer": str(p.get("answer", ""))}
-                for p in problems
-                if isinstance(p, dict)
-            ]
+        raw_problems = result.get("problems")
+        if not isinstance(raw_problems, list) or len(raw_problems) == 0:
+            raise RuntimeError("No problems generated")
+
+        questions = [str(p) for p in raw_problems if isinstance(p, str) and p.strip()]
+        if not questions:
+            raise RuntimeError("No valid questions generated")
     except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
         logger.exception("Failed to generate practice problems")
+        raise RuntimeError("Failed to generate practice problems")
 
-    raise RuntimeError("Failed to generate practice problems")
+    # Step 2: Solve each generated problem via decompose_problem for accuracy
+    async def solve_one(q: str) -> dict[str, str] | None:
+        try:
+            decomp = await decompose_problem(q, user_id=user_id)
+            return {"question": q, "answer": decomp.final_answer}
+        except RuntimeError:
+            logger.warning("Failed to solve generated problem: %s", q[:80])
+            return None
+
+    solved = await asyncio.gather(*[solve_one(q) for q in questions])
+    problems = [p for p in solved if p is not None]
+
+    if not problems:
+        raise RuntimeError("Failed to generate practice problems")
+
+    return problems
 
 
 # ---------------------------------------------------------------------------
