@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 
 class SubmitWorkRequest(BaseModel):
     image_base64: str = Field(..., max_length=7_000_000)  # ~5MB decoded
-    session_id: uuid.UUID
-    problem_index: int = Field(..., ge=0)
+    problem_text: str = Field(..., min_length=1, max_length=5000)
+    user_answer: str = Field("", max_length=2000)
+    user_was_correct: bool = False
 
 
 class DiagnosisStep(BaseModel):

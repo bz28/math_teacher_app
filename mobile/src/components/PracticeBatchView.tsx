@@ -108,7 +108,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
     setInput("");
     setAttachedImage(null);
     // Fire diagnosis in background
-    submitPracticeWork(idx, image);
+    submitPracticeWork(idx, image, text);
     await submitPracticeAnswer(text);
   };
 

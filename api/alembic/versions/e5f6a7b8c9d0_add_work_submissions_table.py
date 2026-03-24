@@ -22,7 +22,7 @@ def upgrade() -> None:
     op.create_table('work_submissions',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
-    sa.Column('session_id', sa.UUID(), nullable=False),
+    sa.Column('session_id', sa.UUID(), nullable=True),
     sa.Column('problem_index', sa.Integer(), nullable=False),
     sa.Column('diagnosis', sa.JSON(), nullable=False),
     sa.Column('summary', sa.String(length=500), nullable=False),

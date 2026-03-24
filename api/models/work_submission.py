@@ -19,9 +19,9 @@ class WorkSubmission(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    session_id: Mapped[uuid.UUID] = mapped_column(
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     problem_index: Mapped[int] = mapped_column(Integer, nullable=False)
 

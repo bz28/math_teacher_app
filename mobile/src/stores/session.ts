@@ -126,7 +126,7 @@ interface SessionState {
   toggleMockTestFlag: (index: number) => void;
   submitMockTest: () => Promise<void>;
   attachWorkImage: (index: number, imageBase64: string) => void;
-  submitPracticeWork: (index: number, imageBase64: string) => void;
+  submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => void;
   reset: () => void;
 }
 
@@ -787,7 +787,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       });
 
       // Fire work diagnosis for attached images (background, capped at 3 concurrent)
-      if (currentMockTest.sessionId) {
+      {
         const imagesToDiagnose = currentMockTest.workImages
           .map((img, i) => img ? { index: i, image: img } : null)
           .filter((x): x is { index: number; image: string } => x !== null);
@@ -798,7 +798,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             await Promise.allSettled(
               chunk.map(async ({ index, image }) => {
                 try {
-                  const resp = await submitWork(image, currentMockTest.sessionId!, index);
+                  const q = currentMockTest.questions[index];
+                  const r = results[index];
+                  const resp = await submitWork(
+                    image,
+                    q.question,
+                    r?.userAnswer ?? "",
+                    r?.isCorrect === true,
+                  );
                   const mt = get().mockTest;
                   if (!mt || !resp.diagnosis) return;
 
@@ -857,12 +864,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ mockTest: { ...mockTest, workImages: newImages } });
   },
 
-  submitPracticeWork: (index, imageBase64) => {
-    const { practiceBatch, session } = get();
-    if (!practiceBatch || !session) return;
+  submitPracticeWork: (index, imageBase64, userAnswer) => {
+    const { practiceBatch } = get();
+    if (!practiceBatch) return;
 
-    // Fire diagnosis in background
-    submitWork(imageBase64, session.id, index)
+    const problem = practiceBatch.problems[index];
+    if (!problem) return;
+
+    // Fire diagnosis in background — correctness not known yet, set false
+    // The backend will determine correctness via decompose_problem()
+    submitWork(imageBase64, problem.question, userAnswer, false)
       .then((resp) => {
         const { practiceBatch: batch } = get();
         if (!batch || !resp.diagnosis) return;

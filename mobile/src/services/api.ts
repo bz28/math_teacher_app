@@ -1,8 +1,11 @@
 import * as SecureStore from "expo-secure-store";
 
 const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
+const isNgrok = DEV_HOST.endsWith(".ngrok-free.dev");
 const API_BASE = __DEV__
-  ? `http://${DEV_HOST}:8000/v1`
+  ? isNgrok
+    ? `https://${DEV_HOST}/v1`
+    : `http://${DEV_HOST}:8000/v1`
   : "https://math-teacher-api.up.railway.app/v1";
 
 const ACCESS_TOKEN_KEY = "access_token";
@@ -258,10 +261,16 @@ export interface SubmitWorkResponse {
   diagnosis: WorkDiagnosis | null;
 }
 
-export const submitWork = (imageBase64: string, sessionId: string, problemIndex: number) =>
+export const submitWork = (
+  imageBase64: string,
+  problemText: string,
+  userAnswer: string,
+  userWasCorrect: boolean,
+) =>
   apiPost<SubmitWorkResponse>("/work/submit", {
     image_base64: imageBase64,
-    session_id: sessionId,
-    problem_index: problemIndex,
+    problem_text: problemText,
+    user_answer: userAnswer,
+    user_was_correct: userWasCorrect,
   }, LLM_TIMEOUT_MS);
 
