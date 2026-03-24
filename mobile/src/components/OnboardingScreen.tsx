@@ -94,7 +94,7 @@ function WelcomeStep() {
       </View>
       <Text style={styles.welcomeTitle}>Welcome to{"\n"}Math Tutor</Text>
       <Text style={styles.stepSubtitle}>
-        Your personal AI tutor that teaches you how to solve problems — not just the answers
+        Your personal AI tutor that teaches you how to solve problems with endless practice
       </Text>
       <View style={styles.welcomeFeatures}>
         <View style={styles.welcomeFeatureRow}>
@@ -164,9 +164,9 @@ function LearnStep() {
           <Ionicons name="book" size={40} color={colors.white} />
         </LinearGradient>
       </View>
-      <Text style={styles.stepTitle}>We guide you step by step</Text>
+      <Text style={styles.stepTitle}>Learn how to solve it</Text>
       <Text style={styles.stepSubtitle}>
-        No answers given — you do the thinking, we give hints when you're stuck
+        We break every problem into steps — ask questions anytime and chat with your AI tutor
       </Text>
 
       {/* Mini mockup: step-by-step walkthrough */}
@@ -188,8 +188,8 @@ function LearnStep() {
           </View>
         </View>
         <View style={styles.mockupHint}>
-          <Ionicons name="bulb" size={14} color={colors.warning} />
-          <Text style={styles.mockupHintText}>Hint available if you need it</Text>
+          <Ionicons name="chatbubble-ellipses" size={14} color={colors.primary} />
+          <Text style={[styles.mockupHintText, { color: colors.primary }]}>Ask a question about this step</Text>
         </View>
       </View>
     </View>
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.warningBg,
+    backgroundColor: colors.primaryBg,
     borderRadius: radii.sm,
   },
   mockupHintText: {
