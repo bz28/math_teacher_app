@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   ScrollView,
   Text,
   View,
@@ -27,7 +28,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 
   if (!practiceBatch) return null;
 
-  const { results, flags, problems, skippedProblems } = practiceBatch;
+  const { results, flags, problems, skippedProblems, workSubmissions } = practiceBatch;
   const correct = results.filter((r) => r.isCorrect).length;
   const pct = correct / results.length;
   const encouragement =
@@ -94,6 +95,18 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
                 <Text style={styles.resultCorrectAnswer}>
                   Correct: {r.correctAnswer}
                 </Text>
+              )}
+              {workSubmissions[i] != null && (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs }}>
+                  <Ionicons name="camera" size={14} color={workSubmissions[i].has_issues ? colors.warningDark : colors.success} />
+                  <Text style={{
+                    fontSize: 12,
+                    fontStyle: "italic",
+                    color: workSubmissions[i].has_issues ? colors.warningDark : colors.success,
+                  }}>
+                    {workSubmissions[i].summary}
+                  </Text>
+                </View>
               )}
             </View>
             <AnimatedPressable

@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -16,7 +16,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
 
   if (!mockTest || !mockTest.results) return null;
 
-  const { questions, results, flags } = mockTest;
+  const { questions, results, flags, workSubmissions, workImages } = mockTest;
   const answered = results.filter((r) => r.isCorrect != null);
   const correct = results.filter((r) => r.isCorrect === true);
   const unanswered = results.filter((r) => r.isCorrect == null);
@@ -162,6 +162,26 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                   </>
                 )}
               </View>
+              {/* Diagnosis teaser from submitted work */}
+              {workSubmissions[i] != null ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm }}>
+                  <Ionicons name="camera" size={14} color={workSubmissions[i].has_issues ? colors.warningDark : colors.success} />
+                  <Text style={{
+                    fontSize: 12,
+                    fontStyle: "italic",
+                    color: workSubmissions[i].has_issues ? colors.warningDark : colors.success,
+                  }}>
+                    {workSubmissions[i].summary}
+                  </Text>
+                </View>
+              ) : workImages[i] != null ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm }}>
+                  <ActivityIndicator size="small" color={colors.textMuted} />
+                  <Text style={{ fontSize: 12, fontStyle: "italic", color: colors.textMuted }}>
+                    Analyzing...
+                  </Text>
+                </View>
+              ) : null}
             </View>
           );
         })}
