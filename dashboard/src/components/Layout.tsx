@@ -4,6 +4,7 @@ import { getToken, setToken } from "../lib/api";
 const NAV = [
   { to: "/", label: "Overview" },
   { to: "/llm-calls", label: "LLM Calls" },
+  { to: "/quality", label: "Quality" },
   { to: "/sessions", label: "Sessions" },
   { to: "/users", label: "Users" },
 ];

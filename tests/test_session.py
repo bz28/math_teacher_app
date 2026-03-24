@@ -10,22 +10,21 @@ import pytest
 from httpx import AsyncClient
 
 from api.core.llm_client import _circuit
-from api.core.step_decomposition import Step
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 MOCK_STEPS = [
-    Step("Subtract 6 from both sides", "subtraction", "2x + 6 = 12", "2x = 6"),
-    Step("Divide both sides by 2", "division", "2x = 6", "x = 3"),
+    "Subtract 6 from both sides to get 2x = 6",
+    "Divide both sides by 2 to get x = 3",
 ]
 
 
 WORD_PROBLEM = "A train travels at 60 mph for 3 hours. How far does it go?"
 MOCK_WORD_PROBLEM_STEPS = [
-    Step("Set up the equation", "translate", WORD_PROBLEM, "d = 60 * 3"),
-    Step("Multiply to find the distance", "multiplication", "d = 60 * 3", "d = 180"),
+    "Set up the equation: d = 60 * 3",
+    "Multiply to find the distance: d = 180",
 ]
 
 
@@ -382,7 +381,7 @@ async def test_learn_mode_steps_visible_in_session(client: AsyncClient, auth_tok
     assert create_resp.status_code == 201
     data = create_resp.json()
     assert len(data["steps"]) == 2
-    assert data["steps"][0]["description"] == "Subtract 6 from both sides"
+    assert data["steps"][0]["description"] == "Subtract 6 from both sides to get 2x = 6"
     assert data["current_step"] == 0
 
 

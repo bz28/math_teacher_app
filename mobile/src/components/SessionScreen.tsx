@@ -187,14 +187,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {isLearn && completedSteps.length > 0 && (
           <View style={styles.historySection}>
             {completedSteps.map((step, i) => (
-              <View key={`step-${i}-${step.operation}`} style={[styles.historyRow, shadows.sm]}>
+              <View key={`step-${i}`} style={[styles.historyRow, shadows.sm]}>
                 <View style={styles.historyCheckWrap}>
                   <Ionicons name="checkmark" size={14} color={colors.success} />
                 </View>
                 <View style={styles.historyContent}>
                   <Text style={styles.historyLabel}>Step {i + 1}</Text>
                   <Text style={styles.historyDesc}>{step.description}</Text>
-                  <Text style={styles.historyResult}>{step.after}</Text>
                 </View>
               </View>
             ))}
@@ -206,7 +205,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <View style={[styles.stepDescCard, shadows.sm]}>
             <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
             <Text style={styles.stepDescText}>{currentStep.description}</Text>
-            <Text style={styles.historyResult}>{currentStep.before} → {currentStep.after}</Text>
           </View>
         )}
 
@@ -216,7 +214,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             <View style={[styles.stepDescCard, shadows.sm]}>
               <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
               <Text style={styles.stepDescText}>{currentStep.description}</Text>
-              <Text style={styles.historyResult}>{currentStep.before}</Text>
             </View>
             <Text style={styles.promptText}>
               What is the result?
@@ -225,7 +222,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
               <View style={styles.choicesContainer}>
                 {currentStep.choices.map((choice, i) => {
                   const isSelected = selectedChoice?.index === i;
-                  const showCorrect = selectedChoice && choice.trim().toLowerCase() === currentStep.after.trim().toLowerCase();
+                  const showCorrect = selectedChoice && choice.trim().toLowerCase() === (currentStep.final_answer ?? "").trim().toLowerCase();
                   const showWrong = isSelected && selectedChoice && !selectedChoice.correct;
 
                   return (
@@ -240,7 +237,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                       ]}
                       onPress={() => {
                         if (selectedChoice) return;
-                        const isCorrect = choice.trim().toLowerCase() === currentStep.after.trim().toLowerCase();
+                        const isCorrect = choice.trim().toLowerCase() === (currentStep.final_answer ?? "").trim().toLowerCase();
                         setSelectedChoice({ index: i, correct: isCorrect });
                         Haptics.notificationAsync(
                           isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,

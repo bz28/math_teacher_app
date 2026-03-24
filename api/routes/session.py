@@ -48,7 +48,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
             and is_final
             and session.status != SessionStatus.COMPLETED
         ):
-            detail.after = ""
+            detail.final_answer = ""
         steps.append(detail)
 
     return SessionResponse(
@@ -153,7 +153,9 @@ async def similar(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
 
     try:
-        problem = await generate_similar_problem(session.problem, user_id=str(current_user.user_id))
+        problem = await generate_similar_problem(
+            session.problem, session.steps, user_id=str(current_user.user_id),
+        )
     except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(
