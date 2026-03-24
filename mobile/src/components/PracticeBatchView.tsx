@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   Text,
@@ -9,6 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
@@ -25,11 +29,13 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const {
     phase,
     error,
     practiceBatch,
     submitPracticeAnswer,
+    submitPracticeWork,
     togglePracticeFlag,
     reset,
   } = useSessionStore();
@@ -39,10 +45,70 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
   const { problems, currentIndex, totalCount } = practiceBatch;
   const currentProblem = problems[currentIndex];
 
+  const handleAttachWork = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Camera Access Required",
+        "Please enable camera access in Settings to submit your work.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ],
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]?.base64) {
+      setAttachedImage(result.assets[0].base64);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
   const handlePracticeSubmit = async () => {
     if (!input.trim()) return;
     const text = input.trim();
+    const image = attachedImage;
+    const idx = currentIndex;
+
+    if (!image) {
+      // Nudge if no work attached
+      Alert.alert(
+        "Attach your work?",
+        "You'll get feedback on exactly where you went wrong.",
+        [
+          {
+            text: "Attach work",
+            onPress: async () => {
+              await handleAttachWork();
+              // Don't auto-submit — let them tap Answer again with the image attached
+            },
+          },
+          {
+            text: "Skip",
+            style: "cancel",
+            onPress: async () => {
+              setInput("");
+              setAttachedImage(null);
+              await submitPracticeAnswer(text);
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     setInput("");
+    setAttachedImage(null);
+    // Fire diagnosis in background
+    submitPracticeWork(idx, image);
     await submitPracticeAnswer(text);
   };
 
@@ -118,6 +184,37 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
             inputAccessoryViewID="math-session"
           />
         </View>
+
+        {/* Attach work button */}
+        <AnimatedPressable
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+            alignSelf: "flex-start",
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.lg,
+            borderRadius: 20,
+            borderWidth: 1.5,
+            borderColor: attachedImage ? colors.success : colors.border,
+            backgroundColor: attachedImage ? colors.successLight : "transparent",
+            marginTop: spacing.md,
+          }}
+          onPress={handleAttachWork}
+        >
+          <Ionicons
+            name={attachedImage ? "checkmark-circle" : "camera-outline"}
+            size={18}
+            color={attachedImage ? colors.success : colors.textSecondary}
+          />
+          <Text style={{
+            fontSize: 14,
+            fontWeight: "600",
+            color: attachedImage ? colors.success : colors.textSecondary,
+          }}>
+            {attachedImage ? "Work attached" : "Attach your work"}
+          </Text>
+        </AnimatedPressable>
 
         <View style={styles.buttons}>
           <GradientButton
