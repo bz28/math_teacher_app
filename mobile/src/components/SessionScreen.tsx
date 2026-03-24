@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,6 +37,7 @@ interface SessionScreenProps {
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState("");
   const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean; pending: boolean } | null>(null);
   const {
@@ -77,6 +79,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       prevStep.current = session.current_step;
     }
   }, [session?.current_step]);
+
+  // Auto-scroll to bottom when new response arrives or phase changes
+  useEffect(() => {
+    if (lastResponse || phase === "awaiting_input") {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    }
+  }, [lastResponse, phase]);
 
   // Loading state
   if (phase === "loading") {
@@ -181,22 +190,15 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps — compact collapsed view */}
+        {/* Completed steps — tap to expand */}
         {isLearn && completedSteps.length > 0 && (
           <View style={compactStyles.historyContainer}>
             {completedSteps.map((step, i) => (
-              <View key={`step-${i}`} style={compactStyles.historyItem}>
-                <View style={compactStyles.historyDot}>
-                  <Ionicons name="checkmark" size={10} color={colors.white} />
-                </View>
-                {i < completedSteps.length - 1 && <View style={compactStyles.historyLine} />}
-                <Text style={compactStyles.historyText} numberOfLines={1}>
-                  Step {i + 1}: {step.description}
-                </Text>
-              </View>
+              <CompletedStepRow key={`step-${i}`} index={i} description={step.description} isLast={i === completedSteps.length - 1} />
             ))}
           </View>
         )}
@@ -469,16 +471,47 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   );
 }
 
+function CompletedStepRow({ index, description, isLast }: { index: number; description: string; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <TouchableOpacity
+      style={compactStyles.historyItem}
+      onPress={() => setExpanded(!expanded)}
+      activeOpacity={0.6}
+    >
+      <View style={compactStyles.historyDotCol}>
+        <View style={compactStyles.historyDot}>
+          <Ionicons name="checkmark" size={10} color={colors.white} />
+        </View>
+        {!isLast && <View style={compactStyles.historyLine} />}
+      </View>
+      <View style={compactStyles.historyTextWrap}>
+        <Text style={compactStyles.historyLabel}>Step {index + 1}</Text>
+        <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
+          {description}
+        </Text>
+      </View>
+      <Ionicons
+        name={expanded ? "chevron-up" : "chevron-down"}
+        size={14}
+        color={colors.textMuted}
+      />
+    </TouchableOpacity>
+  );
+}
+
 const compactStyles = StyleSheet.create({
   historyContainer: {
     marginBottom: spacing.md,
-    paddingLeft: spacing.xs,
   },
   historyItem: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    paddingBottom: spacing.sm,
+  },
+  historyDotCol: {
     alignItems: "center",
-    marginBottom: spacing.sm,
-    position: "relative",
+    marginRight: spacing.md,
   },
   historyDot: {
     width: 20,
@@ -487,21 +520,27 @@ const compactStyles = StyleSheet.create({
     backgroundColor: colors.success,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: spacing.md,
-    zIndex: 1,
   },
   historyLine: {
-    position: "absolute",
-    left: 9,
-    top: 20,
     width: 2,
-    height: spacing.sm + 12,
+    flex: 1,
+    minHeight: 8,
     backgroundColor: colors.successBorder,
+    marginTop: 2,
+  },
+  historyTextWrap: {
+    flex: 1,
+    paddingTop: 1,
+  },
+  historyLabel: {
+    ...typography.small,
+    color: colors.success,
+    marginBottom: 2,
   },
   historyText: {
     ...typography.caption,
     color: colors.textSecondary,
     fontSize: 13,
-    flex: 1,
+    lineHeight: 18,
   },
 });
