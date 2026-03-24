@@ -57,10 +57,13 @@ async def _evaluate_and_persist(
             session_id=session_id,
         )
 
-        correctness = int(data.get("correctness", 0))
-        optimality = int(data.get("optimality", 0))
-        clarity = int(data.get("clarity", 0))
-        flow = int(data.get("flow", 0))
+        def _int(key: str) -> int:
+            return int(str(data.get(key, 0)))
+
+        correctness = _int("correctness")
+        optimality = _int("optimality")
+        clarity = _int("clarity")
+        flow = _int("flow")
         passed = bool(data.get("passed", False))
         issues = data.get("issues")
 
