@@ -65,6 +65,7 @@ async def submit_work(
         user_id=current_user.user_id,
         session_id=None,
         problem_index=0,
+        problem_text=body.problem_text,
         diagnosis=diagnosis_result,
         summary=diagnosis_result["summary"],
         has_issues=diagnosis_result["has_issues"],

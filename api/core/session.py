@@ -18,6 +18,7 @@ from api.core.practice import check_answer
 from api.core.step_decomposition import decompose_problem, solve_problem
 from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
+from api.models.work_submission import WorkSubmission
 
 RECENT_EXCHANGES_LIMIT = 10
 MAX_STUDENT_MESSAGES = 10
@@ -75,8 +76,25 @@ async def create_session(
             {"description": "Final answer", "final_answer": answer},
         ]
     else:
+        # Check for prior work submission to personalize learn mode
+        prior_diagnosis: dict[str, Any] | None = None
+        ws_result = await db.execute(
+            select(WorkSubmission.diagnosis)
+            .where(
+                WorkSubmission.user_id == user_id,
+                WorkSubmission.problem_text == problem,
+            )
+            .order_by(WorkSubmission.created_at.desc())
+            .limit(1)
+        )
+        ws_row = ws_result.scalar_one_or_none()
+        if ws_row is not None:
+            prior_diagnosis = ws_row
+
         # Full decomposition for learn mode
-        decomposition = await decompose_problem(problem, user_id=str(user_id))
+        decomposition = await decompose_problem(
+            problem, user_id=str(user_id), work_diagnosis=prior_diagnosis,
+        )
         problem_type = decomposition.problem_type
         steps_data = [{"description": s} for s in decomposition.steps]
 

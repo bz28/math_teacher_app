@@ -140,10 +140,36 @@ async def generate_similar_problem(
         raise RuntimeError("Failed to generate similar problem") from e
 
 
-async def decompose_problem(problem: str, *, user_id: str | None = None) -> Decomposition:
-    """Generate step-by-step decomposition for a math problem."""
+async def decompose_problem(
+    problem: str,
+    *,
+    user_id: str | None = None,
+    work_diagnosis: dict | None = None,
+) -> Decomposition:
+    """Generate step-by-step decomposition for a math problem.
+
+    If work_diagnosis is provided (from a prior work submission), the steps
+    will be personalized to reference the student's specific mistakes.
+    """
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
     prompt = f"Problem: {problem}"
+
+    if work_diagnosis:
+        import json
+        diagnosis_text = json.dumps(work_diagnosis, indent=2)
+        prompt += (
+            "\n\nIMPORTANT: The student has already attempted this problem. "
+            "Their work has been analyzed:\n"
+            f"{diagnosis_text}\n\n"
+            "When writing each step description, reference their specific mistakes where relevant.\n"
+            "For steps they got right, acknowledge it briefly: \"You got this right —\" then explain the step.\n"
+            "For steps where they made errors, address it directly: \"This is where your work diverged —\" "
+            "then explain what they should have done and why their approach was wrong.\n"
+            "For steps they skipped, note it: \"You skipped this step —\" then explain why it matters.\n"
+            "If the student got the correct answer but with a suboptimal method, point out the more optimal "
+            "approach and explain why it matters for harder problems.\n\n"
+            "Keep the tone encouraging and constructive. The goal is to teach, not to criticize."
+        )
 
     data = await call_claude_json(
         SYSTEM_PROMPT,

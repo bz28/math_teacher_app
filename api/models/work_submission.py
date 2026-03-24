@@ -24,6 +24,7 @@ class WorkSubmission(Base):
         nullable=True,
     )
     problem_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    problem_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     # Diagnosis result from Claude Vision
     diagnosis: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
