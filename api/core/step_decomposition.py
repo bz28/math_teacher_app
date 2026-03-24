@@ -109,7 +109,8 @@ async def generate_similar_problem(
 ) -> str:
     """Generate a similar math problem that uses the same solving approach."""
     system = (
-        "You are a worldclass math professor with expertise in testing students on the same concepts using different problems."
+        "You are a worldclass math professor with expertise in testing "
+        "students on the same concepts using different problems. "
         "Generate a similar math problem that would be solved using the SAME "
         "approach/method as the original. The student should be able to apply "
         "the exact same steps to solve the new problem.\n\n"

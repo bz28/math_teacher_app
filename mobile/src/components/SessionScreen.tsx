@@ -222,7 +222,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
               <View style={styles.choicesContainer}>
                 {currentStep.choices.map((choice, i) => {
                   const isSelected = selectedChoice?.index === i;
-                  const showCorrect = selectedChoice && choice.trim().toLowerCase() === currentStep.final_answer.trim().toLowerCase();
+                  const showCorrect = selectedChoice && choice.trim().toLowerCase() === (currentStep.final_answer ?? "").trim().toLowerCase();
                   const showWrong = isSelected && selectedChoice && !selectedChoice.correct;
 
                   return (
@@ -237,7 +237,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                       ]}
                       onPress={() => {
                         if (selectedChoice) return;
-                        const isCorrect = choice.trim().toLowerCase() === currentStep.final_answer.trim().toLowerCase();
+                        const isCorrect = choice.trim().toLowerCase() === (currentStep.final_answer ?? "").trim().toLowerCase();
                         setSelectedChoice({ index: i, correct: isCorrect });
                         Haptics.notificationAsync(
                           isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
