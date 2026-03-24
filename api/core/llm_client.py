@@ -32,11 +32,9 @@ class LLMMode:
     """Labels for LLM call modes used in logging and persistence."""
 
     DECOMPOSE = "decompose"
-    CONVERSE = "converse"
     STEP_CHAT = "step_chat"
     PRACTICE_GENERATE = "practice_generate"
     PRACTICE_EVAL = "practice_eval"
-    GENERATE_SIMILAR = "generate_similar"
     IMAGE_EXTRACT = "image_extract"
     DIAGNOSE_WORK = "diagnose_work"
     JUDGE = "judge"

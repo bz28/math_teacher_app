@@ -1,4 +1,4 @@
-"""LLM Tutor Layer: converse, step-chat, and answer checking modes.
+"""LLM Tutor Layer: step-chat and answer checking modes.
 
 All calls use call_claude_json from llm_client for consistent retry,
 circuit breaker, cost tracking, and logging.
@@ -15,63 +15,17 @@ from dataclasses import dataclass
 
 import anthropic
 
-from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
 
-# Max recent exchanges sent to post-completion chat
-_COMPLETED_HISTORY_LIMIT = 6
+# Max recent exchanges sent to chat functions
+_HISTORY_LIMIT = 6
 
 logger = logging.getLogger(__name__)
-
-# Max recent exchanges sent to converse() — trimmed from 10 to 6
-CONVERSE_HISTORY_LIMIT = 6
 
 
 # ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
-
-CONVERSATIONAL_TUTOR_PROMPT = """\
-You are a math tutor having a conversation with a student solving a problem step by step.
-
-You will receive:
-- The problem being solved
-- The full list of solution steps (as an "answer key")
-- The conversation history so far
-- The student's latest input
-
-Classify the student's input and respond accordingly:
-
-1. **question**: The student is asking a question or requesting guidance.
-   - Give a helpful hint WITHOUT revealing the answer.
-   - Set is_correct to false, steps_completed to null.
-
-2. **answer**: The student is attempting to give a mathematical answer.
-   - Compare against the solution steps. Accept mathematically equivalent forms.
-   - If correct, set is_correct to true, steps_completed to the index (0-based) of the furthest step they've completed.
-   - If wrong, set is_correct to false, steps_completed to null, and give encouraging feedback.
-
-3. **unclear**: The input doesn't clearly fit either category.
-   - Ask the student to clarify.
-   - Set is_correct to false, steps_completed to null.
-
-Respond with ONLY valid JSON:
-{
-  "input_type": "question" | "answer" | "unclear",
-  "is_correct": true/false,
-  "steps_completed": <int or null>,
-  "feedback": "Your response to the student"
-}
-
-Rules:
-- NEVER reveal the final answer
-- NEVER reveal the exact result of a step the student hasn't completed
-- Be encouraging and guide the student toward understanding
-- Accept mathematically equivalent answers (e.g., 2/4 and 1/2 are the same)
-- For correct answers that match multiple steps, set steps_completed to the furthest matching step index
-- Keep feedback concise (1-3 sentences)
-- For CORRECT answers: just confirm ("Correct!", "Nice work!"). Do NOT ask
-  the student to explain the step or prompt for the next step — the app
-  handles navigation automatically."""
 
 STEP_CHAT_PROMPT = """\
 You are a math tutor helping a student understand a specific step in solving a problem.
@@ -134,14 +88,6 @@ Respond with ONLY valid JSON:
 # ---------------------------------------------------------------------------
 
 @dataclass
-class ConverseResult:
-    input_type: str  # "question" | "answer" | "unclear"
-    is_correct: bool
-    steps_completed: int | None
-    feedback: str
-
-
-@dataclass
 class StepChatResult:
     feedback: str
 
@@ -149,51 +95,6 @@ class StepChatResult:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
-async def converse(
-    problem: str,
-    steps: list[dict[str, str]],
-    exchanges: list[dict[str, str]],
-    student_input: str,
-    session_id: str | None = None,
-    user_id: str | None = None,
-) -> ConverseResult:
-    """Evaluate a student's free-form input against the full problem context."""
-    steps_text = "\n".join(
-        f"  Step {i}: {s['description']}"
-        for i, s in enumerate(steps)
-    )
-    history_text = "\n".join(
-        f"  {e['role']}: {e['content']}"
-        for e in exchanges[-CONVERSE_HISTORY_LIMIT:]
-    ) if exchanges else "(no prior conversation)"
-
-    prompt = (
-        f"Problem: {problem}\n\n"
-        f"Solution steps (answer key):\n{steps_text}\n\n"
-        f"Conversation so far:\n{history_text}\n\n"
-        f"Student's latest input: {student_input}"
-    )
-    data = await call_claude_json(
-        CONVERSATIONAL_TUTOR_PROMPT, prompt, LLMMode.CONVERSE,
-        session_id=session_id, user_id=user_id, model=MODEL_REASON,
-    )
-    # Parse steps_completed safely — LLM may return int, float, or string
-    raw_steps = data.get("steps_completed")
-    steps_completed: int | None = None
-    if raw_steps is not None:
-        try:
-            steps_completed = int(raw_steps)  # type: ignore[call-overload]
-        except (ValueError, TypeError):
-            logger.warning("Invalid steps_completed from LLM: %r", raw_steps)
-
-    return ConverseResult(
-        input_type=str(data.get("input_type", "unclear")),
-        is_correct=bool(data.get("is_correct", False)),
-        steps_completed=steps_completed,
-        feedback=str(data.get("feedback", "")),
-    )
-
 
 async def step_chat(
     problem: str,
@@ -206,7 +107,7 @@ async def step_chat(
     """Answer a student's question about a specific step."""
     history_text = "\n".join(
         f"  {e['role']}: {e['content']}"
-        for e in exchanges[-CONVERSE_HISTORY_LIMIT:]
+        for e in exchanges[-_HISTORY_LIMIT:]
     ) if exchanges else "(no prior conversation)"
 
     prompt = (
@@ -237,7 +138,7 @@ async def completed_chat(
     )
     history_text = "\n".join(
         f"  {e['role']}: {e['content']}"
-        for e in exchanges[-_COMPLETED_HISTORY_LIMIT:]
+        for e in exchanges[-_HISTORY_LIMIT:]
     ) if exchanges else "(no prior conversation)"
 
     prompt = (
