@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
@@ -32,6 +34,7 @@ export function MockTestScreen({ onBack }: Props) {
     navigateMockQuestion,
     toggleMockTestFlag,
     submitMockTest,
+    attachWorkImage,
     reset,
   } = useSessionStore();
 
@@ -111,10 +114,14 @@ export function MockTestScreen({ onBack }: Props) {
     const latestAnswers = { ...answers, [currentIndex]: localAnswer.trim() };
     const answeredCount = questions.filter((_, i) => latestAnswers[i]?.trim()).length;
     const unansweredCount = questions.length - answeredCount;
+    const unattachedCount = mockTest.workImages.filter((img) => img == null).length;
 
-    const message = unansweredCount > 0
-      ? `You have ${unansweredCount} unanswered question${unansweredCount > 1 ? "s" : ""}. Submit anyway?`
-      : "Ready to submit? You won't be able to change answers.";
+    let message = "Ready to submit? You won't be able to change answers.";
+    if (unansweredCount > 0) {
+      message = `You have ${unansweredCount} unanswered question${unansweredCount > 1 ? "s" : ""}. Submit anyway?`;
+    } else if (unattachedCount > 0) {
+      message = `You didn't attach work for ${unattachedCount} question${unattachedCount > 1 ? "s" : ""}. Submit anyway? You'll get detailed feedback on questions with attached work.`;
+    }
 
     Alert.alert("Submit Exam", message, [
       { text: "Cancel", style: "cancel" },
@@ -141,6 +148,35 @@ export function MockTestScreen({ onBack }: Props) {
     setLocalAnswer((prev) => prev + value);
     inputRef.current?.focus();
   };
+
+  const handleAttachWork = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Camera Access Required",
+        "Please enable camera access in Settings to submit your work.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ],
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]?.base64) {
+      attachWorkImage(currentIndex, result.assets[0].base64);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const hasWorkAttached = mockTest.workImages[currentIndex] != null;
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -241,6 +277,24 @@ export function MockTestScreen({ onBack }: Props) {
             inputAccessoryViewID="math-mock-test"
           />
         </View>
+
+        {/* Attach work button */}
+        <AnimatedPressable
+          style={[
+            styles.flagButton,
+            hasWorkAttached && { borderColor: colors.success, backgroundColor: colors.successLight },
+          ]}
+          onPress={handleAttachWork}
+        >
+          <Ionicons
+            name={hasWorkAttached ? "checkmark-circle" : "camera-outline"}
+            size={18}
+            color={hasWorkAttached ? colors.success : colors.textSecondary}
+          />
+          <Text style={[styles.flagText, hasWorkAttached && { color: colors.success }]}>
+            {hasWorkAttached ? "Work attached" : "Attach your work"}
+          </Text>
+        </AnimatedPressable>
 
         {/* Flag button */}
         <AnimatedPressable
