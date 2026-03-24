@@ -3,8 +3,9 @@
 All tests use mocked LLM responses — no real API calls.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from api.core.step_decomposition import (
     Decomposition,
