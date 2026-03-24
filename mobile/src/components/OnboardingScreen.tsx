@@ -10,8 +10,8 @@ interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
-type Step = "welcome" | "modes";
-const STEPS: Step[] = ["welcome", "modes"];
+type Step = "welcome" | "capture" | "learn" | "practice";
+const STEPS: Step[] = ["welcome", "capture", "learn", "practice"];
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [stepIndex, setStepIndex] = useState(0);
@@ -45,7 +45,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       <View style={styles.content}>
         {step === "welcome" && <WelcomeStep />}
-        {step === "modes" && <ModesStep />}
+        {step === "capture" && <CaptureStep />}
+        {step === "learn" && <LearnStep />}
+        {step === "practice" && <PracticeStep />}
       </View>
 
       {/* Navigation */}
@@ -87,78 +89,153 @@ function WelcomeStep() {
           colors={gradients.primary}
           style={styles.heroIconGradient}
         >
-          <Ionicons name="school" size={48} color={colors.white} />
+          <Ionicons name="school" size={40} color={colors.white} />
         </LinearGradient>
       </View>
-      <Text style={styles.welcomeTitle}>Welcome to Math Tutor</Text>
-      <Text style={styles.welcomeSubtitle}>
-        Learn math step-by-step, at your pace.
+      <Text style={styles.welcomeTitle}>Welcome to{"\n"}Math Tutor</Text>
+      <Text style={styles.stepSubtitle}>
+        Your personal AI tutor that teaches you how to solve problems — not just the answers
       </Text>
-      <View style={styles.featureList}>
-        <FeatureRow
-          icon="bulb-outline"
-          text="Get guided through each step — never just the answer"
-        />
-        <FeatureRow
-          icon="checkmark-circle-outline"
-          text="Practice with similar problems until you've got it"
-        />
-        <FeatureRow
-          icon="chatbubble-ellipses-outline"
-          text="Ask questions anytime — your AI tutor is always here"
-        />
+      <View style={styles.welcomeFeatures}>
+        <View style={styles.welcomeFeatureRow}>
+          <Ionicons name="camera-outline" size={20} color={colors.primary} />
+          <Text style={styles.welcomeFeatureText}>Snap a photo of any problem</Text>
+        </View>
+        <View style={styles.welcomeFeatureRow}>
+          <Ionicons name="bulb-outline" size={20} color={colors.primary} />
+          <Text style={styles.welcomeFeatureText}>Get guided step by step</Text>
+        </View>
+        <View style={styles.welcomeFeatureRow}>
+          <Ionicons name="infinite-outline" size={20} color={colors.primary} />
+          <Text style={styles.welcomeFeatureText}>Endless practice from one problem</Text>
+        </View>
+        <View style={styles.welcomeFeatureRow}>
+          <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+          <Text style={styles.welcomeFeatureText}>Take timed mock exams</Text>
+        </View>
       </View>
     </View>
   );
 }
 
-function FeatureRow({ icon, text }: { icon: string; text: string }) {
+function CaptureStep() {
   return (
-    <View style={styles.featureRow}>
-      <View style={styles.featureIconWrap}>
-        <Ionicons name={icon as any} size={22} color={colors.primary} />
+    <View style={styles.stepCenter}>
+      <View style={styles.heroIconWrap}>
+        <LinearGradient
+          colors={gradients.primary}
+          style={styles.heroIconGradient}
+        >
+          <Ionicons name="camera" size={40} color={colors.white} />
+        </LinearGradient>
       </View>
-      <Text style={styles.featureText}>{text}</Text>
+      <Text style={styles.stepTitle}>Snap your homework</Text>
+      <Text style={styles.stepSubtitle}>
+        Take a photo and we'll extract every problem automatically
+      </Text>
+
+      {/* Mini mockup: extracted problems */}
+      <View style={[styles.mockupCard, shadows.md]}>
+        <View style={styles.mockupHeader}>
+          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+          <Text style={styles.mockupHeaderText}>3 problems found</Text>
+        </View>
+        {["2x + 5 = 13", "x² - 4 = 0", "3x/4 + 2 = 8"].map((problem, i) => (
+          <View key={i} style={styles.mockupRow}>
+            <View style={styles.mockupCheckbox}>
+              <Ionicons name="checkmark" size={12} color={colors.white} />
+            </View>
+            <Text style={styles.mockupProblem}>{problem}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
-function ModesStep() {
+function LearnStep() {
   return (
-    <View style={styles.stepTop}>
-      <Text style={styles.stepTitle}>Two ways to study</Text>
-      <Text style={styles.stepSubtitle}>Use both to master any topic.</Text>
-
-      <View style={[styles.modeCard, shadows.md]}>
-        <View style={[styles.modeIconWrap, { backgroundColor: colors.primaryBg }]}>
-          <Ionicons name="book-outline" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.modeTextWrap}>
-          <Text style={styles.modeLabel}>Learn Mode</Text>
-          <Text style={styles.modeDesc}>
-            We break the problem into steps and guide you through each one.
-            Hints start vague and get more specific — you always do the
-            thinking.
-          </Text>
-        </View>
+    <View style={styles.stepCenter}>
+      <View style={styles.heroIconWrap}>
+        <LinearGradient
+          colors={gradients.primary}
+          style={styles.heroIconGradient}
+        >
+          <Ionicons name="book" size={40} color={colors.white} />
+        </LinearGradient>
       </View>
-
-      <View style={[styles.modeCard, shadows.md]}>
-        <View style={[styles.modeIconWrap, { backgroundColor: colors.successLight }]}>
-          <Ionicons name="pencil-outline" size={24} color={colors.success} />
-        </View>
-        <View style={styles.modeTextWrap}>
-          <Text style={styles.modeLabel}>Practice Mode</Text>
-          <Text style={styles.modeDesc}>
-            Solve similar problems on your own to build confidence. Flag
-            anything tricky and revisit it in Learn mode.
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.readyText}>
-        Create an account to start learning!
+      <Text style={styles.stepTitle}>We guide you step by step</Text>
+      <Text style={styles.stepSubtitle}>
+        No answers given — you do the thinking, we give hints when you're stuck
       </Text>
+
+      {/* Mini mockup: step-by-step walkthrough */}
+      <View style={[styles.mockupCard, shadows.md]}>
+        <View style={styles.mockupStep}>
+          <View style={[styles.mockupStepDot, styles.mockupStepDone]} />
+          <View style={styles.mockupStepContent}>
+            <Text style={styles.mockupStepLabel}>Step 1</Text>
+            <Text style={styles.mockupStepText}>Subtract 5 from both sides</Text>
+          </View>
+          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+        </View>
+        <View style={styles.mockupStepLine} />
+        <View style={styles.mockupStep}>
+          <View style={[styles.mockupStepDot, styles.mockupStepActive]} />
+          <View style={styles.mockupStepContent}>
+            <Text style={[styles.mockupStepLabel, { color: colors.primary }]}>Step 2</Text>
+            <Text style={styles.mockupStepText}>Divide both sides by 2</Text>
+          </View>
+        </View>
+        <View style={styles.mockupHint}>
+          <Ionicons name="bulb" size={14} color={colors.warning} />
+          <Text style={styles.mockupHintText}>Hint available if you need it</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PracticeStep() {
+  return (
+    <View style={styles.stepCenter}>
+      <View style={styles.heroIconWrap}>
+        <LinearGradient
+          colors={gradients.success}
+          style={styles.heroIconGradient}
+        >
+          <Ionicons name="infinite" size={40} color={colors.white} />
+        </LinearGradient>
+      </View>
+      <Text style={styles.stepTitle}>One problem, endless practice</Text>
+      <Text style={styles.stepSubtitle}>
+        We generate similar problems so you can practice until you've truly got it
+      </Text>
+
+      {/* Mini mockup: one problem → many similar */}
+      <View style={[styles.mockupCard, shadows.md]}>
+        <Text style={styles.mockupSeedLabel}>Your problem</Text>
+        <View style={styles.mockupSeedRow}>
+          <Text style={styles.mockupSeedProblem}>2x + 5 = 13</Text>
+        </View>
+
+        <View style={styles.mockupArrowRow}>
+          <View style={styles.mockupArrowLine} />
+          <View style={styles.mockupArrowBadge}>
+            <Ionicons name="sparkles" size={14} color={colors.primary} />
+            <Text style={styles.mockupArrowText}>Generated for you</Text>
+          </View>
+          <View style={styles.mockupArrowLine} />
+        </View>
+
+        {["3x - 2 = 7", "5x + 1 = 21", "4x - 3 = 17"].map((problem, i) => (
+          <View key={i} style={styles.mockupGeneratedRow}>
+            <View style={[styles.mockupGeneratedDot, { backgroundColor: i === 0 ? colors.success : i === 1 ? colors.success : colors.primaryBg }]} />
+            <Text style={styles.mockupGeneratedProblem}>{problem}</Text>
+            {i < 2 && <Ionicons name="checkmark-circle" size={16} color={colors.success} />}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -221,95 +298,218 @@ const styles = StyleSheet.create({
   },
   nextText: { color: colors.white, ...typography.button },
 
-  // Welcome
+  // Shared step styles
   stepCenter: {
     alignItems: "center",
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   heroIconWrap: {
     marginBottom: spacing.xl,
   },
   heroIconGradient: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
   },
-  welcomeTitle: {
-    ...typography.hero,
-    textAlign: "center",
-    marginBottom: spacing.sm,
-    color: colors.text,
-  },
-  welcomeSubtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginBottom: spacing.xxxl,
-  },
-  featureList: { gap: spacing.xl, width: "100%" },
-  featureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  featureIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primaryBg,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  featureText: { ...typography.body, color: colors.textSecondary, flex: 1 },
-
-  // Modes
-  stepTop: { paddingTop: spacing.lg },
   stepTitle: {
     ...typography.title,
+    textAlign: "center",
     marginBottom: spacing.sm,
     color: colors.text,
   },
   stepSubtitle: {
     ...typography.body,
     color: colors.textSecondary,
+    textAlign: "center",
     marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.sm,
   },
-  modeCard: {
+
+  // Welcome step
+  welcomeTitle: {
+    ...typography.hero,
+    fontSize: 34,
+    textAlign: "center",
+    marginBottom: spacing.md,
+    color: colors.text,
+  },
+  welcomeFeatures: {
+    width: "100%",
+    gap: spacing.lg,
+    marginTop: spacing.md,
+  },
+  welcomeFeatureRow: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
     backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    alignItems: "flex-start",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
-  modeIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.md,
+  welcomeFeatureText: {
+    ...typography.body,
+    color: colors.text,
+    fontSize: 15,
+  },
+
+  // Mockup card (shared)
+  mockupCard: {
+    width: "100%",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.xl,
+  },
+
+  // Capture step mockup
+  mockupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  mockupHeaderText: {
+    ...typography.bodyBold,
+    color: colors.success,
+    fontSize: 14,
+  },
+  mockupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  mockupCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 14,
   },
-  modeTextWrap: { flex: 1 },
-  modeLabel: {
-    ...typography.heading,
-    fontSize: 18,
+  mockupProblem: {
+    ...typography.body,
     color: colors.text,
-    marginBottom: spacing.xs,
+    fontSize: 15,
   },
-  modeDesc: {
+
+  // Learn step mockup
+  mockupStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  mockupStepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.border,
+  },
+  mockupStepDone: {
+    backgroundColor: colors.success,
+  },
+  mockupStepActive: {
+    backgroundColor: colors.primary,
+  },
+  mockupStepContent: {
+    flex: 1,
+  },
+  mockupStepLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    marginBottom: 2,
+  },
+  mockupStepText: {
+    ...typography.body,
+    color: colors.text,
     fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
   },
-  readyText: {
+  mockupStepLine: {
+    width: 2,
+    height: 16,
+    backgroundColor: colors.border,
+    marginLeft: 4,
+    marginVertical: spacing.xs,
+  },
+  mockupHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.warningBg,
+    borderRadius: radii.sm,
+  },
+  mockupHintText: {
+    ...typography.caption,
+    color: colors.warningDark,
+  },
+
+  // Practice step mockup
+  mockupSeedLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  mockupSeedRow: {
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  mockupSeedProblem: {
     ...typography.bodyBold,
     color: colors.primary,
-    textAlign: "center",
-    marginTop: spacing.xl,
+    fontSize: 16,
+  },
+  mockupArrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  mockupArrowLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  mockupArrowBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+  },
+  mockupArrowText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 11,
+  },
+  mockupGeneratedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  mockupGeneratedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  mockupGeneratedProblem: {
+    ...typography.body,
+    color: colors.text,
+    fontSize: 15,
+    flex: 1,
   },
 });
