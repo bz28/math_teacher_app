@@ -2,11 +2,41 @@
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# In-memory TTL cache for non-personalized decompositions
+# ---------------------------------------------------------------------------
+
+_CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
+_cache: dict[str, tuple[float, "Decomposition"]] = {}
+_CACHE_MAX_SIZE = 200
+
+
+def _cache_get(problem: str) -> "Decomposition | None":
+    """Get a cached decomposition if it exists and hasn't expired."""
+    entry = _cache.get(problem)
+    if entry is None:
+        return None
+    ts, decomp = entry
+    if time.monotonic() - ts > _CACHE_TTL_SECONDS:
+        del _cache[problem]
+        return None
+    return decomp
+
+
+def _cache_set(problem: str, decomp: "Decomposition") -> None:
+    """Cache a decomposition result."""
+    # Evict oldest entries if cache is full
+    if len(_cache) >= _CACHE_MAX_SIZE:
+        oldest_key = min(_cache, key=lambda k: _cache[k][0])
+        del _cache[oldest_key]
+    _cache[problem] = (time.monotonic(), decomp)
 
 SYSTEM_PROMPT = (
     "You are a worldclass math professor with expertise in breaking down "
@@ -122,6 +152,13 @@ async def decompose_problem(
     If work_diagnosis is provided (from a prior work submission), the steps
     will be personalized to reference the student's specific mistakes.
     """
+    # Return cached result for non-personalized calls
+    if not work_diagnosis:
+        cached = _cache_get(problem)
+        if cached is not None:
+            logger.info("Decomposition cache hit for %s", problem)
+            return cached
+
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
     prompt = f"Problem: {problem}"
 
@@ -169,4 +206,9 @@ async def decompose_problem(
         problem,
         extra={"problem_type": problem_type, "num_steps": len(steps)},
     )
+
+    # Cache non-personalized decompositions for reuse
+    if not work_diagnosis:
+        _cache_set(problem, decomposition)
+
     return decomposition
