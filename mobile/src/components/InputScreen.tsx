@@ -348,6 +348,19 @@ export function InputScreen({
           </View>
         )}
 
+        {/* Hint: generate similar feature (mock test, empty queue) */}
+        {mode === "mock_test" && problemQueue.length === 0 && (
+          <View style={[styles.featureHint, shadows.sm]}>
+            <Ionicons name="sparkles" size={20} color={colors.primary} />
+            <View style={styles.featureHintContent}>
+              <Text style={styles.featureHintTitle}>Generate a full exam from one problem</Text>
+              <Text style={styles.featureHintDesc}>
+                Add a problem and we'll create similar questions to build a complete practice exam
+              </Text>
+            </View>
+          </View>
+        )}
+
         <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
         {/* Mock test config — only show once problems are queued */}
@@ -610,6 +623,34 @@ const styles = StyleSheet.create({
   extractingSubtitle: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+
+  // Feature hint
+  featureHint: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  featureHintContent: {
+    flex: 1,
+  },
+  featureHintTitle: {
+    ...typography.bodyBold,
+    color: colors.primary,
+    fontSize: 14,
+    marginBottom: spacing.xs,
+  },
+  featureHintDesc: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
   },
 
   // Queue
