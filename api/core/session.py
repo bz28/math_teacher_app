@@ -10,14 +10,15 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.practice import check_answer
-from api.core.step_decomposition import decompose_problem, solve_problem
+from api.core.step_decomposition import decompose_problem
 from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
+from api.models.work_submission import WorkSubmission
 
 RECENT_EXCHANGES_LIMIT = 10
 MAX_STUDENT_MESSAGES = 10
@@ -69,14 +70,43 @@ async def create_session(
     await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
-        # Lightweight: just solve for the answer, no step decomposition
-        answer, problem_type = await solve_problem(problem, user_id=str(user_id))
+        # Use full decomposition for accuracy — steps cached for learn mode reuse
+        decomp = await decompose_problem(problem, user_id=str(user_id))
+        problem_type = decomp.problem_type
         steps_data: list[dict[str, Any]] = [
-            {"description": "Final answer", "final_answer": answer},
+            {"description": "Final answer", "final_answer": decomp.final_answer},
         ]
     else:
+        # Check for prior work submission to personalize learn mode
+        prior_diagnosis: dict[str, Any] | None = None
+        ws_result = await db.execute(
+            select(WorkSubmission.diagnosis, WorkSubmission.has_issues)
+            .where(
+                WorkSubmission.user_id == user_id,
+                WorkSubmission.problem_text == problem,
+            )
+            .order_by(WorkSubmission.created_at.desc())
+            .limit(1)
+        )
+        ws_row = ws_result.one_or_none()
+        if ws_row is not None:
+            diagnosis_data, has_issues = ws_row
+            # Only personalize if there were actual issues — no point
+            # burning a fresh LLM call just to say "good job" at each step
+            if has_issues:
+                prior_diagnosis = diagnosis_data
+            # Clean up — delete all work submissions for this user + problem
+            await db.execute(
+                delete(WorkSubmission).where(
+                    WorkSubmission.user_id == user_id,
+                    WorkSubmission.problem_text == problem,
+                )
+            )
+
         # Full decomposition for learn mode
-        decomposition = await decompose_problem(problem, user_id=str(user_id))
+        decomposition = await decompose_problem(
+            problem, user_id=str(user_id), work_diagnosis=prior_diagnosis,
+        )
         problem_type = decomposition.problem_type
         steps_data = [{"description": s} for s in decomposition.steps]
 

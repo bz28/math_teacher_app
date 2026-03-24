@@ -10,6 +10,19 @@ import pytest
 from httpx import AsyncClient
 
 from api.core.llm_client import _circuit
+from api.core.step_decomposition import Decomposition
+
+
+def _mock_practice_decomposition(problem: str, answer: str) -> Decomposition:
+    """Create a mock Decomposition for practice mode tests."""
+    return Decomposition(
+        problem=problem,
+        steps=["Solve the equation"],
+        final_answer=answer,
+        problem_type="math",
+        distractors=["wrong1", "wrong2", "wrong3"],
+    )
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -388,8 +401,8 @@ async def test_learn_mode_steps_visible_in_session(client: AsyncClient, auth_tok
 @pytest.mark.anyio
 async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting the final answer directly completes the session."""
-    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
-        mock_solve.return_value = ("x = 3", "linear")
+    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
+        mock_decompose.return_value = _mock_practice_decomposition("2x + 6 = 12", "x = 3")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "2x + 6 = 12", "mode": "practice"},
@@ -413,8 +426,8 @@ async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_toke
 @pytest.mark.anyio
 async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting a wrong answer is rejected."""
-    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
-        mock_solve.return_value = ("x = 3", "linear")
+    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
+        mock_decompose.return_value = _mock_practice_decomposition("2x + 6 = 12", "x = 3")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "2x + 6 = 12", "mode": "practice"},
@@ -439,8 +452,8 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
 @pytest.mark.anyio
 async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting a wrong answer returns error feedback."""
-    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
-        mock_solve.return_value = ("x = 3", "linear")
+    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
+        mock_decompose.return_value = _mock_practice_decomposition("2x + 6 = 12", "x = 3")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "2x + 6 = 12", "mode": "practice"},
@@ -465,8 +478,8 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
 @pytest.mark.anyio
 async def test_practice_mode_no_step_skip_rejection(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: any correct final answer completes the session."""
-    with patch("api.core.session.solve_problem", new_callable=AsyncMock) as mock_solve:
-        mock_solve.return_value = ("3", "linear")
+    with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
+        mock_decompose.return_value = _mock_practice_decomposition("3x + 9 = 18", "3")
         create_resp = await client.post(
             "/v1/session",
             json={"problem": "3x + 9 = 18", "mode": "practice"},

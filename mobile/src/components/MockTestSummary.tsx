@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
 import { useSessionStore } from "../stores/session";
 import { colors, spacing, radii, typography, shadows } from "../theme";
@@ -16,7 +17,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
 
   if (!mockTest || !mockTest.results) return null;
 
-  const { questions, results, flags } = mockTest;
+  const { questions, results, flags, workSubmissions, workImages } = mockTest;
   const answered = results.filter((r) => r.isCorrect != null);
   const correct = results.filter((r) => r.isCorrect === true);
   const unanswered = results.filter((r) => r.isCorrect == null);
@@ -162,6 +163,10 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                   </>
                 )}
               </View>
+              <DiagnosisTeaser
+                diagnosis={workSubmissions[i]}
+                analyzing={workImages[i] != null}
+              />
             </View>
           );
         })}

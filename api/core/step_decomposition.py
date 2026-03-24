@@ -2,11 +2,41 @@
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# In-memory TTL cache for non-personalized decompositions
+# ---------------------------------------------------------------------------
+
+_CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
+_cache: dict[str, tuple[float, "Decomposition"]] = {}
+_CACHE_MAX_SIZE = 200
+
+
+def _cache_get(problem: str) -> "Decomposition | None":
+    """Get a cached decomposition if it exists and hasn't expired."""
+    entry = _cache.get(problem)
+    if entry is None:
+        return None
+    ts, decomp = entry
+    if time.monotonic() - ts > _CACHE_TTL_SECONDS:
+        del _cache[problem]
+        return None
+    return decomp
+
+
+def _cache_set(problem: str, decomp: "Decomposition") -> None:
+    """Cache a decomposition result."""
+    # Evict oldest entries if cache is full
+    if len(_cache) >= _CACHE_MAX_SIZE:
+        oldest_key = min(_cache, key=lambda k: _cache[k][0])
+        del _cache[oldest_key]
+    _cache[problem] = (time.monotonic(), decomp)
 
 SYSTEM_PROMPT = (
     "You are a worldclass math professor with expertise in breaking down "
@@ -71,35 +101,6 @@ def _is_word_problem(text: str) -> bool:
     return any(w.lower() not in _MATH_FUNCTION_NAMES for w in words)
 
 
-SOLVE_SYSTEM_PROMPT = """You are a math tutor solving a problem.
-
-Given a math problem, compute the final answer. Respond with ONLY valid JSON:
-{"answer": "<the final simplified answer>", "problem_type": "word_problem" or "math"}
-
-Rules:
-- The answer must be the fully simplified final result
-- Use standard math notation (e.g., x^2 not x², use * for multiplication)
-- For equations, give the solution (e.g., "x = 3")
-- For expressions, give the simplified form (e.g., "28x")
-- Do NOT include any explanation, just the JSON"""
-
-
-async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[str, str]:
-    """Solve a math problem and return (final_answer, problem_type).
-
-    Lighter-weight alternative to decompose_problem — no step breakdown,
-    just the answer. Used for practice mode where steps aren't needed upfront.
-    """
-    data = await call_claude_json(
-        SOLVE_SYSTEM_PROMPT,
-        f"Problem: {problem}",
-        mode=LLMMode.SOLVE,
-        model=MODEL_REASON,
-        max_tokens=256,
-        user_id=user_id,
-    )
-    return str(data["answer"]), str(data.get("problem_type", "math"))
-
 
 async def generate_similar_problem(
     problem: str,
@@ -140,10 +141,43 @@ async def generate_similar_problem(
         raise RuntimeError("Failed to generate similar problem") from e
 
 
-async def decompose_problem(problem: str, *, user_id: str | None = None) -> Decomposition:
-    """Generate step-by-step decomposition for a math problem."""
+async def decompose_problem(
+    problem: str,
+    *,
+    user_id: str | None = None,
+    work_diagnosis: dict[str, object] | None = None,
+) -> Decomposition:
+    """Generate step-by-step decomposition for a math problem.
+
+    If work_diagnosis is provided (from a prior work submission), the steps
+    will be personalized to reference the student's specific mistakes.
+    """
+    # Return cached result for non-personalized calls
+    if not work_diagnosis:
+        cached = _cache_get(problem)
+        if cached is not None:
+            logger.info("Decomposition cache hit for %s", problem)
+            return cached
+
     problem_type = "word_problem" if _is_word_problem(problem) else "math"
     prompt = f"Problem: {problem}"
+
+    if work_diagnosis:
+        import json
+        diagnosis_text = json.dumps(work_diagnosis, indent=2)
+        prompt += (
+            "\n\nIMPORTANT: The student has already attempted this problem. "
+            "Their work has been analyzed:\n"
+            f"{diagnosis_text}\n\n"
+            "When writing each step description, reference their specific mistakes where relevant.\n"
+            "For steps they got right, acknowledge it briefly: \"You got this right —\" then explain the step.\n"
+            "For steps where they made errors, address it directly: \"This is where your work diverged —\" "
+            "then explain what they should have done and why their approach was wrong.\n"
+            "For steps they skipped, note it: \"You skipped this step —\" then explain why it matters.\n"
+            "If the student got the correct answer but with a suboptimal method, point out the more optimal "
+            "approach and explain why it matters for harder problems.\n\n"
+            "Keep the tone encouraging and constructive. The goal is to teach, not to criticize."
+        )
 
     data = await call_claude_json(
         SYSTEM_PROMPT,
@@ -172,4 +206,9 @@ async def decompose_problem(problem: str, *, user_id: str | None = None) -> Deco
         problem,
         extra={"problem_type": problem_type, "num_steps": len(steps)},
     )
+
+    # Cache non-personalized decompositions for reuse
+    if not work_diagnosis:
+        _cache_set(problem, decomposition)
+
     return decomposition

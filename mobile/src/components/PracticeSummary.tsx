@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
 import { colors, spacing } from "../theme";
@@ -27,7 +28,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 
   if (!practiceBatch) return null;
 
-  const { results, flags, problems, skippedProblems } = practiceBatch;
+  const { results, flags, problems, skippedProblems, workSubmissions } = practiceBatch;
   const correct = results.filter((r) => r.isCorrect).length;
   const pct = correct / results.length;
   const encouragement =
@@ -95,6 +96,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
                   Correct: {r.correctAnswer}
                 </Text>
               )}
+              <DiagnosisTeaser diagnosis={workSubmissions[i]} />
             </View>
             <AnimatedPressable
               style={[styles.flagToggle, flags[i] && styles.flagToggleActive]}

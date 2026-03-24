@@ -1,8 +1,11 @@
 import * as SecureStore from "expo-secure-store";
 
 const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
+const isNgrok = DEV_HOST.endsWith(".ngrok-free.dev");
 const API_BASE = __DEV__
-  ? `http://${DEV_HOST}:8000/v1`
+  ? isNgrok
+    ? `https://${DEV_HOST}/v1`
+    : `http://${DEV_HOST}:8000/v1`
   : "https://math-teacher-api.up.railway.app/v1";
 
 const ACCESS_TOKEN_KEY = "access_token";
@@ -235,5 +238,38 @@ export const checkPracticeAnswer = (question: string, correctAnswer: string, use
 export const extractProblemsFromImage = (imageBase64: string) =>
   apiPost<{ problems: string[]; confidence: string }>("/image/extract", {
     image_base64: imageBase64,
+  }, LLM_TIMEOUT_MS);
+
+// Work submission API
+export interface WorkDiagnosisStep {
+  step_description: string;
+  status: "correct" | "error" | "skipped" | "suboptimal" | "unclear";
+  student_work: string | null;
+  feedback: string | null;
+}
+
+export interface WorkDiagnosis {
+  steps: WorkDiagnosisStep[];
+  summary: string;
+  has_issues: boolean;
+  overall_feedback: string;
+}
+
+export interface SubmitWorkResponse {
+  id: string;
+  diagnosis: WorkDiagnosis | null;
+}
+
+export const submitWork = (
+  imageBase64: string,
+  problemText: string,
+  userAnswer: string,
+  userWasCorrect: boolean,
+) =>
+  apiPost<SubmitWorkResponse>("/work/submit", {
+    image_base64: imageBase64,
+    problem_text: problemText,
+    user_answer: userAnswer,
+    user_was_correct: userWasCorrect,
   }, LLM_TIMEOUT_MS);
 
