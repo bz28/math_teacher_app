@@ -102,6 +102,16 @@ async def create_session(
     db.add(session)
     await db.commit()
     await db.refresh(session)
+
+    # TODO: re-enable once judge prompt is refined
+    # if mode != SessionMode.PRACTICE:
+    #     fire_and_forget_judge(
+    #         problem=problem,
+    #         steps=decomposition.steps,
+    #         final_answer=decomposition.final_answer,
+    #         session_id=str(session.id),
+    #     )
+
     return session
 
 

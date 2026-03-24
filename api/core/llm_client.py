@@ -39,6 +39,7 @@ class LLMMode:
     PRACTICE_EVAL = "practice_eval"
     GENERATE_SIMILAR = "generate_similar"
     IMAGE_EXTRACT = "image_extract"
+    JUDGE = "judge"
 
 _client: anthropic.AsyncAnthropic | None = None
 

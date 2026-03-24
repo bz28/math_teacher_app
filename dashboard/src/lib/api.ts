@@ -37,6 +37,7 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
 export const api = {
   overview: () => request<OverviewData>("/admin/overview"),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
+  quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   sessions: (params?: Record<string, string>) => request<SessionsData>("/admin/sessions", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   login: async (email: string, password: string) => {
@@ -125,6 +126,31 @@ export interface SessionsData {
     mode: string;
     current_step: number;
     total_steps: number;
+    created_at: string;
+  }[];
+  total_count: number;
+}
+
+export interface QualityData {
+  summary: {
+    total: number;
+    passed: number;
+    pass_rate: number;
+    avg_correctness: number;
+    avg_optimality: number;
+    avg_clarity: number;
+    avg_flow: number;
+  };
+  scores: {
+    id: string;
+    session_id: string;
+    problem: string;
+    correctness: number;
+    optimality: number;
+    clarity: number;
+    flow: number;
+    passed: boolean;
+    issues: string | null;
     created_at: string;
   }[];
   total_count: number;
