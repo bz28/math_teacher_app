@@ -98,6 +98,7 @@ async def auth_token(client: AsyncClient) -> str:
     resp = await client.post("/v1/auth/register", json={
         "email": f"session_test_{uuid.uuid4().hex[:8]}@test.com",
         "password": "TestPass123",
+        "name": "Test",
         "grade_level": 8,
     })
     assert resp.status_code == 201

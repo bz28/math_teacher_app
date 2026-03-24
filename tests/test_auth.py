@@ -8,7 +8,7 @@ ME_URL = "/v1/auth/me"
 
 
 def _user(email: str = "test@example.com", password: str = "StrongPass1", grade_level: int = 8) -> dict:
-    return {"email": email, "password": password, "grade_level": grade_level}
+    return {"email": email, "password": password, "name": "Test", "grade_level": grade_level}
 
 
 @pytest.mark.asyncio
@@ -110,6 +110,7 @@ async def test_me_with_valid_token(client: AsyncClient) -> None:
     resp = await client.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     assert resp.json()["email"] == "me@test.com"
+    assert resp.json()["name"] == "Test"
     assert resp.json()["grade_level"] == 8
 
 
