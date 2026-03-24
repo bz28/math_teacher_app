@@ -211,10 +211,11 @@ export const login = (email: string, password: string) =>
 export const checkEmail = (email: string) =>
   apiPost<{ available: boolean }>("/auth/check-email", { email });
 
-export const register = (email: string, password: string, gradeLevel: number) =>
+export const register = (email: string, password: string, name: string, gradeLevel: number) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/register", {
     email,
     password,
+    name,
     grade_level: gradeLevel,
   });
 
