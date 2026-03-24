@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.practice import generate_practice_problems
 from api.core.session import (
     RateLimitError,
     SessionError,
@@ -13,7 +14,6 @@ from api.core.session import (
     get_owned_session,
     respond_to_step,
 )
-from api.core.step_decomposition import generate_similar_problem
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
@@ -153,16 +153,18 @@ async def similar(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
 
     try:
-        problem = await generate_similar_problem(
-            session.problem, session.steps, user_id=str(current_user.user_id),
+        problems = await generate_practice_problems(
+            session.problem, 1, steps=session.steps,
+            user_id=str(current_user.user_id),
         )
+        similar = problems[0]["question"] if problems else session.problem
     except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate similar problem",
         )
-    return {"similar_problem": problem}
+    return {"similar_problem": similar}
 
 
 @router.post("/mock-test", status_code=status.HTTP_201_CREATED)

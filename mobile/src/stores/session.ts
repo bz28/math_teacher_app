@@ -461,8 +461,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         flaggedQuestions.map((q) => generatePracticeProblems(q, 1)),
       );
       const similarProblems: PracticeProblem[] = results.map((r) => {
-        const similar = r.problems[1] ?? r.problems[0];
-        return { question: similar.question, answer: similar.answer };
+        return r.problems[0];
       });
 
       set({
@@ -589,8 +588,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       );
       const practiceProblemsList: PracticeProblem[] = results.map((r) => {
         // Use the generated similar problem (index 1), fall back to original (index 0)
-        const similar = r.problems[1] ?? r.problems[0];
-        return { question: similar.question, answer: similar.answer };
+        return r.problems[0];
       });
 
       set({
