@@ -56,7 +56,11 @@ Look at the student's handwritten work in the image and for each reference step:
 5. If their work is illegible for a step, mark it as "unclear"
 
 Return ONLY valid JSON:
-{{"steps": [{{"step_description": "...", "status": "correct|error|skipped|suboptimal|unclear", "student_work": "what they wrote", "feedback": "..."}}], "summary": "One-line teaser for summary screen", "has_issues": true/false, "overall_feedback": "Brief overall assessment"}}"""
+{{"steps": [{{"step_description": "...", "status": "correct|error|skipped|suboptimal|unclear",
+"student_work": "what they wrote", "feedback": "..."}}],
+"summary": "One-line teaser for summary screen",
+"has_issues": true/false,
+"overall_feedback": "Brief overall assessment"}}"""
 
 
 def _validate_image(image_base64: str) -> str:
