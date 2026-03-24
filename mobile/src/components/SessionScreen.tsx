@@ -36,7 +36,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
-  const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean } | null>(null);
+  const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean; pending: boolean } | null>(null);
   const {
     session,
     phase,
@@ -222,8 +222,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
               <View style={styles.choicesContainer}>
                 {currentStep.choices.map((choice, i) => {
                   const isSelected = selectedChoice?.index === i;
-                  const showCorrect = selectedChoice && choice.trim().toLowerCase() === (currentStep.final_answer ?? "").trim().toLowerCase();
-                  const showWrong = isSelected && selectedChoice && !selectedChoice.correct;
+                  const isPending = selectedChoice?.pending ?? false;
+                  const showCorrect = !isPending && selectedChoice?.correct && isSelected;
+                  const showWrong = !isPending && isSelected && selectedChoice && !selectedChoice.correct;
 
                   return (
                     <AnimatedPressable
@@ -235,14 +236,16 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                         showCorrect && styles.choiceCorrect,
                         showWrong && styles.choiceWrong,
                       ]}
-                      onPress={() => {
+                      onPress={async () => {
                         if (selectedChoice) return;
-                        const isCorrect = choice.trim().toLowerCase() === (currentStep.final_answer ?? "").trim().toLowerCase();
-                        setSelectedChoice({ index: i, correct: isCorrect });
+                        setSelectedChoice({ index: i, correct: false, pending: true });
+                        await submitAnswer(choice);
+                        const { lastResponse: resp } = useSessionStore.getState();
+                        const isCorrect = resp?.is_correct ?? false;
+                        setSelectedChoice({ index: i, correct: isCorrect, pending: false });
                         Haptics.notificationAsync(
                           isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
                         );
-                        submitAnswer(choice);
                         if (!isCorrect) {
                           setTimeout(() => setSelectedChoice(null), 1200);
                         }
