@@ -237,3 +237,31 @@ export const extractProblemsFromImage = (imageBase64: string) =>
     image_base64: imageBase64,
   }, LLM_TIMEOUT_MS);
 
+// Work submission API
+export interface WorkDiagnosisStep {
+  step_description: string;
+  status: "correct" | "error" | "skipped" | "suboptimal" | "unclear";
+  student_work: string | null;
+  feedback: string | null;
+}
+
+export interface WorkDiagnosis {
+  id: string;
+  steps: WorkDiagnosisStep[];
+  summary: string;
+  has_issues: boolean;
+  overall_feedback: string;
+}
+
+export interface SubmitWorkResponse {
+  id: string;
+  diagnosis: WorkDiagnosis | null;
+}
+
+export const submitWork = (imageBase64: string, sessionId: string, problemIndex: number) =>
+  apiPost<SubmitWorkResponse>("/work/submit", {
+    image_base64: imageBase64,
+    session_id: sessionId,
+    problem_index: problemIndex,
+  }, LLM_TIMEOUT_MS);
+
