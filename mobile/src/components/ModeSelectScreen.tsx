@@ -1,9 +1,10 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 export type Mode = "learn" | "practice" | "mock_test";
 
@@ -14,22 +15,31 @@ interface ModeSelectScreenProps {
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
-const MODES: { id: Mode; label: string; icon: IoniconsName; iconColor: string; iconBg: string; description: string }[] = [
+interface ModeConfig {
+  id: Mode;
+  label: string;
+  icon: IoniconsName;
+  gradient: readonly [string, string];
+  description: string;
+  features: string[];
+}
+
+const MODES: ModeConfig[] = [
   {
     id: "learn",
     label: "Learn",
-    icon: "book-outline",
-    iconColor: colors.primary,
-    iconBg: colors.primaryBg,
+    icon: "book",
+    gradient: gradients.primary,
     description: "Step-by-step guided learning",
+    features: ["AI breaks problems into steps", "Ask questions anytime", "Practice similar problems after"],
   },
   {
     id: "mock_test",
     label: "Mock Test",
-    icon: "document-text-outline",
-    iconColor: colors.warningDark,
-    iconBg: colors.warningBg,
+    icon: "document-text",
+    gradient: gradients.warning,
     description: "Use your own problems or generate an exam",
+    features: ["Timed or untimed exams", "Generate similar questions", "Review and learn flagged problems"],
   },
 ];
 
@@ -42,25 +52,36 @@ export function ModeSelectScreen({ onSelect, onBack }: ModeSelectScreenProps) {
       </AnimatedPressable>
 
       <View style={styles.header}>
-        <Text style={styles.title}>Choose a Mode</Text>
-        <Text style={styles.subtitle}>How would you like to study?</Text>
+        <Text style={styles.title}>How do you want{"\n"}to study?</Text>
       </View>
 
       <View style={styles.list}>
         {MODES.map((mode) => (
           <AnimatedPressable
             key={mode.id}
-            style={[styles.card, shadows.sm]}
+            style={[styles.card, shadows.md]}
             onPress={() => onSelect(mode.id)}
+            scaleDown={0.97}
           >
-            <View style={[styles.iconWrap, { backgroundColor: mode.iconBg }]}>
-              <Ionicons name={mode.icon} size={24} color={mode.iconColor} />
+            <LinearGradient
+              colors={mode.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.cardGradientHeader}
+            >
+              <Ionicons name={mode.icon} size={24} color={colors.white} />
+              <Text style={styles.cardLabel}>{mode.label}</Text>
+              <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.7)" style={styles.cardArrow} />
+            </LinearGradient>
+            <View style={styles.cardBody}>
+              <Text style={styles.cardDesc}>{mode.description}</Text>
+              {mode.features.map((feature, i) => (
+                <View key={i} style={styles.featureRow}>
+                  <Ionicons name="checkmark" size={14} color={colors.success} />
+                  <Text style={styles.featureText}>{feature}</Text>
+                </View>
+              ))}
             </View>
-            <View style={styles.cardText}>
-              <Text style={styles.label}>{mode.label}</Text>
-              <Text style={styles.description}>{mode.description}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </AnimatedPressable>
         ))}
       </View>
@@ -83,38 +104,61 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   backText: { color: colors.primary, ...typography.bodyBold },
+
   header: {
-    marginBottom: spacing.xxl + 4,
+    marginBottom: spacing.xxl,
   },
   title: {
-    ...typography.title,
+    ...typography.hero,
     color: colors.text,
-    marginBottom: spacing.sm,
   },
-  subtitle: {
-    ...typography.body,
-    fontSize: 15,
-    color: colors.textSecondary,
+
+  list: {
+    gap: spacing.lg,
   },
-  list: { gap: 14 },
+
+  // Mode cards
   card: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
+    borderRadius: radii.xl,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    overflow: "hidden",
   },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.md,
-    justifyContent: "center",
+  cardGradientHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    marginRight: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.md,
   },
-  cardText: { flex: 1 },
-  label: { ...typography.bodyBold, fontSize: 17, color: colors.text, marginBottom: spacing.xs },
-  description: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
+  cardLabel: {
+    ...typography.heading,
+    color: colors.white,
+    flex: 1,
+  },
+  cardArrow: {
+    marginLeft: "auto",
+  },
+  cardBody: {
+    padding: spacing.xl,
+    paddingTop: spacing.lg,
+  },
+  cardDesc: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginBottom: spacing.md,
+  },
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  featureText: {
+    ...typography.caption,
+    color: colors.text,
+    fontSize: 13,
+  },
 });
