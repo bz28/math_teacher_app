@@ -8,9 +8,11 @@ import {
   getSession,
   getSimilarProblem,
   respondToStep,
+  submitWork,
   type PracticeProblem,
   type SessionData,
   type StepResponse,
+  type WorkDiagnosis,
 } from "../services/api";
 
 type SessionPhase =
@@ -45,6 +47,8 @@ interface PracticeBatch {
   skippedProblems: string[];
   /** Number of answer checks still in flight */
   pendingChecks: number;
+  /** Diagnosis results from submitted work photos, parallel to problems array */
+  workSubmissions: (WorkDiagnosis | null)[];
 }
 
 interface LearnQueue {
@@ -70,6 +74,10 @@ export interface MockTest {
   startedAt: number;
   submittedAt: number | null;
   results: MockTestResult[] | null;
+  /** Base64 photos held locally until test submit */
+  workImages: (string | null)[];
+  /** Diagnosis results from submitted work photos, parallel to questions array */
+  workSubmissions: (WorkDiagnosis | null)[];
 }
 
 interface SessionState {
@@ -117,6 +125,8 @@ interface SessionState {
   navigateMockQuestion: (index: number) => void;
   toggleMockTestFlag: (index: number) => void;
   submitMockTest: () => Promise<void>;
+  attachWorkImage: (index: number, imageBase64: string) => void;
+  submitPracticeWork: (index: number, imageBase64: string) => void;
   reset: () => void;
 }
 
@@ -198,6 +208,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           totalCount: 1 + similarCount,
           skippedProblems: [],
           pendingChecks: 0,
+          workSubmissions: [null],
         },
         phase: "awaiting_input",
       });
@@ -215,13 +226,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
                 (p) => p.question !== firstProblem.question,
               ),
             ];
+            const addedCount = newProblems.length - practiceBatch.problems.length;
             set({
               practiceBatch: {
                 ...practiceBatch,
                 problems: newProblems,
                 flags: [
                   ...practiceBatch.flags,
-                  ...new Array(newProblems.length - practiceBatch.problems.length).fill(false),
+                  ...new Array(addedCount).fill(false),
+                ],
+                workSubmissions: [
+                  ...practiceBatch.workSubmissions,
+                  ...new Array(addedCount).fill(null),
                 ],
                 loadingMore: false,
               },
@@ -260,6 +276,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           totalCount: problems.length,
           skippedProblems: [],
           pendingChecks: 0,
+          workSubmissions: [null],
         },
         phase: "awaiting_input",
       });
@@ -297,6 +314,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
                 flags: [
                   ...practiceBatch.flags,
                   ...new Array(remaining.length).fill(false),
+                ],
+                workSubmissions: [
+                  ...practiceBatch.workSubmissions,
+                  ...new Array(remaining.length).fill(null),
                 ],
                 totalCount: practiceBatch.problems.length + remaining.length,
                 skippedProblems: skipped,
@@ -459,6 +480,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           totalCount: similarProblems.length,
           skippedProblems: [],
           pendingChecks: 0,
+          workSubmissions: new Array(similarProblems.length).fill(null),
         },
         phase: "awaiting_input",
         error: null,
@@ -552,6 +574,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           totalCount: practiceProblemsList.length,
           skippedProblems: [],
           pendingChecks: 0,
+          workSubmissions: new Array(practiceProblemsList.length).fill(null),
         },
         phase: "awaiting_input",
       });
@@ -678,6 +701,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           startedAt: Date.now(),
           submittedAt: null,
           results: null,
+          workImages: new Array(questions.length).fill(null),
+          workSubmissions: new Array(questions.length).fill(null),
         },
         phase: "mock_test_active",
       });
@@ -760,6 +785,51 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         mockTest: { ...currentMockTest, results, flags: newFlags, submittedAt: Date.now() },
         phase: "mock_test_summary",
       });
+
+      // Fire work diagnosis for attached images (background, capped at 3 concurrent)
+      if (currentMockTest.sessionId) {
+        const imagesToDiagnose = currentMockTest.workImages
+          .map((img, i) => img ? { index: i, image: img } : null)
+          .filter((x): x is { index: number; image: string } => x !== null);
+
+        if (imagesToDiagnose.length > 0) {
+          const CONCURRENCY = 3;
+          const processChunk = async (chunk: typeof imagesToDiagnose) => {
+            await Promise.allSettled(
+              chunk.map(async ({ index, image }) => {
+                try {
+                  const resp = await submitWork(image, currentMockTest.sessionId!, index);
+                  const mt = get().mockTest;
+                  if (!mt || !resp.diagnosis) return;
+
+                  const diagnosis: WorkDiagnosis = {
+                    id: resp.id,
+                    steps: resp.diagnosis.steps,
+                    summary: resp.diagnosis.summary,
+                    has_issues: resp.diagnosis.has_issues,
+                    overall_feedback: resp.diagnosis.overall_feedback,
+                  };
+
+                  const newSubs = [...mt.workSubmissions];
+                  newSubs[index] = diagnosis;
+                  const updatedFlags = [...mt.flags];
+                  if (diagnosis.has_issues && !updatedFlags[index]) {
+                    updatedFlags[index] = true;
+                  }
+                  set({ mockTest: { ...mt, workSubmissions: newSubs, flags: updatedFlags } });
+                } catch {
+                  // Diagnosis failed silently
+                }
+              }),
+            );
+          };
+
+          // Process in chunks of CONCURRENCY
+          for (let i = 0; i < imagesToDiagnose.length; i += CONCURRENCY) {
+            await processChunk(imagesToDiagnose.slice(i, i + CONCURRENCY));
+          }
+        }
+      }
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
@@ -777,6 +847,54 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
+  },
+
+  attachWorkImage: (index, imageBase64) => {
+    const { mockTest } = get();
+    if (!mockTest) return;
+    const newImages = [...mockTest.workImages];
+    newImages[index] = imageBase64;
+    set({ mockTest: { ...mockTest, workImages: newImages } });
+  },
+
+  submitPracticeWork: (index, imageBase64) => {
+    const { practiceBatch, session } = get();
+    if (!practiceBatch || !session) return;
+
+    // Fire diagnosis in background
+    submitWork(imageBase64, session.id, index)
+      .then((resp) => {
+        const { practiceBatch: batch } = get();
+        if (!batch || !resp.diagnosis) return;
+
+        const diagnosis: WorkDiagnosis = {
+          id: resp.id,
+          steps: resp.diagnosis.steps,
+          summary: resp.diagnosis.summary,
+          has_issues: resp.diagnosis.has_issues,
+          overall_feedback: resp.diagnosis.overall_feedback,
+        };
+
+        const newSubmissions = [...batch.workSubmissions];
+        newSubmissions[index] = diagnosis;
+
+        // Auto-flag if issues detected
+        const newFlags = [...batch.flags];
+        if (diagnosis.has_issues && !newFlags[index]) {
+          newFlags[index] = true;
+        }
+
+        set({
+          practiceBatch: {
+            ...batch,
+            workSubmissions: newSubmissions,
+            flags: newFlags,
+          },
+        });
+      })
+      .catch(() => {
+        // Diagnosis failed silently — don't block the flow
+      });
   },
 
   reset: () => set(initialState),
