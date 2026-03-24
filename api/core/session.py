@@ -71,32 +71,22 @@ async def create_session(
     if mode == SessionMode.PRACTICE:
         # Lightweight: just solve for the answer, no step decomposition
         answer, problem_type = await solve_problem(problem, user_id=str(user_id))
-        steps_data = [
-            {
-                "description": "Final answer",
-                "operation": "solve",
-                "before": problem,
-                "after": answer,
-            }
+        steps_data: list[dict[str, Any]] = [
+            {"description": "Final answer", "final_answer": answer},
         ]
     else:
         # Full decomposition for learn mode
         decomposition = await decompose_problem(problem, user_id=str(user_id))
         problem_type = decomposition.problem_type
-        steps_data = []
-        for i, s in enumerate(decomposition.steps):
-            step_dict: dict[str, Any] = {
-                "description": s.description,
-                "operation": s.operation,
-                "before": s.before,
-                "after": s.after,
-            }
-            # Attach shuffled multiple-choice options to the final step
-            if i == len(decomposition.steps) - 1 and decomposition.distractors:
-                choices = [s.after] + decomposition.distractors[:3]
-                random.shuffle(choices)
-                step_dict["choices"] = choices
-            steps_data.append(step_dict)
+        steps_data = [{"description": s} for s in decomposition.steps]
+
+        # Attach final_answer and shuffled multiple-choice to the last step
+        last = steps_data[-1]
+        last["final_answer"] = decomposition.final_answer
+        if decomposition.distractors:
+            choices = [decomposition.final_answer] + decomposition.distractors[:3]
+            random.shuffle(choices)
+            last["choices"] = choices
 
     session = Session(
         user_id=user_id,
@@ -211,7 +201,7 @@ async def _respond_practice_mode(
 ) -> StepResponse:
     """Handle a student response in practice mode (final-answer-only)."""
     final_step = session.steps[-1]
-    correct_answer = final_step["after"]
+    correct_answer = final_step["final_answer"]
 
     _add_exchange(session, "student", student_response)
 
@@ -289,7 +279,7 @@ async def _respond_learn_mode(
     if request_advance:
         raise SessionError("You must provide an answer for the final step")
 
-    correct_answer = step_data["after"]
+    correct_answer = step_data["final_answer"]
     _add_exchange(session, "student", student_response)
 
     # Direct string match (multiple-choice: student selects an exact option)

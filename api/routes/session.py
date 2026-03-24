@@ -48,7 +48,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
             and is_final
             and session.status != SessionStatus.COMPLETED
         ):
-            detail.after = ""
+            detail.final_answer = ""
         steps.append(detail)
 
     return SessionResponse(

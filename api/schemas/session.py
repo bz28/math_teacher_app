@@ -30,9 +30,7 @@ class RespondRequest(BaseModel):
 
 class StepDetail(BaseModel):
     description: str
-    operation: str
-    before: str
-    after: str
+    final_answer: str | None = None
     choices: list[str] | None = None
 
 

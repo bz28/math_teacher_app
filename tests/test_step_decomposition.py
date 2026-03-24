@@ -8,55 +8,56 @@ import pytest
 
 from api.core.step_decomposition import (
     Decomposition,
-    Step,
-    _parse_steps,
+    _parse_decomposition,
 )
 
 
-class TestParseSteps:
-    def test_parse_steps_dict(self) -> None:
+class TestParseDecomposition:
+    def test_parse_steps(self) -> None:
         data = {
             "steps": [
-                {"description": "Subtract 6", "operation": "subtraction", "before": "2x + 6 = 12", "after": "2x = 6"},
-                {"description": "Divide by 2", "operation": "division", "before": "2x = 6", "after": "x = 3"},
+                "Subtract 6 from both sides to get 2x = 6",
+                "Divide both sides by 2 to get x = 3",
             ],
+            "final_answer": "x = 3",
         }
-        steps, distractors = _parse_steps(data)
+        steps, final_answer, distractors = _parse_decomposition(data)
         assert len(steps) == 2
-        assert steps[0].description == "Subtract 6"
-        assert steps[1].after == "x = 3"
+        assert steps[0] == "Subtract 6 from both sides to get 2x = 6"
+        assert final_answer == "x = 3"
         assert distractors == []
 
-    def test_parse_steps_with_distractors(self) -> None:
+    def test_parse_with_distractors(self) -> None:
         data = {
-            "steps": [{"description": "d", "operation": "o", "before": "a", "after": "x = 3"}],
+            "steps": ["Solve to get x = 3"],
+            "final_answer": "x = 3",
             "distractors": ["x = 2", "x = 4", "x = -3"],
         }
-        steps, distractors = _parse_steps(data)
+        steps, final_answer, distractors = _parse_decomposition(data)
         assert len(steps) == 1
-        assert steps[0].after == "x = 3"
+        assert final_answer == "x = 3"
         assert distractors == ["x = 2", "x = 4", "x = -3"]
 
-    def test_parse_steps_invalid_type_raises(self) -> None:
+    def test_parse_invalid_type_raises(self) -> None:
         with pytest.raises((KeyError, TypeError, ValueError)):
-            _parse_steps({"steps": "not a list"})
+            _parse_decomposition({"steps": "not a list", "final_answer": "x"})
 
-    def test_parse_steps_missing_key_raises(self) -> None:
+    def test_parse_missing_key_raises(self) -> None:
         with pytest.raises(KeyError):
-            _parse_steps({})
+            _parse_decomposition({})
 
 
 class TestDecompositionDataclass:
     def test_decomposition_fields(self) -> None:
         d = Decomposition(
             problem="2x + 6 = 12",
-            steps=[Step("sub 6", "subtraction", "2x+6=12", "2x=6")],
+            steps=["Subtract 6 from both sides", "Divide by 2"],
             final_answer="x = 3",
             problem_type="linear",
             distractors=["x = 2", "x = 4", "x = -3"],
         )
         assert d.problem_type == "linear"
-        assert len(d.steps) == 1
+        assert len(d.steps) == 2
 
 
 # --- Integration tests (call real Claude API) ---

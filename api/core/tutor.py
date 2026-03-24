@@ -78,7 +78,7 @@ You are a math tutor helping a student understand a specific step in solving a p
 
 You will receive:
 - The problem being solved
-- The current step the student is looking at (description, before, after)
+- The current step description
 - The conversation history so far
 - The student's question
 
@@ -160,7 +160,7 @@ async def converse(
 ) -> ConverseResult:
     """Evaluate a student's free-form input against the full problem context."""
     steps_text = "\n".join(
-        f"  Step {i}: {s['description']} | {s['before']} → {s['after']}"
+        f"  Step {i}: {s['description']}"
         for i, s in enumerate(steps)
     )
     history_text = "\n".join(
@@ -211,10 +211,7 @@ async def step_chat(
 
     prompt = (
         f"Problem: {problem}\n\n"
-        f"Current step:\n"
-        f"  Description: {step['description']}\n"
-        f"  Before: {step['before']}\n"
-        f"  After: {step['after']}\n\n"
+        f"Current step: {step['description']}\n\n"
         f"Conversation so far:\n{history_text}\n\n"
         f"Student's question: {student_input}"
     )
@@ -235,7 +232,7 @@ async def completed_chat(
 ) -> StepChatResult:
     """Answer follow-up questions on a completed problem. Uses Haiku for cost."""
     steps_text = "\n".join(
-        f"  Step {i}: {s['description']} | {s['before']} → {s['after']}"
+        f"  Step {i}: {s['description']}"
         for i, s in enumerate(steps)
     )
     history_text = "\n".join(

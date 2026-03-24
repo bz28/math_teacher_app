@@ -8,73 +8,58 @@ from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a math tutor generating step-by-step solutions for students.
+SYSTEM_PROMPT = (
+    "You are a worldclass math professor with expertise in breaking down "
+    "math problems into easy to understand, coherent steps, making even the most "
+    "complex problems trivial to understand to an elementary student.\n\n"
 
-Given a math problem, produce a JSON array of solution steps. Each step must have:
-- "description": a SPECIFIC instruction telling the student exactly what to do, including the actual
-  numbers/terms involved (e.g., "Subtract 6 from both sides", "Divide both sides by 3",
-  "Apply the power rule to 14x^2: bring down the exponent and reduce by 1 to get 28x").
-  NEVER use vague words like "Evaluate", "Simplify", or "Calculate" alone.
-- "operation": the mathematical operation (e.g., "subtraction", "division", "power rule")
-- "before": the full expression/equation state before this step (must be valid math, e.g., "3x + 6 = 18")
-- "after": the full expression/equation state after this step (must be valid math, e.g., "3x = 12")
+    "Before solving, consider if there is a simpler or faster approach than "
+    "the obvious one. Prefer elegant shortcuts over mechanical procedures. "
 
-Rules:
-- Each step should be ONE mathematical operation (don't combine multiple operations)
-- Steps should be pedagogically ordered — the way a teacher would explain on a whiteboard
-- The "before" and "after" fields must ALWAYS contain complete mathematical expressions
-  or equations, never words like "equation" or "answer"
-- The final step's "after" must be the simplified solution
-- Use standard math notation (e.g., x^2 not x², use * for multiplication)
-- For word problems, the first step should translate to an equation: description says what
-  variables represent, "before" is the word problem summary, "after" is the equation
-- Only include steps that directly answer the problem — stop once you reach the answer.
-  Do NOT add extra steps (factoring, rearranging, verifying) unless the problem asks for it.
-- Every step must make meaningful progress toward the answer. If a step makes the expression
-  more complex (e.g., introducing fractions where there were none), it is probably wrong.
+    "Always use the first step as a breakdown of the problem in plain english, "
+    "provide a generalization on how to approach the problem, "
+    "including what to look out for. "
+    "If the solution is not obvious or straightforward to an elementary student "
+    "then explain how we knew to take this approach. "
+    "Every step should have a clear transition/logic to it, make sure to have "
+    "plain english to help the student understand the problem and solution better.\n\n"
+    "Do NOT include any mention of approaches that are not the final/optimal "
+    "solution. Those will only confuse the student.\n\n"
 
-Also include a top-level "distractors" array with exactly 3 plausible but WRONG final answers.
-Distractors should reflect common student mistakes (sign errors, arithmetic mistakes, forgetting a term).
-
-Respond with ONLY valid JSON in this format — no markdown, no explanation:
-{"steps": [<step objects>], "distractors": ["wrong1", "wrong2", "wrong3"]}"""
-
-
-@dataclass
-class Step:
-    description: str
-    operation: str
-    before: str
-    after: str
+    "Given a math problem, produce a JSON object with:\n"
+    '- "steps": an array of strings, each being a clear description of one step\n'
+    '- "final_answer": the final simplified answer\n'
+    '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
+    "Respond with ONLY valid JSON — no markdown, no explanation:\n"
+    '{"steps": ["step 1", "step 2", ...], "final_answer": "...", '
+    '"distractors": ["wrong1", "wrong2", "wrong3"]}'
+)
 
 
 @dataclass
 class Decomposition:
     problem: str
-    steps: list[Step]
+    steps: list[str]
     final_answer: str
     problem_type: str
     distractors: list[str]
 
 
-def _parse_steps(data: dict[str, object]) -> tuple[list[Step], list[str]]:
-    """Parse Claude's JSON response into Step objects and distractors."""
+def _parse_decomposition(data: dict[str, object]) -> tuple[list[str], str, list[str]]:
+    """Parse LLM JSON response into steps, final_answer, and distractors."""
     steps_data = data["steps"]
+    final_answer = data.get("final_answer", "")
     distractors = data.get("distractors", [])
 
     if not isinstance(steps_data, list):
         raise ValueError("Expected 'steps' to be a list")
 
-    steps = [
-        Step(
-            description=s["description"],
-            operation=s["operation"],
-            before=s["before"],
-            after=s["after"],
-        )
-        for s in steps_data
-    ]
-    return steps, list(distractors) if isinstance(distractors, list) else []
+    steps = [str(s) for s in steps_data]
+    return (
+        steps,
+        str(final_answer),
+        list(distractors) if isinstance(distractors, list) else [],
+    )
 
 
 _MATH_FUNCTION_NAMES = {"sin", "cos", "tan", "log", "ln", "abs", "max", "min", "mod", "gcd", "lcm", "sqrt"}
@@ -116,17 +101,32 @@ async def solve_problem(problem: str, *, user_id: str | None = None) -> tuple[st
     return str(data["answer"]), str(data.get("problem_type", "math"))
 
 
-async def generate_similar_problem(problem: str, *, user_id: str | None = None) -> str:
-    """Use Claude to generate a similar math problem with different numbers/context."""
+async def generate_similar_problem(
+    problem: str,
+    steps: list[dict[str, str]] | None = None,
+    *,
+    user_id: str | None = None,
+) -> str:
+    """Generate a similar math problem that uses the same solving approach."""
     system = (
-        "Generate a similar math problem with the same structure "
-        "but different numbers and context. Respond with ONLY valid JSON:\n"
+        "Generate a similar math problem that would be solved using the SAME "
+        "approach/method as the original. The student should be able to apply "
+        "the exact same steps to solve the new problem.\n\n"
+        "Respond with ONLY valid JSON:\n"
         '{"problem": "<the new problem text>"}'
     )
+    parts = [f"Original problem: {problem}"]
+    if steps:
+        steps_text = "\n".join(
+            f"  Step {i + 1}: {s['description']}" for i, s in enumerate(steps)
+        )
+        parts.append(f"\nApproach used:\n{steps_text}")
+    parts.append("\nGenerate a new problem solvable with this same approach.")
+
     try:
         data = await call_claude_json(
             system,
-            f"Original problem: {problem}",
+            "\n".join(parts),
             mode=LLMMode.GENERATE_SIMILAR,
             model=MODEL_REASON,
             max_tokens=256,
@@ -152,14 +152,16 @@ async def decompose_problem(problem: str, *, user_id: str | None = None) -> Deco
         user_id=user_id,
     )
 
-    steps, distractors = _parse_steps(data)
+    steps, final_answer, distractors = _parse_decomposition(data)
     if not steps:
         raise RuntimeError("Empty steps returned from decomposition")
+    if not final_answer:
+        raise RuntimeError("No final_answer returned from decomposition")
 
     decomposition = Decomposition(
         problem=problem,
         steps=steps,
-        final_answer=steps[-1].after,
+        final_answer=final_answer,
         problem_type=problem_type,
         distractors=distractors,
     )
