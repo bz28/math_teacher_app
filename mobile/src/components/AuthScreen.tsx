@@ -48,7 +48,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setError(null);
     setLoading(true);
     try {
-      const resp = await login(email, password);
+      const resp = await login(email.trim().toLowerCase(), password);
       await saveTokens(resp.access_token, resp.refresh_token);
       onAuth();
     } catch (e) {
@@ -81,8 +81,9 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
     setLoading(true);
     try {
-      await checkEmail(email);
-      const resp = await register(email, password, name.trim(), selectedGrade!.value);
+      const normalizedEmail = email.trim().toLowerCase();
+      await checkEmail(normalizedEmail);
+      const resp = await register(normalizedEmail, password, name.trim(), selectedGrade!.value);
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
       onAuth();

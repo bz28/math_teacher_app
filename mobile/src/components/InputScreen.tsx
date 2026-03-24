@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -195,7 +196,9 @@ export function InputScreen({
         </View>
 
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Add Problems</Text>
+          <Text style={styles.headerTitle}>
+            {mode === "learn" ? "What do you need\nhelp with?" : "Build your exam"}
+          </Text>
           <View style={[styles.modeChip, { backgroundColor: modeBg }]}>
             <Ionicons name={modeIcon} size={16} color={modeColor} style={{ marginRight: spacing.xs }} />
             <Text style={[styles.modeChipText, { color: modeColor }]}>{modeLabel}</Text>
@@ -206,30 +209,40 @@ export function InputScreen({
         <View style={styles.captureRow}>
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
-              style={[styles.captureCard, shadows.sm, extracting && styles.captureCardDisabled]}
+              style={[extracting && styles.captureCardDisabled]}
               onPress={() => pickImage("camera")}
               disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
               scaleDown={0.96}
             >
-              <View style={[styles.captureIconWrap, { backgroundColor: modeBg }]}>
-                <Ionicons name="camera" size={24} color={extracting ? colors.textMuted : modeColor} />
-              </View>
-              <Text style={styles.captureLabel}>Take a photo</Text>
-              <Text style={styles.captureHint}>Snap your homework{"\n"}or textbook</Text>
+              <LinearGradient
+                colors={gradients[modeGradient]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.captureCard}
+              >
+                <Ionicons name="camera" size={26} color={colors.white} />
+                <Text style={styles.captureLabel}>Take a photo</Text>
+                <Text style={styles.captureHint}>Snap your homework{"\n"}or textbook</Text>
+              </LinearGradient>
             </AnimatedPressable>
           </View>
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
-              style={[styles.captureCard, shadows.sm, extracting && styles.captureCardDisabled]}
+              style={[extracting && styles.captureCardDisabled]}
               onPress={() => pickImage("gallery")}
               disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
               scaleDown={0.96}
             >
-              <View style={[styles.captureIconWrap, { backgroundColor: modeBg }]}>
-                <Ionicons name="images" size={24} color={extracting ? colors.textMuted : modeColor} />
-              </View>
-              <Text style={styles.captureLabel}>Choose photo</Text>
-              <Text style={styles.captureHint}>Pick from your{"\n"}camera roll</Text>
+              <LinearGradient
+                colors={gradients[modeGradient]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.captureCard}
+              >
+                <Ionicons name="images" size={26} color={colors.white} />
+                <Text style={styles.captureLabel}>Choose photo</Text>
+                <Text style={styles.captureHint}>Pick from your{"\n"}camera roll</Text>
+              </LinearGradient>
             </AnimatedPressable>
           </View>
         </View>
@@ -294,7 +307,9 @@ export function InputScreen({
                 onPress={() => handleEditFromQueue(i)}
                 activeOpacity={0.6}
               >
-                <Text style={styles.queueIndex}>{i + 1}.</Text>
+                <View style={styles.queueBadge}>
+                  <Text style={styles.queueBadgeText}>{i + 1}</Text>
+                </View>
                 <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
                 <TouchableOpacity
                   onPress={() => handleRemoveFromQueue(i)}
@@ -476,11 +491,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   header: {
-    alignItems: "center",
     marginBottom: spacing.xl,
   },
   headerTitle: {
-    ...typography.title,
+    ...typography.hero,
     color: colors.text,
     marginBottom: spacing.md,
   },
@@ -505,33 +519,23 @@ const styles = StyleSheet.create({
   },
   captureCard: {
     alignItems: "center",
-    backgroundColor: colors.white,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xl,
     paddingHorizontal: spacing.sm,
   },
   captureCardDisabled: {
     opacity: 0.45,
   },
-  captureIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
   captureLabel: {
     ...typography.bodyBold,
-    color: colors.text,
+    color: colors.white,
     fontSize: 14,
+    marginTop: spacing.sm,
     marginBottom: 2,
   },
   captureHint: {
     ...typography.caption,
-    color: colors.textMuted,
+    color: "rgba(255,255,255,0.75)",
     textAlign: "center",
     fontSize: 11,
     lineHeight: 15,
@@ -623,9 +627,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
   },
-  queueIndex: {
+  queueBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primaryBg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  queueBadgeText: {
     ...typography.label,
-    color: colors.textMuted,
+    color: colors.primary,
+    fontSize: 12,
   },
   queueText: {
     ...typography.body,
