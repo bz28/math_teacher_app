@@ -379,11 +379,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const batch = get().practiceBatch;
       const correctAnswer = batch?.problems[answerIndex]?.answer;
       if (correctAnswer) return Promise.resolve(correctAnswer);
-      // Answer not resolved yet — wait for store update
-      return new Promise((resolve) => {
+      // Answer not resolved yet — wait for store update with timeout
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          unsub();
+          reject(new Error("Timed out waiting for correct answer"));
+        }, 30_000);
         const unsub = useSessionStore.subscribe((state) => {
           const ca = state.practiceBatch?.problems[answerIndex]?.answer;
-          if (ca) { unsub(); resolve(ca); }
+          if (ca) { clearTimeout(timeout); unsub(); resolve(ca); }
         });
       });
     };
@@ -870,13 +874,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
                   const mt = get().mockTest;
                   if (!mt || !resp.diagnosis) return;
 
-                  const diagnosis: WorkDiagnosis = {
-                    id: resp.id,
-                    steps: resp.diagnosis.steps,
-                    summary: resp.diagnosis.summary,
-                    has_issues: resp.diagnosis.has_issues,
-                    overall_feedback: resp.diagnosis.overall_feedback,
-                  };
+                  const diagnosis = resp.diagnosis;
 
                   const newSubs = [...mt.workSubmissions];
                   newSubs[index] = diagnosis;
@@ -939,13 +937,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const { practiceBatch: batch } = get();
         if (!batch || !resp.diagnosis) return;
 
-        const diagnosis: WorkDiagnosis = {
-          id: resp.id,
-          steps: resp.diagnosis.steps,
-          summary: resp.diagnosis.summary,
-          has_issues: resp.diagnosis.has_issues,
-          overall_feedback: resp.diagnosis.overall_feedback,
-        };
+        const diagnosis = resp.diagnosis;
 
         const newSubmissions = [...batch.workSubmissions];
         newSubmissions[index] = diagnosis;

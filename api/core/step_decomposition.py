@@ -145,7 +145,7 @@ async def decompose_problem(
     problem: str,
     *,
     user_id: str | None = None,
-    work_diagnosis: dict | None = None,
+    work_diagnosis: dict[str, object] | None = None,
 ) -> Decomposition:
     """Generate step-by-step decomposition for a math problem.
 

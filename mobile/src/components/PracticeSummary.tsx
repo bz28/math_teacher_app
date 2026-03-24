@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   ScrollView,
   Text,
   View,
@@ -7,6 +6,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
 import { colors, spacing } from "../theme";
@@ -96,18 +96,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
                   Correct: {r.correctAnswer}
                 </Text>
               )}
-              {workSubmissions[i] != null && (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs }}>
-                  <Ionicons name="camera" size={14} color={workSubmissions[i].has_issues ? colors.warningDark : colors.success} />
-                  <Text style={{
-                    fontSize: 12,
-                    fontStyle: "italic",
-                    color: workSubmissions[i].has_issues ? colors.warningDark : colors.success,
-                  }}>
-                    {workSubmissions[i].summary}
-                  </Text>
-                </View>
-              )}
+              <DiagnosisTeaser diagnosis={workSubmissions[i]} />
             </View>
             <AnimatedPressable
               style={[styles.flagToggle, flags[i] && styles.flagToggleActive]}

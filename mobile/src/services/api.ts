@@ -249,7 +249,6 @@ export interface WorkDiagnosisStep {
 }
 
 export interface WorkDiagnosis {
-  id: string;
   steps: WorkDiagnosisStep[];
   summary: string;
   has_issues: boolean;

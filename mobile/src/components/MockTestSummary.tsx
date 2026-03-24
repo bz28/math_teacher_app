@@ -1,7 +1,8 @@
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
 import { useSessionStore } from "../stores/session";
 import { colors, spacing, radii, typography, shadows } from "../theme";
@@ -162,26 +163,10 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                   </>
                 )}
               </View>
-              {/* Diagnosis teaser from submitted work */}
-              {workSubmissions[i] != null ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm }}>
-                  <Ionicons name="camera" size={14} color={workSubmissions[i].has_issues ? colors.warningDark : colors.success} />
-                  <Text style={{
-                    fontSize: 12,
-                    fontStyle: "italic",
-                    color: workSubmissions[i].has_issues ? colors.warningDark : colors.success,
-                  }}>
-                    {workSubmissions[i].summary}
-                  </Text>
-                </View>
-              ) : workImages[i] != null ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm }}>
-                  <ActivityIndicator size="small" color={colors.textMuted} />
-                  <Text style={{ fontSize: 12, fontStyle: "italic", color: colors.textMuted }}>
-                    Analyzing...
-                  </Text>
-                </View>
-              ) : null}
+              <DiagnosisTeaser
+                diagnosis={workSubmissions[i]}
+                analyzing={workImages[i] != null}
+              />
             </View>
           );
         })}
