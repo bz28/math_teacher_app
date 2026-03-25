@@ -17,8 +17,8 @@ from api.models.user import User
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _date_range(days: int) -> datetime:
-    return datetime.now(UTC) - timedelta(days=days)
+def _time_range(hours: int) -> datetime:
+    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ async def overview(
     now = datetime.now(UTC)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
-    week_ago = _date_range(7)
+    week_ago = _time_range(168)
 
     # Sessions today
     sessions_today = (await db.execute(
@@ -139,7 +139,7 @@ async def overview(
 
 @router.get("/llm-calls")
 async def llm_calls(
-    days: int = Query(default=7, ge=1, le=90),
+    hours: int = Query(default=168, ge=1, le=2160),
     function: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
@@ -147,7 +147,7 @@ async def llm_calls(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     # Build base filter conditions
     base_filters = [LLMCall.created_at >= since]
@@ -334,14 +334,14 @@ async def llm_calls(
 
 @router.get("/quality")
 async def quality_scores(
-    days: int = Query(default=7, ge=1, le=90),
+    hours: int = Query(default=168, ge=1, le=2160),
     only_failed: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     base_filters = [QualityScore.created_at >= since]
     if only_failed:
@@ -408,13 +408,13 @@ async def quality_scores(
 
 @router.get("/sessions")
 async def sessions(
-    days: int = Query(default=30, ge=1, le=90),
+    hours: int = Query(default=720, ge=1, le=2160),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     # Completion rate over time (by day)
     completion_by_day = (await db.execute(
@@ -552,12 +552,12 @@ async def sessions(
 
 @router.get("/users")
 async def users(
-    days: int = Query(default=30, ge=1, le=90),
+    hours: int = Query(default=720, ge=1, le=2160),
     sort_by: str = Query(default="total_cost", pattern=r"^(total_cost|session_count|last_active|name)$"),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     # Total users
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
@@ -565,7 +565,7 @@ async def users(
     # Active users (7d)
     active_7d = (await db.execute(
         select(func.count(func.distinct(Session.user_id)))
-        .where(Session.created_at >= _date_range(7))
+        .where(Session.created_at >= _time_range(168))
     )).scalar() or 0
 
     # Total spend (all users, in period)

@@ -8,11 +8,11 @@ import StatCard from "../components/StatCard";
 
 export default function Sessions() {
   const [data, setData] = useState<SessionsData | null>(null);
-  const [days, setDays] = useState("30");
+  const [hours, setHours] = useState("168");
 
   useEffect(() => {
-    api.sessions({ days }).then(setData);
-  }, [days]);
+    api.sessions({ hours }).then(setData);
+  }, [hours]);
 
   if (!data) return <p>Loading...</p>;
 
@@ -21,11 +21,12 @@ export default function Sessions() {
       <h1>Sessions</h1>
 
       <div className="filters">
-        <select value={days} onChange={(e) => setDays(e.target.value)}>
-          <option value="7">Last 7 days</option>
-          <option value="14">Last 14 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
+        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+          <option value="1">Last hour</option>
+          <option value="6">Last 6 hours</option>
+          <option value="24">Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+          <option value="720">Last 30 days</option>
         </select>
       </div>
 
