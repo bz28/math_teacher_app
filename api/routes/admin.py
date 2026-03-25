@@ -11,7 +11,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.quality_score import QualityScore
-from api.models.session import Session, SessionStatus
+from api.models.session import Session
 from api.models.user import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])
