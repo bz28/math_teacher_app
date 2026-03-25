@@ -193,12 +193,16 @@ async def llm_calls(
         .order_by("day")
     )).all()
 
-    # Recent calls (paginated)
-    calls_query = select(LLMCall).where(*base_filters)
+    # Recent calls (paginated) — join user info
+    calls_query = (
+        select(LLMCall, User.email.label("user_email"), User.name.label("user_name"))
+        .outerjoin(User, User.id == LLMCall.user_id)
+        .where(*base_filters)
+    )
     if function:
         calls_query = calls_query.where(LLMCall.function == function)
     calls_query = calls_query.order_by(LLMCall.created_at.desc()).offset(offset).limit(limit)
-    calls = (await db.execute(calls_query)).scalars().all()
+    calls = (await db.execute(calls_query)).all()
 
     total_query = select(func.count()).select_from(LLMCall).where(*base_filters)
     if function:
@@ -310,9 +314,10 @@ async def llm_calls(
                 "output_text": c.output_text,
                 "session_id": str(c.session_id) if c.session_id else None,
                 "user_id": str(c.user_id) if c.user_id else None,
+                "user_name": user_name or user_email or None,
                 "created_at": c.created_at.isoformat(),
             }
-            for c in calls
+            for c, user_email, user_name in calls
         ],
         "total_count": total_count,
         "users": [

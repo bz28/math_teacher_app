@@ -28,7 +28,7 @@ export default function LLMCalls() {
     <div>
       <h1>LLM Calls</h1>
 
-      <div className="filters">
+      <div className="filters" style={{ display: "flex", gap: 12 }}>
         <select value={days} onChange={(e) => setDays(e.target.value)}>
           <option value="7">Last 7 days</option>
           <option value="14">Last 14 days</option>
@@ -41,6 +41,11 @@ export default function LLMCalls() {
             <option key={u.id} value={u.id}>{u.email}</option>
           ))}
         </select>
+        {userFilter && (
+          <button className="filter-badge" onClick={() => setUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
+            Filtered by user ✕
+          </button>
+        )}
       </div>
 
       <div className="stat-grid">
@@ -177,6 +182,7 @@ export default function LLMCalls() {
               <th></th>
               <th>Function</th>
               <th>Model</th>
+              <th>User</th>
               <th>Tokens (in/out)</th>
               <th>Latency</th>
               <th>Cost</th>
@@ -195,6 +201,7 @@ export default function LLMCalls() {
                   <td>{expandedId === c.id ? "\u25BC" : "\u25B6"}</td>
                   <td>{c.function}</td>
                   <td>{c.model}</td>
+                  <td>{c.user_name || "-"}</td>
                   <td>{c.input_tokens}/{c.output_tokens}</td>
                   <td>{c.latency_ms.toFixed(0)}ms</td>
                   <td>${c.cost_usd.toFixed(6)}</td>
@@ -203,7 +210,7 @@ export default function LLMCalls() {
                 </tr>
                 {expandedId === c.id && (
                   <tr key={`${c.id}-detail`}>
-                    <td colSpan={8} style={{ padding: 0 }}>
+                    <td colSpan={9} style={{ padding: 0 }}>
                       <div className="call-detail">
                         <div className="call-detail-section">
                           <strong>Input</strong>

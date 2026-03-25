@@ -111,6 +111,7 @@ export interface LLMCallsData {
     retry_count: number;
     session_id: string | null;
     user_id: string | null;
+    user_name: string | null;
     created_at: string;
   }[];
   total_count: number;
