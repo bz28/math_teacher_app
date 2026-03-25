@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
+  LineChart, Line,
 } from "recharts";
 import { api, type LLMCallsData } from "../lib/api";
 import StatCard from "../components/StatCard";
@@ -11,10 +13,11 @@ const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"
 type Tab = "all" | "failures";
 
 export default function LLMCalls() {
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
-  const [userFilter, setUserFilter] = useState("");
+  const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
   const [tab, setTab] = useState<Tab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -107,6 +110,21 @@ export default function LLMCalls() {
                 <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
               </PieChart>
             )}
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="chart-row">
+        <div className="chart-card" style={{ gridColumn: "1 / -1" }}>
+          <h3>Avg Latency / Day (ms)</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data.by_day}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <YAxis />
+              <Tooltip formatter={(v) => `${Number(v).toFixed(0)}ms`} />
+              <Line type="monotone" dataKey="avg_latency" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>

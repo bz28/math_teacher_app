@@ -61,6 +61,7 @@ export interface OverviewData {
   total_calls: number;
   failed_calls: number;
   error_rate: number;
+  avg_latency_ms: number;
   by_mode: { mode: string; count: number }[];
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];
@@ -89,7 +90,7 @@ export interface LLMCallsData {
     avg_output_tokens: number;
   }[];
   by_model: { model: string; count: number; total_cost: number }[];
-  by_day: { day: string; count: number; cost: number }[];
+  by_day: { day: string; count: number; cost: number; avg_latency: number }[];
   calls: {
     id: string;
     function: string;
