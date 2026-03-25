@@ -4,7 +4,6 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
-import Sessions from "./pages/Sessions";
 import Quality from "./pages/Quality";
 import Users from "./pages/Users";
 
@@ -28,7 +27,6 @@ export default function App() {
           <Route path="/" element={<Overview />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
           <Route path="/quality" element={<Quality />} />
-          <Route path="/sessions" element={<Sessions />} />
           <Route path="/users" element={<Users />} />
         </Route>
       </Routes>

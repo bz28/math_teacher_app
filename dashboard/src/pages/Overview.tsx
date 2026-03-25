@@ -1,31 +1,53 @@
 import { useEffect, useState } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell,
 } from "recharts";
 import { api, type OverviewData } from "../lib/api";
 import StatCard from "../components/StatCard";
 
+const MODE_COLORS: Record<string, string> = {
+  learn: "#6366f1",
+  practice: "#10b981",
+  mock_test: "#f59e0b",
+};
+
 export default function Overview() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [hours, setHours] = useState("24");
+  const [grade, setGrade] = useState("");
 
   useEffect(() => {
-    api.overview({ hours }).then(setData);
-  }, [hours]);
+    api.overview({ hours, grade }).then(setData);
+  }, [hours, grade]);
 
   if (!data) return <p>Loading...</p>;
+
+  const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));
 
   return (
     <div>
       <h1>Overview</h1>
 
-      <div className="filters">
+      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
         <select value={hours} onChange={(e) => setHours(e.target.value)}>
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
           <option value="87600">All time</option>
         </select>
+        <select value={grade} onChange={(e) => setGrade(e.target.value)}>
+          <option value="">All Grades</option>
+          <option value="2">K-2</option>
+          <option value="5">3-5</option>
+          <option value="8">6-8</option>
+          <option value="12">9-12</option>
+        </select>
+        {grade && (
+          <button className="filter-badge" onClick={() => setGrade("")} style={{ cursor: "pointer", border: "none" }}>
+            Grade filter ✕
+          </button>
+        )}
       </div>
 
       <div className="stat-grid">
@@ -68,27 +90,51 @@ export default function Overview() {
         </div>
       </div>
 
-      {data.top_spenders.length > 0 && (
-        <div className="table-card">
-          <h3>Top Spenders</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.top_spenders.map((s, i) => (
-                <tr key={i}>
-                  <td>{s.name}</td>
-                  <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="chart-row">
+        <div className="chart-card">
+          <h3>Mode Usage</h3>
+          <div className="stat-grid" style={{ marginBottom: 16 }}>
+            <StatCard label="Learn" value={modeMap["learn"] ?? 0} />
+            <StatCard label="Practice" value={modeMap["practice"] ?? 0} />
+            <StatCard label="Mock Test" value={modeMap["mock_test"] ?? 0} />
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={data.by_mode}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="mode" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count">
+                {data.by_mode.map((entry, i) => (
+                  <Cell key={i} fill={MODE_COLORS[entry.mode] ?? "#6366f1"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      )}
+
+        {data.top_spenders.length > 0 && (
+          <div className="chart-card">
+            <h3>Top Spenders</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_spenders.map((s, i) => (
+                  <tr key={i}>
+                    <td>{s.name}</td>
+                    <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
