@@ -2,17 +2,20 @@ import { NavLink, Outlet } from "react-router-dom";
 import { getToken, setToken } from "../lib/api";
 
 const NAV = [
-  { to: "/", label: "Overview" },
-  { to: "/llm-calls", label: "LLM Calls" },
-  { to: "/quality", label: "Quality" },
-  { to: "/users", label: "Users" },
+  { to: "/", label: "Overview", icon: "📊" },
+  { to: "/llm-calls", label: "LLM Calls", icon: "🤖" },
+  { to: "/quality", label: "Quality", icon: "✅" },
+  { to: "/users", label: "Users", icon: "👥" },
 ];
 
 export default function Layout() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <nav className="sidebar">
-        <h2 style={{ margin: "0 0 24px", fontSize: 18 }}>Math Teacher Admin</h2>
+        <div className="sidebar-header">
+          <div className="sidebar-brand">Math Tutor</div>
+          <div className="sidebar-brand-sub">Admin Dashboard</div>
+        </div>
         {NAV.map((n) => (
           <NavLink
             key={n.to}
@@ -20,6 +23,7 @@ export default function Layout() {
             className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
             end={n.to === "/"}
           >
+            <span className="nav-icon">{n.icon}</span>
             {n.label}
           </NavLink>
         ))}
