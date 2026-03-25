@@ -33,7 +33,7 @@ export default function Overview() {
           sub={`${costDelta >= 0 ? "+" : ""}$${costDelta.toFixed(4)} vs yesterday`}
         />
         <StatCard label="Active Users (7d)" value={data.active_users_7d} />
-        <StatCard label="Completion Rate (7d)" value={`${data.completion_rate_7d}%`} />
+        <StatCard label="Cost (7d)" value={`$${data.cost_7d.toFixed(2)}`} />
         <StatCard
           label="Error Rate (24h)"
           value={`${data.error_rate_24h}%`}

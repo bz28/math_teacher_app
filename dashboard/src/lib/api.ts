@@ -60,7 +60,7 @@ export interface OverviewData {
   cost_today: number;
   cost_yesterday: number;
   active_users_7d: number;
-  completion_rate_7d: number;
+  cost_7d: number;
   error_rate_24h: number;
   failed_calls_24h: number;
   sessions_by_day: { day: string; count: number }[];

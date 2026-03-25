@@ -65,19 +65,10 @@ async def overview(
         select(func.count(func.distinct(Session.user_id))).where(Session.created_at >= week_ago)
     )).scalar() or 0
 
-    # Completion rate (7 day)
-    total_sessions_week = (await db.execute(
-        select(func.count()).where(Session.created_at >= week_ago)
-    )).scalar() or 0
-
-    completed_sessions_week = (await db.execute(
-        select(func.count()).where(
-            Session.created_at >= week_ago,
-            Session.status == SessionStatus.COMPLETED,
-        )
-    )).scalar() or 0
-
-    completion_rate = round(completed_sessions_week / total_sessions_week * 100, 1) if total_sessions_week else 0.0
+    # Total cost (7d)
+    cost_7d = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(LLMCall.created_at >= week_ago)
+    )).scalar() or 0.0
 
     # Sessions per day (last 7 days)
     sessions_by_day = (await db.execute(
@@ -133,7 +124,7 @@ async def overview(
         "cost_today": round(cost_today, 4),
         "cost_yesterday": round(cost_yesterday, 4),
         "active_users_7d": active_users,
-        "completion_rate_7d": completion_rate,
+        "cost_7d": round(cost_7d, 4),
         "error_rate_24h": error_rate_24h,
         "failed_calls_24h": failed_calls_24h,
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],
