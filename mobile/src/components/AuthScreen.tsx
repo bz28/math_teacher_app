@@ -27,6 +27,7 @@ const GRADES = [
   { label: "3-5", range: "3rd - 5th", value: 5 },
   { label: "6-8", range: "6th - 8th", value: 8 },
   { label: "9-12", range: "9th - 12th", value: 12 },
+  { label: "College", range: "Undergraduate", value: 16 },
 ];
 
 type RegisterStep = "name" | "grade" | "credentials";

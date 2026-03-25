@@ -35,7 +35,7 @@ async def test_register_weak_password(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_register_invalid_grade(client: AsyncClient) -> None:
-    resp = await client.post(REGISTER_URL, json=_user("grade@test.com", grade_level=15))
+    resp = await client.post(REGISTER_URL, json=_user("grade@test.com", grade_level=99))
     assert resp.status_code == 422
 
 

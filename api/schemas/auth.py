@@ -19,8 +19,8 @@ class RegisterRequest(BaseModel):
     @field_validator("grade_level")
     @classmethod
     def validate_grade_level(cls, v: int) -> int:
-        if not 1 <= v <= 12:
-            raise ValueError("Grade level must be between 1 and 12")
+        if not 1 <= v <= 16:
+            raise ValueError("Grade level must be between 1 and 16")
         return v
 
 

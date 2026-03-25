@@ -80,6 +80,7 @@ export default function Overview() {
           <option value="5">3-5</option>
           <option value="8">6-8</option>
           <option value="12">9-12</option>
+          <option value="16">College</option>
         </select>
         {grade && (
           <button className="filter-badge" onClick={() => setGrade("")} style={{ cursor: "pointer", border: "none" }}>
