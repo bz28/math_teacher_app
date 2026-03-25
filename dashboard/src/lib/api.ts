@@ -159,13 +159,18 @@ export interface QualityData {
 export interface UsersData {
   total_users: number;
   active_7d: number;
+  total_spend: number;
   registrations_by_day: { day: string; count: number }[];
-  session_distribution: Record<string, number>;
-  top_users: {
+  users: {
     id: string;
     email: string;
-    grade_level: string;
+    name: string;
+    grade_level: number;
     session_count: number;
+    total_cost: number;
+    llm_call_count: number;
+    avg_cost_per_session: number;
     last_active: string | null;
+    registered: string;
   }[];
 }

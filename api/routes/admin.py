@@ -494,6 +494,7 @@ async def sessions(
 @router.get("/users")
 async def users(
     days: int = Query(default=30, ge=1, le=90),
+    sort_by: str = Query(default="total_cost", pattern=r"^(total_cost|session_count|last_active|name)$"),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -501,6 +502,18 @@ async def users(
 
     # Total users
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
+
+    # Active users (7d)
+    active_7d = (await db.execute(
+        select(func.count(func.distinct(Session.user_id)))
+        .where(Session.created_at >= _date_range(7))
+    )).scalar() or 0
+
+    # Total spend (all users, in period)
+    total_spend = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0))
+        .where(LLMCall.created_at >= since)
+    )).scalar() or 0.0
 
     # Registrations over time
     registrations_by_day = (await db.execute(
@@ -513,67 +526,77 @@ async def users(
         .order_by("day")
     )).all()
 
-    # Active users (7d)
-    active_7d = (await db.execute(
-        select(func.count(func.distinct(Session.user_id)))
-        .where(Session.created_at >= _date_range(7))
-    )).scalar() or 0
+    # Per-user cost subquery
+    user_cost = (
+        select(
+            LLMCall.user_id,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost"),
+            func.count().label("llm_call_count"),
+        )
+        .where(LLMCall.created_at >= since, LLMCall.user_id.isnot(None))
+        .group_by(LLMCall.user_id)
+        .subquery()
+    )
 
-    # Sessions per user distribution
-    sessions_per_user = (await db.execute(
+    # Per-user session subquery
+    user_sessions = (
         select(
             Session.user_id,
             func.count().label("session_count"),
+            func.max(Session.created_at).label("last_active"),
         )
         .where(Session.created_at >= since)
         .group_by(Session.user_id)
-    )).all()
+        .subquery()
+    )
 
-    # Build distribution buckets
-    buckets = {"1": 0, "2-5": 0, "6-20": 0, "20+": 0}
-    for row in sessions_per_user:
-        c = row.session_count
-        if c == 1:
-            buckets["1"] += 1
-        elif c <= 5:
-            buckets["2-5"] += 1
-        elif c <= 20:
-            buckets["6-20"] += 1
-        else:
-            buckets["20+"] += 1
+    # Sort column mapping
+    sort_columns = {
+        "total_cost": func.coalesce(user_cost.c.total_cost, 0.0).desc(),
+        "session_count": func.coalesce(user_sessions.c.session_count, 0).desc(),
+        "last_active": func.coalesce(user_sessions.c.last_active, User.created_at).desc(),
+        "name": User.name.asc(),
+    }
 
-    # Most active users
-    top_users_rows = (await db.execute(
+    # All users with cost + session data
+    all_users = (await db.execute(
         select(
             User.id,
             User.email,
+            User.name,
             User.grade_level,
-            func.count(Session.id).label("session_count"),
-            func.max(Session.created_at).label("last_active"),
+            User.created_at,
+            func.coalesce(user_sessions.c.session_count, 0).label("session_count"),
+            func.coalesce(user_cost.c.total_cost, 0.0).label("total_cost"),
+            func.coalesce(user_cost.c.llm_call_count, 0).label("llm_call_count"),
+            user_sessions.c.last_active,
         )
-        .join(Session, Session.user_id == User.id)
-        .where(Session.created_at >= since)
-        .group_by(User.id, User.email, User.grade_level)
-        .order_by(func.count(Session.id).desc())
-        .limit(10)
+        .outerjoin(user_cost, user_cost.c.user_id == User.id)
+        .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
+        .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]))
     )).all()
 
     return {
         "total_users": total_users,
         "active_7d": active_7d,
+        "total_spend": round(total_spend, 4),
         "registrations_by_day": [
             {"day": str(r.day), "count": r.count}
             for r in registrations_by_day
         ],
-        "session_distribution": buckets,
-        "top_users": [
+        "users": [
             {
                 "id": str(r.id),
                 "email": r.email,
+                "name": r.name,
                 "grade_level": r.grade_level,
                 "session_count": r.session_count,
+                "total_cost": round(r.total_cost, 4),
+                "llm_call_count": r.llm_call_count,
+                "avg_cost_per_session": round(r.total_cost / r.session_count, 4) if r.session_count else 0.0,
                 "last_active": r.last_active.isoformat() if r.last_active else None,
+                "registered": r.created_at.isoformat(),
             }
-            for r in top_users_rows
+            for r in all_users
         ],
     }
