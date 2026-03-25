@@ -192,12 +192,13 @@ async def llm_calls(
         .group_by(LLMCall.model)
     )).all()
 
-    # Calls per day
+    # Calls per day (with latency)
     calls_by_day = (await db.execute(
         select(
             cast(LLMCall.created_at, Date).label("day"),
             func.count().label("count"),
             func.sum(LLMCall.cost_usd).label("cost"),
+            func.avg(LLMCall.latency_ms).label("avg_latency"),
         )
         .where(*base_filters)
         .group_by("day")
@@ -307,7 +308,12 @@ async def llm_calls(
             for r in model_stats
         ],
         "by_day": [
-            {"day": str(r.day), "count": r.count, "cost": round(r.cost or 0, 4)}
+            {
+                "day": str(r.day),
+                "count": r.count,
+                "cost": round(r.cost or 0, 4),
+                "avg_latency": round(r.avg_latency or 0, 0),
+            }
             for r in calls_by_day
         ],
         "calls": [

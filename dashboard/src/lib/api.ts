@@ -90,7 +90,7 @@ export interface LLMCallsData {
     avg_output_tokens: number;
   }[];
   by_model: { model: string; count: number; total_cost: number }[];
-  by_day: { day: string; count: number; cost: number }[];
+  by_day: { day: string; count: number; cost: number; avg_latency: number }[];
   calls: {
     id: string;
     function: string;

@@ -42,7 +42,10 @@ export default function Overview() {
   const [grade, setGrade] = useState("");
 
   useEffect(() => {
-    api.overview({ hours, grade }).then(setData);
+    const fetch = () => api.overview({ hours, grade }).then(setData);
+    fetch();
+    const interval = setInterval(fetch, 30_000);
+    return () => clearInterval(interval);
   }, [hours, grade]);
 
   if (!data) return <p>Loading...</p>;

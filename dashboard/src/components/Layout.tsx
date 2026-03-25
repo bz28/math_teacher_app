@@ -4,8 +4,8 @@ import { getToken, setToken } from "../lib/api";
 const NAV = [
   { to: "/", label: "Overview", icon: "📊" },
   { to: "/llm-calls", label: "LLM Calls", icon: "🤖" },
-  { to: "/quality", label: "Quality", icon: "✅" },
   { to: "/users", label: "Users", icon: "👥" },
+  { to: "/quality", label: "Quality", icon: "✅" },
 ];
 
 export default function Layout() {
