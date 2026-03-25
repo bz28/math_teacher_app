@@ -34,6 +34,11 @@ export default function Overview() {
         />
         <StatCard label="Active Users (7d)" value={data.active_users_7d} />
         <StatCard label="Completion Rate (7d)" value={`${data.completion_rate_7d}%`} />
+        <StatCard
+          label="Error Rate (24h)"
+          value={`${data.error_rate_24h}%`}
+          sub={`${data.failed_calls_24h} failed calls`}
+        />
       </div>
 
       <div className="chart-row">
@@ -64,31 +69,27 @@ export default function Overview() {
         </div>
       </div>
 
-      <div className="table-card">
-        <h3>Recent Sessions</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Problem</th>
-              <th>Mode</th>
-              <th>Status</th>
-              <th>Progress</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.recent_sessions.map((s) => (
-              <tr key={s.id}>
-                <td>{s.problem}</td>
-                <td>{s.mode}</td>
-                <td><span className={`badge badge-${s.status}`}>{s.status}</span></td>
-                <td>{s.current_step}/{s.total_steps}</td>
-                <td>{new Date(s.created_at).toLocaleString()}</td>
+      {data.top_spenders.length > 0 && (
+        <div className="table-card">
+          <h3>Top Spenders (7d)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Cost</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {data.top_spenders.map((s, i) => (
+                <tr key={i}>
+                  <td>{s.name}</td>
+                  <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

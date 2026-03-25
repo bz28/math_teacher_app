@@ -101,12 +101,31 @@ async def overview(
         .order_by("day")
     )).all()
 
-    # Recent sessions
-    recent_sessions = (await db.execute(
-        select(Session)
-        .order_by(Session.created_at.desc())
-        .limit(10)
-    )).scalars().all()
+    # Top spenders (7d)
+    top_spenders = (await db.execute(
+        select(
+            User.name,
+            User.email,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost"),
+        )
+        .join(LLMCall, LLMCall.user_id == User.id)
+        .where(LLMCall.created_at >= week_ago)
+        .group_by(User.id, User.name, User.email)
+        .order_by(func.sum(LLMCall.cost_usd).desc())
+        .limit(3)
+    )).all()
+
+    # Error rate (24h)
+    day_ago = _time_range(24)
+    total_calls_24h = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(LLMCall.created_at >= day_ago)
+    )).scalar() or 0
+    failed_calls_24h = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            LLMCall.created_at >= day_ago, LLMCall.success.is_(False),
+        )
+    )).scalar() or 0
+    error_rate_24h = round(failed_calls_24h / total_calls_24h * 100, 1) if total_calls_24h else 0.0
 
     return {
         "sessions_today": sessions_today,
@@ -115,19 +134,16 @@ async def overview(
         "cost_yesterday": round(cost_yesterday, 4),
         "active_users_7d": active_users,
         "completion_rate_7d": completion_rate,
+        "error_rate_24h": error_rate_24h,
+        "failed_calls_24h": failed_calls_24h,
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],
         "cost_by_day": [{"day": str(r.day), "cost": round(r.cost, 4)} for r in cost_by_day],
-        "recent_sessions": [
+        "top_spenders": [
             {
-                "id": str(s.id),
-                "problem": s.problem[:60],
-                "mode": s.mode,
-                "status": s.status,
-                "total_steps": s.total_steps,
-                "current_step": s.current_step,
-                "created_at": s.created_at.isoformat(),
+                "name": r.name or r.email,
+                "total_cost": round(r.total_cost, 4),
             }
-            for s in recent_sessions
+            for r in top_spenders
         ],
     }
 

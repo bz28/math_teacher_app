@@ -61,17 +61,11 @@ export interface OverviewData {
   cost_yesterday: number;
   active_users_7d: number;
   completion_rate_7d: number;
+  error_rate_24h: number;
+  failed_calls_24h: number;
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];
-  recent_sessions: {
-    id: string;
-    problem: string;
-    mode: string;
-    status: string;
-    total_steps: number;
-    current_step: number;
-    created_at: string;
-  }[];
+  top_spenders: { name: string; total_cost: number }[];
 }
 
 export interface LLMCallsData {
