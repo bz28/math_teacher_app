@@ -3,8 +3,9 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Date, case, cast, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
+from sqlalchemy import Date, case, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -568,6 +569,7 @@ async def users(
             User.id,
             User.email,
             User.name,
+            User.role,
             User.grade_level,
             User.created_at,
             func.coalesce(user_sessions.c.session_count, 0).label("session_count"),
@@ -593,6 +595,7 @@ async def users(
                 "id": str(r.id),
                 "email": r.email,
                 "name": r.name,
+                "role": r.role,
                 "grade_level": r.grade_level,
                 "session_count": r.session_count,
                 "total_cost": round(r.total_cost, 4),
@@ -604,3 +607,56 @@ async def users(
             for r in all_users
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# User Management
+# ---------------------------------------------------------------------------
+
+
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+
+@router.patch("/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    body: UpdateRoleRequest,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    if body.role not in ("student", "admin"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role must be 'student' or 'admin'")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Prevent removing your own admin role
+    if str(user.id) == str(current_user.user_id) and body.role != "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove your own admin role")
+
+    user.role = body.role
+    await db.commit()
+    return {"status": "ok", "role": body.role}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Prevent deleting yourself
+    if str(user.id) == str(current_user.user_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
+
+    await db.delete(user)
+    await db.commit()
+    return {"status": "ok"}

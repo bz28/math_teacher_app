@@ -14,19 +14,40 @@ export default function Users() {
   const [hours, setHours] = useState("720");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
 
-  useEffect(() => {
-    api.users({ hours, sort_by: sortBy }).then(setData);
-  }, [hours, sortBy]);
+  const reload = () => api.users({ hours, sort_by: sortBy }).then(setData);
+
+  useEffect(() => { reload(); }, [hours, sortBy]);
 
   if (!data) return <p>Loading...</p>;
 
   const topSpender = data.users.length > 0 ? data.users[0] : null;
 
+  const handleToggleRole = async (userId: string, currentRole: string) => {
+    const newRole = currentRole === "admin" ? "student" : "admin";
+    if (!confirm(`Change this user's role to "${newRole}"?`)) return;
+    try {
+      await api.updateUserRole(userId, newRole);
+      reload();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
+  const handleDelete = async (userId: string, email: string) => {
+    if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
+    try {
+      await api.deleteUser(userId);
+      reload();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
   return (
     <div>
       <h1>Users</h1>
 
-      <div className="filters">
+      <div className="filters" style={{ display: "flex", gap: 12 }}>
         <select value={hours} onChange={(e) => setHours(e.target.value)}>
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
@@ -63,7 +84,7 @@ export default function Users() {
 
       <div className="table-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3>All Users</h3>
+          <h3 style={{ marginBottom: 0 }}>All Users</h3>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)} style={{ fontSize: 13 }}>
             <option value="total_cost">Sort by Cost</option>
             <option value="session_count">Sort by Sessions</option>
@@ -76,38 +97,69 @@ export default function Users() {
             <tr>
               <th>Name</th>
               <th>Email</th>
+              <th>Role</th>
               <th>Grade</th>
               <th>Sessions</th>
-              <th>LLM Calls</th>
               <th>Total Cost</th>
-              <th>Avg $/Session</th>
               <th>Last Active</th>
-              <th>Registered</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {data.users.map((u) => (
-              <tr
-                key={u.id}
-                className="clickable"
-                onClick={() => navigate(`/llm-calls?user=${u.id}`)}
-                title="View LLM calls for this user"
-              >
+              <tr key={u.id}>
                 <td>{u.name || "-"}</td>
                 <td>{u.email}</td>
+                <td>
+                  <span className={`badge ${u.role === "admin" ? "badge-active" : "badge-completed"}`}>
+                    {u.role}
+                  </span>
+                </td>
                 <td>{u.grade_level}</td>
                 <td>{u.session_count}</td>
-                <td>{u.llm_call_count}</td>
                 <td style={{ fontWeight: u.total_cost > 0 ? 600 : 400 }}>
                   ${u.total_cost.toFixed(4)}
                 </td>
-                <td>${u.avg_cost_per_session.toFixed(4)}</td>
                 <td>{u.last_active ? new Date(u.last_active).toLocaleString() : "-"}</td>
-                <td>{new Date(u.registered).toLocaleDateString()}</td>
+                <td>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/llm-calls?user=${u.id}`); }}
+                      style={{
+                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                        border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff", color: "#475569",
+                      }}
+                      title="View LLM calls"
+                    >
+                      Calls
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleRole(u.id, u.role); }}
+                      style={{
+                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                        border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff",
+                        color: u.role === "admin" ? "#f59e0b" : "#6366f1",
+                      }}
+                      title={u.role === "admin" ? "Remove admin" : "Make admin"}
+                    >
+                      {u.role === "admin" ? "Demote" : "Admin"}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(u.id, u.email); }}
+                      style={{
+                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                        border: "1px solid #fecaca", borderRadius: 4, background: "#fef2f2", color: "#ef4444",
+                      }}
+                      title="Delete user"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
             {data.users.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
             )}
           </tbody>
         </table>

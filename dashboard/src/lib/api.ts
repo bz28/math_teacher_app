@@ -34,12 +34,37 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
   return res.json();
 }
 
+async function mutate<T>(path: string, method: string, body?: object): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      ...(_token ? { Authorization: `Bearer ${_token}` } : {}),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    setToken(null);
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `API error ${res.status}`);
+  }
+  return res.json();
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   sessions: (params?: Record<string, string>) => request<SessionsData>("/admin/sessions", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
+  updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
+  deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -153,6 +178,7 @@ export interface UsersData {
     id: string;
     email: string;
     name: string;
+    role: string;
     grade_level: number;
     session_count: number;
     total_cost: number;
