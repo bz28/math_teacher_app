@@ -59,6 +59,11 @@ async def overview(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(*llm_filters)
     )).scalar() or 0.0
 
+    # Avg latency in period
+    avg_latency = (await db.execute(
+        select(func.avg(LLMCall.latency_ms)).where(*llm_filters, LLMCall.success.is_(True))
+    )).scalar() or 0.0
+
     # Error rate in period
     total_calls = (await db.execute(
         select(func.count()).select_from(LLMCall).where(*llm_filters)
@@ -124,6 +129,7 @@ async def overview(
         "total_calls": total_calls,
         "failed_calls": failed_calls,
         "error_rate": error_rate,
+        "avg_latency_ms": round(avg_latency, 0),
         "by_mode": [{"mode": r.mode, "count": r.count} for r in by_mode],
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],
         "cost_by_day": [{"day": str(r.day), "cost": round(r.cost, 4)} for r in cost_by_day],

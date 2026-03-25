@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -11,10 +12,11 @@ const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"
 type Tab = "all" | "failures";
 
 export default function LLMCalls() {
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
-  const [userFilter, setUserFilter] = useState("");
+  const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
   const [tab, setTab] = useState<Tab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 

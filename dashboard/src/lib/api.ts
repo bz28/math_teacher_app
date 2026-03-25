@@ -61,6 +61,7 @@ export interface OverviewData {
   total_calls: number;
   failed_calls: number;
   error_rate: number;
+  avg_latency_ms: number;
   by_mode: { mode: string; count: number }[];
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];

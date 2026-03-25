@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -8,6 +9,7 @@ import StatCard from "../components/StatCard";
 type SortKey = "total_cost" | "session_count" | "last_active" | "name";
 
 export default function Users() {
+  const navigate = useNavigate();
   const [data, setData] = useState<UsersData | null>(null);
   const [hours, setHours] = useState("720");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
@@ -85,7 +87,12 @@ export default function Users() {
           </thead>
           <tbody>
             {data.users.map((u) => (
-              <tr key={u.id}>
+              <tr
+                key={u.id}
+                className="clickable"
+                onClick={() => navigate(`/llm-calls?user=${u.id}`)}
+                title="View LLM calls for this user"
+              >
                 <td>{u.name || "-"}</td>
                 <td>{u.email}</td>
                 <td>{u.grade_level}</td>
