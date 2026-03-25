@@ -7,37 +7,36 @@ import StatCard from "../components/StatCard";
 
 export default function Overview() {
   const [data, setData] = useState<OverviewData | null>(null);
+  const [hours, setHours] = useState("24");
 
   useEffect(() => {
-    api.overview().then(setData);
-  }, []);
+    api.overview({ hours }).then(setData);
+  }, [hours]);
 
   if (!data) return <p>Loading...</p>;
-
-  const sessionsDelta = data.sessions_today - data.sessions_yesterday;
-  const costDelta = data.cost_today - data.cost_yesterday;
 
   return (
     <div>
       <h1>Overview</h1>
 
+      <div className="filters">
+        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+          <option value="24">Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+          <option value="720">Last 30 days</option>
+          <option value="87600">All time</option>
+        </select>
+      </div>
+
       <div className="stat-grid">
+        <StatCard label="Sessions" value={data.total_sessions} />
+        <StatCard label="Total Cost" value={`$${data.total_cost.toFixed(2)}`} />
+        <StatCard label="Active Users" value={data.active_users} />
+        <StatCard label="LLM Calls" value={data.total_calls} />
         <StatCard
-          label="Sessions Today"
-          value={data.sessions_today}
-          sub={`${sessionsDelta >= 0 ? "+" : ""}${sessionsDelta} vs yesterday`}
-        />
-        <StatCard
-          label="Cost Today"
-          value={`$${data.cost_today.toFixed(4)}`}
-          sub={`${costDelta >= 0 ? "+" : ""}$${costDelta.toFixed(4)} vs yesterday`}
-        />
-        <StatCard label="Active Users (7d)" value={data.active_users_7d} />
-        <StatCard label="Cost (7d)" value={`$${data.cost_7d.toFixed(2)}`} />
-        <StatCard
-          label="Error Rate (24h)"
-          value={`${data.error_rate_24h}%`}
-          sub={`${data.failed_calls_24h} failed calls`}
+          label="Error Rate"
+          value={`${data.error_rate}%`}
+          sub={`${data.failed_calls} failed`}
         />
       </div>
 
@@ -71,7 +70,7 @@ export default function Overview() {
 
       {data.top_spenders.length > 0 && (
         <div className="table-card">
-          <h3>Top Spenders (7d)</h3>
+          <h3>Top Spenders</h3>
           <table>
             <thead>
               <tr>

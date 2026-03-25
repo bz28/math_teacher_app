@@ -35,7 +35,7 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
 }
 
 export const api = {
-  overview: () => request<OverviewData>("/admin/overview"),
+  overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   sessions: (params?: Record<string, string>) => request<SessionsData>("/admin/sessions", params),
@@ -55,14 +55,12 @@ export const api = {
 
 // Types
 export interface OverviewData {
-  sessions_today: number;
-  sessions_yesterday: number;
-  cost_today: number;
-  cost_yesterday: number;
-  active_users_7d: number;
-  cost_7d: number;
-  error_rate_24h: number;
-  failed_calls_24h: number;
+  total_sessions: number;
+  active_users: number;
+  total_cost: number;
+  total_calls: number;
+  failed_calls: number;
+  error_rate: number;
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];
   top_spenders: { name: string; total_cost: number }[];

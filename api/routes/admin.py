@@ -28,71 +28,61 @@ def _time_range(hours: int) -> datetime:
 
 @router.get("/overview")
 async def overview(
+    hours: int = Query(default=24, ge=1, le=87600),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_start = today_start - timedelta(days=1)
-    week_ago = _time_range(168)
+    since = _time_range(hours)
 
-    # Sessions today
-    sessions_today = (await db.execute(
-        select(func.count()).where(Session.created_at >= today_start)
+    # Sessions in period
+    total_sessions = (await db.execute(
+        select(func.count()).where(Session.created_at >= since)
     )).scalar() or 0
 
-    sessions_yesterday = (await db.execute(
-        select(func.count()).where(
-            Session.created_at >= yesterday_start,
-            Session.created_at < today_start,
-        )
-    )).scalar() or 0
-
-    # LLM cost today
-    cost_today = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(LLMCall.created_at >= today_start)
-    )).scalar() or 0.0
-
-    cost_yesterday = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
-            LLMCall.created_at >= yesterday_start,
-            LLMCall.created_at < today_start,
-        )
-    )).scalar() or 0.0
-
-    # Active users (7 day)
+    # Active users in period
     active_users = (await db.execute(
-        select(func.count(func.distinct(Session.user_id))).where(Session.created_at >= week_ago)
+        select(func.count(func.distinct(Session.user_id))).where(Session.created_at >= since)
     )).scalar() or 0
 
-    # Total cost (7d)
-    cost_7d = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(LLMCall.created_at >= week_ago)
+    # Total cost in period
+    total_cost = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(LLMCall.created_at >= since)
     )).scalar() or 0.0
 
-    # Sessions per day (last 7 days)
+    # Error rate in period
+    total_calls = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(LLMCall.created_at >= since)
+    )).scalar() or 0
+    failed_calls = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            LLMCall.created_at >= since, LLMCall.success.is_(False),
+        )
+    )).scalar() or 0
+    error_rate = round(failed_calls / total_calls * 100, 1) if total_calls else 0.0
+
+    # Sessions per day
     sessions_by_day = (await db.execute(
         select(
             cast(Session.created_at, Date).label("day"),
             func.count().label("count"),
         )
-        .where(Session.created_at >= week_ago)
+        .where(Session.created_at >= since)
         .group_by("day")
         .order_by("day")
     )).all()
 
-    # Cost per day (last 7 days)
+    # Cost per day
     cost_by_day = (await db.execute(
         select(
             cast(LLMCall.created_at, Date).label("day"),
             func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
         )
-        .where(LLMCall.created_at >= week_ago)
+        .where(LLMCall.created_at >= since)
         .group_by("day")
         .order_by("day")
     )).all()
 
-    # Top spenders (7d)
+    # Top spenders in period
     top_spenders = (await db.execute(
         select(
             User.name,
@@ -100,33 +90,19 @@ async def overview(
             func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost"),
         )
         .join(LLMCall, LLMCall.user_id == User.id)
-        .where(LLMCall.created_at >= week_ago)
+        .where(LLMCall.created_at >= since)
         .group_by(User.id, User.name, User.email)
         .order_by(func.sum(LLMCall.cost_usd).desc())
         .limit(3)
     )).all()
 
-    # Error rate (24h)
-    day_ago = _time_range(24)
-    total_calls_24h = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(LLMCall.created_at >= day_ago)
-    )).scalar() or 0
-    failed_calls_24h = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(
-            LLMCall.created_at >= day_ago, LLMCall.success.is_(False),
-        )
-    )).scalar() or 0
-    error_rate_24h = round(failed_calls_24h / total_calls_24h * 100, 1) if total_calls_24h else 0.0
-
     return {
-        "sessions_today": sessions_today,
-        "sessions_yesterday": sessions_yesterday,
-        "cost_today": round(cost_today, 4),
-        "cost_yesterday": round(cost_yesterday, 4),
-        "active_users_7d": active_users,
-        "cost_7d": round(cost_7d, 4),
-        "error_rate_24h": error_rate_24h,
-        "failed_calls_24h": failed_calls_24h,
+        "total_sessions": total_sessions,
+        "active_users": active_users,
+        "total_cost": round(total_cost, 4),
+        "total_calls": total_calls,
+        "failed_calls": failed_calls,
+        "error_rate": error_rate,
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],
         "cost_by_day": [{"day": str(r.day), "cost": round(r.cost, 4)} for r in cost_by_day],
         "top_spenders": [
