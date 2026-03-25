@@ -205,6 +205,38 @@ async def llm_calls(
         total_query = total_query.where(LLMCall.function == function)
     total_count = (await db.execute(total_query)).scalar() or 0
 
+    # Failure analysis
+    failure_filters = [*base_filters, LLMCall.success.is_(False)]
+
+    failure_count = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(*failure_filters)
+    )).scalar() or 0
+
+    total_calls_count = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(*base_filters)
+    )).scalar() or 0
+
+    failure_rate = round(failure_count / total_calls_count * 100, 1) if total_calls_count else 0.0
+
+    failures_by_function = (await db.execute(
+        select(
+            LLMCall.function,
+            func.count().label("count"),
+            func.avg(LLMCall.retry_count).label("avg_retries"),
+        )
+        .where(*failure_filters)
+        .group_by(LLMCall.function)
+        .order_by(func.count().desc())
+    )).all()
+
+    recent_failures = (await db.execute(
+        select(LLMCall, User.email, User.name)
+        .outerjoin(User, User.id == LLMCall.user_id)
+        .where(*failure_filters)
+        .order_by(LLMCall.created_at.desc())
+        .limit(10)
+    )).all()
+
     # Users who have LLM calls in this period (for filter dropdown)
     user_rows = (await db.execute(
         select(User.id, User.email)
@@ -218,6 +250,28 @@ async def llm_calls(
     )).all()
 
     return {
+        "failure_count": failure_count,
+        "failure_rate": failure_rate,
+        "failures_by_function": [
+            {
+                "function": r.function,
+                "count": r.count,
+                "avg_retries": round(r.avg_retries or 0, 1),
+            }
+            for r in failures_by_function
+        ],
+        "recent_failures": [
+            {
+                "id": str(c.id),
+                "function": c.function,
+                "model": c.model,
+                "retry_count": c.retry_count,
+                "output_text": c.output_text,
+                "user_name": name or email or None,
+                "created_at": c.created_at.isoformat(),
+            }
+            for c, email, name in recent_failures
+        ],
         "by_function": [
             {
                 "function": r.function,

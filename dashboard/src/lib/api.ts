@@ -75,6 +75,18 @@ export interface OverviewData {
 }
 
 export interface LLMCallsData {
+  failure_count: number;
+  failure_rate: number;
+  failures_by_function: { function: string; count: number; avg_retries: number }[];
+  recent_failures: {
+    id: string;
+    function: string;
+    model: string;
+    retry_count: number;
+    output_text: string | null;
+    user_name: string | null;
+    created_at: string;
+  }[];
   by_function: {
     function: string;
     count: number;

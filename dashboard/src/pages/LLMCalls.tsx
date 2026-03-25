@@ -46,7 +46,7 @@ export default function LLMCalls() {
       <div className="stat-grid">
         <StatCard label="Total Calls" value={totalCalls} />
         <StatCard label="Total Cost" value={`$${totalCost.toFixed(4)}`} />
-        <StatCard label="Functions" value={data.by_function.length} />
+        <StatCard label="Failures" value={data.failure_count} sub={`${data.failure_rate}% failure rate`} />
         <StatCard label="Models" value={data.by_model.length} />
       </div>
 
@@ -119,6 +119,55 @@ export default function LLMCalls() {
           </tbody>
         </table>
       </div>
+
+      {data.failure_count > 0 && (
+        <>
+          <div className="chart-row">
+            <div className="chart-card">
+              <h3>Failures by Function</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={data.failures_by_function}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="function" tick={{ fontSize: 11 }} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="table-card">
+            <h3>Recent Failures</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Function</th>
+                  <th>Model</th>
+                  <th>User</th>
+                  <th>Retries</th>
+                  <th>Error</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recent_failures.map((f) => (
+                  <tr key={f.id}>
+                    <td>{f.function}</td>
+                    <td>{f.model}</td>
+                    <td>{f.user_name || "-"}</td>
+                    <td>{f.retry_count}</td>
+                    <td style={{ maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {f.output_text || "(no error text)"}
+                    </td>
+                    <td>{new Date(f.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <div className="table-card">
         <h3>Recent Calls {fnFilter && <span className="filter-badge">{fnFilter} <button onClick={() => setFnFilter("")}>x</button></span>}</h3>
