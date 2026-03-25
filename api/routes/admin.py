@@ -391,140 +391,68 @@ async def quality_scores(
 
 @router.get("/sessions")
 async def sessions(
-    hours: int = Query(default=720, ge=1, le=2160),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    hours: int = Query(default=168, ge=1, le=87600),
+    user_id: str | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     since = _time_range(hours)
+    base_filters = [Session.created_at >= since]
+    if user_id:
+        base_filters.append(Session.user_id == user_id)
 
-    # Completion rate over time (by day)
-    completion_by_day = (await db.execute(
-        select(
-            cast(Session.created_at, Date).label("day"),
-            func.count().label("total"),
-            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
-        )
-        .where(Session.created_at >= since)
-        .group_by("day")
-        .order_by("day")
-    )).all()
+    # Total sessions
+    total_count = (await db.execute(
+        select(func.count()).select_from(Session).where(*base_filters)
+    )).scalar() or 0
 
     # By mode
     by_mode = (await db.execute(
         select(
             Session.mode,
             func.count().label("count"),
-            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
-        .where(Session.created_at >= since)
+        .where(*base_filters)
         .group_by(Session.mode)
     )).all()
 
-    # Averages
-    avg_stats = (await db.execute(
+    # Sessions per day (for trend chart)
+    sessions_by_day = (await db.execute(
         select(
-            func.avg(Session.total_steps).label("avg_steps"),
-            func.avg(Session.current_step).label("avg_progress"),
-        )
-        .where(Session.created_at >= since)
-    )).one()
-
-    # Top problems
-    top_problems = (await db.execute(
-        select(
-            Session.problem,
+            cast(Session.created_at, Date).label("day"),
             func.count().label("count"),
-            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
-        .where(Session.created_at >= since)
-        .group_by(Session.problem)
-        .order_by(func.count().desc())
-        .limit(20)
+        .where(*base_filters)
+        .group_by("day")
+        .order_by("day")
     )).all()
 
-    # Recent sessions (paginated)
-    recent = (await db.execute(
-        select(Session)
-        .where(Session.created_at >= since)
-        .order_by(Session.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )).scalars().all()
-
-    # Abandoned sessions
-    abandoned = (await db.execute(
-        select(Session)
+    # Users dropdown for filter
+    user_rows = (await db.execute(
+        select(User.id, User.email)
         .where(
-            Session.created_at >= since,
-            Session.status == SessionStatus.ABANDONED,
+            User.id.in_(
+                select(func.distinct(Session.user_id))
+                .where(Session.created_at >= since)
+            )
         )
-        .order_by(Session.created_at.desc())
-        .limit(10)
-    )).scalars().all()
-
-    total_count = (await db.execute(
-        select(func.count()).select_from(Session).where(Session.created_at >= since)
-    )).scalar() or 0
+        .order_by(User.email)
+    )).all()
 
     return {
-        "completion_by_day": [
-            {
-                "day": str(r.day),
-                "total": r.total,
-                "completed": r.completed,
-                "rate": round(r.completed / r.total * 100, 1) if r.total else 0,
-            }
-            for r in completion_by_day
-        ],
+        "total_count": total_count,
         "by_mode": [
-            {
-                "mode": r.mode,
-                "count": r.count,
-                "completed": r.completed,
-                "rate": round(r.completed / r.count * 100, 1) if r.count else 0,
-            }
+            {"mode": r.mode, "count": r.count}
             for r in by_mode
         ],
-        "averages": {
-            "avg_steps": round(avg_stats.avg_steps or 0, 1),
-            "avg_progress": round(avg_stats.avg_progress or 0, 1),
-        },
-        "top_problems": [
-            {
-                "problem": r.problem[:80],
-                "count": r.count,
-                "completed": r.completed,
-                "rate": round(r.completed / r.count * 100, 1) if r.count else 0,
-            }
-            for r in top_problems
+        "sessions_by_day": [
+            {"day": str(r.day), "count": r.count}
+            for r in sessions_by_day
         ],
-        "sessions": [
-            {
-                "id": str(s.id),
-                "problem": s.problem[:80],
-                "mode": s.mode,
-                "status": s.status,
-                "problem_type": s.problem_type,
-                "current_step": s.current_step,
-                "total_steps": s.total_steps,
-                "created_at": s.created_at.isoformat(),
-            }
-            for s in recent
+        "users": [
+            {"id": str(r.id), "email": r.email}
+            for r in user_rows
         ],
-        "abandoned": [
-            {
-                "id": str(s.id),
-                "problem": s.problem[:80],
-                "mode": s.mode,
-                "current_step": s.current_step,
-                "total_steps": s.total_steps,
-                "created_at": s.created_at.isoformat(),
-            }
-            for s in abandoned
-        ],
-        "total_count": total_count,
     }
 
 

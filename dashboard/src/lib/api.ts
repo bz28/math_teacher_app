@@ -111,29 +111,10 @@ export interface LLMCallsData {
 }
 
 export interface SessionsData {
-  completion_by_day: { day: string; total: number; completed: number; rate: number }[];
-  by_mode: { mode: string; count: number; completed: number; rate: number }[];
-  averages: { avg_steps: number; avg_progress: number };
-  top_problems: { problem: string; count: number; completed: number; rate: number }[];
-  sessions: {
-    id: string;
-    problem: string;
-    mode: string;
-    status: string;
-    problem_type: string;
-    current_step: number;
-    total_steps: number;
-    created_at: string;
-  }[];
-  abandoned: {
-    id: string;
-    problem: string;
-    mode: string;
-    current_step: number;
-    total_steps: number;
-    created_at: string;
-  }[];
   total_count: number;
+  by_mode: { mode: string; count: number }[];
+  sessions_by_day: { day: string; count: number }[];
+  users: { id: string; email: string }[];
 }
 
 export interface QualityData {
