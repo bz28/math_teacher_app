@@ -1,52 +1,72 @@
 import { useEffect, useState } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, Cell,
 } from "recharts";
 import { api, type SessionsData } from "../lib/api";
 import StatCard from "../components/StatCard";
 
+const MODE_COLORS: Record<string, string> = {
+  learn: "#6366f1",
+  practice: "#10b981",
+  mock_test: "#f59e0b",
+};
+
 export default function Sessions() {
   const [data, setData] = useState<SessionsData | null>(null);
-  const [days, setDays] = useState("30");
+  const [hours, setHours] = useState("168");
+  const [userFilter, setUserFilter] = useState("");
 
   useEffect(() => {
-    api.sessions({ days }).then(setData);
-  }, [days]);
+    api.sessions({ hours, user_id: userFilter }).then(setData);
+  }, [hours, userFilter]);
 
   if (!data) return <p>Loading...</p>;
+
+  const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));
 
   return (
     <div>
       <h1>Sessions</h1>
 
-      <div className="filters">
-        <select value={days} onChange={(e) => setDays(e.target.value)}>
-          <option value="7">Last 7 days</option>
-          <option value="14">Last 14 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
+      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+          <option value="24">Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+          <option value="720">Last 30 days</option>
+          <option value="87600">All time</option>
         </select>
+        <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
+          <option value="">All Users</option>
+          {data.users.map((u) => (
+            <option key={u.id} value={u.id}>{u.email}</option>
+          ))}
+        </select>
+        {userFilter && (
+          <button className="filter-badge" onClick={() => setUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
+            Filtered by user ✕
+          </button>
+        )}
       </div>
 
       <div className="stat-grid">
         <StatCard label="Total Sessions" value={data.total_count} />
-        <StatCard label="Avg Steps" value={data.averages.avg_steps} />
-        <StatCard label="Avg Progress" value={data.averages.avg_progress} />
-        <StatCard label="Abandoned" value={data.abandoned.length} />
+        <StatCard label="Learn" value={modeMap["learn"] ?? 0} />
+        <StatCard label="Practice" value={modeMap["practice"] ?? 0} />
+        <StatCard label="Mock Test" value={modeMap["mock_test"] ?? 0} />
       </div>
 
       <div className="chart-row">
         <div className="chart-card">
-          <h3>Completion Rate / Day</h3>
+          <h3>Sessions / Day</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.completion_by_day}>
+            <AreaChart data={data.sessions_by_day}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-              <YAxis domain={[0, 100]} />
-              <Tooltip formatter={(v) => `${v}%`} />
-              <Line type="monotone" dataKey="rate" stroke="#6366f1" strokeWidth={2} />
-            </LineChart>
+              <YAxis />
+              <Tooltip />
+              <Area type="monotone" dataKey="count" stroke="#6366f1" fill="#6366f140" />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
 
@@ -58,90 +78,15 @@ export default function Sessions() {
               <XAxis dataKey="mode" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="count" fill="#6366f1" name="Total" />
-              <Bar dataKey="completed" fill="#10b981" name="Completed" />
+              <Bar dataKey="count">
+                {data.by_mode.map((entry, i) => (
+                  <Cell key={i} fill={MODE_COLORS[entry.mode] ?? "#6366f1"} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
-
-      <div className="table-card">
-        <h3>Top Problems</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Problem</th>
-              <th>Count</th>
-              <th>Completed</th>
-              <th>Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.top_problems.map((r, i) => (
-              <tr key={i}>
-                <td>{r.problem}</td>
-                <td>{r.count}</td>
-                <td>{r.completed}</td>
-                <td>{r.rate}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="table-card">
-        <h3>Recent Sessions</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Problem</th>
-              <th>Mode</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Progress</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.sessions.map((s) => (
-              <tr key={s.id}>
-                <td>{s.problem}</td>
-                <td>{s.mode}</td>
-                <td>{s.problem_type}</td>
-                <td><span className={`badge badge-${s.status}`}>{s.status}</span></td>
-                <td>{s.current_step}/{s.total_steps}</td>
-                <td>{new Date(s.created_at).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {data.abandoned.length > 0 && (
-        <div className="table-card">
-          <h3>Abandoned Sessions</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Problem</th>
-                <th>Mode</th>
-                <th>Progress</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.abandoned.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.problem}</td>
-                  <td>{s.mode}</td>
-                  <td>{s.current_step}/{s.total_steps}</td>
-                  <td>{new Date(s.created_at).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }

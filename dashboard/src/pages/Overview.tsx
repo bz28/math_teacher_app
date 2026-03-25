@@ -1,39 +1,65 @@
 import { useEffect, useState } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell,
 } from "recharts";
 import { api, type OverviewData } from "../lib/api";
 import StatCard from "../components/StatCard";
 
+const MODE_COLORS: Record<string, string> = {
+  learn: "#6366f1",
+  practice: "#10b981",
+  mock_test: "#f59e0b",
+};
+
 export default function Overview() {
   const [data, setData] = useState<OverviewData | null>(null);
+  const [hours, setHours] = useState("24");
+  const [grade, setGrade] = useState("");
 
   useEffect(() => {
-    api.overview().then(setData);
-  }, []);
+    api.overview({ hours, grade }).then(setData);
+  }, [hours, grade]);
 
   if (!data) return <p>Loading...</p>;
 
-  const sessionsDelta = data.sessions_today - data.sessions_yesterday;
-  const costDelta = data.cost_today - data.cost_yesterday;
+  const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));
 
   return (
     <div>
       <h1>Overview</h1>
 
+      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+          <option value="24">Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+          <option value="720">Last 30 days</option>
+          <option value="87600">All time</option>
+        </select>
+        <select value={grade} onChange={(e) => setGrade(e.target.value)}>
+          <option value="">All Grades</option>
+          <option value="2">K-2</option>
+          <option value="5">3-5</option>
+          <option value="8">6-8</option>
+          <option value="12">9-12</option>
+        </select>
+        {grade && (
+          <button className="filter-badge" onClick={() => setGrade("")} style={{ cursor: "pointer", border: "none" }}>
+            Grade filter ✕
+          </button>
+        )}
+      </div>
+
       <div className="stat-grid">
+        <StatCard label="Sessions" value={data.total_sessions} />
+        <StatCard label="Total Cost" value={`$${data.total_cost.toFixed(2)}`} />
+        <StatCard label="Active Users" value={data.active_users} />
+        <StatCard label="LLM Calls" value={data.total_calls} />
         <StatCard
-          label="Sessions Today"
-          value={data.sessions_today}
-          sub={`${sessionsDelta >= 0 ? "+" : ""}${sessionsDelta} vs yesterday`}
+          label="Error Rate"
+          value={`${data.error_rate}%`}
+          sub={`${data.failed_calls} failed`}
         />
-        <StatCard
-          label="Cost Today"
-          value={`$${data.cost_today.toFixed(4)}`}
-          sub={`${costDelta >= 0 ? "+" : ""}$${costDelta.toFixed(4)} vs yesterday`}
-        />
-        <StatCard label="Active Users (7d)" value={data.active_users_7d} />
-        <StatCard label="Completion Rate (7d)" value={`${data.completion_rate_7d}%`} />
       </div>
 
       <div className="chart-row">
@@ -64,30 +90,50 @@ export default function Overview() {
         </div>
       </div>
 
-      <div className="table-card">
-        <h3>Recent Sessions</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Problem</th>
-              <th>Mode</th>
-              <th>Status</th>
-              <th>Progress</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.recent_sessions.map((s) => (
-              <tr key={s.id}>
-                <td>{s.problem}</td>
-                <td>{s.mode}</td>
-                <td><span className={`badge badge-${s.status}`}>{s.status}</span></td>
-                <td>{s.current_step}/{s.total_steps}</td>
-                <td>{new Date(s.created_at).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="chart-row">
+        <div className="chart-card">
+          <h3>Mode Usage</h3>
+          <div className="stat-grid" style={{ marginBottom: 16 }}>
+            <StatCard label="Learn" value={modeMap["learn"] ?? 0} />
+            <StatCard label="Practice" value={modeMap["practice"] ?? 0} />
+            <StatCard label="Mock Test" value={modeMap["mock_test"] ?? 0} />
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={data.by_mode}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="mode" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count">
+                {data.by_mode.map((entry, i) => (
+                  <Cell key={i} fill={MODE_COLORS[entry.mode] ?? "#6366f1"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {data.top_spenders.length > 0 && (
+          <div className="chart-card">
+            <h3>Top Spenders</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_spenders.map((s, i) => (
+                  <tr key={i}>
+                    <td>{s.name}</td>
+                    <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

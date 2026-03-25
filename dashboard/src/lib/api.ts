@@ -35,7 +35,7 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
 }
 
 export const api = {
-  overview: () => request<OverviewData>("/admin/overview"),
+  overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   sessions: (params?: Record<string, string>) => request<SessionsData>("/admin/sessions", params),
@@ -55,26 +55,31 @@ export const api = {
 
 // Types
 export interface OverviewData {
-  sessions_today: number;
-  sessions_yesterday: number;
-  cost_today: number;
-  cost_yesterday: number;
-  active_users_7d: number;
-  completion_rate_7d: number;
+  total_sessions: number;
+  active_users: number;
+  total_cost: number;
+  total_calls: number;
+  failed_calls: number;
+  error_rate: number;
+  by_mode: { mode: string; count: number }[];
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];
-  recent_sessions: {
-    id: string;
-    problem: string;
-    mode: string;
-    status: string;
-    total_steps: number;
-    current_step: number;
-    created_at: string;
-  }[];
+  top_spenders: { name: string; total_cost: number }[];
 }
 
 export interface LLMCallsData {
+  failure_count: number;
+  failure_rate: number;
+  failures_by_function: { function: string; count: number; avg_retries: number }[];
+  recent_failures: {
+    id: string;
+    function: string;
+    model: string;
+    retry_count: number;
+    output_text: string | null;
+    user_name: string | null;
+    created_at: string;
+  }[];
   by_function: {
     function: string;
     count: number;
@@ -99,6 +104,7 @@ export interface LLMCallsData {
     retry_count: number;
     session_id: string | null;
     user_id: string | null;
+    user_name: string | null;
     created_at: string;
   }[];
   total_count: number;
@@ -106,29 +112,10 @@ export interface LLMCallsData {
 }
 
 export interface SessionsData {
-  completion_by_day: { day: string; total: number; completed: number; rate: number }[];
-  by_mode: { mode: string; count: number; completed: number; rate: number }[];
-  averages: { avg_steps: number; avg_progress: number };
-  top_problems: { problem: string; count: number; completed: number; rate: number }[];
-  sessions: {
-    id: string;
-    problem: string;
-    mode: string;
-    status: string;
-    problem_type: string;
-    current_step: number;
-    total_steps: number;
-    created_at: string;
-  }[];
-  abandoned: {
-    id: string;
-    problem: string;
-    mode: string;
-    current_step: number;
-    total_steps: number;
-    created_at: string;
-  }[];
   total_count: number;
+  by_mode: { mode: string; count: number }[];
+  sessions_by_day: { day: string; count: number }[];
+  users: { id: string; email: string }[];
 }
 
 export interface QualityData {
@@ -159,13 +146,18 @@ export interface QualityData {
 export interface UsersData {
   total_users: number;
   active_7d: number;
+  total_spend: number;
   registrations_by_day: { day: string; count: number }[];
-  session_distribution: Record<string, number>;
-  top_users: {
+  users: {
     id: string;
     email: string;
-    grade_level: string;
+    name: string;
+    grade_level: number;
     session_count: number;
+    total_cost: number;
+    llm_call_count: number;
+    avg_cost_per_session: number;
     last_active: string | null;
+    registered: string;
   }[];
 }

@@ -260,7 +260,7 @@ async def call_claude_json(
             await _log_and_persist(
                 use_model, mode, 0, 0, latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
-                input_text=user_message,
+                input_text=user_message, output_text=str(e),
             )
         except json.JSONDecodeError as e:
             last_error = e

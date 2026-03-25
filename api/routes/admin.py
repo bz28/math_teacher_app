@@ -11,14 +11,14 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.quality_score import QualityScore
-from api.models.session import Session, SessionStatus
+from api.models.session import Session
 from api.models.user import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _date_range(days: int) -> datetime:
-    return datetime.now(UTC) - timedelta(days=days)
+def _time_range(hours: int) -> datetime:
+    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 # ---------------------------------------------------------------------------
@@ -28,106 +28,111 @@ def _date_range(days: int) -> datetime:
 
 @router.get("/overview")
 async def overview(
+    hours: int = Query(default=24, ge=1, le=87600),
+    grade: str | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_start = today_start - timedelta(days=1)
-    week_ago = _date_range(7)
+    since = _time_range(hours)
 
-    # Sessions today
-    sessions_today = (await db.execute(
-        select(func.count()).where(Session.created_at >= today_start)
+    # Build session filters (optionally scoped to grade)
+    session_filters = [Session.created_at >= since]
+    llm_filters = [LLMCall.created_at >= since]
+    if grade:
+        grade_val = int(grade)
+        grade_users = select(User.id).where(User.grade_level == grade_val).scalar_subquery()
+        session_filters.append(Session.user_id.in_(grade_users))
+        llm_filters.append(LLMCall.user_id.in_(grade_users))
+
+    # Sessions in period
+    total_sessions = (await db.execute(
+        select(func.count()).where(*session_filters)
     )).scalar() or 0
 
-    sessions_yesterday = (await db.execute(
-        select(func.count()).where(
-            Session.created_at >= yesterday_start,
-            Session.created_at < today_start,
-        )
-    )).scalar() or 0
-
-    # LLM cost today
-    cost_today = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(LLMCall.created_at >= today_start)
-    )).scalar() or 0.0
-
-    cost_yesterday = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
-            LLMCall.created_at >= yesterday_start,
-            LLMCall.created_at < today_start,
-        )
-    )).scalar() or 0.0
-
-    # Active users (7 day)
+    # Active users in period
     active_users = (await db.execute(
-        select(func.count(func.distinct(Session.user_id))).where(Session.created_at >= week_ago)
+        select(func.count(func.distinct(Session.user_id))).where(*session_filters)
     )).scalar() or 0
 
-    # Completion rate (7 day)
-    total_sessions_week = (await db.execute(
-        select(func.count()).where(Session.created_at >= week_ago)
-    )).scalar() or 0
+    # Total cost in period
+    total_cost = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(*llm_filters)
+    )).scalar() or 0.0
 
-    completed_sessions_week = (await db.execute(
-        select(func.count()).where(
-            Session.created_at >= week_ago,
-            Session.status == SessionStatus.COMPLETED,
+    # Error rate in period
+    total_calls = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(*llm_filters)
+    )).scalar() or 0
+    failed_calls = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            *llm_filters, LLMCall.success.is_(False),
         )
     )).scalar() or 0
+    error_rate = round(failed_calls / total_calls * 100, 1) if total_calls else 0.0
 
-    completion_rate = round(completed_sessions_week / total_sessions_week * 100, 1) if total_sessions_week else 0.0
-
-    # Sessions per day (last 7 days)
+    # Sessions per day
     sessions_by_day = (await db.execute(
         select(
             cast(Session.created_at, Date).label("day"),
             func.count().label("count"),
         )
-        .where(Session.created_at >= week_ago)
+        .where(*session_filters)
         .group_by("day")
         .order_by("day")
     )).all()
 
-    # Cost per day (last 7 days)
+    # Cost per day
     cost_by_day = (await db.execute(
         select(
             cast(LLMCall.created_at, Date).label("day"),
             func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
         )
-        .where(LLMCall.created_at >= week_ago)
+        .where(*llm_filters)
         .group_by("day")
         .order_by("day")
     )).all()
 
-    # Recent sessions
-    recent_sessions = (await db.execute(
-        select(Session)
-        .order_by(Session.created_at.desc())
-        .limit(10)
-    )).scalars().all()
+    # Sessions by mode
+    by_mode = (await db.execute(
+        select(
+            Session.mode,
+            func.count().label("count"),
+        )
+        .where(*session_filters)
+        .group_by(Session.mode)
+    )).all()
+
+    # Top spenders in period
+    spender_filters = [LLMCall.created_at >= since]
+    top_spenders = (await db.execute(
+        select(
+            User.name,
+            User.email,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost"),
+        )
+        .join(LLMCall, LLMCall.user_id == User.id)
+        .where(*spender_filters)
+        .group_by(User.id, User.name, User.email)
+        .order_by(func.sum(LLMCall.cost_usd).desc())
+        .limit(3)
+    )).all()
 
     return {
-        "sessions_today": sessions_today,
-        "sessions_yesterday": sessions_yesterday,
-        "cost_today": round(cost_today, 4),
-        "cost_yesterday": round(cost_yesterday, 4),
-        "active_users_7d": active_users,
-        "completion_rate_7d": completion_rate,
+        "total_sessions": total_sessions,
+        "active_users": active_users,
+        "total_cost": round(total_cost, 4),
+        "total_calls": total_calls,
+        "failed_calls": failed_calls,
+        "error_rate": error_rate,
+        "by_mode": [{"mode": r.mode, "count": r.count} for r in by_mode],
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],
         "cost_by_day": [{"day": str(r.day), "cost": round(r.cost, 4)} for r in cost_by_day],
-        "recent_sessions": [
+        "top_spenders": [
             {
-                "id": str(s.id),
-                "problem": s.problem[:60],
-                "mode": s.mode,
-                "status": s.status,
-                "total_steps": s.total_steps,
-                "current_step": s.current_step,
-                "created_at": s.created_at.isoformat(),
+                "name": r.name or r.email,
+                "total_cost": round(r.total_cost, 4),
             }
-            for s in recent_sessions
+            for r in top_spenders
         ],
     }
 
@@ -139,7 +144,7 @@ async def overview(
 
 @router.get("/llm-calls")
 async def llm_calls(
-    days: int = Query(default=7, ge=1, le=90),
+    hours: int = Query(default=168, ge=1, le=2160),
     function: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
@@ -147,7 +152,7 @@ async def llm_calls(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     # Build base filter conditions
     base_filters = [LLMCall.created_at >= since]
@@ -193,17 +198,53 @@ async def llm_calls(
         .order_by("day")
     )).all()
 
-    # Recent calls (paginated)
-    calls_query = select(LLMCall).where(*base_filters)
+    # Recent calls (paginated) — join user info
+    calls_query = (
+        select(LLMCall, User.email.label("user_email"), User.name.label("user_name"))
+        .outerjoin(User, User.id == LLMCall.user_id)
+        .where(*base_filters)
+    )
     if function:
         calls_query = calls_query.where(LLMCall.function == function)
     calls_query = calls_query.order_by(LLMCall.created_at.desc()).offset(offset).limit(limit)
-    calls = (await db.execute(calls_query)).scalars().all()
+    calls = (await db.execute(calls_query)).all()
 
     total_query = select(func.count()).select_from(LLMCall).where(*base_filters)
     if function:
         total_query = total_query.where(LLMCall.function == function)
     total_count = (await db.execute(total_query)).scalar() or 0
+
+    # Failure analysis
+    failure_filters = [*base_filters, LLMCall.success.is_(False)]
+
+    failure_count = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(*failure_filters)
+    )).scalar() or 0
+
+    total_calls_count = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(*base_filters)
+    )).scalar() or 0
+
+    failure_rate = round(failure_count / total_calls_count * 100, 1) if total_calls_count else 0.0
+
+    failures_by_function = (await db.execute(
+        select(
+            LLMCall.function,
+            func.count().label("count"),
+            func.avg(LLMCall.retry_count).label("avg_retries"),
+        )
+        .where(*failure_filters)
+        .group_by(LLMCall.function)
+        .order_by(func.count().desc())
+    )).all()
+
+    recent_failures = (await db.execute(
+        select(LLMCall, User.email, User.name)
+        .outerjoin(User, User.id == LLMCall.user_id)
+        .where(*failure_filters)
+        .order_by(LLMCall.created_at.desc())
+        .limit(10)
+    )).all()
 
     # Users who have LLM calls in this period (for filter dropdown)
     user_rows = (await db.execute(
@@ -218,6 +259,28 @@ async def llm_calls(
     )).all()
 
     return {
+        "failure_count": failure_count,
+        "failure_rate": failure_rate,
+        "failures_by_function": [
+            {
+                "function": r.function,
+                "count": r.count,
+                "avg_retries": round(r.avg_retries or 0, 1),
+            }
+            for r in failures_by_function
+        ],
+        "recent_failures": [
+            {
+                "id": str(c.id),
+                "function": c.function,
+                "model": c.model,
+                "retry_count": c.retry_count,
+                "output_text": c.output_text,
+                "user_name": name or email or None,
+                "created_at": c.created_at.isoformat(),
+            }
+            for c, email, name in recent_failures
+        ],
         "by_function": [
             {
                 "function": r.function,
@@ -256,9 +319,10 @@ async def llm_calls(
                 "output_text": c.output_text,
                 "session_id": str(c.session_id) if c.session_id else None,
                 "user_id": str(c.user_id) if c.user_id else None,
+                "user_name": user_name or user_email or None,
                 "created_at": c.created_at.isoformat(),
             }
-            for c in calls
+            for c, user_email, user_name in calls
         ],
         "total_count": total_count,
         "users": [
@@ -275,14 +339,14 @@ async def llm_calls(
 
 @router.get("/quality")
 async def quality_scores(
-    days: int = Query(default=7, ge=1, le=90),
+    hours: int = Query(default=168, ge=1, le=2160),
     only_failed: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     base_filters = [QualityScore.created_at >= since]
     if only_failed:
@@ -349,140 +413,68 @@ async def quality_scores(
 
 @router.get("/sessions")
 async def sessions(
-    days: int = Query(default=30, ge=1, le=90),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    hours: int = Query(default=168, ge=1, le=87600),
+    user_id: str | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
+    base_filters = [Session.created_at >= since]
+    if user_id:
+        base_filters.append(Session.user_id == user_id)
 
-    # Completion rate over time (by day)
-    completion_by_day = (await db.execute(
-        select(
-            cast(Session.created_at, Date).label("day"),
-            func.count().label("total"),
-            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
-        )
-        .where(Session.created_at >= since)
-        .group_by("day")
-        .order_by("day")
-    )).all()
+    # Total sessions
+    total_count = (await db.execute(
+        select(func.count()).select_from(Session).where(*base_filters)
+    )).scalar() or 0
 
     # By mode
     by_mode = (await db.execute(
         select(
             Session.mode,
             func.count().label("count"),
-            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
-        .where(Session.created_at >= since)
+        .where(*base_filters)
         .group_by(Session.mode)
     )).all()
 
-    # Averages
-    avg_stats = (await db.execute(
+    # Sessions per day (for trend chart)
+    sessions_by_day = (await db.execute(
         select(
-            func.avg(Session.total_steps).label("avg_steps"),
-            func.avg(Session.current_step).label("avg_progress"),
-        )
-        .where(Session.created_at >= since)
-    )).one()
-
-    # Top problems
-    top_problems = (await db.execute(
-        select(
-            Session.problem,
+            cast(Session.created_at, Date).label("day"),
             func.count().label("count"),
-            func.sum(case((Session.status == SessionStatus.COMPLETED, 1), else_=0)).label("completed"),
         )
-        .where(Session.created_at >= since)
-        .group_by(Session.problem)
-        .order_by(func.count().desc())
-        .limit(20)
+        .where(*base_filters)
+        .group_by("day")
+        .order_by("day")
     )).all()
 
-    # Recent sessions (paginated)
-    recent = (await db.execute(
-        select(Session)
-        .where(Session.created_at >= since)
-        .order_by(Session.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )).scalars().all()
-
-    # Abandoned sessions
-    abandoned = (await db.execute(
-        select(Session)
+    # Users dropdown for filter
+    user_rows = (await db.execute(
+        select(User.id, User.email)
         .where(
-            Session.created_at >= since,
-            Session.status == SessionStatus.ABANDONED,
+            User.id.in_(
+                select(func.distinct(Session.user_id))
+                .where(Session.created_at >= since)
+            )
         )
-        .order_by(Session.created_at.desc())
-        .limit(10)
-    )).scalars().all()
-
-    total_count = (await db.execute(
-        select(func.count()).select_from(Session).where(Session.created_at >= since)
-    )).scalar() or 0
+        .order_by(User.email)
+    )).all()
 
     return {
-        "completion_by_day": [
-            {
-                "day": str(r.day),
-                "total": r.total,
-                "completed": r.completed,
-                "rate": round(r.completed / r.total * 100, 1) if r.total else 0,
-            }
-            for r in completion_by_day
-        ],
+        "total_count": total_count,
         "by_mode": [
-            {
-                "mode": r.mode,
-                "count": r.count,
-                "completed": r.completed,
-                "rate": round(r.completed / r.count * 100, 1) if r.count else 0,
-            }
+            {"mode": r.mode, "count": r.count}
             for r in by_mode
         ],
-        "averages": {
-            "avg_steps": round(avg_stats.avg_steps or 0, 1),
-            "avg_progress": round(avg_stats.avg_progress or 0, 1),
-        },
-        "top_problems": [
-            {
-                "problem": r.problem[:80],
-                "count": r.count,
-                "completed": r.completed,
-                "rate": round(r.completed / r.count * 100, 1) if r.count else 0,
-            }
-            for r in top_problems
+        "sessions_by_day": [
+            {"day": str(r.day), "count": r.count}
+            for r in sessions_by_day
         ],
-        "sessions": [
-            {
-                "id": str(s.id),
-                "problem": s.problem[:80],
-                "mode": s.mode,
-                "status": s.status,
-                "problem_type": s.problem_type,
-                "current_step": s.current_step,
-                "total_steps": s.total_steps,
-                "created_at": s.created_at.isoformat(),
-            }
-            for s in recent
+        "users": [
+            {"id": str(r.id), "email": r.email}
+            for r in user_rows
         ],
-        "abandoned": [
-            {
-                "id": str(s.id),
-                "problem": s.problem[:80],
-                "mode": s.mode,
-                "current_step": s.current_step,
-                "total_steps": s.total_steps,
-                "created_at": s.created_at.isoformat(),
-            }
-            for s in abandoned
-        ],
-        "total_count": total_count,
     }
 
 
@@ -493,14 +485,27 @@ async def sessions(
 
 @router.get("/users")
 async def users(
-    days: int = Query(default=30, ge=1, le=90),
+    hours: int = Query(default=720, ge=1, le=2160),
+    sort_by: str = Query(default="total_cost", pattern=r"^(total_cost|session_count|last_active|name)$"),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _date_range(days)
+    since = _time_range(hours)
 
     # Total users
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
+
+    # Active users (7d)
+    active_7d = (await db.execute(
+        select(func.count(func.distinct(Session.user_id)))
+        .where(Session.created_at >= _time_range(168))
+    )).scalar() or 0
+
+    # Total spend (all users, in period)
+    total_spend = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0))
+        .where(LLMCall.created_at >= since)
+    )).scalar() or 0.0
 
     # Registrations over time
     registrations_by_day = (await db.execute(
@@ -513,67 +518,77 @@ async def users(
         .order_by("day")
     )).all()
 
-    # Active users (7d)
-    active_7d = (await db.execute(
-        select(func.count(func.distinct(Session.user_id)))
-        .where(Session.created_at >= _date_range(7))
-    )).scalar() or 0
+    # Per-user cost subquery
+    user_cost = (
+        select(
+            LLMCall.user_id,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost"),
+            func.count().label("llm_call_count"),
+        )
+        .where(LLMCall.created_at >= since, LLMCall.user_id.isnot(None))
+        .group_by(LLMCall.user_id)
+        .subquery()
+    )
 
-    # Sessions per user distribution
-    sessions_per_user = (await db.execute(
+    # Per-user session subquery
+    user_sessions = (
         select(
             Session.user_id,
             func.count().label("session_count"),
+            func.max(Session.created_at).label("last_active"),
         )
         .where(Session.created_at >= since)
         .group_by(Session.user_id)
-    )).all()
+        .subquery()
+    )
 
-    # Build distribution buckets
-    buckets = {"1": 0, "2-5": 0, "6-20": 0, "20+": 0}
-    for row in sessions_per_user:
-        c = row.session_count
-        if c == 1:
-            buckets["1"] += 1
-        elif c <= 5:
-            buckets["2-5"] += 1
-        elif c <= 20:
-            buckets["6-20"] += 1
-        else:
-            buckets["20+"] += 1
+    # Sort column mapping
+    sort_columns = {
+        "total_cost": func.coalesce(user_cost.c.total_cost, 0.0).desc(),
+        "session_count": func.coalesce(user_sessions.c.session_count, 0).desc(),
+        "last_active": func.coalesce(user_sessions.c.last_active, User.created_at).desc(),
+        "name": User.name.asc(),
+    }
 
-    # Most active users
-    top_users_rows = (await db.execute(
+    # All users with cost + session data
+    all_users = (await db.execute(
         select(
             User.id,
             User.email,
+            User.name,
             User.grade_level,
-            func.count(Session.id).label("session_count"),
-            func.max(Session.created_at).label("last_active"),
+            User.created_at,
+            func.coalesce(user_sessions.c.session_count, 0).label("session_count"),
+            func.coalesce(user_cost.c.total_cost, 0.0).label("total_cost"),
+            func.coalesce(user_cost.c.llm_call_count, 0).label("llm_call_count"),
+            user_sessions.c.last_active,
         )
-        .join(Session, Session.user_id == User.id)
-        .where(Session.created_at >= since)
-        .group_by(User.id, User.email, User.grade_level)
-        .order_by(func.count(Session.id).desc())
-        .limit(10)
+        .outerjoin(user_cost, user_cost.c.user_id == User.id)
+        .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
+        .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]))
     )).all()
 
     return {
         "total_users": total_users,
         "active_7d": active_7d,
+        "total_spend": round(total_spend, 4),
         "registrations_by_day": [
             {"day": str(r.day), "count": r.count}
             for r in registrations_by_day
         ],
-        "session_distribution": buckets,
-        "top_users": [
+        "users": [
             {
                 "id": str(r.id),
                 "email": r.email,
+                "name": r.name,
                 "grade_level": r.grade_level,
                 "session_count": r.session_count,
+                "total_cost": round(r.total_cost, 4),
+                "llm_call_count": r.llm_call_count,
+                "avg_cost_per_session": round(r.total_cost / r.session_count, 4) if r.session_count else 0.0,
                 "last_active": r.last_active.isoformat() if r.last_active else None,
+                "registered": r.created_at.isoformat(),
             }
-            for r in top_users_rows
+            for r in all_users
         ],
     }

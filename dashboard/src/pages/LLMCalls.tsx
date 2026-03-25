@@ -8,32 +8,40 @@ import StatCard from "../components/StatCard";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
+type Tab = "all" | "failures";
+
 export default function LLMCalls() {
   const [data, setData] = useState<LLMCallsData | null>(null);
-  const [days, setDays] = useState("7");
+  const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
+  const [tab, setTab] = useState<Tab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    api.llmCalls({ days, function: fnFilter, user_id: userFilter }).then(setData);
-  }, [days, fnFilter, userFilter]);
+    api.llmCalls({ hours, function: fnFilter, user_id: userFilter }).then(setData);
+  }, [hours, fnFilter, userFilter]);
 
   if (!data) return <p>Loading...</p>;
 
   const totalCalls = data.by_function.reduce((s, r) => s + r.count, 0);
   const totalCost = data.by_function.reduce((s, r) => s + r.total_cost, 0);
 
+  const callsToShow = tab === "failures"
+    ? data.calls.filter((c) => !c.success)
+    : data.calls;
+
   return (
     <div>
       <h1>LLM Calls</h1>
 
-      <div className="filters">
-        <select value={days} onChange={(e) => setDays(e.target.value)}>
-          <option value="7">Last 7 days</option>
-          <option value="14">Last 14 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
+      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+          <option value="1">Last hour</option>
+          <option value="6">Last 6 hours</option>
+          <option value="24">Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+          <option value="720">Last 30 days</option>
         </select>
         <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
           <option value="">All Users</option>
@@ -41,12 +49,17 @@ export default function LLMCalls() {
             <option key={u.id} value={u.id}>{u.email}</option>
           ))}
         </select>
+        {userFilter && (
+          <button className="filter-badge" onClick={() => setUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
+            Filtered by user ✕
+          </button>
+        )}
       </div>
 
       <div className="stat-grid">
         <StatCard label="Total Calls" value={totalCalls} />
         <StatCard label="Total Cost" value={`$${totalCost.toFixed(4)}`} />
-        <StatCard label="Functions" value={data.by_function.length} />
+        <StatCard label="Failures" value={data.failure_count} sub={`${data.failure_rate}% failure rate`} />
         <StatCard label="Models" value={data.by_model.length} />
       </div>
 
@@ -65,25 +78,35 @@ export default function LLMCalls() {
         </div>
 
         <div className="chart-card">
-          <h3>Cost by Model</h3>
+          <h3>{data.failure_count > 0 ? "Failures by Function" : "Cost by Model"}</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={data.by_model}
-                dataKey="total_cost"
-                nameKey="model"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-              >
-                {data.by_model.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
-            </PieChart>
+            {data.failure_count > 0 ? (
+              <BarChart data={data.failures_by_function}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="function" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="count" fill="#ef4444" />
+              </BarChart>
+            ) : (
+              <PieChart>
+                <Pie
+                  data={data.by_model}
+                  dataKey="total_cost"
+                  nameKey="model"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                >
+                  {data.by_model.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
+              </PieChart>
+            )}
           </ResponsiveContainer>
         </div>
       </div>
@@ -107,6 +130,7 @@ export default function LLMCalls() {
                 key={r.function}
                 className="clickable"
                 onClick={() => setFnFilter(fnFilter === r.function ? "" : r.function)}
+                style={fnFilter === r.function ? { background: "#ede9fe" } : undefined}
               >
                 <td>{r.function}</td>
                 <td>{r.count}</td>
@@ -121,35 +145,65 @@ export default function LLMCalls() {
       </div>
 
       <div className="table-card">
-        <h3>Recent Calls {fnFilter && <span className="filter-badge">{fnFilter} <button onClick={() => setFnFilter("")}>x</button></span>}</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ marginBottom: 0 }}>
+            {tab === "all" ? "Recent Calls" : "Recent Failures"}
+            {fnFilter && <span className="filter-badge">{fnFilter} <button onClick={() => setFnFilter("")}>x</button></span>}
+          </h3>
+          <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 6, padding: 2 }}>
+            <button
+              onClick={() => setTab("all")}
+              style={{
+                padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: tab === "all" ? "#fff" : "transparent",
+                color: tab === "all" ? "#1e293b" : "#94a3b8",
+                boxShadow: tab === "all" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+              }}
+            >
+              All ({totalCalls})
+            </button>
+            <button
+              onClick={() => setTab("failures")}
+              style={{
+                padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: tab === "failures" ? "#fff" : "transparent",
+                color: tab === "failures" ? "#ef4444" : "#94a3b8",
+                boxShadow: tab === "failures" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+              }}
+            >
+              Failures ({data.failure_count})
+            </button>
+          </div>
+        </div>
         <table>
           <thead>
             <tr>
               <th></th>
               <th>Function</th>
-              <th>Model</th>
+              <th>User</th>
               <th>Tokens (in/out)</th>
               <th>Latency</th>
               <th>Cost</th>
-              <th>OK</th>
+              <th>Retries</th>
               <th>Time</th>
             </tr>
           </thead>
           <tbody>
-            {data.calls.map((c) => (
+            {callsToShow.map((c) => (
               <>
                 <tr
                   key={c.id}
                   className="clickable"
                   onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                  style={!c.success ? { background: "#fef2f2" } : undefined}
                 >
                   <td>{expandedId === c.id ? "\u25BC" : "\u25B6"}</td>
                   <td>{c.function}</td>
-                  <td>{c.model}</td>
+                  <td>{c.user_name || "-"}</td>
                   <td>{c.input_tokens}/{c.output_tokens}</td>
                   <td>{c.latency_ms.toFixed(0)}ms</td>
                   <td>${c.cost_usd.toFixed(6)}</td>
-                  <td>{c.success ? "Y" : "N"}</td>
+                  <td>{c.retry_count > 0 ? c.retry_count : "-"}</td>
                   <td>{new Date(c.created_at).toLocaleString()}</td>
                 </tr>
                 {expandedId === c.id && (
@@ -161,7 +215,7 @@ export default function LLMCalls() {
                           <pre>{c.input_text || "(not captured)"}</pre>
                         </div>
                         <div className="call-detail-section">
-                          <strong>Output</strong>
+                          <strong>{c.success ? "Output" : "Error"}</strong>
                           <pre>{c.output_text || "(not captured)"}</pre>
                         </div>
                       </div>
@@ -170,6 +224,11 @@ export default function LLMCalls() {
                 )}
               </>
             ))}
+            {callsToShow.length === 0 && (
+              <tr><td colSpan={8} style={{ textAlign: "center", color: "#94a3b8", padding: 24 }}>
+                {tab === "failures" ? "No failures in this period" : "No calls found"}
+              </td></tr>
+            )}
           </tbody>
         </table>
       </div>
