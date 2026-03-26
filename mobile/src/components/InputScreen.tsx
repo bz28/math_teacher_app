@@ -228,7 +228,6 @@ export function InputScreen({
               >
                 <Ionicons name="camera" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Take a photo</Text>
-                <Text style={styles.captureHint}>Snap your homework{"\n"}or textbook</Text>
               </LinearGradient>
             </AnimatedPressable>
           </View>
@@ -247,7 +246,6 @@ export function InputScreen({
               >
                 <Ionicons name="images" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Choose photo</Text>
-                <Text style={styles.captureHint}>Pick from your{"\n"}camera roll</Text>
               </LinearGradient>
             </AnimatedPressable>
           </View>
@@ -541,7 +539,7 @@ const styles = StyleSheet.create({
   captureCard: {
     alignItems: "center",
     borderRadius: radii.lg,
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.sm,
   },
   captureCardDisabled: {
@@ -553,13 +551,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: spacing.sm,
     marginBottom: 2,
-  },
-  captureHint: {
-    ...typography.caption,
-    color: "rgba(255,255,255,0.75)",
-    textAlign: "center",
-    fontSize: 11,
-    lineHeight: 15,
   },
 
   // "or type it in" divider
