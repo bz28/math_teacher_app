@@ -216,6 +216,23 @@ export const respondToStep = (
 export const getSimilarProblem = (sessionId: string) =>
   apiPost<{ similar_problem: string }>(`/session/${sessionId}/similar`, {});
 
+// Session history
+export interface SessionHistoryItem {
+  id: string;
+  problem: string;
+  status: string;
+  total_steps: number;
+  created_at: string;
+}
+
+export interface SessionHistoryResponse {
+  items: SessionHistoryItem[];
+  has_more: boolean;
+}
+
+export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
+  apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
+
 export const createMockTestSession = (problem: string) =>
   apiPost<{ id: string }>("/session/mock-test", { problem });
 
