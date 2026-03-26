@@ -27,12 +27,13 @@ Sentry.init({
 
 const ONBOARDING_KEY = "onboarding_completed";
 
-type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session";
+type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session" | "session-review" | "history-list";
 
 function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [mode, setMode] = useState<Mode>("learn");
   const [subject, setSubject] = useState("math");
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
 
@@ -112,11 +113,17 @@ function AppRoot() {
     return (
       <SafeAreaProvider>
         <ModeSelectScreen
+          subject={subject}
           onSelect={(selectedMode) => {
             setMode(selectedMode);
             setScreen("input");
           }}
           onBack={() => setScreen("home")}
+          onViewSession={(sessionId) => {
+            setReviewSessionId(sessionId);
+            setScreen("session-review");
+          }}
+          onViewAllHistory={() => setScreen("history-list")}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
