@@ -11,6 +11,7 @@ import * as SecureStore from "expo-secure-store";
 import * as Sentry from "@sentry/react-native";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
+import { HistoryListScreen } from "./src/components/HistoryListScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
 import { InputScreen } from "./src/components/InputScreen";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
@@ -125,6 +126,22 @@ function AppRoot() {
             setScreen("session-review");
           }}
           onViewAllHistory={() => setScreen("history-list")}
+        />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (screen === "history-list") {
+    return (
+      <SafeAreaProvider>
+        <HistoryListScreen
+          subject={subject}
+          onBack={() => setScreen("mode-select")}
+          onViewSession={(sessionId) => {
+            setReviewSessionId(sessionId);
+            setScreen("session-review");
+          }}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
