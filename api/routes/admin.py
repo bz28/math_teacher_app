@@ -108,6 +108,16 @@ async def overview(
         .group_by(Session.mode)
     )).all()
 
+    # Sessions by subject
+    by_subject = (await db.execute(
+        select(
+            Session.subject,
+            func.count().label("count"),
+        )
+        .where(*session_filters)
+        .group_by(Session.subject)
+    )).all()
+
     # Top spenders in period
     spender_filters = [LLMCall.created_at >= since]
     top_spenders = (await db.execute(
@@ -132,6 +142,7 @@ async def overview(
         "error_rate": error_rate,
         "avg_latency_ms": round(avg_latency, 0),
         "by_mode": [{"mode": r.mode, "count": r.count} for r in by_mode],
+        "by_subject": [{"subject": r.subject, "count": r.count} for r in by_subject],
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],
         "cost_by_day": [{"day": str(r.day), "cost": round(r.cost, 4)} for r in cost_by_day],
         "top_spenders": [

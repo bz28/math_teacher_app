@@ -8,6 +8,7 @@ import anthropic
 
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 from api.core.step_decomposition import decompose_problem
+from api.core.subjects import Subject, get_config
 from api.core.tutor import check_answer_equivalence
 
 logger = logging.getLogger(__name__)
@@ -17,13 +18,13 @@ logger = logging.getLogger(__name__)
 # Problem generation
 # ---------------------------------------------------------------------------
 
-_GENERATE_QUESTIONS_PROMPT = """You are a worldclass math professor generating practice problems.
+_GENERATE_QUESTIONS_TEMPLATE = """You are a {professor_role} generating practice problems.
 
-Given one or more math problems, generate similar problems that test the SAME
+Given one or more {problems_noun}, generate similar problems that test the SAME
 concepts and require the SAME approach to solve.
 
 Respond with ONLY valid JSON:
-{"problems": ["problem 1 text", "problem 2 text", ...]}
+{{"problems": ["problem 1 text", "problem 2 text", ...]}}
 
 Rules:
 - Identify the concept and solving approach from the problem text alone
@@ -33,11 +34,20 @@ Rules:
 - Return ONLY the problem text — do NOT include answers"""
 
 
+def _build_generate_prompt(subject: str) -> str:
+    cfg = get_config(subject)
+    return _GENERATE_QUESTIONS_TEMPLATE.format(
+        professor_role=cfg["professor_role"],
+        problems_noun=cfg["problems_noun"],
+    )
+
+
 async def generate_practice_problems(
     problem: str,
     count: int,
     *,
     user_id: str | None = None,
+    subject: str = Subject.MATH,
 ) -> list[dict[str, str]]:
     """Generate the original + count similar problems with answers.
 
@@ -49,7 +59,7 @@ async def generate_practice_problems(
     Returns list of {"question": ..., "answer": ...} dicts.
     """
     if count == 0:
-        decomposition = await decompose_problem(problem, user_id=user_id)
+        decomposition = await decompose_problem(problem, user_id=user_id, subject=subject)
         return [{"question": problem, "answer": decomposition.final_answer}]
 
     # Generate question text only (no answers — they'd be unreliable)
@@ -57,7 +67,7 @@ async def generate_practice_problems(
 
     try:
         result = await call_claude_json(
-            _GENERATE_QUESTIONS_PROMPT,
+            _build_generate_prompt(subject),
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
@@ -78,7 +88,7 @@ async def generate_practice_problems(
     # Step 2: Solve each generated problem via decompose_problem for accuracy
     async def solve_one(q: str) -> dict[str, str] | None:
         try:
-            decomp = await decompose_problem(q, user_id=user_id)
+            decomp = await decompose_problem(q, user_id=user_id, subject=subject)
             return {"question": q, "answer": decomp.final_answer}
         except RuntimeError:
             logger.warning("Failed to solve generated problem: %s", q[:80])
@@ -105,6 +115,7 @@ async def check_answer(
     *,
     session_id: str | None = None,
     user_id: str | None = None,
+    subject: str = Subject.MATH,
 ) -> bool:
     """Check if user's answer matches the correct answer.
 
@@ -114,5 +125,5 @@ async def check_answer(
         return True
     return await check_answer_equivalence(
         question, correct_answer, user_answer,
-        session_id=session_id, user_id=user_id,
+        session_id=session_id, user_id=user_id, subject=subject,
     )

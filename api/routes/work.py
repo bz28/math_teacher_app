@@ -28,7 +28,9 @@ async def submit_work(
 
     # Step 1: Generate optimal steps via decompose_problem()
     try:
-        decomposition = await decompose_problem(body.problem_text, user_id=user_id_str)
+        decomposition = await decompose_problem(
+            body.problem_text, user_id=user_id_str, subject=body.subject,
+        )
     except RuntimeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -48,6 +50,7 @@ async def submit_work(
             user_answer=body.user_answer,
             user_was_correct=body.user_was_correct,
             user_id=user_id_str,
+            subject=body.subject,
         )
     except ValueError as e:
         raise HTTPException(

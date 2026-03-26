@@ -1,4 +1,4 @@
-"""Image extraction endpoints: extract math problems from photos."""
+"""Image extraction endpoints: extract problems from photos."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -14,10 +14,11 @@ async def extract(
     body: ImageExtractRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ImageExtractResponse:
-    """Extract math problems from a photo of a worksheet, textbook, etc."""
+    """Extract problems from a photo of a worksheet, textbook, etc."""
     try:
         result = await extract_problems_from_image(
             body.image_base64, user_id=str(current_user.user_id),
+            subject=body.subject,
         )
     except ValueError as e:
         raise HTTPException(

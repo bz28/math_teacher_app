@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.core.practice import check_answer
 from api.core.step_decomposition import decompose_problem
+from api.core.subjects import Subject
 from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
 from api.models.work_submission import WorkSubmission
@@ -65,13 +66,14 @@ async def create_session(
     problem: str,
     mode: str = SessionMode.LEARN,
     role: str = "student",
+    subject: str = Subject.MATH,
 ) -> Session:
     """Create a new tutoring session for a problem."""
     await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
         # Use full decomposition for accuracy — steps cached for learn mode reuse
-        decomp = await decompose_problem(problem, user_id=str(user_id))
+        decomp = await decompose_problem(problem, user_id=str(user_id), subject=subject)
         problem_type = decomp.problem_type
         steps_data: list[dict[str, Any]] = [
             {"description": "Final answer", "final_answer": decomp.final_answer},
@@ -106,6 +108,7 @@ async def create_session(
         # Full decomposition for learn mode
         decomposition = await decompose_problem(
             problem, user_id=str(user_id), work_diagnosis=prior_diagnosis,
+            subject=subject,
         )
         problem_type = decomposition.problem_type
         steps_data = [{"description": s} for s in decomposition.steps]
@@ -127,6 +130,7 @@ async def create_session(
         total_steps=len(steps_data),
         status=SessionStatus.ACTIVE,
         mode=mode,
+        subject=subject,
         exchanges=[],
     )
     db.add(session)
@@ -200,6 +204,7 @@ async def _converse_completed(
         student_input=student_response,
         session_id=str(session.id),
         user_id=str(session.user_id),
+        subject=getattr(session, "subject", Subject.MATH),
     )
 
     _add_exchange(session, "tutor", chat_result.feedback)
@@ -248,6 +253,7 @@ async def _respond_practice_mode(
     is_correct = await check_answer(
         session.problem, correct_answer, student_response,
         session_id=str(session.id), user_id=str(session.user_id),
+        subject=getattr(session, "subject", Subject.MATH),
     )
 
     if is_correct:
@@ -305,6 +311,7 @@ async def _respond_learn_mode(
             student_input=student_response,
             session_id=str(session.id),
             user_id=str(session.user_id),
+            subject=getattr(session, "subject", Subject.MATH),
         )
         _add_exchange(session, "tutor", chat_result.feedback)
         await db.commit()
