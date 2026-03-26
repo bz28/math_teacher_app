@@ -3,7 +3,8 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.practice import generate_practice_problems
@@ -14,6 +15,7 @@ from api.core.session import (
     get_owned_session,
     respond_to_step,
 )
+from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
@@ -23,6 +25,8 @@ from api.schemas.session import (
     CreateMockTestRequest,
     CreateSessionRequest,
     RespondRequest,
+    SessionHistoryItem,
+    SessionHistoryResponse,
     SessionResponse,
     StepDetail,
     StepResponseSchema,
@@ -87,6 +91,72 @@ async def create(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return _session_to_response(session)
+
+
+@router.get("/history", response_model=SessionHistoryResponse)
+async def history(
+    subject: str = Query(...),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SessionHistoryResponse:
+    """List past learn-mode sessions for a subject."""
+    if subject not in VALID_SUBJECTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}",
+        )
+
+    query = (
+        select(SessionModel)
+        .where(
+            SessionModel.user_id == current_user.user_id,
+            SessionModel.subject == subject,
+            SessionModel.mode == SessionMode.LEARN,
+        )
+        .order_by(SessionModel.created_at.desc())
+        .offset(offset)
+        .limit(limit + 1)
+    )
+    result = await db.execute(query)
+    rows = result.scalars().all()
+
+    has_more = len(rows) > limit
+    items = [
+        SessionHistoryItem(
+            id=s.id,
+            problem=s.problem,
+            status=s.status,
+            current_step=s.current_step,
+            total_steps=s.total_steps,
+            created_at=s.created_at,
+        )
+        for s in rows[:limit]
+    ]
+    return SessionHistoryResponse(items=items, has_more=has_more)
+
+
+@router.post("/{session_id}/abandon")
+async def abandon(
+    session_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Mark an active session as abandoned."""
+    try:
+        session = await get_owned_session(db, session_id, current_user.user_id)
+    except SessionError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
+
+    if session.status != SessionStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not active")
+
+    session.status = SessionStatus.ABANDONED
+    await db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/{session_id}", response_model=SessionResponse)

@@ -11,10 +11,12 @@ import * as SecureStore from "expo-secure-store";
 import * as Sentry from "@sentry/react-native";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
+import { HistoryListScreen } from "./src/components/HistoryListScreen";
 import { HomeScreen } from "./src/components/HomeScreen";
 import { InputScreen } from "./src/components/InputScreen";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
+import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
@@ -27,14 +29,16 @@ Sentry.init({
 
 const ONBOARDING_KEY = "onboarding_completed";
 
-type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session";
+type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session" | "session-review" | "history-list";
 
 function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [mode, setMode] = useState<Mode>("learn");
   const [subject, setSubject] = useState("math");
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
+  const resumeSession = useSessionStore((s) => s.resumeSession);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -112,11 +116,54 @@ function AppRoot() {
     return (
       <SafeAreaProvider>
         <ModeSelectScreen
+          subject={subject}
           onSelect={(selectedMode) => {
             setMode(selectedMode);
             setScreen("input");
           }}
           onBack={() => setScreen("home")}
+          onViewSession={(sessionId) => {
+            setReviewSessionId(sessionId);
+            setScreen("session-review");
+          }}
+          onViewAllHistory={() => setScreen("history-list")}
+        />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (screen === "history-list") {
+    return (
+      <SafeAreaProvider>
+        <HistoryListScreen
+          subject={subject}
+          onBack={() => setScreen("mode-select")}
+          onViewSession={(sessionId) => {
+            setReviewSessionId(sessionId);
+            setScreen("session-review");
+          }}
+        />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (screen === "session-review" && reviewSessionId) {
+    return (
+      <SafeAreaProvider>
+        <SessionReviewScreen
+          sessionId={reviewSessionId}
+          onBack={() => setScreen("mode-select")}
+          onPracticeSimilar={(problem) => {
+            setProblemQueue([problem]);
+            setMode("learn");
+            setScreen("input");
+          }}
+          onResume={async (sessionId) => {
+            await resumeSession(sessionId);
+            setScreen("session");
+          }}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
