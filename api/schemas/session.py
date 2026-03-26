@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -62,3 +63,16 @@ class StepResponseSchema(BaseModel):
     current_step: int
     total_steps: int
     is_correct: bool = False
+
+
+class SessionHistoryItem(BaseModel):
+    id: uuid.UUID
+    problem: str
+    status: str
+    total_steps: int
+    created_at: datetime
+
+
+class SessionHistoryResponse(BaseModel):
+    items: list[SessionHistoryItem]
+    has_more: bool
