@@ -15,6 +15,7 @@ import { HomeScreen } from "./src/components/HomeScreen";
 import { InputScreen } from "./src/components/InputScreen";
 import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
+import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
@@ -124,6 +125,23 @@ function AppRoot() {
             setScreen("session-review");
           }}
           onViewAllHistory={() => setScreen("history-list")}
+        />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (screen === "session-review" && reviewSessionId) {
+    return (
+      <SafeAreaProvider>
+        <SessionReviewScreen
+          sessionId={reviewSessionId}
+          onBack={() => setScreen("mode-select")}
+          onPracticeSimilar={(problem) => {
+            setProblemQueue([problem]);
+            setMode("learn");
+            setScreen("input");
+          }}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
