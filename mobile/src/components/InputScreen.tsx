@@ -46,7 +46,7 @@ export function InputScreen({
   // Mock test config state
   const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
-  const [mockUntimed, setMockUntimed] = useState(false);
+  const [mockUntimed, setMockUntimed] = useState(true);
 
   const {
     extracting,
@@ -354,88 +354,86 @@ export function InputScreen({
 
         <MathKeyboard onInsert={handleInsert} accessoryID="math-input" />
 
-        {/* Mock test config — only show once problems are queued */}
-        {mode === "mock_test" && problemQueue.length > 0 && (
-          <View style={[styles.mockConfigContainer, shadows.sm]}>
-            <View style={styles.mockConfigHeader}>
-              <Ionicons name="settings-outline" size={16} color={colors.primary} />
-              <Text style={styles.mockConfigTitle}>Exam Settings</Text>
-            </View>
-
-            {/* Exam type segmented control */}
-            <View style={styles.mockSection}>
-              <View style={styles.mockSegment}>
-                <TouchableOpacity
-                  style={[styles.mockSegmentBtn, mockExamType === "use_as_exam" && [styles.mockSegmentBtnActive, shadows.sm]]}
-                  onPress={() => setMockExamType("use_as_exam")}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.mockSegmentText, mockExamType === "use_as_exam" && styles.mockSegmentTextActive]}>
-                    Use as Exam
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.mockSegmentBtn, mockExamType === "generate_similar" && [styles.mockSegmentBtnActive, shadows.sm]]}
-                  onPress={() => setMockExamType("generate_similar")}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.mockSegmentText, mockExamType === "generate_similar" && styles.mockSegmentTextActive]}>
-                    Generate Similar
-                  </Text>
-                </TouchableOpacity>
+        {/* Mock test config — always visible so students see what they're building */}
+        {mode === "mock_test" && (
+          <View style={styles.mockConfig}>
+            {/* Questions */}
+            <Text style={styles.mockSectionLabel}>QUESTIONS</Text>
+            <AnimatedPressable
+              style={[styles.mockRadioCard, mockExamType === "use_as_exam" && styles.mockRadioCardActive]}
+              onPress={() => setMockExamType("use_as_exam")}
+              scaleDown={0.98}
+            >
+              <View style={[styles.mockRadioDot, mockExamType === "use_as_exam" && styles.mockRadioDotActive]}>
+                {mockExamType === "use_as_exam" && <View style={styles.mockRadioDotInner} />}
               </View>
-              <Text style={styles.mockSegmentHint}>
-                {mockExamType === "use_as_exam"
-                  ? `Your ${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""} will be the exam`
-                  : `1 similar problem generated per queued problem (${problemQueue.length} total)`}
+              <Text style={[styles.mockRadioLabel, mockExamType === "use_as_exam" && styles.mockRadioLabelActive]}>
+                Use these as my exam
               </Text>
-            </View>
+            </AnimatedPressable>
+            <AnimatedPressable
+              style={[styles.mockRadioCard, mockExamType === "generate_similar" && styles.mockRadioCardActive]}
+              onPress={() => setMockExamType("generate_similar")}
+              scaleDown={0.98}
+            >
+              <View style={[styles.mockRadioDot, mockExamType === "generate_similar" && styles.mockRadioDotActive]}>
+                {mockExamType === "generate_similar" && <View style={styles.mockRadioDotInner} />}
+              </View>
+              <View style={styles.mockRadioTextWrap}>
+                <Text style={[styles.mockRadioLabel, mockExamType === "generate_similar" && styles.mockRadioLabelActive]}>
+                  Generate a similar exam
+                </Text>
+                <Text style={styles.mockRadioHint}>Fresh questions based on yours</Text>
+              </View>
+            </AnimatedPressable>
 
             {/* Time limit */}
-            <View style={styles.mockDivider} />
-            <View style={styles.mockSettingRow}>
-              <View style={styles.mockSettingLabel}>
-                <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-                <Text style={styles.mockSettingText}>Time Limit</Text>
+            <Text style={[styles.mockSectionLabel, { marginTop: spacing.xl }]}>TIME LIMIT</Text>
+            <AnimatedPressable
+              style={[styles.mockRadioCard, mockUntimed && styles.mockRadioCardActive]}
+              onPress={() => setMockUntimed(true)}
+              scaleDown={0.98}
+            >
+              <View style={[styles.mockRadioDot, mockUntimed && styles.mockRadioDotActive]}>
+                {mockUntimed && <View style={styles.mockRadioDotInner} />}
               </View>
-              <AnimatedPressable
-                style={[styles.mockToggleChip, !mockUntimed && styles.mockToggleChipActive]}
-                onPress={() => setMockUntimed(!mockUntimed)}
-              >
-                <Ionicons
-                  name={mockUntimed ? "infinite-outline" : "timer-outline"}
-                  size={14}
-                  color={!mockUntimed ? colors.primary : colors.textMuted}
-                />
-                <Text style={[styles.mockToggleChipText, !mockUntimed && styles.mockToggleChipTextActive]}>
-                  {mockUntimed ? "Off" : "On"}
-                </Text>
-              </AnimatedPressable>
-            </View>
-            {!mockUntimed && (
-              <View style={styles.mockTimeStepperRow}>
-                <View style={styles.mockMiniStepper}>
+              <Text style={[styles.mockRadioLabel, mockUntimed && styles.mockRadioLabelActive]}>
+                No time limit
+              </Text>
+            </AnimatedPressable>
+            <AnimatedPressable
+              style={[styles.mockRadioCard, !mockUntimed && styles.mockRadioCardActive]}
+              onPress={() => setMockUntimed(false)}
+              scaleDown={0.98}
+            >
+              <View style={[styles.mockRadioDot, !mockUntimed && styles.mockRadioDotActive]}>
+                {!mockUntimed && <View style={styles.mockRadioDotInner} />}
+              </View>
+              <Text style={[styles.mockRadioLabel, !mockUntimed && styles.mockRadioLabelActive]}>
+                Timed
+              </Text>
+              {!mockUntimed && (
+                <View style={styles.mockTimeStepper}>
                   <AnimatedPressable
-                    style={[styles.mockMiniBtn, mockTimeLimitMinutes <= 1 && styles.mockMiniBtnDisabled]}
+                    style={[styles.mockStepperBtn, mockTimeLimitMinutes <= 1 && styles.mockStepperBtnDisabled]}
                     onPress={() => setMockTimeLimitMinutes(Math.max(1, mockTimeLimitMinutes - 5))}
                     scaleDown={0.9}
                     disabled={mockTimeLimitMinutes <= 1}
                   >
-                    <Ionicons name="remove" size={16} color={mockTimeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
+                    <Ionicons name="remove" size={14} color={mockTimeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
                   </AnimatedPressable>
-                  <Text style={styles.mockMiniValue}>{mockTimeLimitMinutes}</Text>
+                  <Text style={styles.mockStepperValue}>{mockTimeLimitMinutes} min</Text>
                   <AnimatedPressable
-                    style={[styles.mockMiniBtn, mockTimeLimitMinutes >= 180 && styles.mockMiniBtnDisabled]}
+                    style={[styles.mockStepperBtn, mockTimeLimitMinutes >= 180 && styles.mockStepperBtnDisabled]}
                     onPress={() => setMockTimeLimitMinutes(Math.min(180, mockTimeLimitMinutes + 5))}
                     scaleDown={0.9}
                     disabled={mockTimeLimitMinutes >= 180}
                   >
-                    <Ionicons name="add" size={16} color={mockTimeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
+                    <Ionicons name="add" size={14} color={mockTimeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
                   </AnimatedPressable>
                 </View>
-                <Text style={styles.mockTimeUnit}>minutes</Text>
-              </View>
-            )}
+              )}
+            </AnimatedPressable>
           </View>
         )}
 
@@ -709,134 +707,90 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: spacing.sm,
   },
-  // Mock test config styles
-  mockConfigContainer: {
+  // Mock test config — radio style
+  mockConfig: {
+    marginTop: spacing.lg,
     width: "100%",
+  },
+  mockSectionLabel: {
+    ...typography.small,
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
+  mockRadioCard: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     backgroundColor: colors.white,
     borderRadius: radii.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.borderLight,
-    marginTop: spacing.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
   },
-  mockConfigHeader: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
+  mockRadioCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
   },
-  mockConfigTitle: {
-    ...typography.bodyBold,
-    color: colors.text,
-    fontSize: 15,
-  },
-  mockSection: {
-    marginBottom: spacing.xs,
-  },
-  mockSegment: {
-    flexDirection: "row" as const,
-    backgroundColor: colors.inputBg,
-    borderRadius: radii.md,
-    padding: 3,
-  },
-  mockSegmentBtn: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: radii.sm + 1,
-    alignItems: "center" as const,
+  mockRadioDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.textMuted,
     justifyContent: "center" as const,
-  },
-  mockSegmentBtnActive: {
-    backgroundColor: colors.white,
-  },
-  mockSegmentText: {
-    ...typography.label,
-    color: colors.textMuted,
-  },
-  mockSegmentTextActive: {
-    color: colors.primary,
-  },
-  mockSegmentHint: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: "center" as const,
-    marginTop: spacing.sm,
-  },
-  mockDivider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: spacing.lg,
-  },
-  mockSettingRow: {
-    flexDirection: "row" as const,
     alignItems: "center" as const,
-    justifyContent: "space-between" as const,
   },
-  mockSettingLabel: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: spacing.sm,
+  mockRadioDotActive: {
+    borderColor: colors.primary,
   },
-  mockSettingText: {
-    ...typography.body,
+  mockRadioDotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+  },
+  mockRadioTextWrap: {
+    flex: 1,
+  },
+  mockRadioLabel: {
+    ...typography.bodyBold,
     color: colors.text,
     fontSize: 14,
   },
-  mockMiniStepper: {
+  mockRadioLabelActive: {
+    color: colors.primary,
+  },
+  mockRadioHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  mockTimeStepper: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    backgroundColor: colors.inputBg,
+    marginLeft: "auto" as const,
+    backgroundColor: colors.white,
     borderRadius: radii.sm,
-    paddingHorizontal: 2,
-    paddingVertical: 2,
-    gap: 0,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  mockMiniBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm - 2,
+  mockStepperBtn: {
+    width: 30,
+    height: 30,
     justifyContent: "center" as const,
     alignItems: "center" as const,
   },
-  mockMiniBtnDisabled: {
+  mockStepperBtnDisabled: {
     opacity: 0.35,
   },
-  mockMiniValue: {
-    ...typography.bodyBold,
-    color: colors.text,
-    minWidth: 36,
-    textAlign: "center" as const,
-    fontSize: 15,
-  },
-  mockToggleChip: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.inputBg,
-  },
-  mockToggleChipActive: {
-    backgroundColor: colors.primaryBg,
-  },
-  mockToggleChipText: {
+  mockStepperValue: {
     ...typography.label,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  mockToggleChipTextActive: {
     color: colors.primary,
-  },
-  mockTimeStepperRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "flex-end" as const,
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  mockTimeUnit: {
-    ...typography.caption,
-    color: colors.textMuted,
+    minWidth: 46,
+    textAlign: "center" as const,
+    fontSize: 13,
   },
 });
