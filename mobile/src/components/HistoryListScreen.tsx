@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -26,16 +26,25 @@ function formatRelativeDate(dateStr: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function HistoryCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
-  const isCompleted = item.status === "completed";
+function InProgressCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
   return (
-    <AnimatedPressable style={[styles.historyCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
-      <Ionicons
-        name={isCompleted ? "checkmark-circle" : "time-outline"}
-        size={20}
-        color={isCompleted ? colors.success : colors.textMuted}
-        style={styles.historyIcon}
-      />
+    <AnimatedPressable style={[styles.inProgressCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
+      <Ionicons name="play-circle" size={22} color={colors.success} style={styles.historyIcon} />
+      <View style={styles.historyContent}>
+        <Text style={styles.historyProblem} numberOfLines={1}>{item.problem}</Text>
+        <Text style={styles.historyMeta}>
+          Step {item.current_step} of {item.total_steps} · {formatRelativeDate(item.created_at)}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+    </AnimatedPressable>
+  );
+}
+
+function CompletedCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
+  return (
+    <AnimatedPressable style={[styles.completedCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
+      <Ionicons name="checkmark-circle" size={20} color={colors.success} style={styles.historyIcon} />
       <View style={styles.historyContent}>
         <Text style={styles.historyProblem} numberOfLines={1}>{item.problem}</Text>
         <Text style={styles.historyMeta}>
@@ -87,6 +96,8 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
   };
 
   const subjectLabel = subject.charAt(0).toUpperCase() + subject.slice(1);
+  const inProgress = items.filter((s) => s.status !== "completed");
+  const completed = items.filter((s) => s.status === "completed");
 
   return (
     <SafeAreaView style={styles.container}>
@@ -105,22 +116,49 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
           <Text style={styles.emptyText}>No sessions yet</Text>
         </View>
       ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <HistoryCard item={item} onPress={() => onViewSession(item.id)} />
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* Continue Learning */}
+          {inProgress.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>CONTINUE LEARNING</Text>
+              <View style={styles.historyList}>
+                {inProgress.map((item) => (
+                  <InProgressCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => onViewSession(item.id)}
+                  />
+                ))}
+              </View>
+            </View>
           )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator size="small" color={colors.primary} style={styles.footerLoader} />
-            ) : null
-          }
-        />
+
+          {/* Completed */}
+          {completed.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>COMPLETED</Text>
+              <View style={styles.historyList}>
+                {completed.map((item) => (
+                  <CompletedCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => onViewSession(item.id)}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {hasMore && (
+            <AnimatedPressable style={styles.loadMoreButton} onPress={loadMore}>
+              {loadingMore ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.loadMoreText}>Load More</Text>
+              )}
+            </AnimatedPressable>
+          )}
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -131,6 +169,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: spacing.xxl + 4,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
   },
   backButton: {
     alignSelf: "flex-start",
@@ -157,11 +198,37 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
   },
-  listContent: {
-    gap: spacing.sm,
-    paddingBottom: spacing.xxxl,
+
+  // Sections
+  section: {
+    marginBottom: spacing.xxl,
   },
-  historyCard: {
+  sectionLabel: {
+    ...typography.small,
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginBottom: spacing.md,
+  },
+  historyList: {
+    gap: spacing.sm,
+  },
+
+  // In-progress card
+  inProgressCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.success,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+
+  // Completed card
+  completedCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.white,
@@ -171,6 +238,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+
   historyIcon: {
     marginTop: 1,
   },
@@ -188,7 +256,15 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
   },
-  footerLoader: {
-    paddingVertical: spacing.xl,
+
+  // Load more
+  loadMoreButton: {
+    alignItems: "center",
+    paddingVertical: spacing.lg,
+  },
+  loadMoreText: {
+    ...typography.bodyBold,
+    color: colors.primary,
+    fontSize: 14,
   },
 });
