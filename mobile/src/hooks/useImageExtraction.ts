@@ -30,6 +30,7 @@ export function useImageExtraction(
   queueLength: number,
   maxProblems: number,
   setError: (msg: string | null) => void,
+  subject: string = "math",
 ) {
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
 
@@ -39,7 +40,7 @@ export function useImageExtraction(
       if (status !== "granted") {
         Alert.alert(
           "Camera Access Required",
-          "Please enable camera access in Settings to scan math problems.",
+          "Please enable camera access in Settings to scan problems.",
           [
             { text: "Cancel", style: "cancel" },
             { text: "Open Settings", onPress: () => Linking.openSettings() },
@@ -106,7 +107,7 @@ export function useImageExtraction(
 
       // Process images in parallel
       const results = await Promise.allSettled(
-        validAssets.map((asset) => extractProblemsFromImage(asset.base64!)),
+        validAssets.map((asset) => extractProblemsFromImage(asset.base64!, subject)),
       );
 
       let done = 0;
@@ -132,7 +133,7 @@ export function useImageExtraction(
         setError(
           failedCount > 0
             ? `Failed to extract from ${failedCount} image${failedCount > 1 ? "s" : ""}. Try clearer photos.`
-            : "No math problems found. Try clearer photos.",
+            : "No problems found. Try clearer photos.",
         );
         return;
       }

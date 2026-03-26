@@ -32,6 +32,7 @@ type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "sessio
 function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [mode, setMode] = useState<Mode>("learn");
+  const [subject, setSubject] = useState("math");
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
 
@@ -41,6 +42,8 @@ function AppRoot() {
       setFromOnboarding(false);
     });
 
+    // TODO: remove — temp force onboarding for testing
+    setScreen("onboarding"); return;
     SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
       if (!done) {
         setScreen("onboarding");
@@ -81,7 +84,10 @@ function AppRoot() {
     return (
       <SafeAreaProvider>
         <HomeScreen
-          onSelect={() => setScreen("mode-select")}
+          onSelect={(selectedSubject) => {
+            setSubject(selectedSubject);
+            setScreen("mode-select");
+          }}
           onLogout={() => {
             Alert.alert("Log Out", "Are you sure you want to log out?", [
               { text: "Cancel", style: "cancel" },
@@ -145,6 +151,7 @@ function AppRoot() {
         >
           <InputScreen
             mode={mode}
+            subject={subject}
             onBack={() => {
               setProblemQueue([]);
               setScreen("mode-select");

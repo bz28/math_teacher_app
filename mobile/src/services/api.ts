@@ -26,6 +26,7 @@ export interface SessionData {
   total_steps: number;
   status: string;
   mode: string;
+  subject: string;
   steps: StepDetail[];
 }
 
@@ -196,8 +197,8 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 // Session API — LLM-backed endpoints use longer timeout
-export const createSession = (problem: string, mode: string = "learn") =>
-  apiPost<SessionData>("/session", { problem, mode }, LLM_TIMEOUT_MS);
+export const createSession = (problem: string, mode: string = "learn", subject: string = "math") =>
+  apiPost<SessionData>("/session", { problem, mode, subject }, LLM_TIMEOUT_MS);
 
 export const getSession = (id: string) =>
   apiGet<SessionData>(`/session/${id}`);
@@ -245,20 +246,22 @@ export interface PracticeProblem {
   answer: string;
 }
 
-export const generatePracticeProblems = (problem: string, count: number) =>
-  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count }, LLM_TIMEOUT_MS);
+export const generatePracticeProblems = (problem: string, count: number, subject: string = "math") =>
+  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count, subject }, LLM_TIMEOUT_MS);
 
-export const checkPracticeAnswer = (question: string, correctAnswer: string, userAnswer: string) =>
+export const checkPracticeAnswer = (question: string, correctAnswer: string, userAnswer: string, subject: string = "math") =>
   apiPost<{ is_correct: boolean }>("/practice/check", {
     question,
     correct_answer: correctAnswer,
     user_answer: userAnswer,
+    subject,
   });
 
 // Image API — vision calls can be slow
-export const extractProblemsFromImage = (imageBase64: string) =>
+export const extractProblemsFromImage = (imageBase64: string, subject: string = "math") =>
   apiPost<{ problems: string[]; confidence: string }>("/image/extract", {
     image_base64: imageBase64,
+    subject,
   }, LLM_TIMEOUT_MS);
 
 // Work submission API
@@ -286,11 +289,13 @@ export const submitWork = (
   problemText: string,
   userAnswer: string,
   userWasCorrect: boolean,
+  subject: string = "math",
 ) =>
   apiPost<SubmitWorkResponse>("/work/submit", {
     image_base64: imageBase64,
     problem_text: problemText,
     user_answer: userAnswer,
     user_was_correct: userWasCorrect,
+    subject,
   }, LLM_TIMEOUT_MS);
 

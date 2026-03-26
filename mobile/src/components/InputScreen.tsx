@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -25,6 +25,7 @@ const MAX_PROBLEMS = 10;
 
 interface Props {
   mode: Mode;
+  subject: string;
   onBack: () => void;
   onSessionStart: () => void;
   onSessionError: () => void;
@@ -32,6 +33,7 @@ interface Props {
 
 export function InputScreen({
   mode,
+  subject,
   onBack,
   onSessionStart,
   onSessionError,
@@ -65,7 +67,7 @@ export function InputScreen({
     setEditingText,
     finishEdit,
     getSelectedProblems,
-  } = useImageExtraction(problemQueue.length, MAX_PROBLEMS, setError);
+  } = useImageExtraction(problemQueue.length, MAX_PROBLEMS, setError, subject);
 
   const handleConfirmExtraction = () => {
     const selected = getSelectedProblems();
@@ -82,9 +84,13 @@ export function InputScreen({
     startSession,
     startLearnQueue,
     startMockTest,
+    setSubject,
     phase: sessionPhase,
     error: sessionError,
   } = useSessionStore();
+
+  // Keep store subject in sync with prop
+  useEffect(() => { setSubject(subject); }, [subject, setSubject]);
 
   const isLoading = sessionPhase === "loading";
   const displayError = error ?? sessionError;
