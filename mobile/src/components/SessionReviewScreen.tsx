@@ -13,6 +13,20 @@ interface SessionReviewScreenProps {
   onResume: (sessionId: string) => void;
 }
 
+function ProgressBar({ current, total }: { current: number; total: number }) {
+  const progress = total > 0 ? current / total : 0;
+  return (
+    <View style={progressStyles.container}>
+      <View style={progressStyles.track}>
+        <View style={[progressStyles.fill, { width: `${progress * 100}%` }]} />
+      </View>
+      <Text style={progressStyles.label}>
+        {current === total ? `${total} steps` : `Step ${current} of ${total}`}
+      </Text>
+    </View>
+  );
+}
+
 export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onResume }: SessionReviewScreenProps) {
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,30 +91,46 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
             </Text>
           </View>
           <Text style={styles.problemText}>{session.problem}</Text>
-          <Text style={styles.problemMeta}>
-            {session.total_steps} step{session.total_steps !== 1 ? "s" : ""}
-          </Text>
+          <ProgressBar current={session.current_step} total={session.total_steps} />
         </View>
 
         {/* Steps */}
         <Text style={styles.sectionLabel}>SOLUTION STEPS</Text>
         <View style={styles.stepsList}>
-          {session.steps.map((step, i) => (
-            <View key={i} style={[styles.stepCard, shadows.sm]}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>{i + 1}</Text>
+          {session.steps.map((step, i) => {
+            const isReached = i < session.current_step || isCompleted;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.stepCard,
+                  shadows.sm,
+                  !isReached && styles.stepCardDimmed,
+                ]}
+              >
+                <View style={[styles.stepNumber, !isReached && styles.stepNumberDimmed]}>
+                  <Text style={[styles.stepNumberText, !isReached && styles.stepNumberTextDimmed]}>
+                    {i + 1}
+                  </Text>
+                </View>
+                <View style={styles.stepContent}>
+                  {isReached ? (
+                    <>
+                      <Text style={styles.stepDescription}>{step.description}</Text>
+                      {step.final_answer ? (
+                        <View style={styles.answerRow}>
+                          <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                          <Text style={styles.answerText}>{step.final_answer}</Text>
+                        </View>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text style={styles.stepNotReached}>Not yet reached</Text>
+                  )}
+                </View>
               </View>
-              <View style={styles.stepContent}>
-                <Text style={styles.stepDescription}>{step.description}</Text>
-                {step.final_answer ? (
-                  <View style={styles.answerRow}>
-                    <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-                    <Text style={styles.answerText}>{step.final_answer}</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* Action button */}
@@ -111,7 +141,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
             scaleDown={0.97}
           >
             <Ionicons name="refresh" size={18} color={colors.white} />
-            <Text style={styles.practiceButtonText}>Practice Similar Problem</Text>
+            <Text style={styles.actionButtonText}>Practice Similar Problem</Text>
           </AnimatedPressable>
         ) : (
           <AnimatedPressable
@@ -120,13 +150,41 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
             scaleDown={0.97}
           >
             <Ionicons name="play" size={18} color={colors.white} />
-            <Text style={styles.practiceButtonText}>Resume Session</Text>
+            <Text style={styles.actionButtonText}>Resume Session</Text>
           </AnimatedPressable>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const progressStyles = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  track: {
+    flex: 1,
+    height: 6,
+    backgroundColor: colors.borderLight,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  fill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+    borderRadius: 3,
+  },
+  label: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
+    minWidth: 80,
+    textAlign: "right",
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -182,12 +240,6 @@ const styles = StyleSheet.create({
     ...typography.heading,
     color: colors.text,
     fontSize: 18,
-    marginBottom: spacing.sm,
-  },
-  problemMeta: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 12,
   },
 
   // Steps
@@ -209,6 +261,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  stepCardDimmed: {
+    opacity: 0.45,
+  },
   stepNumber: {
     width: 28,
     height: 28,
@@ -217,10 +272,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  stepNumberDimmed: {
+    backgroundColor: colors.borderLight,
+  },
   stepNumberText: {
     ...typography.label,
     color: colors.primary,
     fontSize: 13,
+  },
+  stepNumberTextDimmed: {
+    color: colors.textMuted,
   },
   stepContent: {
     flex: 1,
@@ -230,6 +291,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     lineHeight: 20,
+  },
+  stepNotReached: {
+    ...typography.body,
+    color: colors.textMuted,
+    fontSize: 14,
+    fontStyle: "italic",
   },
   answerRow: {
     flexDirection: "row",
@@ -248,7 +315,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Practice button
+  // Action buttons
   practiceButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -259,12 +326,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     marginTop: spacing.xxl,
   },
-  practiceButtonText: {
-    ...typography.button,
-    color: colors.white,
-  },
-
-  // Resume button
   resumeButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -274,5 +335,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     paddingVertical: spacing.lg,
     marginTop: spacing.xxl,
+  },
+  actionButtonText: {
+    ...typography.button,
+    color: colors.white,
   },
 });
