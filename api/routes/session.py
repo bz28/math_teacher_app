@@ -15,11 +15,11 @@ from api.core.session import (
     get_owned_session,
     respond_to_step,
 )
+from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.session import Session as SessionModel
 from api.models.session import SessionMode, SessionStatus
-from api.core.subjects import VALID_SUBJECTS
 from api.schemas.session import (
     CompleteMockTestRequest,
     CreateMockTestRequest,
