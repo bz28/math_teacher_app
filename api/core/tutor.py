@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import anthropic
 
 from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
+from api.core.subjects import Subject, get_config
 
 # Max recent exchanges sent to chat functions
 _HISTORY_LIMIT = 6
@@ -27,8 +28,8 @@ logger = logging.getLogger(__name__)
 # System prompts
 # ---------------------------------------------------------------------------
 
-STEP_CHAT_PROMPT = """\
-You are a math tutor helping a student understand a specific step in solving a problem.
+_STEP_CHAT_TEMPLATE = """\
+You are a {tutor_role} helping a student understand a specific step in solving a problem.
 
 You will receive:
 - The problem being solved
@@ -40,9 +41,9 @@ Your job is to help the student understand THIS SPECIFIC STEP only.
 Do NOT reveal future steps or the final answer.
 
 Respond with ONLY valid JSON:
-{
+{{
   "feedback": "Your helpful response to the student's question"
-}
+}}
 
 Rules:
 - Answer questions about WHY this step is done and HOW it works
@@ -52,8 +53,8 @@ Rules:
 - NEVER skip ahead to future steps — only discuss the current step
 - If the student asks about something unrelated to this step, gently redirect"""
 
-_COMPLETED_CHAT_PROMPT = """\
-You are a math tutor. The student has already solved the problem correctly and
+_COMPLETED_CHAT_TEMPLATE = """\
+You are a {tutor_role}. The student has already solved the problem correctly and
 is now asking follow-up questions to deepen their understanding.
 
 You will receive:
@@ -62,25 +63,43 @@ You will receive:
 - The student's question
 
 Respond with ONLY valid JSON:
-{"feedback": "Your helpful response"}
+{{"feedback": "Your helpful response"}}
 
 Rules:
 - Answer clearly and concisely (1-3 sentences)
 - You may freely reference any step or the final answer since the problem is solved
 - If the student asks something unrelated to the problem, gently redirect"""
 
-_ANSWER_EQUIVALENCE_PROMPT = """You are a strict math tutor checking a student's final answer.
+_ANSWER_EQUIVALENCE_TEMPLATE = """You are a strict {tutor_role} checking a student's final answer.
 
-Determine if the student's answer is MATHEMATICALLY EQUIVALENT to the correct
+Determine if the student's answer is {equivalence_adjective} EQUIVALENT to the correct
 final answer. Allow differences in formatting or notation (e.g., "x=3" vs
 "x = 3", "6" vs "x = 6"), but the answer must be completely correct.
 
 Be STRICT:
-- "35" does NOT match "35x^4" — the variable/exponent is missing
-- Partial answers or answers missing terms are WRONG
+{equivalence_examples}
 
 Respond with ONLY valid JSON:
-{"is_correct": <true/false>}"""
+{{"is_correct": <true/false>}}"""
+
+
+def _build_step_chat_prompt(subject: str) -> str:
+    cfg = get_config(subject)
+    return _STEP_CHAT_TEMPLATE.format(tutor_role=cfg["tutor_role"])
+
+
+def _build_completed_chat_prompt(subject: str) -> str:
+    cfg = get_config(subject)
+    return _COMPLETED_CHAT_TEMPLATE.format(tutor_role=cfg["tutor_role"])
+
+
+def _build_equivalence_prompt(subject: str) -> str:
+    cfg = get_config(subject)
+    return _ANSWER_EQUIVALENCE_TEMPLATE.format(
+        tutor_role=cfg["tutor_role"],
+        equivalence_adjective=cfg["equivalence_adjective"],
+        equivalence_examples=cfg["equivalence_examples"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +122,7 @@ async def step_chat(
     student_input: str,
     session_id: str | None = None,
     user_id: str | None = None,
+    subject: str = Subject.MATH,
 ) -> StepChatResult:
     """Answer a student's question about a specific step."""
     history_text = "\n".join(
@@ -117,7 +137,7 @@ async def step_chat(
         f"Student's question: {student_input}"
     )
     data = await call_claude_json(
-        STEP_CHAT_PROMPT, prompt, LLMMode.STEP_CHAT,
+        _build_step_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
         session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
@@ -130,6 +150,7 @@ async def completed_chat(
     student_input: str,
     session_id: str | None = None,
     user_id: str | None = None,
+    subject: str = Subject.MATH,
 ) -> StepChatResult:
     """Answer follow-up questions on a completed problem. Uses Haiku for cost."""
     steps_text = "\n".join(
@@ -148,7 +169,7 @@ async def completed_chat(
         f"Student's question: {student_input}"
     )
     data = await call_claude_json(
-        _COMPLETED_CHAT_PROMPT, prompt, LLMMode.STEP_CHAT,
+        _build_completed_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
         session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
@@ -161,8 +182,9 @@ async def check_answer_equivalence(
     session_id: str | None = None,
     *,
     user_id: str | None = None,
+    subject: str = Subject.MATH,
 ) -> bool:
-    """Check if a student's answer is mathematically equivalent to the correct answer."""
+    """Check if a student's answer is equivalent to the correct answer."""
     user_msg = (
         f"Problem: {problem}\n"
         f"Correct final answer: {correct_answer}\n"
@@ -170,7 +192,7 @@ async def check_answer_equivalence(
     )
     try:
         result = await call_claude_json(
-            _ANSWER_EQUIVALENCE_PROMPT, user_msg,
+            _build_equivalence_prompt(subject), user_msg,
             mode=LLMMode.PRACTICE_EVAL, session_id=session_id, user_id=user_id,
         )
         return bool(result.get("is_correct", False))

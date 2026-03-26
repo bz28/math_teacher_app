@@ -1,4 +1,4 @@
-"""Step-by-step decomposition: Claude generates steps for any math problem."""
+"""Step-by-step decomposition: Claude generates steps for any problem."""
 
 import logging
 import re
@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,8 @@ def _cache_set(problem: str, decomp: "Decomposition") -> None:
         del _cache[oldest_key]
     _cache[problem] = (time.monotonic(), decomp)
 
-SYSTEM_PROMPT = (
-    "You are a worldclass math professor with expertise in breaking down "
-    "math problems into easy to understand, coherent steps, making even the most "
-    "complex problems trivial to understand to an elementary student.\n\n"
+_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a {professor_role}.\n\n"
 
     "Before solving, consider if there is a simpler or faster approach than "
     "the obvious one. Prefer elegant shortcuts over mechanical procedures. "
@@ -56,14 +55,22 @@ SYSTEM_PROMPT = (
     "Do NOT include any mention of approaches that are not the final/optimal "
     "solution. Those will only confuse the student.\n\n"
 
-    "Given a math problem, produce a JSON object with:\n"
+    "Given a {domain} problem, produce a JSON object with:\n"
     '- "steps": an array of strings, each being a clear description of one step\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
     "Respond with ONLY valid JSON — no markdown, no explanation:\n"
-    '{"steps": ["step 1", "step 2", ...], "final_answer": "...", '
-    '"distractors": ["wrong1", "wrong2", "wrong3"]}'
+    '{{"steps": ["step 1", "step 2", ...], "final_answer": "...", '
+    '"distractors": ["wrong1", "wrong2", "wrong3"]}}'
 )
+
+
+def _build_system_prompt(subject: str) -> str:
+    cfg = get_config(subject)
+    return _SYSTEM_PROMPT_TEMPLATE.format(
+        professor_role=cfg["professor_role"],
+        domain=cfg["domain"],
+    )
 
 
 @dataclass
@@ -92,13 +99,12 @@ def _parse_decomposition(data: dict[str, object]) -> tuple[list[str], str, list[
     )
 
 
-_MATH_FUNCTION_NAMES = {"sin", "cos", "tan", "log", "ln", "abs", "max", "min", "mod", "gcd", "lcm", "sqrt"}
-
-
-def _is_word_problem(text: str) -> bool:
-    """Detect whether text is a word problem vs pure math notation."""
+def _is_word_problem(text: str, subject: str = Subject.MATH) -> bool:
+    """Detect whether text is a word problem vs pure notation."""
+    cfg = get_config(subject)
+    function_names: set[str] = cfg.get("function_names", set())  # type: ignore[assignment]
     words = re.findall(r"[a-zA-Z]{3,}", text)
-    return any(w.lower() not in _MATH_FUNCTION_NAMES for w in words)
+    return any(w.lower() not in function_names for w in words)
 
 
 
@@ -107,20 +113,22 @@ async def decompose_problem(
     *,
     user_id: str | None = None,
     work_diagnosis: dict[str, object] | None = None,
+    subject: str = Subject.MATH,
 ) -> Decomposition:
-    """Generate step-by-step decomposition for a math problem.
+    """Generate step-by-step decomposition for a problem.
 
     If work_diagnosis is provided (from a prior work submission), the steps
     will be personalized to reference the student's specific mistakes.
     """
+    cache_key = f"{subject}:{problem}"
     # Return cached result for non-personalized calls
     if not work_diagnosis:
-        cached = _cache_get(problem)
+        cached = _cache_get(cache_key)
         if cached is not None:
             logger.info("Decomposition cache hit for %s", problem)
             return cached
 
-    problem_type = "word_problem" if _is_word_problem(problem) else "math"
+    problem_type = "word_problem" if _is_word_problem(problem, subject) else subject
     prompt = f"Problem: {problem}"
 
     if work_diagnosis:
@@ -141,7 +149,7 @@ async def decompose_problem(
         )
 
     data = await call_claude_json(
-        SYSTEM_PROMPT,
+        _build_system_prompt(subject),
         prompt,
         mode=LLMMode.DECOMPOSE,
         model=MODEL_REASON,
@@ -170,6 +178,6 @@ async def decompose_problem(
 
     # Cache non-personalized decompositions for reuse
     if not work_diagnosis:
-        _cache_set(problem, decomposition)
+        _cache_set(cache_key, decomposition)
 
     return decomposition

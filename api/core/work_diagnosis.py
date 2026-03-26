@@ -5,12 +5,13 @@ import logging
 from typing import Any
 
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_vision
+from api.core.subjects import Subject
 
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB after decode
 
-DIAGNOSIS_PROMPT = """You are analyzing a student's handwritten math work shown in the attached image.
+DIAGNOSIS_PROMPT = """You are analyzing a student's handwritten {domain} work shown in the attached image.
 Compare their work against the reference solution below.
 
 Problem: {problem_text}
@@ -93,18 +94,20 @@ async def diagnose_work(
     *,
     session_id: str | None = None,
     user_id: str | None = None,
+    subject: str = Subject.MATH,
 ) -> dict[str, Any]:
     """Analyze student's handwritten work against the optimal solution.
 
     Args:
         image_base64: Base64-encoded photo of student's work.
-        problem_text: The math problem.
+        problem_text: The problem.
         steps: Optimal solution steps from decompose_problem().
         final_answer: The correct final answer.
         user_answer: What the student typed as their answer.
         user_was_correct: Whether their typed answer was correct.
         session_id: For cost tracking.
         user_id: For cost tracking.
+        subject: The subject (math, chemistry, etc.).
 
     Returns:
         Structured diagnosis dict with steps, summary, has_issues, overall_feedback.
@@ -116,6 +119,7 @@ async def diagnose_work(
     correctness = "correct" if user_was_correct else "incorrect"
 
     prompt = DIAGNOSIS_PROMPT.format(
+        domain=subject,
         problem_text=problem_text,
         steps=steps_text,
         final_answer=final_answer,
