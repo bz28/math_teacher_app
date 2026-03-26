@@ -99,26 +99,6 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
         </LinearGradient>
       </AnimatedPressable>
 
-      {/* Quick tips / what you can do */}
-      <Text style={[styles.sectionLabel, { marginTop: spacing.xxxl }]}>WHAT YOU CAN DO</Text>
-      <View style={styles.tipGrid}>
-        <View style={[styles.tipCard, shadows.sm]}>
-          <Ionicons name="camera-outline" size={22} color={colors.primary} />
-          <Text style={styles.tipText}>Snap a photo of any problem</Text>
-        </View>
-        <View style={[styles.tipCard, shadows.sm]}>
-          <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} />
-          <Text style={styles.tipText}>Chat with your AI tutor</Text>
-        </View>
-        <View style={[styles.tipCard, shadows.sm]}>
-          <Ionicons name="infinite-outline" size={22} color={colors.primary} />
-          <Text style={styles.tipText}>Generate endless practice</Text>
-        </View>
-        <View style={[styles.tipCard, shadows.sm]}>
-          <Ionicons name="document-text-outline" size={22} color={colors.primary} />
-          <Text style={styles.tipText}>Take timed mock exams</Text>
-        </View>
-      </View>
     </SafeAreaView>
   );
 }
@@ -217,25 +197,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Tips grid
-  tipGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
-  },
-  tipCard: {
-    width: "47%",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  tipText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
 });
