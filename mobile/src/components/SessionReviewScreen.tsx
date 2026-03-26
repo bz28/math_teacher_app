@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { getSession, type SessionData } from "../services/api";
+import { abandonSession, getSession, type SessionData } from "../services/api";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface SessionReviewScreenProps {
@@ -69,6 +69,8 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
   }
 
   const isCompleted = session.status === "completed";
+  const isAbandoned = session.status === "abandoned";
+  const isActive = session.status === "active";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,12 +84,12 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
         <View style={[styles.problemCard, shadows.md]}>
           <View style={styles.problemHeader}>
             <Ionicons
-              name={isCompleted ? "checkmark-circle" : "time-outline"}
+              name={isAbandoned ? "close-circle" : isCompleted ? "checkmark-circle" : "time-outline"}
               size={22}
-              color={isCompleted ? colors.success : colors.textMuted}
+              color={isAbandoned ? colors.error : isCompleted ? colors.success : colors.textMuted}
             />
             <Text style={styles.statusText}>
-              {isCompleted ? "Completed" : "In Progress"}
+              {isAbandoned ? "Ended Early" : isCompleted ? "Completed" : "In Progress"}
             </Text>
           </View>
           <Text style={styles.problemText}>{session.problem}</Text>
@@ -133,8 +135,46 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
           })}
         </View>
 
-        {/* Action button */}
-        {isCompleted ? (
+        {/* Action buttons */}
+        {isActive ? (
+          <>
+            <AnimatedPressable
+              style={[styles.resumeButton, shadows.sm]}
+              onPress={() => onResume(sessionId)}
+              scaleDown={0.97}
+            >
+              <Ionicons name="play" size={18} color={colors.white} />
+              <Text style={styles.actionButtonText}>Resume Session</Text>
+            </AnimatedPressable>
+
+            <AnimatedPressable
+              style={styles.endSessionButton}
+              onPress={() => {
+                Alert.alert(
+                  "End Session",
+                  "End this session? You won't be able to resume it.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "End Session",
+                      style: "destructive",
+                      onPress: async () => {
+                        try {
+                          await abandonSession(sessionId);
+                          onBack();
+                        } catch {
+                          Alert.alert("Error", "Failed to end session. Try again.");
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={styles.endSessionText}>End Session</Text>
+            </AnimatedPressable>
+          </>
+        ) : (
           <AnimatedPressable
             style={[styles.practiceButton, shadows.sm]}
             onPress={() => onPracticeSimilar(session.problem)}
@@ -142,15 +182,6 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
           >
             <Ionicons name="refresh" size={18} color={colors.white} />
             <Text style={styles.actionButtonText}>Practice Similar Problem</Text>
-          </AnimatedPressable>
-        ) : (
-          <AnimatedPressable
-            style={[styles.resumeButton, shadows.sm]}
-            onPress={() => onResume(sessionId)}
-            scaleDown={0.97}
-          >
-            <Ionicons name="play" size={18} color={colors.white} />
-            <Text style={styles.actionButtonText}>Resume Session</Text>
           </AnimatedPressable>
         )}
       </ScrollView>
@@ -339,5 +370,17 @@ const styles = StyleSheet.create({
   actionButtonText: {
     ...typography.button,
     color: colors.white,
+  },
+
+  // End session
+  endSessionButton: {
+    alignItems: "center",
+    paddingVertical: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  endSessionText: {
+    ...typography.caption,
+    color: colors.error,
+    fontSize: 14,
   },
 });

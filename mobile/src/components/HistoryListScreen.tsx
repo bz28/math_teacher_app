@@ -42,13 +42,22 @@ function InProgressCard({ item, onPress }: { item: SessionHistoryItem; onPress: 
 }
 
 function CompletedCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
+  const isAbandoned = item.status === "abandoned";
   return (
     <AnimatedPressable style={[styles.completedCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
-      <Ionicons name="checkmark-circle" size={20} color={colors.success} style={styles.historyIcon} />
+      <Ionicons
+        name={isAbandoned ? "close-circle" : "checkmark-circle"}
+        size={20}
+        color={isAbandoned ? colors.error : colors.success}
+        style={styles.historyIcon}
+      />
       <View style={styles.historyContent}>
         <Text style={styles.historyProblem} numberOfLines={1}>{item.problem}</Text>
         <Text style={styles.historyMeta}>
-          {item.total_steps} step{item.total_steps !== 1 ? "s" : ""} · {formatRelativeDate(item.created_at)}
+          {isAbandoned
+            ? `Ended early · Step ${item.current_step} of ${item.total_steps} · ${formatRelativeDate(item.created_at)}`
+            : `${item.total_steps} step${item.total_steps !== 1 ? "s" : ""} · ${formatRelativeDate(item.created_at)}`
+          }
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -96,8 +105,8 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
   };
 
   const subjectLabel = subject.charAt(0).toUpperCase() + subject.slice(1);
-  const inProgress = items.filter((s) => s.status !== "completed");
-  const completed = items.filter((s) => s.status === "completed");
+  const inProgress = items.filter((s) => s.status === "active");
+  const completed = items.filter((s) => s.status !== "active");
 
   return (
     <SafeAreaView style={styles.container}>

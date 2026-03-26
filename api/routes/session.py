@@ -137,6 +137,28 @@ async def history(
     return SessionHistoryResponse(items=items, has_more=has_more)
 
 
+@router.post("/{session_id}/abandon")
+async def abandon(
+    session_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Mark an active session as abandoned."""
+    try:
+        session = await get_owned_session(db, session_id, current_user.user_id)
+    except SessionError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
+
+    if session.status != SessionStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not active")
+
+    session.status = SessionStatus.ABANDONED
+    await db.commit()
+    return {"status": "ok"}
+
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get(
     session_id: uuid.UUID,

@@ -234,6 +234,9 @@ export interface SessionHistoryResponse {
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
 
+export const abandonSession = (sessionId: string) =>
+  apiPost<{ status: string }>(`/session/${sessionId}/abandon`, {});
+
 export const createMockTestSession = (problem: string) =>
   apiPost<{ id: string }>("/session/mock-test", { problem });
 

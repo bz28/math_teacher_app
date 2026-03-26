@@ -40,11 +40,12 @@ const MODES: ModeConfig[] = [
     label: "Mock Test",
     icon: "document-text",
     gradient: gradients.warning,
-    tagline: "Timed or untimed exams",
+    tagline: "Practice or generate an exam",
   },
 ];
 
-const HISTORY_PREVIEW_LIMIT = 10;
+const HISTORY_PREVIEW_LIMIT = 20;
+const SECTION_PREVIEW_LIMIT = 3;
 
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -74,13 +75,22 @@ function InProgressCard({ item, onPress }: { item: SessionHistoryItem; onPress: 
 }
 
 function CompletedCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
+  const isAbandoned = item.status === "abandoned";
   return (
     <AnimatedPressable style={[styles.completedCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
-      <Ionicons name="checkmark-circle" size={20} color={colors.success} style={styles.historyIcon} />
+      <Ionicons
+        name={isAbandoned ? "close-circle" : "checkmark-circle"}
+        size={20}
+        color={isAbandoned ? colors.error : colors.success}
+        style={styles.historyIcon}
+      />
       <View style={styles.historyContent}>
         <Text style={styles.historyProblem} numberOfLines={1}>{item.problem}</Text>
         <Text style={styles.historyMeta}>
-          {item.total_steps} step{item.total_steps !== 1 ? "s" : ""} · {formatRelativeDate(item.created_at)}
+          {isAbandoned
+            ? `Ended early · Step ${item.current_step} of ${item.total_steps} · ${formatRelativeDate(item.created_at)}`
+            : `${item.total_steps} step${item.total_steps !== 1 ? "s" : ""} · ${formatRelativeDate(item.created_at)}`
+          }
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -109,8 +119,8 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
     fetchHistory();
   }, [fetchHistory]);
 
-  const inProgress = history.filter((s) => s.status !== "completed");
-  const completed = history.filter((s) => s.status === "completed");
+  const inProgress = history.filter((s) => s.status === "active");
+  const completed = history.filter((s) => s.status !== "active");
 
   return (
     <SafeAreaView style={styles.container}>
@@ -163,9 +173,16 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
             {/* Continue Learning */}
             {inProgress.length > 0 && (
               <View style={styles.historySection}>
-                <Text style={styles.sectionLabel}>CONTINUE LEARNING</Text>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>CONTINUE LEARNING</Text>
+                  {inProgress.length > SECTION_PREVIEW_LIMIT && (
+                    <AnimatedPressable onPress={onViewAllHistory}>
+                      <Text style={styles.seeAllText}>See All</Text>
+                    </AnimatedPressable>
+                  )}
+                </View>
                 <View style={styles.historyList}>
-                  {inProgress.map((item) => (
+                  {inProgress.slice(0, SECTION_PREVIEW_LIMIT).map((item) => (
                     <InProgressCard
                       key={item.id}
                       item={item}
@@ -176,19 +193,19 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
               </View>
             )}
 
-            {/* Completed */}
+            {/* Completed / Abandoned */}
             {completed.length > 0 && (
               <View style={styles.historySection}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionLabel}>COMPLETED</Text>
-                  {hasMore && (
+                  {(completed.length > SECTION_PREVIEW_LIMIT || hasMore) && (
                     <AnimatedPressable onPress={onViewAllHistory}>
                       <Text style={styles.seeAllText}>See All</Text>
                     </AnimatedPressable>
                   )}
                 </View>
                 <View style={styles.historyList}>
-                  {completed.map((item) => (
+                  {completed.slice(0, SECTION_PREVIEW_LIMIT).map((item) => (
                     <CompletedCard
                       key={item.id}
                       item={item}
