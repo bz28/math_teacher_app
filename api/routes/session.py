@@ -128,6 +128,7 @@ async def history(
             id=s.id,
             problem=s.problem,
             status=s.status,
+            current_step=s.current_step,
             total_steps=s.total_steps,
             created_at=s.created_at,
         )

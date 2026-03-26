@@ -69,6 +69,7 @@ class SessionHistoryItem(BaseModel):
     id: uuid.UUID
     problem: str
     status: str
+    current_step: int
     total_steps: int
     created_at: datetime
 

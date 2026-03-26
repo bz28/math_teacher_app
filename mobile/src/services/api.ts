@@ -221,6 +221,7 @@ export interface SessionHistoryItem {
   id: string;
   problem: string;
   status: string;
+  current_step: number;
   total_steps: number;
   created_at: string;
 }
