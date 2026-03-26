@@ -148,10 +148,11 @@ async def decompose_problem(
             "Keep the tone encouraging and constructive. The goal is to teach, not to criticize."
         )
 
+    llm_mode = LLMMode.DECOMPOSE_DIAGNOSIS if work_diagnosis else LLMMode.DECOMPOSE
     data = await call_claude_json(
         _build_system_prompt(subject),
         prompt,
-        mode=LLMMode.DECOMPOSE,
+        mode=llm_mode,
         model=MODEL_REASON,
         max_tokens=1024,
         user_id=user_id,
