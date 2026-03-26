@@ -38,6 +38,7 @@ function AppRoot() {
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
+  const resumeSession = useSessionStore((s) => s.resumeSession);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -158,6 +159,10 @@ function AppRoot() {
             setProblemQueue([problem]);
             setMode("learn");
             setScreen("input");
+          }}
+          onResume={async (sessionId) => {
+            await resumeSession(sessionId);
+            setScreen("session");
           }}
         />
         <StatusBar style="auto" />

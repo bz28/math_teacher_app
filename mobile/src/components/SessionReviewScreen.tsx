@@ -10,9 +10,10 @@ interface SessionReviewScreenProps {
   sessionId: string;
   onBack: () => void;
   onPracticeSimilar: (problem: string) => void;
+  onResume: (sessionId: string) => void;
 }
 
-export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar }: SessionReviewScreenProps) {
+export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onResume }: SessionReviewScreenProps) {
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +103,8 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar }: Se
           ))}
         </View>
 
-        {/* Practice similar button */}
-        {isCompleted && (
+        {/* Action button */}
+        {isCompleted ? (
           <AnimatedPressable
             style={[styles.practiceButton, shadows.sm]}
             onPress={() => onPracticeSimilar(session.problem)}
@@ -111,6 +112,15 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar }: Se
           >
             <Ionicons name="refresh" size={18} color={colors.white} />
             <Text style={styles.practiceButtonText}>Practice Similar Problem</Text>
+          </AnimatedPressable>
+        ) : (
+          <AnimatedPressable
+            style={[styles.resumeButton, shadows.sm]}
+            onPress={() => onResume(sessionId)}
+            scaleDown={0.97}
+          >
+            <Ionicons name="play" size={18} color={colors.white} />
+            <Text style={styles.practiceButtonText}>Resume Session</Text>
           </AnimatedPressable>
         )}
       </ScrollView>
@@ -252,5 +262,17 @@ const styles = StyleSheet.create({
   practiceButtonText: {
     ...typography.button,
     color: colors.white,
+  },
+
+  // Resume button
+  resumeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.success,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.lg,
+    marginTop: spacing.xxl,
   },
 });

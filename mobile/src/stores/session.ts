@@ -110,6 +110,7 @@ interface SessionState {
   setProblemQueue: (queue: string[]) => void;
   setPracticeCount: (count: number) => void;
   startSession: (problem: string, mode?: string) => Promise<void>;
+  resumeSession: (sessionId: string) => Promise<void>;
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
   startPracticeQueue: (problems: string[]) => Promise<void>;
   startLearnQueue: (problems: string[]) => Promise<void>;
@@ -193,6 +194,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const session = await createSession(problem, mode, subject);
       set({ session, phase: "awaiting_input", lastResponse: null });
+    } catch (e) {
+      set({ phase: "error", error: (e as Error).message });
+    }
+  },
+
+  resumeSession: async (sessionId) => {
+    set({ phase: "loading", error: null });
+    try {
+      const session = await getSession(sessionId);
+      set({ session, phase: "awaiting_input", lastResponse: null, subject: session.subject });
     } catch (e) {
       set({ phase: "error", error: (e as Error).message });
     }
