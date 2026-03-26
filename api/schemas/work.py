@@ -2,7 +2,9 @@
 
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from api.core.subjects import VALID_SUBJECTS
 
 
 class SubmitWorkRequest(BaseModel):
@@ -10,6 +12,14 @@ class SubmitWorkRequest(BaseModel):
     problem_text: str = Field(..., min_length=1, max_length=5000)
     user_answer: str = Field("", max_length=2000)
     user_was_correct: bool = False
+    subject: str = Field("math")
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, v: str) -> str:
+        if v not in VALID_SUBJECTS:
+            raise ValueError(f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}")
+        return v
 
 
 class DiagnosisStep(BaseModel):

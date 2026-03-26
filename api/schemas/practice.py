@@ -1,9 +1,19 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from api.core.subjects import VALID_SUBJECTS
 
 
 class PracticeGenerateRequest(BaseModel):
     problem: str = Field(..., min_length=1, max_length=5000)
     count: int = Field(3, ge=0, le=20)
+    subject: str = Field("math")
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, v: str) -> str:
+        if v not in VALID_SUBJECTS:
+            raise ValueError(f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}")
+        return v
 
 
 class PracticeProblem(BaseModel):
@@ -19,6 +29,14 @@ class PracticeCheckRequest(BaseModel):
     question: str = Field(..., max_length=5000)
     correct_answer: str = Field(..., max_length=2000)
     user_answer: str = Field(..., max_length=2000)
+    subject: str = Field("math")
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, v: str) -> str:
+        if v not in VALID_SUBJECTS:
+            raise ValueError(f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}")
+        return v
 
 
 class PracticeCheckResponse(BaseModel):

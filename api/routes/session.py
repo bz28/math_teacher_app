@@ -59,6 +59,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
         total_steps=session.total_steps,
         status=session.status,
         mode=session.mode,
+        subject=getattr(session, "subject", "math"),
         steps=steps,
     )
 
@@ -71,7 +72,10 @@ async def create(
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
     try:
-        session = await create_session(db, current_user.user_id, body.problem, body.mode, current_user.role)
+        session = await create_session(
+            db, current_user.user_id, body.problem, body.mode, current_user.role,
+            subject=body.subject,
+        )
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
     except SessionError as e:
@@ -156,6 +160,7 @@ async def similar(
         problems = await generate_practice_problems(
             session.problem, 1,
             user_id=str(current_user.user_id),
+            subject=getattr(session, "subject", "math"),
         )
         similar = problems[0]["question"] if problems else session.problem
     except RuntimeError:

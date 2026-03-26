@@ -26,7 +26,10 @@ async def generate(
 ) -> PracticeGenerateResponse:
     """Generate similar practice problems for a given problem."""
     try:
-        problems = await generate_practice_problems(body.problem, body.count, user_id=str(current_user.user_id))
+        problems = await generate_practice_problems(
+            body.problem, body.count,
+            user_id=str(current_user.user_id), subject=body.subject,
+        )
     except RuntimeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -47,7 +50,7 @@ async def check(
     try:
         is_correct = await check_answer(
             body.question, body.correct_answer, body.user_answer,
-            user_id=str(current_user.user_id),
+            user_id=str(current_user.user_id), subject=body.subject,
         )
     except RuntimeError:
         logger.exception("Answer check failed")

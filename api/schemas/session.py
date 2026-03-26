@@ -1,11 +1,21 @@
 import uuid
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from api.core.subjects import VALID_SUBJECTS
 
 
 class CreateSessionRequest(BaseModel):
     problem: str = Field(..., min_length=1, max_length=5000)
     mode: str = Field("learn", pattern=r"^(learn|practice)$")
+    subject: str = Field("math")
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, v: str) -> str:
+        if v not in VALID_SUBJECTS:
+            raise ValueError(f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}")
+        return v
 
 
 class CreateMockTestRequest(BaseModel):
@@ -42,6 +52,7 @@ class SessionResponse(BaseModel):
     total_steps: int
     status: str
     mode: str
+    subject: str
     steps: list[StepDetail]
 
 
