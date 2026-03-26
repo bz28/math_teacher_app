@@ -88,6 +88,7 @@ export interface OverviewData {
   error_rate: number;
   avg_latency_ms: number;
   by_mode: { mode: string; count: number }[];
+  by_subject: { subject: string; count: number }[];
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];
   top_spenders: { name: string; total_cost: number }[];

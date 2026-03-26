@@ -12,6 +12,11 @@ const MODE_COLORS: Record<string, string> = {
   mock_test: "#f59e0b",
 };
 
+const SUBJECT_COLORS: Record<string, string> = {
+  math: "#6366f1",
+  chemistry: "#10b981",
+};
+
 function HealthBadge({ errorRate, latency }: { errorRate: number; latency: number }) {
   const isHealthy = errorRate < 5 && latency < 5000;
   const isDegraded = errorRate >= 5 || latency >= 5000;
@@ -155,6 +160,33 @@ export default function Overview() {
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {data.by_mode.map((entry, i) => (
                   <Cell key={i} fill={MODE_COLORS[entry.mode] ?? "#6366f1"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="chart-card">
+          <h3>Subject Usage</h3>
+          <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+            {data.by_subject.map((s) => (
+              <div key={s.subject} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: SUBJECT_COLORS[s.subject] ?? "#94a3b8" }} />
+                <span style={{ fontSize: 13, color: "#475569" }}>
+                  {s.subject.charAt(0).toUpperCase() + s.subject.slice(1)}: {s.count}
+                </span>
+              </div>
+            ))}
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={data.by_subject}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="subject" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {data.by_subject.map((entry, i) => (
+                  <Cell key={i} fill={SUBJECT_COLORS[entry.subject] ?? "#94a3b8"} />
                 ))}
               </Bar>
             </BarChart>
