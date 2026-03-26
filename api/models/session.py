@@ -45,6 +45,7 @@ class Session(Base):
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default=SessionStatus.ACTIVE, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default=SessionMode.LEARN)
+    subject: Mapped[str] = mapped_column(String(30), nullable=False, server_default="math")
 
     # Conversation history (JSON array of {role, content, timestamp})
     exchanges: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
