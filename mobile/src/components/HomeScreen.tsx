@@ -21,9 +21,9 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <LinearGradient colors={gradients.primary} style={styles.logoCircle}>
-            <Ionicons name="school" size={18} color={colors.white} />
+            <Text style={{ fontSize: 16, fontWeight: "800", color: colors.white }}>V</Text>
           </LinearGradient>
-          <Text style={styles.appName}>Math Tutor</Text>
+          <Text style={styles.appName}>Veradic AI</Text>
         </View>
         <AnimatedPressable
           style={styles.profileButton}

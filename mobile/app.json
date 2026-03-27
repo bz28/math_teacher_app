@@ -32,8 +32,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow Math Teacher to use your camera to scan math problems.",
-          "photosPermission": "Allow Math Teacher to access your photos to scan math problems."
+          "cameraPermission": "Allow Veradic AI to use your camera to scan problems.",
+          "photosPermission": "Allow Veradic AI to access your photos to scan problems."
         }
       ]
     ]
