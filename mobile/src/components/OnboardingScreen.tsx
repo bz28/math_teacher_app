@@ -1,8 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
@@ -10,58 +20,54 @@ interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
-type Step = "welcome" | "capture" | "learn" | "practice";
-const STEPS: Step[] = ["welcome", "capture", "learn", "practice"];
-
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
-  const [stepIndex, setStepIndex] = useState(0);
-
-  const step = STEPS[stepIndex];
-  const isLast = stepIndex === STEPS.length - 1;
+  const [slideIndex, setSlideIndex] = useState(0);
 
   const handleNext = () => {
-    if (isLast) {
+    if (slideIndex === 1) {
       onComplete();
     } else {
-      setStepIndex(stepIndex + 1);
+      setSlideIndex(1);
     }
-  };
-
-  const handleBack = () => {
-    if (stepIndex > 0) setStepIndex(stepIndex - 1);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Progress dots */}
       <View style={styles.progressRow}>
-        {STEPS.map((_, i) => (
-          <View
+        {[0, 1].map((i) => (
+          <Animated.View
             key={i}
-            style={[styles.dot, i === stepIndex && styles.dotActive]}
+            style={[
+              styles.dot,
+              i === slideIndex && styles.dotActive,
+            ]}
           />
         ))}
       </View>
 
       <View style={styles.content}>
-        {step === "welcome" && <WelcomeStep />}
-        {step === "capture" && <CaptureStep />}
-        {step === "learn" && <LearnStep />}
-        {step === "practice" && <PracticeStep />}
+        {slideIndex === 0 && <HeroSlide />}
+        {slideIndex === 1 && <FlowSlide />}
       </View>
 
       {/* Navigation */}
-      <View style={styles.nav}>
-        {stepIndex > 0 ? (
-          <AnimatedPressable onPress={handleBack} style={styles.backButton}>
+      <Animated.View
+        entering={FadeInUp.delay(600).duration(400)}
+        style={styles.nav}
+      >
+        {slideIndex > 0 ? (
+          <AnimatedPressable onPress={() => setSlideIndex(0)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
             <Text style={styles.backText}>Back</Text>
           </AnimatedPressable>
         ) : (
-          <View />
+          <AnimatedPressable onPress={onComplete} style={styles.skipButton}>
+            <Text style={styles.skipText}>Skip</Text>
+          </AnimatedPressable>
         )}
 
-        <AnimatedPressable onPress={handleNext}>
+        <AnimatedPressable onPress={handleNext} scaleDown={0.95}>
           <LinearGradient
             colors={gradients.primary}
             start={{ x: 0, y: 0 }}
@@ -69,178 +75,186 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             style={styles.nextButton}
           >
             <Text style={styles.nextText}>
-              {isLast ? "Get Started" : "Continue"}
+              {slideIndex === 1 ? "Get Started" : "Continue"}
             </Text>
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </LinearGradient>
         </AnimatedPressable>
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
 
-/* -- Step Components -- */
+/* ── Slide 1: Hero ───────────────────────────────────────── */
 
-function WelcomeStep() {
+function HeroSlide() {
+  const pulseScale = useSharedValue(1);
+
+  useEffect(() => {
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 2000 }),
+        withTiming(1, { duration: 2000 }),
+      ),
+      -1,
+      true,
+    );
+  }, []);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+  }));
+
   return (
-    <View style={styles.stepCenter}>
-      <View style={styles.heroIconWrap}>
+    <View style={styles.slideCenter}>
+      {/* Animated logo */}
+      <Animated.View
+        entering={FadeInDown.duration(600).springify()}
+        style={pulseStyle}
+      >
         <LinearGradient
           colors={gradients.primary}
-          style={styles.heroIconGradient}
+          style={styles.heroLogo}
         >
-          <Ionicons name="school" size={40} color={colors.white} />
+          <Text style={styles.heroLogoText}>V</Text>
         </LinearGradient>
-      </View>
-      <Text style={styles.welcomeTitle}>Welcome to{"\n"}Math Tutor</Text>
-      <Text style={styles.stepSubtitle}>
-        Your personal AI tutor that teaches you how to solve problems with endless practice
-      </Text>
-      <View style={styles.welcomeFeatures}>
-        <View style={styles.welcomeFeatureRow}>
-          <Ionicons name="camera-outline" size={20} color={colors.primary} />
-          <Text style={styles.welcomeFeatureText}>Snap a photo of any problem</Text>
-        </View>
-        <View style={styles.welcomeFeatureRow}>
-          <Ionicons name="bulb-outline" size={20} color={colors.primary} />
-          <Text style={styles.welcomeFeatureText}>Get guided step by step</Text>
-        </View>
-        <View style={styles.welcomeFeatureRow}>
-          <Ionicons name="infinite-outline" size={20} color={colors.primary} />
-          <Text style={styles.welcomeFeatureText}>Endless practice from one problem</Text>
-        </View>
-        <View style={styles.welcomeFeatureRow}>
-          <Ionicons name="document-text-outline" size={20} color={colors.primary} />
-          <Text style={styles.welcomeFeatureText}>Take timed mock exams</Text>
-        </View>
-      </View>
+      </Animated.View>
+
+      {/* Tagline */}
+      <Animated.Text
+        entering={FadeInDown.delay(200).duration(500)}
+        style={styles.heroTagline}
+      >
+        Snap. Learn. Master.
+      </Animated.Text>
+
+      <Animated.Text
+        entering={FadeInDown.delay(400).duration(500)}
+        style={styles.heroSubtitle}
+      >
+        Your AI tutor that breaks any problem{"\n"}into steps you actually understand
+      </Animated.Text>
+
+      {/* Feature pills */}
+      <Animated.View
+        entering={FadeInUp.delay(600).duration(500)}
+        style={styles.pillRow}
+      >
+        <FeaturePill icon="camera" label="Snap a photo" delay={0} />
+        <FeaturePill icon="book" label="Learn steps" delay={100} />
+        <FeaturePill icon="infinite" label="Practice" delay={200} />
+      </Animated.View>
     </View>
   );
 }
 
-function CaptureStep() {
+function FeaturePill({ icon, label, delay }: { icon: string; label: string; delay: number }) {
   return (
-    <View style={styles.stepCenter}>
-      <View style={styles.heroIconWrap}>
-        <LinearGradient
-          colors={gradients.primary}
-          style={styles.heroIconGradient}
-        >
-          <Ionicons name="camera" size={40} color={colors.white} />
-        </LinearGradient>
-      </View>
-      <Text style={styles.stepTitle}>Snap your homework</Text>
-      <Text style={styles.stepSubtitle}>
-        Take a photo and we'll extract every problem automatically
-      </Text>
-
-      {/* Mini mockup: extracted problems */}
-      <View style={[styles.mockupCard, shadows.md]}>
-        <View style={styles.mockupHeader}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-          <Text style={styles.mockupHeaderText}>3 problems found</Text>
-        </View>
-        {["2x + 5 = 13", "x² - 4 = 0", "3x/4 + 2 = 8"].map((problem, i) => (
-          <View key={i} style={styles.mockupRow}>
-            <View style={styles.mockupCheckbox}>
-              <Ionicons name="checkmark" size={12} color={colors.white} />
-            </View>
-            <Text style={styles.mockupProblem}>{problem}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <Animated.View
+      entering={FadeInUp.delay(700 + delay).duration(400)}
+      style={[styles.pill, shadows.sm]}
+    >
+      <Ionicons name={icon as any} size={16} color={colors.primary} />
+      <Text style={styles.pillText}>{label}</Text>
+    </Animated.View>
   );
 }
 
-function LearnStep() {
+/* ── Slide 2: The Flow ──────────────────────────────────── */
+
+function FlowSlide() {
   return (
-    <View style={styles.stepCenter}>
-      <View style={styles.heroIconWrap}>
-        <LinearGradient
-          colors={gradients.primary}
-          style={styles.heroIconGradient}
-        >
-          <Ionicons name="book" size={40} color={colors.white} />
-        </LinearGradient>
-      </View>
-      <Text style={styles.stepTitle}>Learn how to solve it</Text>
-      <Text style={styles.stepSubtitle}>
-        We break every problem into steps — ask questions anytime and chat with your AI tutor
-      </Text>
+    <View style={styles.slideCenter}>
+      <Animated.Text
+        entering={FadeInDown.duration(400)}
+        style={styles.flowTitle}
+      >
+        How it works
+      </Animated.Text>
 
-      {/* Mini mockup: step-by-step walkthrough */}
-      <View style={[styles.mockupCard, shadows.md]}>
-        <View style={styles.mockupStep}>
-          <View style={[styles.mockupStepDot, styles.mockupStepDone]} />
-          <View style={styles.mockupStepContent}>
-            <Text style={styles.mockupStepLabel}>Step 1</Text>
-            <Text style={styles.mockupStepText}>Subtract 5 from both sides</Text>
-          </View>
-          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-        </View>
-        <View style={styles.mockupStepLine} />
-        <View style={styles.mockupStep}>
-          <View style={[styles.mockupStepDot, styles.mockupStepActive]} />
-          <View style={styles.mockupStepContent}>
-            <Text style={[styles.mockupStepLabel, { color: colors.primary }]}>Step 2</Text>
-            <Text style={styles.mockupStepText}>Divide both sides by 2</Text>
-          </View>
-        </View>
-        <View style={styles.mockupHint}>
-          <Ionicons name="chatbubble-ellipses" size={14} color={colors.primary} />
-          <Text style={[styles.mockupHintText, { color: colors.primary }]}>Ask a question about this step</Text>
-        </View>
+      <Animated.Text
+        entering={FadeInDown.delay(100).duration(400)}
+        style={styles.flowSubtitle}
+      >
+        From problem to mastery in minutes
+      </Animated.Text>
+
+      <View style={styles.flowSteps}>
+        <FlowStep
+          index={1}
+          icon="camera"
+          title="Capture"
+          description="Snap a photo or type your problem"
+          gradient={gradients.primary}
+          delay={200}
+        />
+        <FlowConnector delay={400} />
+        <FlowStep
+          index={2}
+          icon="book"
+          title="Learn"
+          description="AI breaks it into guided steps"
+          gradient={gradients.primary}
+          delay={400}
+        />
+        <FlowConnector delay={600} />
+        <FlowStep
+          index={3}
+          icon="infinite"
+          title="Master"
+          description="Practice similar problems until it clicks"
+          gradient={gradients.success}
+          delay={600}
+        />
       </View>
     </View>
   );
 }
 
-function PracticeStep() {
+function FlowStep({
+  index,
+  icon,
+  title,
+  description,
+  gradient,
+  delay,
+}: {
+  index: number;
+  icon: string;
+  title: string;
+  description: string;
+  gradient: readonly [string, string];
+  delay: number;
+}) {
   return (
-    <View style={styles.stepCenter}>
-      <View style={styles.heroIconWrap}>
-        <LinearGradient
-          colors={gradients.success}
-          style={styles.heroIconGradient}
-        >
-          <Ionicons name="infinite" size={40} color={colors.white} />
-        </LinearGradient>
+    <Animated.View
+      entering={FadeInDown.delay(delay).duration(400).springify()}
+      style={[styles.flowCard, shadows.sm]}
+    >
+      <LinearGradient colors={gradient} style={styles.flowIconWrap}>
+        <Ionicons name={icon as any} size={20} color={colors.white} />
+      </LinearGradient>
+      <View style={styles.flowTextWrap}>
+        <Text style={styles.flowStepTitle}>{title}</Text>
+        <Text style={styles.flowStepDesc}>{description}</Text>
       </View>
-      <Text style={styles.stepTitle}>One problem, endless practice</Text>
-      <Text style={styles.stepSubtitle}>
-        We generate similar problems so you can practice until you've truly got it
-      </Text>
-
-      {/* Mini mockup: one problem → many similar */}
-      <View style={[styles.mockupCard, shadows.md]}>
-        <Text style={styles.mockupSeedLabel}>Your problem</Text>
-        <View style={styles.mockupSeedRow}>
-          <Text style={styles.mockupSeedProblem}>2x + 5 = 13</Text>
-        </View>
-
-        <View style={styles.mockupArrowRow}>
-          <View style={styles.mockupArrowLine} />
-          <View style={styles.mockupArrowBadge}>
-            <Ionicons name="sparkles" size={14} color={colors.primary} />
-            <Text style={styles.mockupArrowText}>Generated for you</Text>
-          </View>
-          <View style={styles.mockupArrowLine} />
-        </View>
-
-        {["3x - 2 = 7", "5x + 1 = 21", "4x - 3 = 17"].map((problem, i) => (
-          <View key={i} style={styles.mockupGeneratedRow}>
-            <View style={[styles.mockupGeneratedDot, { backgroundColor: i === 0 ? colors.success : i === 1 ? colors.success : colors.primaryBg }]} />
-            <Text style={styles.mockupGeneratedProblem}>{problem}</Text>
-            {i < 2 && <Ionicons name="checkmark-circle" size={16} color={colors.success} />}
-          </View>
-        ))}
-      </View>
-    </View>
+    </Animated.View>
   );
 }
 
-/* -- Styles -- */
+function FlowConnector({ delay }: { delay: number }) {
+  return (
+    <Animated.View
+      entering={FadeIn.delay(delay + 100).duration(300)}
+      style={styles.flowConnector}
+    >
+      <View style={styles.flowConnectorLine} />
+      <Ionicons name="chevron-down" size={14} color={colors.primaryLight} />
+    </Animated.View>
+  );
+}
+
+/* ── Styles ─────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
   container: {
@@ -288,6 +302,13 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   backText: { color: colors.primary, ...typography.bodyBold },
+  skipButton: {
+    padding: spacing.sm,
+  },
+  skipText: {
+    color: colors.textMuted,
+    ...typography.bodyBold,
+  },
   nextButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -298,218 +319,121 @@ const styles = StyleSheet.create({
   },
   nextText: { color: colors.white, ...typography.button },
 
-  // Shared step styles
-  stepCenter: {
+  // Shared slide
+  slideCenter: {
     alignItems: "center",
     paddingHorizontal: spacing.xs,
   },
-  heroIconWrap: {
-    marginBottom: spacing.xl,
-  },
-  heroIconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+
+  // Hero slide
+  heroLogo: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: spacing.xxl,
   },
-  stepTitle: {
+  heroLogoText: {
+    fontSize: 44,
+    fontWeight: "800",
+    color: colors.white,
+    letterSpacing: -1,
+  },
+  heroTagline: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: colors.text,
+    textAlign: "center",
+    letterSpacing: -0.5,
+    marginBottom: spacing.md,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: spacing.xxxl,
+  },
+  pillRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.white,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  pillText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 12,
+  },
+
+  // Flow slide
+  flowTitle: {
     ...typography.title,
+    color: colors.text,
     textAlign: "center",
     marginBottom: spacing.sm,
-    color: colors.text,
   },
-  stepSubtitle: {
+  flowSubtitle: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: "center",
     marginBottom: spacing.xxl,
-    paddingHorizontal: spacing.sm,
   },
-
-  // Welcome step
-  welcomeTitle: {
-    ...typography.hero,
-    fontSize: 34,
-    textAlign: "center",
-    marginBottom: spacing.md,
-    color: colors.text,
-  },
-  welcomeFeatures: {
+  flowSteps: {
     width: "100%",
-    gap: spacing.lg,
-    marginTop: spacing.md,
+    alignItems: "center",
   },
-  welcomeFeatureRow: {
+  flowCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
-  welcomeFeatureText: {
-    ...typography.body,
-    color: colors.text,
-    fontSize: 15,
-  },
-
-  // Mockup card (shared)
-  mockupCard: {
     width: "100%",
     backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    padding: spacing.xl,
-  },
-
-  // Capture step mockup
-  mockupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  mockupHeaderText: {
-    ...typography.bodyBold,
-    color: colors.success,
-    fontSize: 14,
-  },
-  mockupRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    padding: spacing.lg,
     gap: spacing.md,
-    marginBottom: spacing.md,
   },
-  mockupCheckbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    backgroundColor: colors.primary,
+  flowIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
   },
-  mockupProblem: {
-    ...typography.body,
-    color: colors.text,
-    fontSize: 15,
-  },
-
-  // Learn step mockup
-  mockupStep: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  mockupStepDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.border,
-  },
-  mockupStepDone: {
-    backgroundColor: colors.success,
-  },
-  mockupStepActive: {
-    backgroundColor: colors.primary,
-  },
-  mockupStepContent: {
+  flowTextWrap: {
     flex: 1,
   },
-  mockupStepLabel: {
-    ...typography.label,
-    color: colors.textMuted,
+  flowStepTitle: {
+    ...typography.bodyBold,
+    color: colors.text,
+    fontSize: 16,
     marginBottom: 2,
   },
-  mockupStepText: {
-    ...typography.body,
-    color: colors.text,
-    fontSize: 14,
-  },
-  mockupStepLine: {
-    width: 2,
-    height: 16,
-    backgroundColor: colors.border,
-    marginLeft: 4,
-    marginVertical: spacing.xs,
-  },
-  mockupHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.primaryBg,
-    borderRadius: radii.sm,
-  },
-  mockupHintText: {
+  flowStepDesc: {
     ...typography.caption,
-    color: colors.warningDark,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
   },
-
-  // Practice step mockup
-  mockupSeedLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  mockupSeedRow: {
-    backgroundColor: colors.primaryBg,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  mockupSeedProblem: {
-    ...typography.bodyBold,
-    color: colors.primary,
-    fontSize: 16,
-  },
-  mockupArrowRow: {
-    flexDirection: "row",
+  flowConnector: {
     alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  mockupArrowLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  mockupArrowBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
     paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.primaryBg,
-    borderRadius: radii.pill,
   },
-  mockupArrowText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 11,
-  },
-  mockupGeneratedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  mockupGeneratedDot: {
-    width: 8,
+  flowConnectorLine: {
+    width: 2,
     height: 8,
-    borderRadius: 4,
-  },
-  mockupGeneratedProblem: {
-    ...typography.body,
-    color: colors.text,
-    fontSize: 15,
-    flex: 1,
+    backgroundColor: colors.primaryLight,
+    marginBottom: 2,
   },
 });
