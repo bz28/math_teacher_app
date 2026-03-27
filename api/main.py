@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from sqlalchemy import delete, or_, text, update
 
 from api.config import settings
+from api.core.constants import STALE_SESSION_HOURS
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
@@ -17,8 +18,6 @@ from api.routes.session import router as session_router
 from api.routes.work import router as work_router
 
 logger = logging.getLogger(__name__)
-
-STALE_SESSION_HOURS = 1
 
 
 async def _cleanup_stale_sessions() -> None:

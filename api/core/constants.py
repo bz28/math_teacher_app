@@ -1,0 +1,34 @@
+"""Centralized operational constants for the API.
+
+Collect all tunable limits, caps, and thresholds here so they can be
+reviewed and adjusted in one place.
+"""
+
+# ---------------------------------------------------------------------------
+# Session limits
+# ---------------------------------------------------------------------------
+MAX_PROBLEM_LENGTH = 10_000
+RECENT_EXCHANGES_LIMIT = 10
+MAX_STUDENT_MESSAGES = 10
+STALE_SESSION_HOURS = 1
+
+# ---------------------------------------------------------------------------
+# LLM / tutor
+# ---------------------------------------------------------------------------
+LLM_HISTORY_LIMIT = 6  # max recent exchanges sent to chat functions
+
+# ---------------------------------------------------------------------------
+# Decomposition cache
+# ---------------------------------------------------------------------------
+DECOMPOSITION_CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
+DECOMPOSITION_CACHE_MAX_SIZE = 200
+
+# ---------------------------------------------------------------------------
+# Image handling
+# ---------------------------------------------------------------------------
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
+
+# ---------------------------------------------------------------------------
+# Logging / storage
+# ---------------------------------------------------------------------------
+MAX_STORED_TEXT_LENGTH = 10 * 1024  # truncate LLM call logs beyond this

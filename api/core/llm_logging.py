@@ -5,16 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 
-logger = logging.getLogger(__name__)
+from api.core.constants import MAX_STORED_TEXT_LENGTH
 
-# Truncate stored text to 10KB to prevent unbounded growth
-_MAX_TEXT_LENGTH = 10 * 1024
+logger = logging.getLogger(__name__)
 
 
 def _truncate(text: str | None) -> str | None:
-    if text is None or len(text) <= _MAX_TEXT_LENGTH:
+    if text is None or len(text) <= MAX_STORED_TEXT_LENGTH:
         return text
-    return text[:_MAX_TEXT_LENGTH] + "... [truncated]"
+    return text[:MAX_STORED_TEXT_LENGTH] + "... [truncated]"
 
 
 async def persist_llm_call(

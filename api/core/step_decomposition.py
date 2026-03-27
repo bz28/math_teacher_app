@@ -5,6 +5,7 @@ import re
 import time
 from dataclasses import dataclass
 
+from api.core.constants import DECOMPOSITION_CACHE_MAX_SIZE, DECOMPOSITION_CACHE_TTL_SECONDS
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 from api.core.subjects import Subject, get_config
 
@@ -14,9 +15,7 @@ logger = logging.getLogger(__name__)
 # In-memory TTL cache for non-personalized decompositions
 # ---------------------------------------------------------------------------
 
-_CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
 _cache: dict[str, tuple[float, "Decomposition"]] = {}
-_CACHE_MAX_SIZE = 200
 
 
 def _cache_get(problem: str) -> "Decomposition | None":
@@ -25,7 +24,7 @@ def _cache_get(problem: str) -> "Decomposition | None":
     if entry is None:
         return None
     ts, decomp = entry
-    if time.monotonic() - ts > _CACHE_TTL_SECONDS:
+    if time.monotonic() - ts > DECOMPOSITION_CACHE_TTL_SECONDS:
         del _cache[problem]
         return None
     return decomp
@@ -34,7 +33,7 @@ def _cache_get(problem: str) -> "Decomposition | None":
 def _cache_set(problem: str, decomp: "Decomposition") -> None:
     """Cache a decomposition result."""
     # Evict oldest entries if cache is full
-    if len(_cache) >= _CACHE_MAX_SIZE:
+    if len(_cache) >= DECOMPOSITION_CACHE_MAX_SIZE:
         oldest_key = min(_cache, key=lambda k: _cache[k][0])
         del _cache[oldest_key]
     _cache[problem] = (time.monotonic(), decomp)

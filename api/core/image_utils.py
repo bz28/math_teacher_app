@@ -2,7 +2,7 @@
 
 import base64
 
-MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB after decode
+from api.core.constants import MAX_IMAGE_BYTES
 
 
 def validate_and_decode_image(image_base64: str) -> tuple[bytes, str]:

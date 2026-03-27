@@ -14,16 +14,17 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.constants import (
+    MAX_PROBLEM_LENGTH,
+    MAX_STUDENT_MESSAGES,
+    RECENT_EXCHANGES_LIMIT,
+)
 from api.core.practice import check_answer
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject
 from api.core.tutor import completed_chat, step_chat
 from api.models.session import Session, SessionMode, SessionStatus
 from api.models.work_submission import WorkSubmission
-
-RECENT_EXCHANGES_LIMIT = 10
-MAX_STUDENT_MESSAGES = 10
-MAX_PROBLEM_LENGTH = 10_000
 
 
 class SessionError(Exception):

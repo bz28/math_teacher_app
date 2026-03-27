@@ -15,11 +15,9 @@ from dataclasses import dataclass
 
 import anthropic
 
+from api.core.constants import LLM_HISTORY_LIMIT
 from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
 from api.core.subjects import Subject, get_config
-
-# Max recent exchanges sent to chat functions
-_HISTORY_LIMIT = 6
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +125,7 @@ async def step_chat(
     """Answer a student's question about a specific step."""
     history_text = "\n".join(
         f"  {e['role']}: {e['content']}"
-        for e in exchanges[-_HISTORY_LIMIT:]
+        for e in exchanges[-LLM_HISTORY_LIMIT:]
     ) if exchanges else "(no prior conversation)"
 
     prompt = (
@@ -159,7 +157,7 @@ async def completed_chat(
     )
     history_text = "\n".join(
         f"  {e['role']}: {e['content']}"
-        for e in exchanges[-_HISTORY_LIMIT:]
+        for e in exchanges[-LLM_HISTORY_LIMIT:]
     ) if exchanges else "(no prior conversation)"
 
     prompt = (
