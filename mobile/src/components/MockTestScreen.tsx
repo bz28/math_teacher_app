@@ -63,7 +63,7 @@ export function MockTestScreen({ onBack }: Props) {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [remainingSeconds != null && remainingSeconds > 0]);
+  }, [remainingSeconds]);
 
   // Auto-submit on time up
   useEffect(() => {
