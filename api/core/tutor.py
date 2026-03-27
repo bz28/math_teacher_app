@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import anthropic
 
 from api.core.constants import LLM_HISTORY_LIMIT
-from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -136,7 +136,7 @@ async def step_chat(
     )
     data = await call_claude_json(
         _build_step_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
-        session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
+        session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
 
