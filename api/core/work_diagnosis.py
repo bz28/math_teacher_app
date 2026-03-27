@@ -1,15 +1,13 @@
 """Work diagnosis: analyze student handwritten work via Claude Vision."""
 
-import base64
 import logging
 from typing import Any
 
+from api.core.image_utils import validate_and_decode_image
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_vision
 from api.core.subjects import Subject
 
 logger = logging.getLogger(__name__)
-
-MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB after decode
 
 DIAGNOSIS_PROMPT = """You are analyzing a student's handwritten {domain} work shown in the attached image.
 Compare their work against the reference solution below.
@@ -64,26 +62,6 @@ Return ONLY valid JSON:
 "overall_feedback": "Brief overall assessment"}}"""
 
 
-def _validate_image(image_base64: str) -> str:
-    """Validate and detect media type of base64-encoded image. Returns media_type."""
-    try:
-        raw = base64.b64decode(image_base64)
-    except Exception as err:
-        raise ValueError("Invalid base64 image data") from err
-
-    if len(raw) > MAX_IMAGE_BYTES:
-        raise ValueError(
-            f"Image too large: {len(raw) / 1024 / 1024:.1f}MB (max 5MB)"
-        )
-
-    if raw[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-    elif raw[:2] == b"\xff\xd8":
-        return "image/jpeg"
-    else:
-        raise ValueError("Unsupported image format (only JPEG and PNG are accepted)")
-
-
 async def diagnose_work(
     image_base64: str,
     problem_text: str,
@@ -112,7 +90,7 @@ async def diagnose_work(
     Returns:
         Structured diagnosis dict with steps, summary, has_issues, overall_feedback.
     """
-    media_type = _validate_image(image_base64)
+    _, media_type = validate_and_decode_image(image_base64)
 
     # Format steps for the prompt
     steps_text = "\n".join(f"  Step {i + 1}: {s}" for i, s in enumerate(steps))
