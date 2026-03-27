@@ -23,6 +23,7 @@ from api.models.work_submission import WorkSubmission
 
 RECENT_EXCHANGES_LIMIT = 10
 MAX_STUDENT_MESSAGES = 10
+MAX_PROBLEM_LENGTH = 10_000
 
 
 class SessionError(Exception):
@@ -69,6 +70,12 @@ async def create_session(
     subject: str = Subject.MATH,
 ) -> Session:
     """Create a new tutoring session for a problem."""
+    problem = problem.strip()
+    if not problem:
+        raise ValueError("Problem cannot be empty")
+    if len(problem) > MAX_PROBLEM_LENGTH:
+        raise ValueError(f"Problem too long (max {MAX_PROBLEM_LENGTH} characters)")
+
     await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
@@ -112,6 +119,8 @@ async def create_session(
         )
         problem_type = decomposition.problem_type
         steps_data = [{"description": s} for s in decomposition.steps]
+        if not steps_data:
+            raise RuntimeError("Decomposition returned no steps")
 
         # Attach final_answer and shuffled multiple-choice to the last step
         last = steps_data[-1]
