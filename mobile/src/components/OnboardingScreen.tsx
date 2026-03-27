@@ -1,23 +1,47 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeInUp,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface OnboardingScreenProps {
   onComplete: () => void;
+}
+
+/** Fade-in + slide-up animation hook */
+function useFadeInUp(delay = 0, duration = 500) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return { opacity, transform: [{ translateY }] };
+}
+
+/** Gentle continuous pulse */
+function usePulse() {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    ).start();
+  }, []);
+
+  return { transform: [{ scale }] };
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
@@ -36,12 +60,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       {/* Progress dots */}
       <View style={styles.progressRow}>
         {[0, 1].map((i) => (
-          <Animated.View
+          <View
             key={i}
-            style={[
-              styles.dot,
-              i === slideIndex && styles.dotActive,
-            ]}
+            style={[styles.dot, i === slideIndex && styles.dotActive]}
           />
         ))}
       </View>
@@ -52,10 +73,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       </View>
 
       {/* Navigation */}
-      <Animated.View
-        entering={FadeInUp.delay(600).duration(400)}
-        style={styles.nav}
-      >
+      <View style={styles.nav}>
         {slideIndex > 0 ? (
           <AnimatedPressable onPress={() => setSlideIndex(0)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
@@ -80,7 +98,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </LinearGradient>
         </AnimatedPressable>
-      </Animated.View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -88,169 +106,115 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 /* ── Slide 1: Hero ───────────────────────────────────────── */
 
 function HeroSlide() {
-  const pulseScale = useSharedValue(1);
-
-  useEffect(() => {
-    pulseScale.value = withRepeat(
-      withSequence(
-        withTiming(1.05, { duration: 2000 }),
-        withTiming(1, { duration: 2000 }),
-      ),
-      -1,
-      true,
-    );
-  }, []);
-
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseScale.value }],
-  }));
+  const logoAnim = useFadeInUp(0, 600);
+  const pulseAnim = usePulse();
+  const taglineAnim = useFadeInUp(200, 500);
+  const subtitleAnim = useFadeInUp(400, 500);
+  const pillsAnim = useFadeInUp(600, 500);
+  const pill1Anim = useFadeInUp(700, 400);
+  const pill2Anim = useFadeInUp(800, 400);
+  const pill3Anim = useFadeInUp(900, 400);
 
   return (
     <View style={styles.slideCenter}>
       {/* Animated logo */}
-      <Animated.View
-        entering={FadeInDown.duration(600).springify()}
-        style={pulseStyle}
-      >
-        <LinearGradient
-          colors={gradients.primary}
-          style={styles.heroLogo}
-        >
+      <Animated.View style={[logoAnim, pulseAnim]}>
+        <LinearGradient colors={gradients.primary} style={styles.heroLogo}>
           <Text style={styles.heroLogoText}>V</Text>
         </LinearGradient>
       </Animated.View>
 
       {/* Tagline */}
-      <Animated.Text
-        entering={FadeInDown.delay(200).duration(500)}
-        style={styles.heroTagline}
-      >
+      <Animated.Text style={[styles.heroTagline, taglineAnim]}>
         Snap. Learn. Master.
       </Animated.Text>
 
-      <Animated.Text
-        entering={FadeInDown.delay(400).duration(500)}
-        style={styles.heroSubtitle}
-      >
+      <Animated.Text style={[styles.heroSubtitle, subtitleAnim]}>
         Your AI tutor that breaks any problem{"\n"}into steps you actually understand
       </Animated.Text>
 
       {/* Feature pills */}
-      <Animated.View
-        entering={FadeInUp.delay(600).duration(500)}
-        style={styles.pillRow}
-      >
-        <FeaturePill icon="camera" label="Snap a photo" delay={0} />
-        <FeaturePill icon="book" label="Learn steps" delay={100} />
-        <FeaturePill icon="infinite" label="Practice" delay={200} />
+      <Animated.View style={[styles.pillRow, pillsAnim]}>
+        <Animated.View style={[styles.pill, shadows.sm, pill1Anim]}>
+          <Ionicons name="camera" size={16} color={colors.primary} />
+          <Text style={styles.pillText}>Snap a photo</Text>
+        </Animated.View>
+        <Animated.View style={[styles.pill, shadows.sm, pill2Anim]}>
+          <Ionicons name="book" size={16} color={colors.primary} />
+          <Text style={styles.pillText}>Learn steps</Text>
+        </Animated.View>
+        <Animated.View style={[styles.pill, shadows.sm, pill3Anim]}>
+          <Ionicons name="infinite" size={16} color={colors.primary} />
+          <Text style={styles.pillText}>Practice</Text>
+        </Animated.View>
       </Animated.View>
     </View>
-  );
-}
-
-function FeaturePill({ icon, label, delay }: { icon: string; label: string; delay: number }) {
-  return (
-    <Animated.View
-      entering={FadeInUp.delay(700 + delay).duration(400)}
-      style={[styles.pill, shadows.sm]}
-    >
-      <Ionicons name={icon as any} size={16} color={colors.primary} />
-      <Text style={styles.pillText}>{label}</Text>
-    </Animated.View>
   );
 }
 
 /* ── Slide 2: The Flow ──────────────────────────────────── */
 
 function FlowSlide() {
+  const titleAnim = useFadeInUp(0, 400);
+  const subtitleAnim = useFadeInUp(100, 400);
+  const step1Anim = useFadeInUp(200, 400);
+  const conn1Anim = useFadeInUp(350, 300);
+  const step2Anim = useFadeInUp(400, 400);
+  const conn2Anim = useFadeInUp(550, 300);
+  const step3Anim = useFadeInUp(600, 400);
+
   return (
     <View style={styles.slideCenter}>
-      <Animated.Text
-        entering={FadeInDown.duration(400)}
-        style={styles.flowTitle}
-      >
+      <Animated.Text style={[styles.flowTitle, titleAnim]}>
         How it works
       </Animated.Text>
 
-      <Animated.Text
-        entering={FadeInDown.delay(100).duration(400)}
-        style={styles.flowSubtitle}
-      >
+      <Animated.Text style={[styles.flowSubtitle, subtitleAnim]}>
         From problem to mastery in minutes
       </Animated.Text>
 
       <View style={styles.flowSteps}>
-        <FlowStep
-          index={1}
-          icon="camera"
-          title="Capture"
-          description="Snap a photo or type your problem"
-          gradient={gradients.primary}
-          delay={200}
-        />
-        <FlowConnector delay={400} />
-        <FlowStep
-          index={2}
-          icon="book"
-          title="Learn"
-          description="AI breaks it into guided steps"
-          gradient={gradients.primary}
-          delay={400}
-        />
-        <FlowConnector delay={600} />
-        <FlowStep
-          index={3}
-          icon="infinite"
-          title="Master"
-          description="Practice similar problems until it clicks"
-          gradient={gradients.success}
-          delay={600}
-        />
+        <Animated.View style={[styles.flowCard, shadows.sm, step1Anim]}>
+          <LinearGradient colors={gradients.primary} style={styles.flowIconWrap}>
+            <Ionicons name="camera" size={20} color={colors.white} />
+          </LinearGradient>
+          <View style={styles.flowTextWrap}>
+            <Text style={styles.flowStepTitle}>Capture</Text>
+            <Text style={styles.flowStepDesc}>Snap a photo or type your problem</Text>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[styles.flowConnector, conn1Anim]}>
+          <View style={styles.flowConnectorLine} />
+          <Ionicons name="chevron-down" size={14} color={colors.primaryLight} />
+        </Animated.View>
+
+        <Animated.View style={[styles.flowCard, shadows.sm, step2Anim]}>
+          <LinearGradient colors={gradients.primary} style={styles.flowIconWrap}>
+            <Ionicons name="book" size={20} color={colors.white} />
+          </LinearGradient>
+          <View style={styles.flowTextWrap}>
+            <Text style={styles.flowStepTitle}>Learn</Text>
+            <Text style={styles.flowStepDesc}>AI breaks it into guided steps</Text>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[styles.flowConnector, conn2Anim]}>
+          <View style={styles.flowConnectorLine} />
+          <Ionicons name="chevron-down" size={14} color={colors.primaryLight} />
+        </Animated.View>
+
+        <Animated.View style={[styles.flowCard, shadows.sm, step3Anim]}>
+          <LinearGradient colors={gradients.success} style={styles.flowIconWrap}>
+            <Ionicons name="infinite" size={20} color={colors.white} />
+          </LinearGradient>
+          <View style={styles.flowTextWrap}>
+            <Text style={styles.flowStepTitle}>Master</Text>
+            <Text style={styles.flowStepDesc}>Practice similar problems until it clicks</Text>
+          </View>
+        </Animated.View>
       </View>
     </View>
-  );
-}
-
-function FlowStep({
-  index,
-  icon,
-  title,
-  description,
-  gradient,
-  delay,
-}: {
-  index: number;
-  icon: string;
-  title: string;
-  description: string;
-  gradient: readonly [string, string];
-  delay: number;
-}) {
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(delay).duration(400).springify()}
-      style={[styles.flowCard, shadows.sm]}
-    >
-      <LinearGradient colors={gradient} style={styles.flowIconWrap}>
-        <Ionicons name={icon as any} size={20} color={colors.white} />
-      </LinearGradient>
-      <View style={styles.flowTextWrap}>
-        <Text style={styles.flowStepTitle}>{title}</Text>
-        <Text style={styles.flowStepDesc}>{description}</Text>
-      </View>
-    </Animated.View>
-  );
-}
-
-function FlowConnector({ delay }: { delay: number }) {
-  return (
-    <Animated.View
-      entering={FadeIn.delay(delay + 100).duration(300)}
-      style={styles.flowConnector}
-    >
-      <View style={styles.flowConnectorLine} />
-      <Ionicons name="chevron-down" size={14} color={colors.primaryLight} />
-    </Animated.View>
   );
 }
 
