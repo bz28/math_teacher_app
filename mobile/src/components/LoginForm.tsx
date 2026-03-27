@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -12,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { login, saveTokens } from "../services/api";
 import { colors, spacing, radii, typography, gradients } from "../theme";
@@ -21,6 +24,24 @@ interface LoginFormProps {
   onSwitchToRegister: () => void;
 }
 
+/** Fade-in + slide-up animation hook */
+function useFadeInUp(delay = 0, duration = 500) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return { opacity, transform: [{ translateY }] };
+}
+
 export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,15 +49,22 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const logoAnim = useFadeInUp(0, 500);
+  const headerAnim = useFadeInUp(100, 500);
+  const formAnim = useFadeInUp(300, 500);
+  const switchAnim = useFadeInUp(500, 400);
+
   const handleLogin = async () => {
     setError(null);
     setLoading(true);
     try {
       const resp = await login(email.trim().toLowerCase(), password);
       await saveTokens(resp.access_token, resp.refresh_token);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAuth();
     } catch (e) {
       setError((e as Error).message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
     }
@@ -49,19 +77,21 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.header}>
-          <View style={styles.heroIconWrap}>
+          <Animated.View style={[styles.heroIconWrap, logoAnim]}>
             <LinearGradient
               colors={gradients.primary}
               style={styles.heroIconGradient}
             >
-              <Ionicons name="school" size={36} color={colors.white} />
+              <Text style={styles.logoText}>V</Text>
             </LinearGradient>
-          </View>
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in to continue learning</Text>
+          </Animated.View>
+          <Animated.View style={headerAnim}>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Sign in to continue learning</Text>
+          </Animated.View>
         </View>
 
-        <View style={styles.form}>
+        <Animated.View style={[styles.form, formAnim]}>
           <View style={styles.inputWrap}>
             <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
             <TextInput
@@ -84,6 +114,8 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
               placeholder="Password"
               secureTextEntry={!showPassword}
               placeholderTextColor={colors.textMuted}
+              returnKeyType="go"
+              onSubmitEditing={handleLogin}
             />
             <TouchableOpacity
               style={styles.eyeButton}
@@ -109,6 +141,7 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
             style={(loading || !email || !password) && styles.buttonDisabled}
             onPress={handleLogin}
             disabled={loading || !email || !password}
+            scaleDown={0.97}
           >
             <LinearGradient
               colors={gradients.primary}
@@ -123,14 +156,16 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
               )}
             </LinearGradient>
           </AnimatedPressable>
-        </View>
+        </Animated.View>
 
-        <TouchableOpacity onPress={onSwitchToRegister} style={styles.switchButton}>
-          <Text style={styles.switchText}>
-            Don't have an account?{" "}
-            <Text style={styles.switchTextBold}>Register</Text>
-          </Text>
-        </TouchableOpacity>
+        <Animated.View style={switchAnim}>
+          <TouchableOpacity onPress={onSwitchToRegister} style={styles.switchButton}>
+            <Text style={styles.switchText}>
+              Don't have an account?{" "}
+              <Text style={styles.switchTextBold}>Register</Text>
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -159,6 +194,12 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
+  },
+  logoText: {
+    fontSize: 38,
+    fontWeight: "800",
+    color: colors.white,
+    letterSpacing: -1,
   },
   title: {
     ...typography.title,
