@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Alert, Linking } from "react-native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import { requestCameraAccess, requestGalleryAccess } from "./usePermissions";
 import { extractProblemsFromImage } from "../services/api";
 
 export interface ExtractionState {
@@ -35,33 +35,10 @@ export function useImageExtraction(
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
 
   const pickImage = async (source: "camera" | "gallery") => {
-    if (source === "camera") {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Camera Access Required",
-          "Please enable camera access in Settings to scan problems.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
-          ],
-        );
-        return;
-      }
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Photo Access Required",
-          "Please enable photo library access in Settings to select images.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
-          ],
-        );
-        return;
-      }
-    }
+    const granted = source === "camera"
+      ? await requestCameraAccess()
+      : await requestGalleryAccess();
+    if (!granted) return;
 
     const options: ImagePicker.ImagePickerOptions = {
       base64: true,
