@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { LoginForm } from "./LoginForm";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
@@ -33,6 +36,24 @@ const GRADES = [
 
 type RegisterStep = "name" | "grade" | "credentials";
 
+/** Fade-in + slide-up animation hook */
+function useFadeInUp(delay = 0, duration = 500) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return { opacity, transform: [{ translateY }] };
+}
+
 export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
   const [registerStep, setRegisterStep] = useState<RegisterStep>("name");
@@ -49,12 +70,14 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
   const handleNameNext = () => {
     if (!name.trim()) return;
     setError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRegisterStep("grade");
   };
 
   const handleGradeNext = () => {
     if (!selectedGrade) return;
     setError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRegisterStep("credentials");
   };
 
@@ -74,9 +97,11 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
       const resp = await register(normalizedEmail, password, name.trim(), selectedGrade!.value);
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAuth();
     } catch (e) {
       setError((e as Error).message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
     }
@@ -97,125 +122,97 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   // ── Register Step 1: Name ──────────────────────────────
   if (registerStep === "name") {
-    return (
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView
-          style={styles.inner}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>What's your name?</Text>
-            <StepIndicator current={stepNumber} total={3} />
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="First name"
-                autoCapitalize="words"
-                autoFocus
-                placeholderTextColor={colors.textMuted}
-                returnKeyType="next"
-                onSubmitEditing={handleNameNext}
-              />
-            </View>
-
-            <AnimatedPressable
-              style={!name.trim() && styles.buttonDisabled}
-              onPress={handleNameNext}
-              disabled={!name.trim()}
-            >
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.primaryButton}
-              >
-                <Text style={styles.primaryButtonText}>Continue</Text>
-              </LinearGradient>
-            </AnimatedPressable>
-          </View>
-
-          <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
-            <Text style={styles.switchText}>
-              Already have an account?{" "}
-              <Text style={styles.switchTextBold}>Sign In</Text>
-            </Text>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
+    return <NameStep
+      name={name}
+      onNameChange={setName}
+      onNext={handleNameNext}
+      onSwitch={switchMode}
+      stepNumber={stepNumber}
+    />;
   }
 
   // ── Register Step 2: Grade ─────────────────────────────
   if (registerStep === "grade") {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <AnimatedPressable
-            onPress={() => setRegisterStep("name")}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={20} color={colors.primary} />
-            <Text style={styles.backText}>Back</Text>
-          </AnimatedPressable>
+    return <GradeStep
+      name={name}
+      selectedGrade={selectedGrade}
+      onGradeSelect={setSelectedGrade}
+      onNext={handleGradeNext}
+      onBack={() => setRegisterStep("name")}
+      stepNumber={stepNumber}
+    />;
+  }
 
-          <View style={styles.header}>
-            <Text style={styles.title}>What grade are you in?</Text>
-            <StepIndicator current={stepNumber} total={3} />
-            <Text style={styles.subtitle}>
-              This helps us improve your experience over time
-            </Text>
+  // ── Register Step 3: Credentials ───────────────────────
+  return <CredentialsStep
+    name={name}
+    email={email}
+    onEmailChange={setEmail}
+    password={password}
+    onPasswordChange={setPassword}
+    showPassword={showPassword}
+    onTogglePassword={() => setShowPassword(!showPassword)}
+    loading={loading}
+    error={error}
+    onSubmit={handleRegisterSubmit}
+    onBack={() => setRegisterStep("grade")}
+    onSwitch={switchMode}
+    stepNumber={stepNumber}
+  />;
+}
+
+/* ── Step 1: Name ─────────────────────────────────────────── */
+
+function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
+  name: string;
+  onNameChange: (v: string) => void;
+  onNext: () => void;
+  onSwitch: () => void;
+  stepNumber: number;
+}) {
+  const headerAnim = useFadeInUp(0, 500);
+  const inputAnim = useFadeInUp(200, 500);
+  const buttonAnim = useFadeInUp(400, 500);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Animated.View style={[styles.header, headerAnim]}>
+          <Text style={styles.titleEmoji}>👋</Text>
+          <Text style={styles.title}>What should we{"\n"}call you?</Text>
+          <StepIndicator current={stepNumber} total={3} />
+        </Animated.View>
+
+        <Animated.View style={[styles.form, inputAnim]}>
+          <View style={styles.inputWrap}>
+            <Ionicons name="person-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={onNameChange}
+              placeholder="Your first name"
+              autoCapitalize="words"
+              autoFocus
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="next"
+              onSubmitEditing={onNext}
+            />
           </View>
 
-          <View style={styles.gradeGrid}>
-            {GRADES.map((g) => (
-              <AnimatedPressable
-                key={g.label}
-                style={[
-                  styles.gradeCard,
-                  shadows.sm,
-                  selectedGrade?.label === g.label && styles.gradeCardSelected,
-                ]}
-                onPress={() => setSelectedGrade(g)}
-              >
-                <Text
-                  style={[
-                    styles.gradeLabel,
-                    selectedGrade?.label === g.label && styles.gradeLabelSelected,
-                  ]}
-                >
-                  {g.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.gradeRange,
-                    selectedGrade?.label === g.label && styles.gradeRangeSelected,
-                  ]}
-                >
-                  {g.range}
-                </Text>
-                {selectedGrade?.label === g.label && (
-                  <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-                )}
-              </AnimatedPressable>
-            ))}
-          </View>
+          {name.trim() ? (
+            <Animated.Text style={[styles.namePreview, buttonAnim]}>
+              We'll say: Hi, {name.trim()}! 👋
+            </Animated.Text>
+          ) : null}
 
           <AnimatedPressable
-            style={[
-              { marginTop: spacing.xxl },
-              !selectedGrade && styles.buttonDisabled,
-            ]}
-            onPress={handleGradeNext}
-            disabled={!selectedGrade}
+            style={!name.trim() && styles.buttonDisabled}
+            onPress={onNext}
+            disabled={!name.trim()}
+            scaleDown={0.97}
           >
             <LinearGradient
               colors={gradients.primary}
@@ -226,38 +223,160 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
               <Text style={styles.primaryButtonText}>Continue</Text>
             </LinearGradient>
           </AnimatedPressable>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+        </Animated.View>
 
-  // ── Register Step 3: Credentials ───────────────────────
+        <TouchableOpacity onPress={onSwitch} style={styles.switchButton}>
+          <Text style={styles.switchText}>
+            Already have an account?{" "}
+            <Text style={styles.switchTextBold}>Sign In</Text>
+          </Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+/* ── Step 2: Grade ────────────────────────────────────────── */
+
+function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNumber }: {
+  name: string;
+  selectedGrade: typeof GRADES[number] | null;
+  onGradeSelect: (g: typeof GRADES[number]) => void;
+  onNext: () => void;
+  onBack: () => void;
+  stepNumber: number;
+}) {
+  const headerAnim = useFadeInUp(0, 400);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <AnimatedPressable onPress={onBack} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={20} color={colors.primary} />
+          <Text style={styles.backText}>Back</Text>
+        </AnimatedPressable>
+
+        <Animated.View style={[styles.header, headerAnim]}>
+          <Text style={styles.title}>Nice to meet you,{"\n"}{name.trim()}!</Text>
+          <StepIndicator current={stepNumber} total={3} />
+          <Text style={styles.subtitle}>
+            What grade are you in?
+          </Text>
+        </Animated.View>
+
+        <View style={styles.gradeGrid}>
+          {GRADES.map((g, i) => (
+            <GradeCard
+              key={g.label}
+              grade={g}
+              selected={selectedGrade?.label === g.label}
+              onSelect={() => {
+                onGradeSelect(g);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              delay={100 + i * 80}
+            />
+          ))}
+        </View>
+
+        <AnimatedPressable
+          style={[
+            { marginTop: spacing.xxl },
+            !selectedGrade && styles.buttonDisabled,
+          ]}
+          onPress={onNext}
+          disabled={!selectedGrade}
+          scaleDown={0.97}
+        >
+          <LinearGradient
+            colors={gradients.primary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Continue</Text>
+          </LinearGradient>
+        </AnimatedPressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function GradeCard({ grade, selected, onSelect, delay }: {
+  grade: typeof GRADES[number];
+  selected: boolean;
+  onSelect: () => void;
+  delay: number;
+}) {
+  const anim = useFadeInUp(delay, 400);
+
+  return (
+    <Animated.View style={anim}>
+      <AnimatedPressable
+        style={[styles.gradeCard, shadows.sm, selected && styles.gradeCardSelected]}
+        onPress={onSelect}
+        scaleDown={0.97}
+      >
+        <Text style={[styles.gradeLabel, selected && styles.gradeLabelSelected]}>
+          {grade.label}
+        </Text>
+        <Text style={[styles.gradeRange, selected && styles.gradeRangeSelected]}>
+          {grade.range}
+        </Text>
+        {selected && (
+          <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+        )}
+      </AnimatedPressable>
+    </Animated.View>
+  );
+}
+
+/* ── Step 3: Credentials ──────────────────────────────────── */
+
+function CredentialsStep({ name, email, onEmailChange, password, onPasswordChange, showPassword, onTogglePassword, loading, error, onSubmit, onBack, onSwitch, stepNumber }: {
+  name: string;
+  email: string;
+  onEmailChange: (v: string) => void;
+  password: string;
+  onPasswordChange: (v: string) => void;
+  showPassword: boolean;
+  onTogglePassword: () => void;
+  loading: boolean;
+  error: string | null;
+  onSubmit: () => void;
+  onBack: () => void;
+  onSwitch: () => void;
+  stepNumber: number;
+}) {
+  const headerAnim = useFadeInUp(0, 400);
+  const formAnim = useFadeInUp(200, 400);
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.inner}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <AnimatedPressable
-          onPress={() => setRegisterStep("grade")}
-          style={styles.backButton}
-        >
+        <AnimatedPressable onPress={onBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={20} color={colors.primary} />
           <Text style={styles.backText}>Back</Text>
         </AnimatedPressable>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Create your account</Text>
+        <Animated.View style={[styles.header, headerAnim]}>
+          <Text style={styles.title}>Almost there,{"\n"}{name.trim()}!</Text>
           <StepIndicator current={stepNumber} total={3} />
-        </View>
+        </Animated.View>
 
-        <View style={styles.form}>
+        <Animated.View style={[styles.form, formAnim]}>
           <View style={styles.inputWrap}>
             <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={onEmailChange}
               placeholder="Email"
               autoCapitalize="none"
               autoFocus
@@ -271,14 +390,14 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
             <TextInput
               style={styles.input}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={onPasswordChange}
               placeholder="Password (8+ characters)"
               secureTextEntry={!showPassword}
               placeholderTextColor={colors.textMuted}
             />
             <TouchableOpacity
               style={styles.eyeButton}
-              onPress={() => setShowPassword(!showPassword)}
+              onPress={onTogglePassword}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons
@@ -293,8 +412,9 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
           <AnimatedPressable
             style={(loading || !email || !password) && styles.buttonDisabled}
-            onPress={handleRegisterSubmit}
+            onPress={onSubmit}
             disabled={loading || !email || !password}
+            scaleDown={0.97}
           >
             <LinearGradient
               colors={gradients.primary}
@@ -309,9 +429,9 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
               )}
             </LinearGradient>
           </AnimatedPressable>
-        </View>
+        </Animated.View>
 
-        <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
+        <TouchableOpacity onPress={onSwitch} style={styles.switchButton}>
           <Text style={styles.switchText}>
             Already have an account?{" "}
             <Text style={styles.switchTextBold}>Sign In</Text>
@@ -378,6 +498,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: spacing.md,
   },
+  titleEmoji: {
+    fontSize: 40,
+    marginBottom: spacing.md,
+  },
   subtitle: {
     ...typography.body,
     fontSize: 15,
@@ -431,6 +555,15 @@ const styles = StyleSheet.create({
   eyeButton: {
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+
+  // Name preview
+  namePreview: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    fontSize: 14,
+    marginBottom: spacing.xs,
   },
 
   // Buttons
