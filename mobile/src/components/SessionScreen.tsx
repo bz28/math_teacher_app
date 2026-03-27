@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { CompletedCard } from "./CompletedCard";
+import { FeedbackCard } from "./FeedbackCard";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestScreen } from "./MockTestScreen";
@@ -308,47 +309,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 
         {/* Feedback */}
         {lastResponse && phase !== "thinking" && (
-          <View
-            style={[
-              styles.feedback,
-              shadows.sm,
-              lastResponse.is_correct ? styles.feedbackCorrect :
-              lastResponse.action === "conversation" ? styles.feedbackConversation :
-              styles.feedbackWrong,
-            ]}
-          >
-            {lastResponse.action === "conversation" && (
-              <View style={styles.feedbackHeader}>
-                <View style={[styles.feedbackIconWrap, { backgroundColor: colors.primaryBg }]}>
-                  <Ionicons name="school" size={14} color={colors.primary} />
-                </View>
-                <Text style={[styles.feedbackTitle, { color: colors.primary }]}>Tutor</Text>
-              </View>
-            )}
-            {lastResponse.action !== "conversation" && (
-              <View style={styles.feedbackHeader}>
-                <View style={[
-                  styles.feedbackIconWrap,
-                  { backgroundColor: lastResponse.is_correct ? colors.successLight : colors.errorLight },
-                ]}>
-                  <Ionicons
-                    name={lastResponse.is_correct ? "checkmark" : "close"}
-                    size={18}
-                    color={lastResponse.is_correct ? colors.success : colors.error}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.feedbackTitle,
-                    lastResponse.is_correct ? styles.feedbackTitleCorrect : styles.feedbackTitleWrong,
-                  ]}
-                >
-                  {lastResponse.is_correct ? "Correct!" : "Not quite"}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.feedbackText}>{lastResponse.feedback}</Text>
-          </View>
+          <FeedbackCard response={lastResponse} />
         )}
 
         {/* Switch to Learn Mode (practice, wrong answer) */}
