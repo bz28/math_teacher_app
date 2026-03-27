@@ -3,8 +3,9 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { InProgressCard, CompletedCard } from "./HistoryCards";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { colors, spacing, typography } from "../theme";
 
 interface HistoryListScreenProps {
   subject: string;
@@ -13,57 +14,6 @@ interface HistoryListScreenProps {
 }
 
 const PAGE_SIZE = 20;
-
-function formatRelativeDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function InProgressCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
-  return (
-    <AnimatedPressable style={[styles.inProgressCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
-      <Ionicons name="play-circle" size={22} color={colors.success} style={styles.historyIcon} />
-      <View style={styles.historyContent}>
-        <Text style={styles.historyProblem} numberOfLines={1}>{item.problem}</Text>
-        <Text style={styles.historyMeta}>
-          Step {item.current_step} of {item.total_steps} · {formatRelativeDate(item.created_at)}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-    </AnimatedPressable>
-  );
-}
-
-function CompletedCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
-  const isAbandoned = item.status === "abandoned";
-  return (
-    <AnimatedPressable style={[styles.completedCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
-      <Ionicons
-        name={isAbandoned ? "close-circle" : "checkmark-circle"}
-        size={20}
-        color={isAbandoned ? colors.error : colors.success}
-        style={styles.historyIcon}
-      />
-      <View style={styles.historyContent}>
-        <Text style={styles.historyProblem} numberOfLines={1}>{item.problem}</Text>
-        <Text style={styles.historyMeta}>
-          {isAbandoned
-            ? `Ended early · Step ${item.current_step} of ${item.total_steps} · ${formatRelativeDate(item.created_at)}`
-            : `${item.total_steps} step${item.total_steps !== 1 ? "s" : ""} · ${formatRelativeDate(item.created_at)}`
-          }
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-    </AnimatedPressable>
-  );
-}
 
 export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryListScreenProps) {
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
@@ -220,50 +170,6 @@ const styles = StyleSheet.create({
   },
   historyList: {
     gap: spacing.sm,
-  },
-
-  // In-progress card
-  inProgressCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.success,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-
-  // Completed card
-  completedCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-
-  historyIcon: {
-    marginTop: 1,
-  },
-  historyContent: {
-    flex: 1,
-  },
-  historyProblem: {
-    ...typography.bodyBold,
-    color: colors.text,
-    fontSize: 14,
-    marginBottom: spacing.xs,
-  },
-  historyMeta: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 12,
   },
 
   // Load more
