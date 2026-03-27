@@ -152,19 +152,21 @@ function AppRoot() {
   if (screen === "session-review" && reviewSessionId) {
     return (
       <SafeAreaProvider>
-        <SessionReviewScreen
-          sessionId={reviewSessionId}
-          onBack={() => setScreen("mode-select")}
-          onPracticeSimilar={(problem) => {
-            setProblemQueue([problem]);
-            setMode("learn");
-            setScreen("input");
-          }}
-          onResume={async (sessionId) => {
-            await resumeSession(sessionId);
-            setScreen("session");
-          }}
-        />
+        <ErrorBoundary onReset={() => setScreen("mode-select")}>
+          <SessionReviewScreen
+            sessionId={reviewSessionId}
+            onBack={() => setScreen("mode-select")}
+            onPracticeSimilar={(problem) => {
+              setProblemQueue([problem]);
+              setMode("learn");
+              setScreen("input");
+            }}
+            onResume={async (sessionId) => {
+              await resumeSession(sessionId);
+              setScreen("session");
+            }}
+          />
+        </ErrorBoundary>
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -173,16 +175,18 @@ function AppRoot() {
   if (screen === "session") {
     return (
       <SafeAreaProvider>
-        <SessionScreen
-          onBack={() => {
-            setProblemQueue([]);
-            setScreen("input");
-          }}
-          onHome={() => {
-            setProblemQueue([]);
-            setScreen("mode-select");
-          }}
-        />
+        <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("mode-select"); }}>
+          <SessionScreen
+            onBack={() => {
+              setProblemQueue([]);
+              setScreen("input");
+            }}
+            onHome={() => {
+              setProblemQueue([]);
+              setScreen("mode-select");
+            }}
+          />
+        </ErrorBoundary>
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -196,16 +200,18 @@ function AppRoot() {
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <InputScreen
-            mode={mode}
-            subject={subject}
-            onBack={() => {
-              setProblemQueue([]);
-              setScreen("mode-select");
-            }}
-            onSessionStart={() => setScreen("session")}
-            onSessionError={() => setScreen("input")}
-          />
+          <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("mode-select"); }}>
+            <InputScreen
+              mode={mode}
+              subject={subject}
+              onBack={() => {
+                setProblemQueue([]);
+                setScreen("mode-select");
+              }}
+              onSessionStart={() => setScreen("session")}
+              onSessionError={() => setScreen("input")}
+            />
+          </ErrorBoundary>
         </KeyboardAvoidingView>
         <StatusBar style="auto" />
       </SafeAreaView>

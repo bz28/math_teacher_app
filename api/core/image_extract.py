@@ -1,14 +1,12 @@
 """Extract problems from images using Claude Vision."""
 
-import base64
 import logging
 
+from api.core.image_utils import validate_and_decode_image
 from api.core.llm_client import LLMMode, call_claude_vision
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
-
-MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB after decode
 
 _EXTRACT_TEMPLATE = """Extract all {problems_noun} from this image.
 
@@ -44,24 +42,7 @@ async def extract_problems_from_image(
 
     Returns dict with 'problems' (list[str]) and 'confidence' (str).
     """
-    # Validate image size
-    try:
-        raw = base64.b64decode(image_base64)
-    except Exception as err:
-        raise ValueError("Invalid base64 image data") from err
-
-    if len(raw) > MAX_IMAGE_BYTES:
-        raise ValueError(
-            f"Image too large: {len(raw) / 1024 / 1024:.1f}MB (max 5MB)"
-        )
-
-    # Detect media type from magic bytes
-    if raw[:8] == b"\x89PNG\r\n\x1a\n":
-        media_type = "image/png"
-    elif raw[:2] == b"\xff\xd8":
-        media_type = "image/jpeg"
-    else:
-        raise ValueError("Unsupported image format (only JPEG and PNG are accepted)")
+    _, media_type = validate_and_decode_image(image_base64)
 
     user_content: list[dict[str, object]] = [
         {

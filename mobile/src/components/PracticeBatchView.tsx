@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   ScrollView,
   Text,
@@ -18,6 +17,7 @@ import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
+import { requestCameraAccess } from "../hooks/usePermissions";
 import { colors, spacing, shadows } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
@@ -46,18 +46,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
   const currentProblem = problems[currentIndex];
 
   const handleAttachWork = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Camera Access Required",
-        "Please enable camera access in Settings to submit your work.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Open Settings", onPress: () => Linking.openSettings() },
-        ],
-      );
-      return;
-    }
+    if (!(await requestCameraAccess())) return;
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ["images"],

@@ -5,6 +5,7 @@ import { colors, spacing, typography, radii } from "../theme";
 
 interface Props {
   children: ReactNode;
+  onReset?: () => void;
 }
 
 interface State {
@@ -32,7 +33,10 @@ export class ErrorBoundary extends Component<Props, State> {
           </Text>
           <TouchableOpacity
             style={styles.button}
-            onPress={() => this.setState({ hasError: false })}
+            onPress={() => {
+              this.setState({ hasError: false });
+              this.props.onReset?.();
+            }}
           >
             <Text style={styles.buttonText}>Try Again</Text>
           </TouchableOpacity>

@@ -14,7 +14,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { checkEmail, login, register, saveTokens, saveUserName } from "../services/api";
+import { LoginForm } from "./LoginForm";
+import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AuthScreenProps {
@@ -44,20 +45,6 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleLogin = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const resp = await login(email.trim().toLowerCase(), password);
-      await saveTokens(resp.access_token, resp.refresh_token);
-      onAuth();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleNameNext = () => {
     if (!name.trim()) return;
@@ -105,93 +92,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   // ── Login ──────────────────────────────────────────────
   if (isLogin) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView
-          style={styles.inner}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <View style={styles.header}>
-            <View style={styles.heroIconWrap}>
-              <LinearGradient
-                colors={gradients.primary}
-                style={styles.heroIconGradient}
-              >
-                <Ionicons name="school" size={36} color={colors.white} />
-              </LinearGradient>
-            </View>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to continue learning</Text>
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                secureTextEntry={!showPassword}
-                placeholderTextColor={colors.textMuted}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={20}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {error && <ErrorRow message={error} />}
-
-            <AnimatedPressable
-              style={(loading || !email || !password) && styles.buttonDisabled}
-              onPress={handleLogin}
-              disabled={loading || !email || !password}
-            >
-              <LinearGradient
-                colors={gradients.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.primaryButton}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Sign In</Text>
-                )}
-              </LinearGradient>
-            </AnimatedPressable>
-          </View>
-
-          <TouchableOpacity onPress={switchMode} style={styles.switchButton}>
-            <Text style={styles.switchText}>
-              Don't have an account?{" "}
-              <Text style={styles.switchTextBold}>Register</Text>
-            </Text>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
+    return <LoginForm onAuth={onAuth} onSwitchToRegister={switchMode} />;
   }
 
   // ── Register Step 1: Name ──────────────────────────────
@@ -470,16 +371,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     marginBottom: spacing.xxl + 4,
-  },
-  heroIconWrap: {
-    marginBottom: spacing.lg,
-  },
-  heroIconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
   },
   title: {
     ...typography.title,
