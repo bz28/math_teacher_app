@@ -7,6 +7,7 @@ import { useSessionStore, type Subject } from "@/stores/session";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
+import { cn } from "@/lib/utils";
 
 export default function LearnPage() {
   const searchParams = useSearchParams();
@@ -26,6 +27,11 @@ export default function LearnPage() {
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
+
+  // Mock test config
+  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("generate_similar");
+  const [untimed, setUntimed] = useState(true);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
 
   useEffect(() => {
     setSubject(subject);
@@ -59,7 +65,9 @@ export default function LearnPage() {
       }
       router.push(`/learn/session?subject=${subject}`);
     } else {
-      await startMockTest(problems, problems.length === 1 ? 5 : 0, null);
+      const generateCount = examType === "generate_similar" ? 5 : 0;
+      const timeLimit = untimed ? null : timeLimitMinutes;
+      await startMockTest(problems, generateCount, timeLimit);
       router.push(`/mock-test?subject=${subject}`);
     }
   }
@@ -111,6 +119,108 @@ export default function LearnPage() {
           </button>
         ))}
       </div>
+
+      {/* Mock test config */}
+      {!isLearn && (
+        <Card variant="flat" className="space-y-4">
+          {/* Questions type */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
+              Questions
+            </p>
+            {([
+              { id: "use_as_exam" as const, label: "Use these as my exam", hint: null },
+              { id: "generate_similar" as const, label: "Generate a similar exam", hint: "Fresh questions based on yours" },
+            ]).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setExamType(opt.id)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
+                  examType === opt.id
+                    ? "border-primary bg-primary-bg"
+                    : "border-border-light bg-white hover:border-primary/30",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2",
+                    examType === opt.id ? "border-primary" : "border-text-muted",
+                  )}
+                >
+                  {examType === opt.id && (
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                  )}
+                </span>
+                <div>
+                  <p className={cn("text-sm font-semibold", examType === opt.id ? "text-primary" : "text-text-primary")}>
+                    {opt.label}
+                  </p>
+                  {opt.hint && (
+                    <p className="text-xs text-text-muted">{opt.hint}</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Time limit */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
+              Time Limit
+            </p>
+            <button
+              onClick={() => setUntimed(true)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
+                untimed
+                  ? "border-primary bg-primary-bg"
+                  : "border-border-light bg-white hover:border-primary/30",
+              )}
+            >
+              <span className={cn("flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2", untimed ? "border-primary" : "border-text-muted")}>
+                {untimed && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
+              </span>
+              <p className={cn("text-sm font-semibold", untimed ? "text-primary" : "text-text-primary")}>No time limit</p>
+            </button>
+            <button
+              onClick={() => setUntimed(false)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
+                !untimed
+                  ? "border-primary bg-primary-bg"
+                  : "border-border-light bg-white hover:border-primary/30",
+              )}
+            >
+              <span className={cn("flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2", !untimed ? "border-primary" : "border-text-muted")}>
+                {!untimed && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
+              </span>
+              <p className={cn("text-sm font-semibold", !untimed ? "text-primary" : "text-text-primary")}>Timed</p>
+              {!untimed && (
+                <div className="ml-auto flex items-center gap-0 rounded-[--radius-sm] border border-border-light bg-white">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setTimeLimitMinutes(Math.max(1, timeLimitMinutes - 5)); }}
+                    disabled={timeLimitMinutes <= 1}
+                    className="flex h-8 w-8 items-center justify-center text-primary disabled:opacity-30"
+                  >
+                    -
+                  </button>
+                  <span className="min-w-[50px] text-center text-xs font-semibold text-primary">
+                    {timeLimitMinutes} min
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setTimeLimitMinutes(Math.min(180, timeLimitMinutes + 5)); }}
+                    disabled={timeLimitMinutes >= 180}
+                    className="flex h-8 w-8 items-center justify-center text-primary disabled:opacity-30"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Image upload */}
       <ImageUpload
