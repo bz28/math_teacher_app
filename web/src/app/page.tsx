@@ -1,18 +1,23 @@
-import Link from "next/link";
+import { Navbar } from "@/components/landing/navbar";
+import { Hero } from "@/components/landing/hero";
+import { Features } from "@/components/landing/features";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { Subjects } from "@/components/landing/subjects";
+import { CTA } from "@/components/landing/cta";
+import { Footer } from "@/components/landing/footer";
 
 export default function Home() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-4xl font-extrabold tracking-tight text-text-primary">
-        Veradic AI
-      </h1>
-      <p className="text-lg text-text-secondary">Snap. Learn. Master.</p>
-      <Link
-        href="/login"
-        className="rounded-[--radius-pill] bg-primary px-8 py-3 font-bold text-text-on-primary transition-colors hover:bg-primary-dark"
-      >
-        Get Started
-      </Link>
-    </div>
+    <>
+      <Navbar />
+      <main>
+        <Hero />
+        <Features />
+        <HowItWorks />
+        <Subjects />
+        <CTA />
+      </main>
+      <Footer />
+    </>
   );
 }
