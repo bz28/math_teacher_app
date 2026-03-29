@@ -16,6 +16,7 @@ export default function Users() {
 
   const reload = () => api.users({ hours, sort_by: sortBy }).then(setData);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [hours, sortBy]);
 
   if (!data) return <p>Loading...</p>;
