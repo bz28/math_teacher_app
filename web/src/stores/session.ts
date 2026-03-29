@@ -183,10 +183,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   async resumeSession(sessionId) {
-    set({ phase: "loading", error: null });
+    // Clear all stale state before resuming
+    set({ ...initialState, phase: "loading" as SessionPhase, error: null });
     try {
       const session = await sessionApi.get(sessionId);
-      set({ session, phase: "awaiting_input", chatHistory: {} });
+      set({ session, phase: "awaiting_input", chatHistory: {}, subject: session.subject as Subject });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }

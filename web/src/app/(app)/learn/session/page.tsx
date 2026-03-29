@@ -71,12 +71,15 @@ export default function LearnSessionPage() {
     );
   }
 
-  const currentStep = Math.max(1, session.current_step);
+  // Backend: current_step is 0-indexed, total_steps is count
+  // Display as 1-indexed for the user
+  const rawStep = session.current_step;
   const totalSteps = session.total_steps;
+  const currentStep = rawStep + 1; // 1-indexed for display
+  const stepIndex = rawStep; // 0-indexed for array access
   const steps = session.steps;
-  const stepIndex = currentStep - 1;
   const currentStepData = steps[stepIndex];
-  const isFinalStep = currentStep === totalSteps;
+  const isFinalStep = rawStep === totalSteps - 1;
   const isCompleted = phase === "completed";
   const isThinking = phase === "thinking";
   const messages = chatHistory[currentStep] ?? [];
