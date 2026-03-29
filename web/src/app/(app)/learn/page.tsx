@@ -183,10 +183,10 @@ export default function LearnPage() {
               </span>
               <p className={cn("text-sm font-semibold", untimed ? "text-primary" : "text-text-primary")}>No time limit</p>
             </button>
-            <button
+            <div
               onClick={() => setUntimed(false)}
               className={cn(
-                "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
+                "flex w-full cursor-pointer items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
                 !untimed
                   ? "border-primary bg-primary-bg"
                   : "border-border-light bg-white hover:border-primary/30",
@@ -217,7 +217,7 @@ export default function LearnPage() {
                   </button>
                 </div>
               )}
-            </button>
+            </div>
           </div>
         </Card>
       )}
