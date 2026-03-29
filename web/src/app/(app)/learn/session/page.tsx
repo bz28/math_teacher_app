@@ -72,21 +72,21 @@ export default function LearnSessionPage() {
   }
 
   // Backend: current_step is 0-indexed, total_steps is count
-  // Display as 1-indexed for the user
-  const rawStep = session.current_step;
+  // Matches mobile: session.steps[session.current_step]
   const totalSteps = session.total_steps;
-  const currentStep = rawStep + 1; // 1-indexed for display
-  const stepIndex = rawStep; // 0-indexed for array access
+  const stepIndex = Math.min(session.current_step, totalSteps - 1); // clamp to valid range
+  const currentStep = stepIndex + 1; // 1-indexed for display
   const steps = session.steps;
   const currentStepData = steps[stepIndex];
-  const isFinalStep = rawStep === totalSteps - 1;
+  const isFinalStep = stepIndex >= totalSteps - 1;
   const isCompleted = phase === "completed";
   const isThinking = phase === "thinking";
-  const messages = chatHistory[currentStep] ?? [];
+  const completedSteps = steps.slice(0, stepIndex);
+  const messages = chatHistory[stepIndex] ?? [];
 
-  // Choice selection scoped to current step
+  // Choice selection scoped to current step (use stepIndex for consistency)
   const activeChoice =
-    selectedChoice?.forStep === currentStep ? selectedChoice : null;
+    selectedChoice?.forStep === stepIndex ? selectedChoice : null;
   const choiceResult =
     activeChoice && lastResponse
       ? { ...activeChoice, correct: lastResponse.is_correct }
@@ -100,7 +100,7 @@ export default function LearnSessionPage() {
   }
 
   async function handleChoiceSelect(choice: string, index: number) {
-    setSelectedChoice({ index, correct: null, forStep: currentStep });
+    setSelectedChoice({ index, correct: null, forStep: stepIndex });
     await submitAnswer(choice);
   }
 
@@ -132,7 +132,7 @@ export default function LearnSessionPage() {
             className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
             initial={{ width: 0 }}
             animate={{
-              width: `${((isCompleted ? totalSteps : currentStep) / totalSteps) * 100}%`,
+              width: `${((isCompleted ? totalSteps : stepIndex) / totalSteps) * 100}%`,
             }}
             transition={{ type: "spring", stiffness: 200, damping: 20 }}
           />
@@ -143,9 +143,9 @@ export default function LearnSessionPage() {
       </div>
 
       {/* ── Completed steps timeline ── */}
-      {currentStep > 1 && !isCompleted && (
+      {completedSteps.length > 0 && !isCompleted && (
         <div className="mb-6 space-y-0">
-          {steps.slice(0, stepIndex).map((step, i) => {
+          {completedSteps.map((step, i) => {
             const stepNum = i + 1;
             const expanded = expandedSteps[stepNum] ?? false;
             return (

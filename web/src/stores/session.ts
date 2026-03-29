@@ -231,8 +231,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async askAboutStep(question) {
     const { session } = get();
     if (!session) return;
-    // Use clamped step number to match the UI key
-    const stepNum = Math.max(1, session.current_step);
+    // Use 0-indexed step to match the UI key
+    const stepNum = session.current_step;
 
     // Add user message to chat and set thinking
     set((state) => ({
