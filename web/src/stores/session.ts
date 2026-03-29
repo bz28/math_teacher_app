@@ -201,11 +201,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         student_response: answer,
         request_advance: false,
       });
-      if (response.action === "completed") {
-        set({ lastResponse: response, phase: "completed" });
-      } else {
-        set({ lastResponse: response, phase: "awaiting_input" });
-      }
+      // Re-fetch session to get updated steps/choices (matches mobile)
+      const updated = await sessionApi.get(session.id);
+      const nextPhase = response.action === "completed" ? "completed" : "awaiting_input";
+      set({ session: updated, lastResponse: response, phase: nextPhase as SessionPhase });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
@@ -216,22 +215,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return;
     set({ phase: "thinking" });
     try {
-      const response = await sessionApi.respond(session.id, {
+      await sessionApi.respond(session.id, {
         student_response: "",
         request_advance: true,
       });
-      // Update session step info
-      set((state) => ({
-        session: state.session
-          ? {
-              ...state.session,
-              current_step: response.current_step,
-              total_steps: response.total_steps,
-            }
-          : null,
-        lastResponse: response,
-        phase: response.action === "completed" ? "completed" : "awaiting_input",
-      }));
+      // Re-fetch session to get updated steps/choices (matches mobile)
+      const updated = await sessionApi.get(session.id);
+      set({ session: updated, lastResponse: null, phase: "awaiting_input" });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
@@ -260,8 +250,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         student_response: question,
         request_advance: false,
       });
-      // Add AI message to chat
+      // Re-fetch session and add AI message to chat
+      const updated = await sessionApi.get(session.id);
       set((state) => ({
+        session: updated,
         phase: "awaiting_input" as SessionPhase,
         chatHistory: {
           ...state.chatHistory,
