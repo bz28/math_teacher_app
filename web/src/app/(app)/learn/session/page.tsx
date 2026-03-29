@@ -53,9 +53,11 @@ export default function LearnSessionPage() {
     );
   }
 
-  const currentStep = session.current_step;
+  // API returns current_step: 0 before first interaction — treat as step 1
+  const currentStep = Math.max(1, session.current_step);
   const totalSteps = session.total_steps;
   const steps = session.steps;
+  const stepIndex = currentStep - 1; // 0-based index into steps array
   const isCompleted = phase === "completed";
   const isThinking = phase === "thinking";
 
@@ -153,17 +155,17 @@ export default function LearnSessionPage() {
           <Card variant="elevated" className="space-y-4">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
-                {Math.min(currentStep, totalSteps)}
+                {currentStep}
               </span>
               <h2 className="text-base font-bold text-text-primary">
-                {steps[Math.min(currentStep, totalSteps) - 1]?.description ?? "Loading..."}
+                {steps[stepIndex]?.description ?? "Loading..."}
               </h2>
             </div>
 
             {/* Multiple choice options */}
-            {steps[currentStep - 1]?.choices &&
+            {steps[stepIndex]?.choices &&
               !isCompleted &&
-              steps[currentStep - 1].choices!.map((choice, i) => (
+              steps[stepIndex].choices!.map((choice, i) => (
                 <button
                   key={i}
                   onClick={() => submitAnswer(choice)}
@@ -175,7 +177,7 @@ export default function LearnSessionPage() {
               ))}
 
             {/* Text answer input */}
-            {!steps[currentStep - 1]?.choices && !isCompleted && (
+            {!steps[stepIndex]?.choices && !isCompleted && (
               <div className="flex gap-2">
                 <Input
                   placeholder="Your answer..."
