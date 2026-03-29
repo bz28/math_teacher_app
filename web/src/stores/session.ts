@@ -324,19 +324,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async tryPracticeProblem() {
     const { session, subject } = get();
     if (!session) return;
-    const problem = session.problem;
     set({ ...initialState, subject, phase: "loading" as SessionPhase });
     try {
-      const { problems } = await practiceApi.generate({ problem, count: 5, subject });
-      set({
-        practiceBatch: {
-          problems,
-          currentIndex: 0,
-          results: [],
-          flags: new Array(problems.length).fill(false),
-        },
-        phase: "awaiting_input" as SessionPhase,
+      // Get a single similar problem (matches mobile: getSimilarProblem + createSession)
+      const { similar_problem } = await sessionApi.similar(session.id);
+      const newSession = await sessionApi.create({
+        problem: similar_problem,
+        mode: "practice",
+        subject,
       });
+      set({ session: newSession, phase: "awaiting_input" });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
@@ -602,10 +599,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         });
       }
 
+      // Auto-flag incorrect and skipped questions (matches mobile)
+      const newFlags = [...mockTest.flags];
+      results.forEach((r, i) => {
+        if (r.isCorrect !== true) newFlags[i] = true;
+      });
+
       set({
         mockTest: {
           ...mockTest,
           results,
+          flags: newFlags,
           submittedAt: Date.now(),
         },
         phase: "mock_test_summary",

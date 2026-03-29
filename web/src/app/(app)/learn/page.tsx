@@ -65,7 +65,7 @@ export default function LearnPage() {
       }
       router.push(`/learn/session?subject=${subject}`);
     } else {
-      const generateCount = examType === "generate_similar" ? 5 : 0;
+      const generateCount = examType === "generate_similar" ? problems.length : 0;
       const timeLimit = untimed ? null : timeLimitMinutes;
       await startMockTest(problems, generateCount, timeLimit);
       router.push(`/mock-test?subject=${subject}`);

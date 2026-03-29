@@ -3,7 +3,8 @@
 import { useState, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { session as sessionApi, type SessionResponse } from "@/lib/api";
+import { session as sessionApi, practice as practiceApi, type SessionResponse } from "@/lib/api";
+import { useSessionStore } from "@/stores/session";
 import { Card, Badge, Button } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -184,7 +185,29 @@ export default function SessionReviewPage({
         )}
         <Button
           variant="secondary"
-          onClick={() => router.push(`/learn?subject=${subject}`)}
+          onClick={async () => {
+            const store = useSessionStore.getState();
+            store.setSubject(subject as "math" | "chemistry");
+            try {
+              const { problems } = await practiceApi.generate({
+                problem: session.problem,
+                count: 5,
+                subject,
+              });
+              useSessionStore.setState({
+                practiceBatch: {
+                  problems,
+                  currentIndex: 0,
+                  results: [],
+                  flags: new Array(problems.length).fill(false),
+                },
+                phase: "awaiting_input",
+              });
+              router.push("/practice");
+            } catch {
+              router.push(`/learn?subject=${subject}`);
+            }
+          }}
         >
           Practice Similar
         </Button>
