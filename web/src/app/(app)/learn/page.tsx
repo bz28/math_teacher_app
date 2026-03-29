@@ -30,7 +30,7 @@ export default function LearnPage() {
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
 
   // Mock test config
-  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("generate_similar");
+  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
 

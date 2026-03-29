@@ -497,15 +497,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         });
         questions = generated;
       } else {
-        // Solve each problem to get answers
-        const { problems: solved } = await practiceApi.generate({
-          problem: problems.join("\n"),
-          count: 0,
-          subject,
-        });
-        questions = solved.length > 0
-          ? solved
-          : problems.map((p) => ({ question: p, answer: "" }));
+        // Solve each problem individually to get answers (matches mobile)
+        const results = await Promise.allSettled(
+          problems.map((p) =>
+            practiceApi.generate({ problem: p, count: 0, subject }),
+          ),
+        );
+        questions = results.map((r, i) =>
+          r.status === "fulfilled" && r.value.problems.length > 0
+            ? r.value.problems[0]
+            : { question: problems[i], answer: "" },
+        );
       }
 
       // Create analytics session

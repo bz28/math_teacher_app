@@ -19,6 +19,7 @@ export default function PracticePage() {
     nextPracticeProblem,
     togglePracticeFlag,
     retryFlaggedProblems,
+    startLearnQueue,
     reset,
   } = useSessionStore();
 
@@ -130,16 +131,31 @@ export default function PracticePage() {
         {/* Action buttons */}
         <div className="flex flex-col gap-2">
           {flagged > 0 && (
-            <Button
-              gradient
-              onClick={async () => {
-                await retryFlaggedProblems();
-                // Stay on /practice — store resets to new batch
-              }}
-              className="w-full"
-            >
-              Practice {flagged} Similar Problem{flagged > 1 ? "s" : ""}
-            </Button>
+            <>
+              <Button
+                gradient
+                onClick={async () => {
+                  await retryFlaggedProblems();
+                  // Stay on /practice — store resets to new batch
+                }}
+                className="w-full"
+              >
+                Practice {flagged} Similar Problem{flagged > 1 ? "s" : ""}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  const flaggedProblems = results
+                    .filter((_, i) => flags[i])
+                    .map((r) => r.problem);
+                  await startLearnQueue(flaggedProblems);
+                  router.push("/learn/session");
+                }}
+                className="w-full"
+              >
+                Learn {flagged} Flagged Problem{flagged > 1 ? "s" : ""}
+              </Button>
+            </>
           )}
           <Button variant="secondary" onClick={() => { reset(); router.push("/learn"); }} className="w-full">
             New Problem
