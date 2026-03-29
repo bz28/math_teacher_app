@@ -170,12 +170,25 @@ export default function SessionReviewPage({
         })}
       </div>
 
-      <Button
-        variant="secondary"
-        onClick={() => router.push(`/learn?subject=${subject}`)}
-      >
-        Practice Similar
-      </Button>
+      <div className="flex gap-3">
+        {session.status === "active" && (
+          <Button
+            gradient
+            onClick={() => {
+              // Resume by navigating to session page — the session ID is already known
+              router.push(`/learn/session?subject=${subject}&resume=${id}`);
+            }}
+          >
+            Resume Session
+          </Button>
+        )}
+        <Button
+          variant="secondary"
+          onClick={() => router.push(`/learn?subject=${subject}`)}
+        >
+          Practice Similar
+        </Button>
+      </div>
     </div>
   );
 }

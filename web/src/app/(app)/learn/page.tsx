@@ -20,13 +20,12 @@ export default function LearnPage() {
     removeFromQueue,
     startLearnQueue,
     startSession,
-    startPracticeBatch,
     startMockTest,
     phase,
   } = useSessionStore();
 
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"learn" | "practice" | "mock-test">("learn");
+  const [mode, setMode] = useState<"learn" | "mock-test">("learn");
 
   useEffect(() => {
     setSubject(subject);
@@ -49,34 +48,24 @@ export default function LearnPage() {
   async function handleStart() {
     if (problemQueue.length === 0 && !input.trim()) return;
 
-    // If there's text in input but not added to queue, add it
     const problems =
-      problemQueue.length > 0
-        ? problemQueue
-        : [input.trim()];
+      problemQueue.length > 0 ? problemQueue : [input.trim()];
 
-    switch (mode) {
-      case "learn":
-        if (problems.length === 1) {
-          await startSession(problems[0]);
-        } else {
-          await startLearnQueue(problems);
-        }
-        router.push(`/learn/session?subject=${subject}`);
-        break;
-      case "practice":
-        await startPracticeBatch(problems[0], 5);
-        router.push(`/practice?subject=${subject}`);
-        break;
-      case "mock-test":
-        await startMockTest(problems, problems.length === 1 ? 5 : 0, null);
-        router.push(`/mock-test?subject=${subject}`);
-        break;
+    if (mode === "learn") {
+      if (problems.length === 1) {
+        await startSession(problems[0]);
+      } else {
+        await startLearnQueue(problems);
+      }
+      router.push(`/learn/session?subject=${subject}`);
+    } else {
+      await startMockTest(problems, problems.length === 1 ? 5 : 0, null);
+      router.push(`/mock-test?subject=${subject}`);
     }
   }
 
   const isLoading = phase === "loading";
-  const subjectLabel = subject === "math" ? "Mathematics" : "Chemistry";
+  const isLearn = mode === "learn";
   const canStart = problemQueue.length > 0 || input.trim().length > 0;
 
   return (
@@ -96,32 +85,29 @@ export default function LearnPage() {
           Back
         </button>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-          {subjectLabel}
+          {isLearn ? "What do you need help with?" : "Build your exam"}
         </h1>
-        <p className="mt-1 text-text-secondary">
-          Enter a problem to get started
-        </p>
       </motion.div>
 
-      {/* Mode selector */}
+      {/* Mode selector — Learn and Mock Test only */}
       <div className="flex gap-2">
-        {(
-          [
-            { id: "learn", label: "Learn" },
-            { id: "practice", label: "Practice" },
-            { id: "mock-test", label: "Mock Test" },
-          ] as const
-        ).map((m) => (
+        {([
+          { id: "learn" as const, label: "Learn", desc: "Step-by-step guided learning" },
+          { id: "mock-test" as const, label: "Mock Test", desc: "Practice or generate an exam" },
+        ]).map((m) => (
           <button
             key={m.id}
             onClick={() => setMode(m.id)}
-            className={`rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors ${
+            className={`flex-1 rounded-[--radius-md] border p-3 text-left transition-colors ${
               mode === m.id
-                ? "bg-primary text-white"
-                : "bg-primary-bg text-primary hover:bg-primary/10"
+                ? "border-primary bg-primary-bg"
+                : "border-border bg-white hover:border-primary/30"
             }`}
           >
-            {m.label}
+            <p className={`text-sm font-bold ${mode === m.id ? "text-primary" : "text-text-primary"}`}>
+              {m.label}
+            </p>
+            <p className="mt-0.5 text-xs text-text-muted">{m.desc}</p>
           </button>
         ))}
       </div>
@@ -140,9 +126,9 @@ export default function LearnPage() {
       <Card variant="flat" className="space-y-4">
         <Textarea
           placeholder={
-            mode === "mock-test"
-              ? "Enter a problem (we'll generate similar questions for the exam)"
-              : "Type your problem here... (Shift+Enter for new line)"
+            isLearn
+              ? "Type your problem here... (Shift+Enter for new line)"
+              : "Enter a problem (we'll generate similar questions for the exam)"
           }
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -155,16 +141,14 @@ export default function LearnPage() {
             {problemQueue.length}/10 problems
           </span>
           <div className="flex gap-2">
-            {mode !== "practice" && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleAddProblem}
-                disabled={!input.trim() || problemQueue.length >= 10}
-              >
-                Add to Queue
-              </Button>
-            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleAddProblem}
+              disabled={!input.trim() || problemQueue.length >= 10}
+            >
+              Add to Queue
+            </Button>
             <Button
               size="sm"
               gradient
@@ -172,11 +156,9 @@ export default function LearnPage() {
               loading={isLoading}
               disabled={!canStart}
             >
-              {mode === "learn"
-                ? "Start Learning"
-                : mode === "practice"
-                  ? "Start Practice"
-                  : "Start Exam"}
+              {isLearn
+                ? `Start Learn${problemQueue.length > 0 ? ` (${problemQueue.length})` : ""}`
+                : `Start Exam${problemQueue.length > 0 ? ` (${problemQueue.length})` : ""}`}
             </Button>
           </div>
         </div>

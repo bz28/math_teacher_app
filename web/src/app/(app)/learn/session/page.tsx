@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
 import { Button, Card, Badge } from "@/components/ui";
@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 
 export default function LearnSessionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resumeId = searchParams.get("resume");
   const {
     session,
     phase,
@@ -21,6 +23,7 @@ export default function LearnSessionPage() {
     advanceStep,
     askAboutStep,
     advanceLearnQueue,
+    resumeSession,
     reset,
   } = useSessionStore();
 
@@ -34,12 +37,19 @@ export default function LearnSessionPage() {
     forStep: number;
   } | null>(null);
 
-  // Redirect if no session
+  // Resume session from history
   useEffect(() => {
-    if (phase === "idle") {
+    if (resumeId && phase === "idle") {
+      resumeSession(resumeId);
+    }
+  }, [resumeId, phase, resumeSession]);
+
+  // Redirect if no session and not resuming
+  useEffect(() => {
+    if (phase === "idle" && !resumeId) {
       router.replace("/learn");
     }
-  }, [phase, router]);
+  }, [phase, router, resumeId]);
 
   if (phase === "loading" || !session) {
     return (

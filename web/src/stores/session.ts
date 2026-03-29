@@ -104,6 +104,7 @@ interface SessionState {
 
   // Learn actions
   startSession: (problem: string) => Promise<void>;
+  resumeSession: (sessionId: string) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   advanceStep: () => Promise<void>;
   askAboutStep: (question: string) => Promise<void>;
@@ -175,6 +176,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         mode: "learn",
         subject,
       });
+      set({ session, phase: "awaiting_input", chatHistory: {} });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
+  async resumeSession(sessionId) {
+    set({ phase: "loading", error: null });
+    try {
+      const session = await sessionApi.get(sessionId);
       set({ session, phase: "awaiting_input", chatHistory: {} });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
