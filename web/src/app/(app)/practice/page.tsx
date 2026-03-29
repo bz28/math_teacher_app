@@ -17,6 +17,8 @@ export default function PracticePage() {
     error,
     submitPracticeAnswer,
     nextPracticeProblem,
+    togglePracticeFlag,
+    retryFlaggedProblems,
     reset,
   } = useSessionStore();
 
@@ -53,57 +55,97 @@ export default function PracticePage() {
     const { results, flags } = practiceBatch;
     const correct = results.filter((r) => r.isCorrect).length;
     const flagged = flags.filter(Boolean).length;
+    const percentage = Math.round((correct / results.length) * 100);
+    const encouragement =
+      percentage === 100
+        ? "Perfect score!"
+        : percentage >= 80
+          ? "Great job!"
+          : percentage >= 50
+            ? "Good effort, keep practicing!"
+            : "Keep going, you'll get there!";
 
     return (
       <div className="mx-auto max-w-2xl space-y-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-extrabold text-text-primary">
-            Practice Complete
-          </h1>
-          <p className="mt-1 text-text-secondary">
-            {correct}/{results.length} correct
-            {flagged > 0 && ` | ${flagged} flagged for review`}
-          </p>
+          <h1 className="text-2xl font-extrabold text-text-primary">Results</h1>
         </motion.div>
 
-        <div className="space-y-3">
+        {/* Score card */}
+        <Card variant="elevated" className="text-center space-y-3">
+          <p className="text-4xl font-extrabold text-primary">
+            {correct}/{results.length}
+          </p>
+          <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+          <p className="text-sm font-medium text-text-secondary">
+            {encouragement}
+          </p>
+        </Card>
+
+        {/* Per-result breakdown */}
+        <div className="space-y-2">
           {results.map((result, i) => (
-            <Card key={i} variant="flat" className="flex items-start gap-3">
+            <div
+              key={i}
+              className={cn(
+                "flex items-start gap-3 rounded-[--radius-md] border px-4 py-3",
+                result.isCorrect ? "border-success-border bg-success-light" : "border-error-border bg-error-light",
+              )}
+            >
               <span
                 className={cn(
-                  "mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                  "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
                   result.isCorrect ? "bg-success" : "bg-error",
                 )}
               >
                 {result.isCorrect ? "\u2713" : "\u2717"}
               </span>
-              <div className="flex-1 space-y-1">
-                <p className="text-sm font-medium text-text-primary">
-                  {result.problem}
-                </p>
-                <p className="text-xs text-text-secondary">
-                  Your answer: {result.userAnswer}
-                </p>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <p className="text-sm font-medium text-text-primary">{result.problem}</p>
+                <p className="text-xs text-text-secondary">Your answer: {result.userAnswer}</p>
                 {!result.isCorrect && (
-                  <p className="text-xs text-success">
-                    Correct: {result.correctAnswer}
-                  </p>
+                  <p className="text-xs font-medium text-success">Correct: {result.correctAnswer}</p>
                 )}
               </div>
-              {flags[i] && <Badge variant="warning">Flagged</Badge>}
-            </Card>
+              <button
+                onClick={() => togglePracticeFlag(i)}
+                className={cn(
+                  "rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors flex-shrink-0",
+                  flags[i]
+                    ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
+                    : "border-border text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
+                )}
+              >
+                {flags[i] ? "Flagged" : "Flag"}
+              </button>
+            </div>
           ))}
         </div>
 
-        <div className="flex gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              reset();
-              router.push("/home");
-            }}
-          >
-            Done
+        {/* Action buttons */}
+        <div className="flex flex-col gap-2">
+          {flagged > 0 && (
+            <Button
+              gradient
+              onClick={async () => {
+                await retryFlaggedProblems();
+                // Stay on /practice — store resets to new batch
+              }}
+              className="w-full"
+            >
+              Practice {flagged} Similar Problem{flagged > 1 ? "s" : ""}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => { reset(); router.push("/learn"); }} className="w-full">
+            New Problem
+          </Button>
+          <Button variant="secondary" onClick={() => { reset(); router.push("/home"); }} className="w-full">
+            Return Home
           </Button>
         </div>
       </div>
@@ -114,6 +156,7 @@ export default function PracticePage() {
   const current = practiceBatch.problems[practiceBatch.currentIndex];
   const isThinking = phase === "thinking";
   const lastResult = practiceBatch.results[practiceBatch.currentIndex];
+  const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
 
   async function handleSubmit() {
     if (!answer.trim()) return;
@@ -130,6 +173,15 @@ export default function PracticePage() {
         </Badge>
       </div>
 
+      {/* Progress bar */}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-border-light">
+        <motion.div
+          className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+          animate={{ width: `${progress}%` }}
+          transition={{ type: "spring", stiffness: 200, damping: 20 }}
+        />
+      </div>
+
       <Card variant="elevated" className="space-y-4">
         <p className="text-base font-medium text-text-primary">
           {current.question}
@@ -138,7 +190,7 @@ export default function PracticePage() {
         {!lastResult ? (
           <div className="flex gap-2">
             <Input
-              placeholder="Your answer..."
+              placeholder="Enter your answer..."
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={(e) => {
@@ -156,7 +208,7 @@ export default function PracticePage() {
               disabled={!answer.trim()}
               size="sm"
             >
-              Check
+              Answer
             </Button>
           </div>
         ) : (

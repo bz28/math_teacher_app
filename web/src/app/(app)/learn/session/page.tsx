@@ -23,6 +23,11 @@ export default function LearnSessionPage() {
     advanceStep,
     askAboutStep,
     advanceLearnQueue,
+    continueAsking,
+    finishAsking,
+    tryPracticeProblem,
+    toggleLearnFlag,
+    practiceFlaggedFromLearnQueue,
     resumeSession,
     reset,
   } = useSessionStore();
@@ -50,6 +55,64 @@ export default function LearnSessionPage() {
       router.replace("/learn");
     }
   }, [phase, router, resumeId]);
+
+  // Learn queue summary
+  if (phase === "learn_summary" && learnQueue) {
+    const flaggedCount = learnQueue.flags.filter(Boolean).length;
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-2xl font-extrabold text-text-primary">Learning Complete</h1>
+        </motion.div>
+
+        <Card variant="elevated" className="text-center">
+          <p className="text-sm text-text-muted">Problems Reviewed</p>
+          <p className="text-4xl font-extrabold text-primary">{learnQueue.problems.length}</p>
+        </Card>
+
+        <div className="space-y-2">
+          {learnQueue.problems.map((problem, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-[--radius-md] border border-success-border bg-success-light px-4 py-3">
+              <svg className="h-5 w-5 flex-shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+              <p className="flex-1 text-sm font-medium text-text-primary">{problem}</p>
+              <button
+                onClick={() => toggleLearnFlag(i)}
+                className={cn(
+                  "rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors",
+                  learnQueue.flags[i]
+                    ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
+                    : "border-border text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
+                )}
+              >
+                {learnQueue.flags[i] ? "Flagged" : "Flag"}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {flaggedCount > 0 && (
+            <Button
+              gradient
+              onClick={async () => {
+                await practiceFlaggedFromLearnQueue();
+                router.push("/practice");
+              }}
+              className="w-full"
+            >
+              Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => { reset(); router.push("/learn"); }} className="w-full">
+            New Problem
+          </Button>
+          <Button variant="secondary" onClick={() => { reset(); router.push("/home"); }} className="w-full">
+            Return Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "loading" || !session) {
     return (
@@ -102,6 +165,11 @@ export default function LearnSessionPage() {
   async function handleChoiceSelect(choice: string, index: number) {
     setSelectedChoice({ index, correct: null, forStep: stepIndex });
     await submitAnswer(choice);
+    // Auto-reset wrong answer after 1.2s (matches mobile)
+    const { lastResponse: resp } = useSessionStore.getState();
+    if (resp && !resp.is_correct) {
+      setTimeout(() => setSelectedChoice(null), 1200);
+    }
   }
 
   function toggleExpandStep(stepNum: number) {
@@ -213,7 +281,7 @@ export default function LearnSessionPage() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
         >
-          <Card variant="elevated" className="space-y-5 text-center">
+          <Card variant="elevated" className="space-y-4 text-center">
             {/* Checkmark */}
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
               <svg
@@ -231,36 +299,147 @@ export default function LearnSessionPage() {
               Problem Solved!
             </h2>
 
-            {steps[totalSteps - 1]?.final_answer && (
-              <p className="text-sm text-text-secondary">
-                Answer:{" "}
-                <strong className="text-text-primary">
-                  {steps[totalSteps - 1].final_answer}
-                </strong>
-              </p>
-            )}
-
             <div className="flex flex-col gap-2 pt-2">
-              {learnQueue &&
-                learnQueue.currentIndex <
-                  learnQueue.problems.length - 1 && (
-                  <Button gradient onClick={advanceLearnQueue} className="w-full">
-                    Next Problem
+              {/* Learn queue completion */}
+              {learnQueue ? (
+                <>
+                  <button
+                    onClick={continueAsking}
+                    className="flex w-full items-center justify-center gap-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-dark transition-colors hover:bg-warning-dark/10"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                    I still have questions
+                  </button>
+
+                  <button
+                    onClick={() => toggleLearnFlag(learnQueue.currentIndex)}
+                    className={cn(
+                      "flex w-full items-center justify-center gap-2 rounded-[--radius-md] border px-4 py-3 text-sm font-semibold transition-colors",
+                      learnQueue.flags[learnQueue.currentIndex]
+                        ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
+                        : "border-border bg-white text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
+                    )}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill={learnQueue.flags[learnQueue.currentIndex] ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                    {learnQueue.flags[learnQueue.currentIndex] ? "Flagged" : "Flag for Practice"}
+                  </button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={advanceLearnQueue}
+                    className="w-full"
+                  >
+                    {learnQueue.currentIndex < learnQueue.problems.length - 1
+                      ? "Next Problem"
+                      : "View Results"}
                   </Button>
-                )}
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  reset();
-                  router.push("/home");
-                }}
-                className="w-full"
-              >
-                Return Home
-              </Button>
+                </>
+              ) : (
+                <>
+                  {/* Single session completion */}
+                  <Button
+                    gradient
+                    onClick={async () => {
+                      await tryPracticeProblem();
+                      router.push("/practice");
+                    }}
+                    className="w-full"
+                  >
+                    Try a practice problem
+                  </Button>
+
+                  <button
+                    onClick={continueAsking}
+                    className="flex w-full items-center justify-center gap-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-dark transition-colors hover:bg-warning-dark/10"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                    I still have questions
+                  </button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      reset();
+                      router.push("/learn");
+                    }}
+                    className="w-full"
+                  >
+                    Learn New Problem
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      reset();
+                      router.push("/home");
+                    }}
+                    className="w-full"
+                  >
+                    Return Home
+                  </Button>
+                </>
+              )}
             </div>
           </Card>
         </motion.div>
+      )}
+
+      {/* ── "Continue asking" state (completed but user wants to ask more) ── */}
+      {phase === "awaiting_input" && session?.status === "completed" && !isFinalStep && (
+        <div className="space-y-4">
+          {messages.map((msg, i) => (
+            <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+              {msg.role === "user" ? (
+                <div className="flex justify-end">
+                  <div className="max-w-[80%] rounded-[--radius-md] bg-primary-bg px-4 py-3 text-sm text-primary">{msg.text}</div>
+                </div>
+              ) : (
+                <Card variant="flat" className="border-primary/15">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" /><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" /></svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-primary">Tutor</p>
+                      <p className="mt-1 text-sm leading-relaxed text-text-primary">{msg.text}</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </motion.div>
+          ))}
+
+          {isThinking && (
+            <div className="flex items-center gap-2 text-sm text-text-muted">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Thinking...
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-text-muted">Ask a question about the problem</p>
+            <div className="flex gap-2">
+              <input
+                placeholder="Ask a question..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && input.trim()) {
+                    e.preventDefault();
+                    handleAsk();
+                  }
+                }}
+                disabled={isThinking}
+                className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-4 py-2.5 text-sm placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+              />
+              {input.trim() ? (
+                <Button size="sm" onClick={handleAsk} loading={isThinking}>Ask</Button>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={finishAsking}>I Understand Now</Button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Active step (non-completed) ── */}

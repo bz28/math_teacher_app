@@ -109,14 +109,23 @@ interface SessionState {
   advanceStep: () => Promise<void>;
   askAboutStep: (question: string) => Promise<void>;
 
+  // Learn completion actions
+  continueAsking: () => void;
+  finishAsking: () => void;
+  tryPracticeProblem: () => Promise<void>;
+
   // Learn queue actions
   startLearnQueue: (problems: string[]) => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
+  toggleLearnFlag: (index: number) => void;
+  practiceFlaggedFromLearnQueue: () => Promise<void>;
 
   // Practice actions
   startPracticeBatch: (problem: string, count: number) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
   nextPracticeProblem: () => void;
+  togglePracticeFlag: (index: number) => void;
+  retryFlaggedProblems: () => Promise<void>;
 
   // Mock test actions
   startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
@@ -302,7 +311,108 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await get().startSession(learnQueue.problems[nextIndex]);
   },
 
+  // ── Learn completion ──
+
+  continueAsking() {
+    set({ phase: "awaiting_input" as SessionPhase, lastResponse: null });
+  },
+
+  finishAsking() {
+    set({ phase: "completed" as SessionPhase });
+  },
+
+  async tryPracticeProblem() {
+    const { session, subject } = get();
+    if (!session) return;
+    const problem = session.problem;
+    set({ ...initialState, subject, phase: "loading" as SessionPhase });
+    try {
+      const { problems } = await practiceApi.generate({ problem, count: 5, subject });
+      set({
+        practiceBatch: {
+          problems,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(problems.length).fill(false),
+        },
+        phase: "awaiting_input" as SessionPhase,
+      });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
+  toggleLearnFlag(index) {
+    const { learnQueue } = get();
+    if (!learnQueue) return;
+    const newFlags = [...learnQueue.flags];
+    newFlags[index] = !newFlags[index];
+    set({ learnQueue: { ...learnQueue, flags: newFlags } });
+  },
+
+  async practiceFlaggedFromLearnQueue() {
+    const { learnQueue, subject } = get();
+    if (!learnQueue) return;
+    const flaggedProblems = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
+    if (flaggedProblems.length === 0) return;
+
+    set({ ...initialState, subject, phase: "loading" as SessionPhase });
+    try {
+      const allProblems: PracticeProblem[] = [];
+      for (const problem of flaggedProblems) {
+        const { problems } = await practiceApi.generate({ problem, count: 1, subject });
+        allProblems.push(...problems);
+      }
+      set({
+        practiceBatch: {
+          problems: allProblems,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(allProblems.length).fill(false),
+        },
+        phase: "awaiting_input" as SessionPhase,
+      });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
   // ── Practice ──
+
+  togglePracticeFlag(index) {
+    const { practiceBatch } = get();
+    if (!practiceBatch) return;
+    const newFlags = [...practiceBatch.flags];
+    newFlags[index] = !newFlags[index];
+    set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
+  },
+
+  async retryFlaggedProblems() {
+    const { practiceBatch, subject } = get();
+    if (!practiceBatch) return;
+    const flaggedProblems = practiceBatch.problems.filter((_, i) => practiceBatch.flags[i]);
+    if (flaggedProblems.length === 0) return;
+
+    set({ ...initialState, subject, phase: "loading" as SessionPhase });
+    try {
+      const allProblems: PracticeProblem[] = [];
+      for (const problem of flaggedProblems) {
+        const { problems } = await practiceApi.generate({ problem: problem.question, count: 1, subject });
+        allProblems.push(...problems);
+      }
+      set({
+        practiceBatch: {
+          problems: allProblems,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(allProblems.length).fill(false),
+        },
+        phase: "awaiting_input" as SessionPhase,
+      });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
 
   async startPracticeBatch(problem, count) {
     const { subject } = get();
