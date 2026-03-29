@@ -5,8 +5,7 @@ import Purchases, {
   type CustomerInfo,
 } from "react-native-purchases";
 
-// Replace with your actual RevenueCat API keys
-const REVENUECAT_IOS_KEY = "appl_XXXXXXXX"; // TODO: set real iOS API key
+const REVENUECAT_IOS_KEY = "test_EARIAgUMbdOpwbkzpSUsbgREBus";
 const REVENUECAT_ANDROID_KEY = "goog_XXXXXXXX"; // TODO: set real Android API key
 
 /**
@@ -15,7 +14,7 @@ const REVENUECAT_ANDROID_KEY = "goog_XXXXXXXX"; // TODO: set real Android API ke
  */
 export async function initRevenueCat(userId: string): Promise<void> {
   const apiKey = Platform.OS === "ios" ? REVENUECAT_IOS_KEY : REVENUECAT_ANDROID_KEY;
-  if (apiKey.includes("XXXXXXXX")) {
+  if (apiKey.includes("XXXXXXXX") || !apiKey) {
     console.warn("[RevenueCat] Skipping init — API key is a placeholder (dev mode)");
     return;
   }
