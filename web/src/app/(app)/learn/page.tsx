@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/session";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
+import { ImageUpload } from "@/components/shared/image-upload";
 
 export default function LearnPage() {
   const searchParams = useSearchParams();
@@ -124,6 +125,16 @@ export default function LearnPage() {
           </button>
         ))}
       </div>
+
+      {/* Image upload */}
+      <ImageUpload
+        subject={subject}
+        onProblemsExtracted={(problems) => {
+          problems.forEach((p) => addToQueue(p));
+        }}
+        maxProblems={10}
+        currentQueueLength={problemQueue.length}
+      />
 
       {/* Problem input */}
       <Card variant="flat" className="space-y-4">
