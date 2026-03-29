@@ -1,0 +1,32 @@
+"use client";
+
+import { useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/stores/auth";
+
+/**
+ * Redirects to /login if no authenticated user.
+ * Shows a loading state while checking auth.
+ */
+export function AuthGuard({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuthStore();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  return <>{children}</>;
+}
