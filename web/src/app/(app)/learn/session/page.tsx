@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
 import { Button, Card, Badge } from "@/components/ui";
-import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { StepChat } from "@/components/session/step-chat";
 import { cn } from "@/lib/utils";
@@ -24,7 +23,11 @@ export default function LearnSessionPage() {
     reset,
   } = useSessionStore();
 
-  const [answer, setAnswer] = useState("");
+  const [selectedChoice, setSelectedChoice] = useState<{
+    index: number;
+    correct: boolean | null;
+    forStep: number;
+  } | null>(null);
 
   // Redirect if no session
   useEffect(() => {
@@ -53,26 +56,27 @@ export default function LearnSessionPage() {
     );
   }
 
-  // API returns current_step: 0 before first interaction — treat as step 1
   const currentStep = Math.max(1, session.current_step);
   const totalSteps = session.total_steps;
   const steps = session.steps;
-  const stepIndex = currentStep - 1; // 0-based index into steps array
+  const stepIndex = currentStep - 1;
+  const currentStepData = steps[stepIndex];
+  const isFinalStep = currentStep === totalSteps;
   const isCompleted = phase === "completed";
   const isThinking = phase === "thinking";
 
-  async function handleSubmitAnswer() {
-    if (!answer.trim()) return;
-    await submitAnswer(answer.trim());
-    setAnswer("");
+  async function handleChoiceSelect(choice: string, index: number) {
+    setSelectedChoice({ index, correct: null, forStep: currentStep });
+    await submitAnswer(choice);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmitAnswer();
-    }
-  }
+  // After submitAnswer, check if the response was correct. Ignore stale selections from previous steps.
+  const activeChoice =
+    selectedChoice?.forStep === currentStep ? selectedChoice : null;
+  const choiceResult =
+    activeChoice && lastResponse
+      ? { ...activeChoice, correct: lastResponse.is_correct }
+      : activeChoice;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -98,20 +102,20 @@ export default function LearnSessionPage() {
             className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
             initial={{ width: 0 }}
             animate={{
-              width: `${((isCompleted ? totalSteps : currentStep - 1) / totalSteps) * 100}%`,
+              width: `${((isCompleted ? totalSteps : currentStep) / totalSteps) * 100}%`,
             }}
             transition={{ type: "spring", stiffness: 200, damping: 20 }}
           />
         </div>
         <p className="mt-1 text-xs text-text-muted">
-          Step {Math.min(currentStep, totalSteps)} of {totalSteps}
+          Step {currentStep} of {totalSteps}
         </p>
       </div>
 
       {/* Desktop layout: step list + active step */}
       <div className="flex gap-6">
         {/* Step sidebar (desktop only) */}
-        <div className="hidden w-48 flex-shrink-0 space-y-2 lg:block">
+        <div className="hidden w-48 flex-shrink-0 space-y-1 lg:block">
           {steps.map((step, i) => {
             const stepNum = i + 1;
             const isCurrent = stepNum === currentStep && !isCompleted;
@@ -121,18 +125,18 @@ export default function LearnSessionPage() {
               <div
                 key={i}
                 className={cn(
-                  "flex items-center gap-2 rounded-[--radius-sm] px-3 py-2 text-sm transition-colors",
-                  isCurrent && "bg-primary-bg text-primary font-semibold",
-                  isDone && "text-success",
+                  "flex items-center gap-2.5 rounded-[--radius-sm] px-3 py-2 text-sm transition-colors",
+                  isCurrent && "bg-primary-bg font-semibold text-primary",
+                  isDone && "text-text-secondary",
                   !isCurrent && !isDone && "text-text-muted",
                 )}
               >
                 <span
                   className={cn(
-                    "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
+                    "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
                     isCurrent && "bg-primary text-white",
                     isDone && "bg-success text-white",
-                    !isCurrent && !isDone && "bg-border-light text-text-muted",
+                    !isCurrent && !isDone && "bg-border text-text-muted",
                   )}
                 >
                   {isDone ? (
@@ -143,7 +147,11 @@ export default function LearnSessionPage() {
                     stepNum
                   )}
                 </span>
-                <span className="truncate">Step {stepNum}</span>
+                <span className="truncate text-xs">
+                  {isDone || isCurrent
+                    ? step.description.slice(0, 30) + (step.description.length > 30 ? "..." : "")
+                    : `Step ${stepNum}`}
+                </span>
               </div>
             );
           })}
@@ -152,54 +160,84 @@ export default function LearnSessionPage() {
         {/* Active step + chat */}
         <div className="flex-1 space-y-4">
           {/* Current step card */}
-          <Card variant="elevated" className="space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
+          <Card variant="elevated" className="space-y-5">
+            {/* Step header */}
+            <div className="flex items-start gap-4">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white">
                 {currentStep}
               </span>
-              <h2 className="text-base font-bold text-text-primary">
-                {steps[stepIndex]?.description ?? "Loading..."}
-              </h2>
+              <div>
+                <p className="text-[13px] font-semibold uppercase tracking-wide text-text-muted">
+                  Step {currentStep} of {totalSteps}
+                </p>
+                <p className="mt-1 text-base leading-relaxed text-text-primary">
+                  {currentStepData?.description ?? "Loading..."}
+                </p>
+              </div>
             </div>
 
-            {/* Multiple choice options */}
-            {steps[stepIndex]?.choices &&
-              !isCompleted &&
-              steps[stepIndex].choices!.map((choice, i) => (
-                <button
-                  key={i}
-                  onClick={() => submitAnswer(choice)}
-                  disabled={isThinking}
-                  className="w-full rounded-[--radius-md] border border-border bg-input-bg px-4 py-3 text-left text-sm font-medium text-text-primary transition-colors hover:border-primary hover:bg-primary-bg disabled:opacity-50"
-                >
-                  {choice}
-                </button>
-              ))}
+            {/* Final step: multiple choice */}
+            {isFinalStep && currentStepData?.choices && !isCompleted && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-text-secondary">
+                  What is the result?
+                </p>
+                {currentStepData.choices.map((choice, i) => {
+                  const isSelected = choiceResult?.index === i;
+                  const isCorrect = isSelected && choiceResult?.correct === true;
+                  const isWrong = isSelected && choiceResult?.correct === false;
 
-            {/* Text answer input */}
-            {!steps[stepIndex]?.choices && !isCompleted && (
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Your answer..."
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="flex-1"
-                  disabled={isThinking}
-                />
-                <Button
-                  onClick={handleSubmitAnswer}
-                  loading={isThinking}
-                  disabled={!answer.trim()}
-                  size="sm"
-                >
-                  Submit
-                </Button>
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => handleChoiceSelect(choice, i)}
+                      disabled={isThinking}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-all",
+                        isCorrect &&
+                          "border-success bg-success-light text-success",
+                        isWrong &&
+                          "border-error bg-error-light text-error",
+                        !isSelected &&
+                          "border-border bg-white text-text-primary hover:border-primary hover:bg-primary-bg",
+                        isThinking && !isSelected && "opacity-50",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                          isCorrect && "bg-success text-white",
+                          isWrong && "bg-error text-white",
+                          !isSelected && "bg-input-bg text-text-secondary",
+                        )}
+                      >
+                        {isCorrect
+                          ? "\u2713"
+                          : isWrong
+                            ? "\u2717"
+                            : String.fromCharCode(65 + i)}
+                      </span>
+                      {choice}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
-            {/* Feedback */}
-            {lastResponse && (
+            {/* Non-final step: "I Understand" button */}
+            {!isFinalStep && !isCompleted && (
+              <Button
+                variant="secondary"
+                onClick={advanceStep}
+                loading={isThinking}
+                className="w-full"
+              >
+                I Understand
+              </Button>
+            )}
+
+            {/* Feedback from tutor (for wrong answers or chat) */}
+            {lastResponse && lastResponse.feedback && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -207,23 +245,13 @@ export default function LearnSessionPage() {
                   "rounded-[--radius-md] p-4",
                   lastResponse.is_correct
                     ? "bg-success-light border border-success-border"
-                    : "bg-error-light border border-error-border",
+                    : "bg-primary-bg border border-primary/20",
                 )}
               >
-                <p className="text-sm font-medium">
-                  {lastResponse.is_correct ? "Correct!" : "Not quite."}
-                </p>
-                <p className="mt-1 text-sm text-text-secondary">
+                <p className="text-sm leading-relaxed text-text-primary">
                   {lastResponse.feedback}
                 </p>
               </motion.div>
-            )}
-
-            {/* Advance / Next buttons */}
-            {lastResponse && !isCompleted && (
-              <Button variant="secondary" onClick={advanceStep} loading={isThinking}>
-                Next Step
-              </Button>
             )}
 
             {/* Completed state */}
@@ -233,7 +261,7 @@ export default function LearnSessionPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-4"
               >
-                <div className="rounded-[--radius-md] bg-success-light border border-success-border p-4 text-center">
+                <div className="rounded-[--radius-md] bg-success-light border border-success-border p-5 text-center">
                   <p className="text-lg font-bold text-success">
                     Problem Complete!
                   </p>
@@ -247,7 +275,8 @@ export default function LearnSessionPage() {
 
                 <div className="flex gap-3">
                   {learnQueue &&
-                    learnQueue.currentIndex < learnQueue.problems.length - 1 && (
+                    learnQueue.currentIndex <
+                      learnQueue.problems.length - 1 && (
                       <Button gradient onClick={advanceLearnQueue}>
                         Next Problem
                       </Button>
@@ -266,7 +295,7 @@ export default function LearnSessionPage() {
             )}
           </Card>
 
-          {/* Step chat */}
+          {/* Step chat — ask questions about the step */}
           {!isCompleted && <StepChat />}
         </div>
       </div>
