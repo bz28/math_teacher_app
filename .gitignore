@@ -31,6 +31,7 @@ node_modules/
 mobile/.expo/
 mobile/dist/
 web/node_modules/
+web/.next/
 web/dist/
 web/build/
 
