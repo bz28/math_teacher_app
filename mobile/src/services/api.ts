@@ -261,6 +261,25 @@ export const register = (email: string, password: string, name: string, gradeLev
     grade_level: gradeLevel,
   });
 
+// Entitlements
+export interface EntitlementLimits {
+  daily_sessions_used: number;
+  daily_sessions_limit: number;
+  history_limit: number | null;
+}
+
+export interface EntitlementsData {
+  is_pro: boolean;
+  subscription_tier: string;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  limits: EntitlementLimits;
+  gated_features: string[];
+}
+
+export const getEntitlements = () =>
+  apiGet<EntitlementsData>("/auth/entitlements");
+
 // Practice API
 export interface PracticeProblem {
   question: string;
