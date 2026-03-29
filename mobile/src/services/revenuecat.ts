@@ -11,9 +11,14 @@ const REVENUECAT_ANDROID_KEY = "goog_XXXXXXXX"; // TODO: set real Android API ke
 
 /**
  * Initialise RevenueCat SDK. Call once after the user authenticates.
+ * Skips initialisation when API keys are still placeholders (dev mode).
  */
 export async function initRevenueCat(userId: string): Promise<void> {
   const apiKey = Platform.OS === "ios" ? REVENUECAT_IOS_KEY : REVENUECAT_ANDROID_KEY;
+  if (apiKey.includes("XXXXXXXX")) {
+    console.warn("[RevenueCat] Skipping init — API key is a placeholder (dev mode)");
+    return;
+  }
   Purchases.configure({ apiKey, appUserID: userId });
 }
 
