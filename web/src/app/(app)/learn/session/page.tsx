@@ -385,7 +385,7 @@ export default function LearnSessionPage() {
       )}
 
       {/* ── "Continue asking" state (completed but user wants to ask more) ── */}
-      {phase === "awaiting_input" && session?.status === "completed" && (
+      {(phase === "awaiting_input" || phase === "thinking") && session?.status === "completed" && (
         <div className="space-y-4">
           {messages.map((msg, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
