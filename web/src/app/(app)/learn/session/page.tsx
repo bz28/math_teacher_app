@@ -442,8 +442,8 @@ export default function LearnSessionPage() {
         </div>
       )}
 
-      {/* ── Active step (non-completed) ── */}
-      {!isCompleted && (
+      {/* ── Active step (only when session is truly active, not in continue-asking) ── */}
+      {!isCompleted && session.status !== "completed" && (
         <div className="space-y-4">
           {/* Current step card */}
           <Card variant="elevated">

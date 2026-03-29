@@ -17,6 +17,7 @@ export default function LearnPage() {
   const {
     setSubject,
     problemQueue,
+    setProblemQueue,
     addToQueue,
     removeFromQueue,
     startLearnQueue,
@@ -35,7 +36,9 @@ export default function LearnPage() {
 
   useEffect(() => {
     setSubject(subject);
-  }, [subject, setSubject]);
+    // Clear stale state when entering the input page
+    setProblemQueue([]);
+  }, [subject, setSubject, setProblemQueue]);
 
   function handleAddProblem() {
     const trimmed = input.trim();
