@@ -240,10 +240,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async askAboutStep(question) {
     const { session } = get();
     if (!session) return;
-    const stepNum = session.current_step;
+    // Use clamped step number to match the UI key
+    const stepNum = Math.max(1, session.current_step);
 
-    // Add user message to chat
+    // Add user message to chat and set thinking
     set((state) => ({
+      phase: "thinking" as SessionPhase,
       chatHistory: {
         ...state.chatHistory,
         [stepNum]: [
@@ -260,6 +262,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       });
       // Add AI message to chat
       set((state) => ({
+        phase: "awaiting_input" as SessionPhase,
         chatHistory: {
           ...state.chatHistory,
           [stepNum]: [
@@ -270,7 +273,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         lastResponse: response,
       }));
     } catch (err) {
-      set({ error: (err as Error).message });
+      set({ phase: "awaiting_input" as SessionPhase, error: (err as Error).message });
     }
   },
 
