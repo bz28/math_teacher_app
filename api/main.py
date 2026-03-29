@@ -3,10 +3,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, or_, text, update
 
 from api.config import settings
+from api.core.entitlements import EntitlementError
 from api.core.constants import STALE_SESSION_HOURS
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
@@ -90,6 +92,21 @@ app = FastAPI(
 )
 
 configure_middleware(app)
+
+
+@app.exception_handler(EntitlementError)
+async def entitlement_error_handler(request: Request, exc: EntitlementError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": "entitlement_required",
+            "entitlement": exc.entitlement.value,
+            "message": exc.message,
+            "is_limit": exc.is_limit,
+        },
+    )
+
+
 app.include_router(health_router, prefix="/v1")
 app.include_router(auth_router, prefix="/v1")
 app.include_router(session_router, prefix="/v1")

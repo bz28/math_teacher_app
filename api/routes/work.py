@@ -5,10 +5,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.entitlements import Entitlement, check_entitlement
 from api.core.step_decomposition import decompose_problem
 from api.core.work_diagnosis import diagnose_work
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user
+from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
+from api.models.user import User
 from api.models.work_submission import WorkSubmission
 from api.schemas.work import DiagnosisResult, DiagnosisStep, SubmitWorkRequest, SubmitWorkResponse
 
@@ -20,11 +22,12 @@ router = APIRouter(prefix="/work", tags=["work"])
 @router.post("/submit", response_model=SubmitWorkResponse)
 async def submit_work(
     body: SubmitWorkRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitWorkResponse:
     """Submit a photo of handwritten work for diagnosis against the optimal solution."""
-    user_id_str = str(current_user.user_id)
+    await check_entitlement(db, user, Entitlement.WORK_DIAGNOSIS)
+    user_id_str = str(user.id)
 
     # Step 1: Generate optimal steps via decompose_problem()
     try:
@@ -65,7 +68,7 @@ async def submit_work(
 
     # Save WorkSubmission record
     submission = WorkSubmission(
-        user_id=current_user.user_id,
+        user_id=user.id,
         session_id=None,
         problem_index=0,
         problem_text=body.problem_text,

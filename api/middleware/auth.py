@@ -40,6 +40,29 @@ async def get_current_user(
     return CurrentUser(user_id=user_id, role=str(payload["role"]))
 
 
+async def get_current_user_full(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> "User":
+    """Return the full User ORM object for the current authenticated user."""
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+    user_id = uuid.UUID(str(payload["sub"]))
+
+    from api.models.user import User
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
+
+    return user
+
+
 async def require_admin(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
