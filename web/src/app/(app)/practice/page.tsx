@@ -109,7 +109,7 @@ export default function PracticePage() {
                 <p className="text-sm font-medium text-text-primary">{result.problem}</p>
                 <p className="text-xs text-text-secondary">Your answer: {result.userAnswer}</p>
                 {!result.isCorrect && (
-                  <p className="text-xs font-medium text-success">Correct: {result.correctAnswer}</p>
+                  <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
                 )}
               </div>
               <button
@@ -225,8 +225,8 @@ export default function PracticePage() {
                 {lastResult.isCorrect ? "Correct!" : "Incorrect"}
               </p>
               {!lastResult.isCorrect && (
-                <p className="mt-1 text-sm text-text-secondary">
-                  The correct answer is: {current.answer}
+                <p className="mt-1 text-sm text-text-muted italic">
+                  Flag and learn this problem to see the answer
                 </p>
               )}
             </div>
