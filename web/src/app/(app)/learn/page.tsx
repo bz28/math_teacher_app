@@ -17,6 +17,7 @@ export default function LearnPage() {
   const {
     setSubject,
     problemQueue,
+    setProblemQueue,
     addToQueue,
     removeFromQueue,
     startLearnQueue,
@@ -29,13 +30,15 @@ export default function LearnPage() {
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
 
   // Mock test config
-  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("generate_similar");
+  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
 
   useEffect(() => {
     setSubject(subject);
-  }, [subject, setSubject]);
+    // Clear stale state when entering the input page
+    setProblemQueue([]);
+  }, [subject, setSubject, setProblemQueue]);
 
   function handleAddProblem() {
     const trimmed = input.trim();
@@ -65,7 +68,7 @@ export default function LearnPage() {
       }
       router.push(`/learn/session?subject=${subject}`);
     } else {
-      const generateCount = examType === "generate_similar" ? 5 : 0;
+      const generateCount = examType === "generate_similar" ? problems.length : 0;
       const timeLimit = untimed ? null : timeLimitMinutes;
       await startMockTest(problems, generateCount, timeLimit);
       router.push(`/mock-test?subject=${subject}`);

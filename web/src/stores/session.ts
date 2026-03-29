@@ -109,14 +109,23 @@ interface SessionState {
   advanceStep: () => Promise<void>;
   askAboutStep: (question: string) => Promise<void>;
 
+  // Learn completion actions
+  continueAsking: () => void;
+  finishAsking: () => void;
+  tryPracticeProblem: () => Promise<void>;
+
   // Learn queue actions
   startLearnQueue: (problems: string[]) => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
+  toggleLearnFlag: (index: number) => void;
+  practiceFlaggedFromLearnQueue: () => Promise<void>;
 
   // Practice actions
   startPracticeBatch: (problem: string, count: number) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
   nextPracticeProblem: () => void;
+  togglePracticeFlag: (index: number) => void;
+  retryFlaggedProblems: () => Promise<void>;
 
   // Mock test actions
   startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
@@ -231,8 +240,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async askAboutStep(question) {
     const { session } = get();
     if (!session) return;
-    // Use 0-indexed step to match the UI key
-    const stepNum = session.current_step;
+    // Clamp to valid range to match UI key (stepIndex)
+    const stepNum = Math.min(session.current_step, session.total_steps - 1);
 
     // Add user message to chat and set thinking
     set((state) => ({
@@ -302,7 +311,105 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await get().startSession(learnQueue.problems[nextIndex]);
   },
 
+  // ── Learn completion ──
+
+  continueAsking() {
+    set({ phase: "awaiting_input" as SessionPhase, lastResponse: null });
+  },
+
+  finishAsking() {
+    set({ phase: "completed" as SessionPhase });
+  },
+
+  async tryPracticeProblem() {
+    const { session, subject } = get();
+    if (!session) return;
+    set({ ...initialState, subject, phase: "loading" as SessionPhase });
+    try {
+      // Get a single similar problem (matches mobile: getSimilarProblem + createSession)
+      const { similar_problem } = await sessionApi.similar(session.id);
+      const newSession = await sessionApi.create({
+        problem: similar_problem,
+        mode: "practice",
+        subject,
+      });
+      set({ session: newSession, phase: "awaiting_input" });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
+  toggleLearnFlag(index) {
+    const { learnQueue } = get();
+    if (!learnQueue) return;
+    const newFlags = [...learnQueue.flags];
+    newFlags[index] = !newFlags[index];
+    set({ learnQueue: { ...learnQueue, flags: newFlags } });
+  },
+
+  async practiceFlaggedFromLearnQueue() {
+    const { learnQueue, subject } = get();
+    if (!learnQueue) return;
+    const flaggedProblems = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
+    if (flaggedProblems.length === 0) return;
+
+    set({ ...initialState, subject, phase: "loading" as SessionPhase });
+    try {
+      const allProblems: PracticeProblem[] = [];
+      for (const problem of flaggedProblems) {
+        const { problems } = await practiceApi.generate({ problem, count: 1, subject });
+        allProblems.push(...problems);
+      }
+      set({
+        practiceBatch: {
+          problems: allProblems,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(allProblems.length).fill(false),
+        },
+        phase: "awaiting_input" as SessionPhase,
+      });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
   // ── Practice ──
+
+  togglePracticeFlag(index) {
+    const { practiceBatch } = get();
+    if (!practiceBatch) return;
+    const newFlags = [...practiceBatch.flags];
+    newFlags[index] = !newFlags[index];
+    set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
+  },
+
+  async retryFlaggedProblems() {
+    const { practiceBatch, subject } = get();
+    if (!practiceBatch) return;
+    const flaggedProblems = practiceBatch.problems.filter((_, i) => practiceBatch.flags[i]);
+    if (flaggedProblems.length === 0) return;
+
+    set({ ...initialState, subject, phase: "loading" as SessionPhase });
+    try {
+      const allProblems: PracticeProblem[] = [];
+      for (const problem of flaggedProblems) {
+        const { problems } = await practiceApi.generate({ problem: problem.question, count: 1, subject });
+        allProblems.push(...problems);
+      }
+      set({
+        practiceBatch: {
+          problems: allProblems,
+          currentIndex: 0,
+          results: [],
+          flags: new Array(allProblems.length).fill(false),
+        },
+        phase: "awaiting_input" as SessionPhase,
+      });
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
 
   async startPracticeBatch(problem, count) {
     const { subject } = get();
@@ -390,15 +497,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         });
         questions = generated;
       } else {
-        // Solve each problem to get answers
-        const { problems: solved } = await practiceApi.generate({
-          problem: problems.join("\n"),
-          count: 0,
-          subject,
-        });
-        questions = solved.length > 0
-          ? solved
-          : problems.map((p) => ({ question: p, answer: "" }));
+        // Solve each problem individually to get answers (matches mobile)
+        const results = await Promise.allSettled(
+          problems.map((p) =>
+            practiceApi.generate({ problem: p, count: 0, subject }),
+          ),
+        );
+        questions = results.map((r, i) =>
+          r.status === "fulfilled" && r.value.problems.length > 0
+            ? r.value.problems[0]
+            : { question: problems[i], answer: "" },
+        );
       }
 
       // Create analytics session
@@ -492,10 +601,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         });
       }
 
+      // Auto-flag incorrect and skipped questions (matches mobile)
+      const newFlags = [...mockTest.flags];
+      results.forEach((r, i) => {
+        if (r.isCorrect !== true) newFlags[i] = true;
+      });
+
       set({
         mockTest: {
           ...mockTest,
           results,
+          flags: newFlags,
           submittedAt: Date.now(),
         },
         phase: "mock_test_summary",

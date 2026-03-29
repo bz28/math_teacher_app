@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { session as sessionApi, type SessionResponse } from "@/lib/api";
+import { useSessionStore } from "@/stores/session";
 import { Card, Badge, Button } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -182,13 +183,29 @@ export default function SessionReviewPage({
             Resume Session
           </Button>
         )}
-        <Button
-          variant="secondary"
-          onClick={() => router.push(`/learn?subject=${subject}`)}
-        >
-          Practice Similar
-        </Button>
+        <PracticeSimilarButton problem={session.problem} subject={subject} />
       </div>
     </div>
+  );
+}
+
+function PracticeSimilarButton({ problem, subject }: { problem: string; subject: string }) {
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  return (
+    <Button
+      variant="secondary"
+      loading={loading}
+      onClick={async () => {
+        setLoading(true);
+        const store = useSessionStore.getState();
+        store.setSubject(subject as "math" | "chemistry");
+        await store.startPracticeBatch(problem, 1);
+        router.push("/practice");
+      }}
+    >
+      Practice Similar Problem
+    </Button>
   );
 }
