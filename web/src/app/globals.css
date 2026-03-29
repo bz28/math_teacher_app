@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+/* ── Design tokens (mirrors mobile/src/theme.ts) ── */
+:root {
+  /* Primary */
+  --color-primary: #6C5CE7;
+  --color-primary-light: #A29BFE;
+  --color-primary-bg: #F0EDFF;
+  --color-primary-dark: #5A4BD1;
+
+  /* Success */
+  --color-success: #00B894;
+  --color-success-light: #E8F8F5;
+  --color-success-border: #B2DFDB;
+
+  /* Error */
+  --color-error: #FF6B6B;
+  --color-error-light: #FFF0F0;
+  --color-error-border: #FFCDD2;
+
+  /* Warning */
+  --color-warning: #FDCB6E;
+  --color-warning-dark: #E17055;
+  --color-warning-bg: #FFF8E1;
+
+  /* Text */
+  --color-text: #2D3436;
+  --color-text-secondary: #636E72;
+  --color-text-muted: #B2BEC3;
+  --color-text-on-primary: #FFFFFF;
+
+  /* Backgrounds */
+  --color-bg: #FAFAFE;
+  --color-card: #F8F7FF;
+  --color-input-bg: #F5F4FB;
+
+  /* Borders */
+  --color-border: #E8E5F0;
+  --color-border-light: #F0EEF8;
+
+  /* Overlay */
+  --color-overlay: rgba(108, 92, 231, 0.08);
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  --gradient-header: linear-gradient(135deg, #6C5CE7, #8B7CF7);
+  --gradient-success: linear-gradient(135deg, #00B894, #55EFC4);
+  --gradient-warning: linear-gradient(135deg, #E17055, #FDCB6E);
+  --gradient-card: linear-gradient(135deg, #F8F7FF, #F0EDFF);
+}
+
+/* ── Tailwind theme extension ── */
+@theme inline {
+  --font-sans: var(--font-inter);
+
+  /* Colors */
+  --color-primary: var(--color-primary);
+  --color-primary-light: var(--color-primary-light);
+  --color-primary-bg: var(--color-primary-bg);
+  --color-primary-dark: var(--color-primary-dark);
+
+  --color-success: var(--color-success);
+  --color-success-light: var(--color-success-light);
+  --color-success-border: var(--color-success-border);
+
+  --color-error: var(--color-error);
+  --color-error-light: var(--color-error-light);
+  --color-error-border: var(--color-error-border);
+
+  --color-warning: var(--color-warning);
+  --color-warning-dark: var(--color-warning-dark);
+  --color-warning-bg: var(--color-warning-bg);
+
+  --color-text-primary: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-on-primary: var(--color-text-on-primary);
+
+  --color-bg: var(--color-bg);
+  --color-card: var(--color-card);
+  --color-input-bg: var(--color-input-bg);
+
+  --color-border: var(--color-border);
+  --color-border-light: var(--color-border-light);
+
+  /* Shadows (purple-tinted, matching mobile) */
+  --shadow-sm: 0 2px 8px rgba(108, 92, 231, 0.06);
+  --shadow-md: 0 4px 12px rgba(108, 92, 231, 0.1);
+  --shadow-lg: 0 8px 24px rgba(108, 92, 231, 0.15);
+
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 100px;
+}
+
+/* ── Base styles ── */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── Smooth scrolling ── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Focus ring utility ── */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Selection color ── */
+::selection {
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary-dark);
+}
+
+/* ── Scrollbar styling ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
