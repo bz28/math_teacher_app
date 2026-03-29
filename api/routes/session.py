@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.practice import generate_practice_problems
 from api.core.session import (
-    RateLimitError,
     SessionError,
     create_session,
     get_owned_session,
@@ -77,11 +76,9 @@ async def create(
     """Start a new tutoring session for a problem."""
     try:
         session = await create_session(
-            db, current_user.user_id, body.problem, body.mode, current_user.role,
+            db, current_user.user_id, body.problem, body.mode,
             subject=body.subject,
         )
-    except RateLimitError as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except RuntimeError as e:

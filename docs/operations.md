@@ -34,8 +34,8 @@ How to deploy, monitor, and troubleshoot the math teacher app. Written so anyone
 | `LOG_LEVEL` | No | `INFO` (default) |
 | `CORS_ORIGINS` | No | `["https://dashboard.example.com"]` |
 | `DAILY_COST_LIMIT_USD` | No | `50.0` (default) |
-| `DAILY_REQUEST_CAP_FREE` | No | `50` (default) |
-| `DAILY_REQUEST_CAP_SCHOOL` | No | `500` (default) |
+| `REVENUECAT_WEBHOOK_SECRET` | No | Shared secret from RevenueCat dashboard |
+| `BYPASS_SUBSCRIPTION` | No | `true` to skip entitlement checks (dev only) |
 
 ### Deploying Database Migrations
 Migrations run automatically on every deploy (`alembic upgrade head` in the Docker CMD). To create a new migration locally:
@@ -101,12 +101,12 @@ All logs are JSON with these fields:
 - If cost limit: increase `DAILY_COST_LIMIT_USD` in Railway env vars, or wait until midnight UTC.
 - If Claude outage: wait for Anthropic to resolve.
 
-### "429 Too Many Requests"
-**Cause:** User hit their daily session cap.
+### "403 Entitlement Required"
+**Cause:** Free user tried to use a Pro-only feature or hit their daily session limit.
 
-**Check:** `daily_request_cap_free` (50) or `daily_request_cap_school` (500).
+**Check:** The response body contains `entitlement` (which feature was blocked) and `is_limit` (whether it was a daily limit vs feature gate).
 
-**Fix:** Increase the cap in env vars if needed, or wait until the next day.
+**Fix:** User needs to subscribe to Pro. No server-side override — use `BYPASS_SUBSCRIPTION=true` in dev only.
 
 ### "423 Locked" on login
 **Cause:** 5+ failed login attempts.
