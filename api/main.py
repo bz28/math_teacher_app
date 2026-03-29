@@ -59,7 +59,7 @@ async def _cleanup_expired_tokens() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    if settings.sentry_dsn and "your-" not in settings.sentry_dsn:
+    if settings.sentry_dsn and settings.sentry_dsn.startswith("https://"):
         import sentry_sdk
 
         sentry_sdk.init(
