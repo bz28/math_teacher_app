@@ -17,6 +17,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-1 flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[--radius-sm] focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
+      >
+        Skip to main content
+      </a>
+
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border-light bg-surface/90 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
@@ -71,7 +78,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Page content — add bottom padding on mobile for tab bar */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 pb-24 md:pb-8">
+      <main id="main-content" className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 pb-24 md:pb-8">
         {children}
       </main>
 

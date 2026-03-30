@@ -336,6 +336,7 @@ export default function MockTestPage() {
                 : "text-text-muted hover:bg-warning-bg hover:text-warning-dark",
             )}
             title={isFlagged ? "Unflag" : "Flag for review"}
+            aria-label={isFlagged ? "Unflag for review" : "Flag for review"}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill={isFlagged ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
               <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
