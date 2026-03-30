@@ -28,8 +28,8 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 
   if (!practiceBatch) return null;
 
-  const { results, flags, problems, skippedProblems, workSubmissions, firstAttemptCorrect } = practiceBatch;
-  const correct = firstAttemptCorrect.filter((v) => v === true).length;
+  const { results, flags, problems, skippedProblems, workSubmissions } = practiceBatch;
+  const correct = results.filter((r) => r.isCorrect).length;
   const pct = correct / results.length;
   const encouragement =
     pct === 1 ? "Perfect score!" :
@@ -73,7 +73,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
         </View>
 
         {results.map((r, i) => {
-          const wasCorrect = firstAttemptCorrect[i] === true;
+          const wasCorrect = r.isCorrect;
           return (
             <View
               key={i}

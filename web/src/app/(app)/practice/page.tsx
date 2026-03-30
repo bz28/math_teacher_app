@@ -48,8 +48,8 @@ export default function PracticePage() {
   // Confetti on perfect practice score
   useEffect(() => {
     if (phase === "practice_summary" && practiceBatch) {
-      const allFirstAttemptCorrect = practiceBatch.firstAttemptCorrect.every((v) => v === true);
-      if (allFirstAttemptCorrect) fireConfetti(true);
+      const allCorrect = practiceBatch.results.every((r) => r.isCorrect);
+      if (allCorrect) fireConfetti(true);
     }
   }, [phase, practiceBatch, fireConfetti]);
 
@@ -101,8 +101,8 @@ export default function PracticePage() {
 
   // Summary view
   if (phase === "practice_summary") {
-    const { results, flags, workSubmissions, firstAttemptCorrect } = practiceBatch;
-    const correct = firstAttemptCorrect.filter((v) => v === true).length;
+    const { results, flags, workSubmissions } = practiceBatch;
+    const correct = results.filter((r) => r.isCorrect).length;
     const flagged = flags.filter(Boolean).length;
     const percentage = Math.round((correct / results.length) * 100);
     const encouragement =
@@ -139,7 +139,7 @@ export default function PracticePage() {
         {/* Per-result breakdown */}
         <div className="space-y-2">
           {results.map((result, i) => {
-            const wasCorrect = firstAttemptCorrect[i] === true;
+            const wasCorrect = result.isCorrect;
             return (
               <div
                 key={i}
