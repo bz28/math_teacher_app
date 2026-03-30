@@ -9,14 +9,6 @@ import { clearTokens } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
-const ERROR_MAP: Record<string, string> = {
-  "Account temporarily locked": "Too many failed attempts. Try again in 15 minutes.",
-};
-
-function friendlyError(msg: string): string {
-  return ERROR_MAP[msg] ?? msg;
-}
-
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +28,7 @@ export default function LoginPage() {
       router.replace("/home");
     } catch {
       const msg = useAuthStore.getState().error;
-      if (msg) toast.error(friendlyError(msg));
+      if (msg) toast.error(msg);
     }
   }
 
