@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { auth } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
@@ -58,19 +59,36 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+    <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
+      {/* Background gradient mesh */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-1/4 top-1/4 h-[400px] w-[400px] rounded-full bg-gradient-to-br from-primary/6 to-transparent blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 h-[300px] w-[300px] rounded-full bg-gradient-to-br from-primary-light/5 to-transparent blur-3xl" />
+      </div>
+
       {/* Logo */}
-      <Link href="/" className="mb-8 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-gradient-to-br from-primary to-primary-light">
-          <span className="text-base font-extrabold text-white">V</span>
-        </div>
-        <span className="text-xl font-bold tracking-tight text-text-primary">
-          Veradic AI
-        </span>
-      </Link>
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <Link href="/" className="mb-8 flex items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-gradient-to-br from-primary to-primary-light">
+            <span className="text-base font-extrabold text-white">V</span>
+          </div>
+          <span className="text-xl font-bold tracking-tight text-text-primary">
+            Veradic AI
+          </span>
+        </Link>
+      </motion.div>
 
       {/* Card */}
-      <div className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 25 }}
+        className="relative w-full max-w-md rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md"
+      >
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           Create your account
         </h1>
@@ -88,7 +106,7 @@ export default function RegisterPage() {
             autoComplete="name"
           />
 
-          <div className="relative">
+          <div>
             <Input
               label="Email"
               type="email"
@@ -156,16 +174,18 @@ export default function RegisterPage() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-text-muted">
-          Already have an account?{" "}
-          <Link
-            href="/login"
-            className="font-semibold text-primary hover:text-primary-dark"
-          >
-            Sign In
-          </Link>
-        </p>
-      </div>
+        <div className="mt-6 border-t border-border-light pt-4 text-center">
+          <p className="text-sm text-text-secondary">
+            Already have an account?{" "}
+            <Link
+              href="/login"
+              className="font-semibold text-primary hover:text-primary-dark"
+            >
+              Sign In
+            </Link>
+          </p>
+        </div>
+      </motion.div>
     </div>
   );
 }
