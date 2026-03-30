@@ -37,7 +37,7 @@ export interface LearnQueue {
   problems: string[];
   currentIndex: number;
   flags: boolean[];
-  sessions: (SessionResponse | null)[];
+  preloadedSessions: Record<number, SessionResponse>;
 }
 
 export interface PracticeBatch {
@@ -312,11 +312,37 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         problems,
         currentIndex: 0,
         flags: new Array(problems.length).fill(false),
-        sessions: new Array(problems.length).fill(null),
+        preloadedSessions: {},
       },
     });
     // Start first session
     await get().startSession(problems[0]);
+
+    // Preload remaining sessions in background
+    if (problems.length > 1) {
+      const { subject, problemImages } = get();
+      problems.slice(1).forEach((p, i) => {
+        const queueIndex = i + 1;
+        const image = problemImages[p];
+        sessionApi.create({
+          problem: p,
+          mode: "learn",
+          subject,
+          ...(image && { image_base64: image }),
+        })
+          .then((s) => {
+            const { learnQueue: lq } = get();
+            if (!lq) return;
+            set({
+              learnQueue: {
+                ...lq,
+                preloadedSessions: { ...lq.preloadedSessions, [queueIndex]: s },
+              },
+            });
+          })
+          .catch(() => {});
+      });
+    }
   },
 
   async advanceLearnQueue() {
@@ -327,6 +353,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ phase: "learn_summary" });
       return;
     }
+
+    const preloaded = learnQueue.preloadedSessions[nextIndex];
+    if (preloaded) {
+      set({
+        session: preloaded,
+        phase: "awaiting_input",
+        lastResponse: null,
+        chatHistory: {},
+        learnQueue: { ...learnQueue, currentIndex: nextIndex },
+      });
+      return;
+    }
+
+    // Fallback: generate on the fly if preload didn't finish
     set({
       learnQueue: { ...learnQueue, currentIndex: nextIndex },
       session: null,
