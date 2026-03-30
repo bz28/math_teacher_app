@@ -55,12 +55,16 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "solution. Those will only confuse the student.\n\n"
 
     "Given a {domain} problem, produce a JSON object with:\n"
-    '- "steps": an array of strings, each being a clear description of one step\n'
+    '- "steps": an array of objects. EACH step MUST be an object with exactly two keys:\n'
+    '  - "title": a short 2-5 word heading (e.g., "Isolate the Variable")\n'
+    '  - "description": the full explanation of the step\n'
+    '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
     "Respond with ONLY valid JSON — no markdown, no explanation:\n"
-    '{{"steps": ["step 1", "step 2", ...], "final_answer": "...", '
-    '"distractors": ["wrong1", "wrong2", "wrong3"]}}'
+    '{{"steps": [{{"title": "Understand the Problem", "description": "We have..."}}, '
+    '{{"title": "Isolate the Variable", "description": "Divide both sides..."}}], '
+    '"final_answer": "...", "distractors": ["wrong1", "wrong2", "wrong3"]}}'
 )
 
 
@@ -75,13 +79,13 @@ def _build_system_prompt(subject: str) -> str:
 @dataclass
 class Decomposition:
     problem: str
-    steps: list[str]
+    steps: list[dict[str, str]]
     final_answer: str
     problem_type: str
     distractors: list[str]
 
 
-def _parse_decomposition(data: dict[str, object]) -> tuple[list[str], str, list[str]]:
+def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, list[str]]:
     """Parse LLM JSON response into steps, final_answer, and distractors."""
     steps_data = data["steps"]
     final_answer = data.get("final_answer", "")
@@ -90,7 +94,14 @@ def _parse_decomposition(data: dict[str, object]) -> tuple[list[str], str, list[
     if not isinstance(steps_data, list):
         raise ValueError("Expected 'steps' to be a list")
 
-    steps = [str(s) for s in steps_data]
+    steps: list[dict[str, str]] = []
+    for s in steps_data:
+        if isinstance(s, dict):
+            steps.append({"title": str(s.get("title", "")), "description": str(s.get("description", ""))})
+        else:
+            # Backward compat: plain string from older prompt format
+            steps.append({"title": "", "description": str(s)})
+
     return (
         steps,
         str(final_answer),

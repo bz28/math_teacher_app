@@ -201,7 +201,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {isLearn && completedSteps.length > 0 && (
           <View style={compactStyles.historyContainer}>
             {completedSteps.map((step, i) => (
-              <CompletedStepRow key={`step-${i}`} index={i} description={step.description} isLast={i === completedSteps.length - 1} />
+              <CompletedStepRow key={`step-${i}`} index={i} title={step.title} description={step.description} isLast={i === completedSteps.length - 1} />
             ))}
           </View>
         )}
@@ -209,7 +209,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {/* Learn mode: show current step (non-final) */}
         {isLearn && !isCompleted && !isFinalStep && currentStep && (
           <View style={[styles.stepDescCard, shadows.sm]}>
-            <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
+            <Text style={styles.stepDescLabel}>
+              Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
+            </Text>
             <Text style={styles.stepDescText}>{currentStep.description}</Text>
           </View>
         )}
@@ -218,7 +220,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {isLearn && !isCompleted && isFinalStep && currentStep && (
           <View>
             <View style={[styles.stepDescCard, shadows.sm]}>
-              <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
+              <Text style={styles.stepDescLabel}>
+                Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
+              </Text>
               <Text style={styles.stepDescText}>{currentStep.description}</Text>
             </View>
             <Text style={styles.promptText}>
@@ -458,7 +462,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   );
 }
 
-function CompletedStepRow({ index, description, isLast }: { index: number; description: string; isLast: boolean }) {
+function CompletedStepRow({ index, title, description, isLast }: { index: number; title?: string; description: string; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <TouchableOpacity
@@ -473,7 +477,9 @@ function CompletedStepRow({ index, description, isLast }: { index: number; descr
         {!isLast && <View style={compactStyles.historyLine} />}
       </View>
       <View style={compactStyles.historyTextWrap}>
-        <Text style={compactStyles.historyLabel}>Step {index + 1}</Text>
+        <Text style={compactStyles.historyLabel}>
+          Step {index + 1}{title ? ` — ${title}` : ""}
+        </Text>
         <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
           {description}
         </Text>

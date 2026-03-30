@@ -24,6 +24,7 @@ export interface User {
 }
 
 export interface StepDetail {
+  title?: string;
   description: string;
   final_answer: string | null;
   choices: string[] | null;
