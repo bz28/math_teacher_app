@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { useRef } from "react";
 
 export function Hero() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const { scrollY } = useScroll();
+  const headlineY = useTransform(scrollY, [0, 500], [0, -50]);
+  const subtitleY = useTransform(scrollY, [0, 500], [0, -30]);
+  const pillsY = useTransform(scrollY, [0, 500], [0, -15]);
+  const orbY = useTransform(scrollY, [0, 500], [0, 40]);
+  const contentOpacity = useTransform(scrollY, [0, 400], [1, 0]);
+
   return (
-    <section className="relative overflow-hidden px-6 pb-20 pt-16 md:pb-28 md:pt-24">
+    <section ref={sectionRef} className="relative overflow-hidden px-6 pb-20 pt-16 md:pb-28 md:pt-24">
       {/* Animated gradient mesh */}
-      <div className="pointer-events-none absolute inset-0 -top-40 overflow-hidden">
+      <motion.div style={{ y: orbY }} className="pointer-events-none absolute inset-0 -top-40 overflow-hidden">
         <motion.div
           className="absolute left-1/2 top-0 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl"
           animate={{ x: [-20, 20, -20], y: [-10, 15, -10], scale: [1, 1.08, 1] }}
@@ -23,9 +32,9 @@ export function Hero() {
           animate={{ x: [-10, 30, -10], y: [-15, 10, -15], scale: [1, 1.05, 1] }}
           transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
         />
-      </div>
+      </motion.div>
 
-      <div className="relative mx-auto max-w-4xl text-center">
+      <motion.div style={{ opacity: contentOpacity }} className="relative mx-auto max-w-4xl text-center">
         {/* Pill badge */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -42,6 +51,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
+          style={{ y: headlineY }}
           className="text-5xl font-extrabold leading-tight tracking-tight text-text-primary md:text-6xl lg:text-7xl"
         >
           Snap. Learn.{" "}
@@ -55,6 +65,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
+          style={{ y: subtitleY }}
           className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-text-secondary md:text-xl"
         >
           Your AI tutor that breaks any math or chemistry problem into steps you
@@ -89,13 +100,14 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65 }}
+          style={{ y: pillsY }}
           className="mt-14 flex flex-wrap items-center justify-center gap-3"
         >
           <FeaturePill icon={<CameraIcon />} label="Snap a photo" />
           <FeaturePill icon={<BookIcon />} label="Learn steps" />
           <FeaturePill icon={<InfinityIcon />} label="Practice" />
         </motion.div>
-      </div>
+      </motion.div>
     </section>
   );
 }
