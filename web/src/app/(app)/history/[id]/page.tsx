@@ -176,7 +176,7 @@ export default function SessionReviewPage({
       </div>
 
       {/* Chat — ask questions about this session */}
-      {(isCompleted || session.status === "abandoned") && (
+      {isCompleted && (
         <SessionChat sessionId={id} />
       )}
 

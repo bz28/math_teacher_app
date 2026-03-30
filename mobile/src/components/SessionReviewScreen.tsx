@@ -138,7 +138,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
         </View>
 
         {/* Chat — ask questions about this session */}
-        {(isCompleted || isAbandoned) && (
+        {isCompleted && (
           <SessionChat sessionId={sessionId} />
         )}
 
