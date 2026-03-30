@@ -17,7 +17,6 @@ export default function LearnPage() {
   const {
     setSubject,
     problemQueue,
-    problemImages,
     setProblemQueue,
     addToQueue,
     removeFromQueue,
@@ -59,11 +58,12 @@ export default function LearnPage() {
     if (problemQueue.length === 0 && !input.trim()) return;
 
     const problems =
-      problemQueue.length > 0 ? problemQueue : [input.trim()];
+      problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
+    const firstImage = problemQueue.length > 0 ? problemQueue[0].image : undefined;
 
     if (mode === "learn") {
       if (problems.length === 1) {
-        await startSession(problems[0], problemImages[0]);
+        await startSession(problems[0], firstImage);
       } else {
         await startLearnQueue(problems);
       }
@@ -288,7 +288,7 @@ export default function LearnPage() {
           <h3 className="text-sm font-semibold text-text-secondary">
             Problem Queue
           </h3>
-          {problemQueue.map((problem, i) => (
+          {problemQueue.map((item, i) => (
             <div
               key={i}
               className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3"
@@ -297,11 +297,11 @@ export default function LearnPage() {
                 {i + 1}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-text-primary">{problem}</p>
-                {problemImages[i] && (
+                <p className="text-sm text-text-primary">{item.text}</p>
+                {item.image && (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
-                    src={`data:image/jpeg;base64,${problemImages[i]}`}
+                    src={`data:image/jpeg;base64,${item.image}`}
                     alt=""
                     className="mt-1.5 h-16 rounded border border-border object-contain"
                   />

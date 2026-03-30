@@ -104,13 +104,11 @@ interface SessionState {
   mockTest: MockTest | null;
 
   // Problem input
-  problemQueue: string[];
-  /** Optional images indexed parallel to problemQueue */
-  problemImages: (string | undefined)[];
+  problemQueue: { text: string; image?: string }[];
 
   // Actions
   setSubject: (subject: Subject) => void;
-  setProblemQueue: (queue: string[]) => void;
+  setProblemQueue: (queue: { text: string; image?: string }[]) => void;
   addToQueue: (problem: string, image?: string) => void;
   removeFromQueue: (index: number) => void;
 
@@ -165,7 +163,6 @@ const initialState = {
   practiceBatch: null,
   mockTest: null,
   problemQueue: [],
-  problemImages: [],
 };
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -180,21 +177,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   addToQueue(problem, image) {
-    const { problemQueue, problemImages } = get();
+    const { problemQueue } = get();
     if (problemQueue.length < 10) {
-      set({
-        problemQueue: [...problemQueue, problem],
-        problemImages: [...problemImages, image],
-      });
+      set({ problemQueue: [...problemQueue, { text: problem, image }] });
     }
   },
 
   removeFromQueue(index) {
-    const { problemQueue, problemImages } = get();
-    set({
-      problemQueue: problemQueue.filter((_, i) => i !== index),
-      problemImages: problemImages.filter((_, i) => i !== index),
-    });
+    const { problemQueue } = get();
+    set({ problemQueue: problemQueue.filter((_, i) => i !== index) });
   },
 
   // ── Learn session ──
@@ -306,6 +297,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ── Learn queue ──
 
   async startLearnQueue(problems) {
+    const { problemQueue } = get();
+    // Build image lookup from queue
+    const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
+
     set({
       learnQueue: {
         problems,
@@ -315,15 +310,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       },
     });
     // Start first session
-    const { problemImages } = get();
-    await get().startSession(problems[0], problemImages[0]);
+    await get().startSession(problems[0], imageMap.get(problems[0]));
 
     // Preload remaining sessions in background
     if (problems.length > 1) {
       const { subject } = get();
       problems.slice(1).forEach((p, i) => {
         const queueIndex = i + 1;
-        const image = problemImages[queueIndex];
+        const image = imageMap.get(p);
         sessionApi.create({
           problem: p,
           mode: "learn",
@@ -373,8 +367,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       lastResponse: null,
       chatHistory: {},
     });
-    const { problemImages } = get();
-    await get().startSession(learnQueue.problems[nextIndex], problemImages[nextIndex]);
+    await get().startSession(learnQueue.problems[nextIndex]);
   },
 
   // ── Learn completion ──
@@ -643,13 +636,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ── Mock test ──
 
   async startMockTest(problems, generateCount, timeLimitMinutes) {
-    const { subject, problemQueue, problemImages } = get();
+    const { subject, problemQueue } = get();
+    const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
     try {
       let questions: PracticeProblem[];
       if (generateCount > 0) {
-        const pIdx = problemQueue.indexOf(problems[0]);
-        const image = pIdx >= 0 ? problemImages[pIdx] : undefined;
+        const image = imageMap.get(problems[0]);
         const { problems: generated } = await practiceApi.generate({
           problem: problems[0],
           count: generateCount,
@@ -661,8 +654,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // Solve each problem individually to get answers (matches mobile)
         const results = await Promise.allSettled(
           problems.map((p) => {
-            const pIdx = problemQueue.indexOf(p);
-            const image = pIdx >= 0 ? problemImages[pIdx] : undefined;
+            const image = imageMap.get(p);
             return practiceApi.generate({
               problem: p, count: 0, subject,
               ...(image && { image_base64: image }),
