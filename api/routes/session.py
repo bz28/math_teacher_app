@@ -232,7 +232,7 @@ async def similar(
             user_id=str(current_user.user_id),
             subject=getattr(session, "subject", "math"),
         )
-        similar = problems[0]["question"] if problems else session.problem
+        similar = str(problems[0]["question"]) if problems else session.problem
     except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(

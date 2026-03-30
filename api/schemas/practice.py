@@ -20,6 +20,7 @@ class PracticeGenerateRequest(BaseModel):
 class PracticeProblem(BaseModel):
     question: str
     answer: str
+    distractors: list[str] = []
 
 
 class PracticeGenerateResponse(BaseModel):

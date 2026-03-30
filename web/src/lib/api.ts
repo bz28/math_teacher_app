@@ -53,6 +53,7 @@ export interface StepResponse {
 export interface PracticeProblem {
   question: string;
   answer: string;
+  distractors?: string[];
 }
 
 export interface PracticeGenerateResponse {

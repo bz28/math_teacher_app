@@ -38,6 +38,7 @@ export default function LearnPage() {
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
+  const [multipleChoice, setMultipleChoice] = useState(true);
 
   useEffect(() => {
     setSubject(subject);
@@ -62,8 +63,11 @@ export default function LearnPage() {
     }
   }
 
+  const [starting, setStarting] = useState(false);
   async function handleStart() {
+    if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
+    setStarting(true);
 
     const problems =
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
@@ -79,7 +83,7 @@ export default function LearnPage() {
     } else {
       const generateCount = examType === "generate_similar" ? problems.length : 0;
       const timeLimit = untimed ? null : timeLimitMinutes;
-      await startMockTest(problems, generateCount, timeLimit);
+      await startMockTest(problems, generateCount, timeLimit, multipleChoice);
       router.push(`/mock-test?subject=${subject}`);
     }
   }
@@ -227,6 +231,31 @@ export default function LearnPage() {
                 </div>
               )}
             </div>
+
+            {/* Answer format */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted">Answers:</span>
+              <div className="flex rounded-full border border-border bg-surface p-0.5">
+                <button
+                  onClick={() => setMultipleChoice(true)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                    multipleChoice ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
+                  )}
+                >
+                  Multiple choice
+                </button>
+                <button
+                  onClick={() => setMultipleChoice(false)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                    !multipleChoice ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
+                  )}
+                >
+                  Free response
+                </button>
+              </div>
+            </div>
           </div>
         </Card>
         </motion.div>
@@ -279,7 +308,7 @@ export default function LearnPage() {
         <Button
           gradient
           onClick={handleStart}
-          loading={isLoading}
+          loading={isLoading || starting}
           className="w-full py-3 text-base"
         >
           {isLearn ? "Start Learning" : "Start Exam"}
@@ -340,7 +369,7 @@ export default function LearnPage() {
           <Button
             gradient
             onClick={handleStart}
-            loading={isLoading}
+            loading={isLoading || starting}
             disabled={!canStart}
             className="w-full py-3 text-base"
           >

@@ -352,13 +352,42 @@ export default function MockTestPage() {
           </button>
         </div>
 
-        <Input
-          placeholder="Your answer..."
-          value={currentAnswer}
-          onChange={(e) =>
-            saveMockTestAnswer(mockTest.currentIndex, e.target.value)
-          }
-        />
+        {mockTest.multipleChoice && current.distractors && current.distractors.length > 0 ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(() => {
+              // Shuffle choices deterministically per question index
+              const choices = [current.answer, ...current.distractors];
+              const seed = mockTest.currentIndex;
+              const shuffled = [...choices].sort((a, b) => {
+                const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
+                const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
+                return ha - hb;
+              });
+              return shuffled.map((choice) => (
+                <button
+                  key={choice}
+                  onClick={() => saveMockTestAnswer(mockTest.currentIndex, choice)}
+                  className={cn(
+                    "rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-colors",
+                    currentAnswer === choice
+                      ? "border-primary bg-primary-bg text-primary"
+                      : "border-border-light bg-surface text-text-primary hover:border-primary/30",
+                  )}
+                >
+                  {choice}
+                </button>
+              ));
+            })()}
+          </div>
+        ) : (
+          <Input
+            placeholder="Your answer..."
+            value={currentAnswer}
+            onChange={(e) =>
+              saveMockTestAnswer(mockTest.currentIndex, e.target.value)
+            }
+          />
+        )}
 
         {/* Attach work */}
         <AttachWork
