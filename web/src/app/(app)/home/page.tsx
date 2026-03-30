@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
@@ -25,6 +26,11 @@ const subjects = [
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
+
+  // Clean up subject color theme
+  useEffect(() => {
+    document.documentElement.removeAttribute("data-subject");
+  }, []);
 
   return (
     <div className="space-y-10">

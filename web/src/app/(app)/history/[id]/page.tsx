@@ -24,6 +24,11 @@ export default function SessionReviewPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Clean up subject color theme from other pages
+  useEffect(() => {
+    document.documentElement.removeAttribute("data-subject");
+  }, []);
+
   useEffect(() => {
     async function load() {
       try {
