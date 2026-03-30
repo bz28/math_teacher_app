@@ -367,7 +367,8 @@ export default function LearnSessionPage() {
                     gradient
                     onClick={async () => {
                       await tryPracticeProblem();
-                      router.push("/practice");
+                      // tryPracticeProblem creates a learn-style practice session, not a batch
+                      router.push("/learn/session");
                     }}
                     className="w-full"
                   >
