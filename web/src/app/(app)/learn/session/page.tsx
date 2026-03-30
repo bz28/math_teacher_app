@@ -46,6 +46,13 @@ export default function LearnSessionPage() {
     forStep: number;
   } | null>(null);
 
+  // Set subject color theme
+  const subjectParam = searchParams.get("subject") ?? session?.subject ?? "math";
+  useEffect(() => {
+    document.documentElement.setAttribute("data-subject", subjectParam);
+    return () => { document.documentElement.removeAttribute("data-subject"); };
+  }, [subjectParam]);
+
   // Resume session from history
   useEffect(() => {
     if (resumeId) {

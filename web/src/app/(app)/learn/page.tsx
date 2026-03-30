@@ -41,8 +41,11 @@ export default function LearnPage() {
 
   useEffect(() => {
     setSubject(subject);
+    // Set subject color theme
+    document.documentElement.setAttribute("data-subject", subject);
     // Clear stale state when entering the input page
     setProblemQueue([]);
+    return () => { document.documentElement.removeAttribute("data-subject"); };
   }, [subject, setSubject, setProblemQueue]);
 
   function handleAddProblem() {

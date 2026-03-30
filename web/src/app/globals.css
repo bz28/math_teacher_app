@@ -52,6 +52,17 @@
   --gradient-card: linear-gradient(135deg, #F8F7FF, #F0EDFF);
 }
 
+/* ── Subject color overrides ── */
+[data-subject="chemistry"] {
+  --color-primary: #00B894;
+  --color-primary-light: #55EFC4;
+  --color-primary-bg: #E8F8F5;
+  --color-primary-dark: #00A381;
+  --gradient-primary: linear-gradient(135deg, #00B894, #55EFC4);
+  --gradient-header: linear-gradient(135deg, #00B894, #2ED8A3);
+  --color-overlay: rgba(0, 184, 148, 0.08);
+}
+
 /* ── Dark theme ── */
 [data-theme="dark"] {
   --color-primary: #7C6CF7;
@@ -87,6 +98,16 @@
   --color-overlay: rgba(0, 0, 0, 0.3);
 
   --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
+}
+
+[data-theme="dark"][data-subject="chemistry"] {
+  --color-primary: #2ED8A3;
+  --color-primary-light: #55EFC4;
+  --color-primary-bg: #0D2B22;
+  --color-primary-dark: #55EFC4;
+  --gradient-primary: linear-gradient(135deg, #2ED8A3, #55EFC4);
+  --gradient-header: linear-gradient(135deg, #2ED8A3, #55EFC4);
+  --color-overlay: rgba(46, 216, 163, 0.08);
 }
 
 /* ── Tailwind theme extension ── */
