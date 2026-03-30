@@ -150,16 +150,6 @@ export default function PracticePage() {
               <Button
                 gradient
                 onClick={async () => {
-                  await retryFlaggedProblems();
-                  // Stay on /practice — store resets to new batch
-                }}
-                className="w-full"
-              >
-                Practice {flagged} Similar Problem{flagged > 1 ? "s" : ""}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={async () => {
                   const flaggedProblems = results
                     .filter((_, i) => flags[i])
                     .map((r) => r.problem);
@@ -169,6 +159,16 @@ export default function PracticePage() {
                 className="w-full"
               >
                 Learn {flagged} Flagged Problem{flagged > 1 ? "s" : ""}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  await retryFlaggedProblems();
+                  // Stay on /practice — store resets to new batch
+                }}
+                className="w-full"
+              >
+                Practice {flagged} Similar Problem{flagged > 1 ? "s" : ""}
               </Button>
             </>
           )}

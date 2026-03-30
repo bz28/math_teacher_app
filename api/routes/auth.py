@@ -3,12 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.auth import (
-    check_lockout,
     create_access_token,
     create_refresh_token,
     hash_password,
-    record_failed_login,
-    reset_failed_logins,
     rotate_refresh_token,
     verify_password,
 )
@@ -67,14 +64,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
 
-    if check_lockout(user):
-        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Account temporarily locked")
-
     if not verify_password(body.password, user.password_hash):
-        await record_failed_login(db, user)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-
-    await reset_failed_logins(db, user)
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)

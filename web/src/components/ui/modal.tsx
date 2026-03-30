@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, type ReactNode } from "react";
+import { useEffect, useCallback, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,9 @@ interface ModalProps {
   dismissible?: boolean;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Modal({
   open,
   onClose,
@@ -20,20 +23,58 @@ export function Modal({
   className,
   dismissible = true,
 }: ModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape" && dismissible) onClose();
+      if (e.key === "Escape" && dismissible) {
+        onClose();
+        return;
+      }
+
+      // Focus trapping
+      if (e.key === "Tab" && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll(FOCUSABLE_SELECTOR);
+        if (focusable.length === 0) return;
+
+        const first = focusable[0] as HTMLElement;
+        const last = focusable[focusable.length - 1] as HTMLElement;
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     },
     [onClose, dismissible],
   );
 
   useEffect(() => {
     if (!open) return;
+
+    // Save previous focus to restore on close
+    previousFocusRef.current = document.activeElement as HTMLElement;
+
     document.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
+
+    // Focus first focusable element in modal
+    requestAnimationFrame(() => {
+      if (panelRef.current) {
+        const first = panelRef.current.querySelector(FOCUSABLE_SELECTOR) as HTMLElement;
+        first?.focus();
+      }
+    });
+
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
+      // Restore focus
+      previousFocusRef.current?.focus();
     };
   }, [open, handleKeyDown]);
 
@@ -54,6 +95,7 @@ export function Modal({
 
           {/* Panel */}
           <motion.div
+            ref={panelRef}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}

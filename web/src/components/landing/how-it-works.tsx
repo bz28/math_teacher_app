@@ -8,7 +8,7 @@ const steps = [
     number: "01",
     title: "Enter your problem",
     description:
-      "Type it in, use the equation editor, or snap a photo of your worksheet. We'll extract every problem automatically.",
+      "Type it in or snap a photo of your worksheet. We'll extract every problem automatically.",
     color: "from-primary to-primary-light",
   },
   {

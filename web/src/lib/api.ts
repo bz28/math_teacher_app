@@ -197,13 +197,19 @@ async function apiFetch<T>(
     });
 
     if (res.status === 401) {
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        clearTimeout(timer);
-        return apiFetch(path, options);
+      // Don't attempt token refresh for auth endpoints — their 401s
+      // mean invalid credentials, not expired sessions
+      const isAuthEndpoint = path.startsWith("/auth/");
+      if (!isAuthEndpoint) {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          clearTimeout(timer);
+          return apiFetch(path, options);
+        }
+        clearTokens();
       }
-      clearTokens();
-      throw new ApiError(401, { detail: "Session expired" });
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(401, body);
     }
 
     if (!res.ok) {

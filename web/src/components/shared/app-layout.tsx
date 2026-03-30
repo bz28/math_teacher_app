@@ -17,6 +17,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-1 flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[--radius-sm] focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
+      >
+        Skip to main content
+      </a>
+
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border-light bg-surface/90 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
@@ -31,7 +38,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </span>
             </Link>
 
-            {/* Nav links */}
+            {/* Desktop nav links */}
             <nav className="hidden items-center gap-1 md:flex">
               {navItems.map((item) => {
                 const active = pathname.startsWith(item.href);
@@ -70,10 +77,47 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Page content */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+      {/* Page content — add bottom padding on mobile for tab bar */}
+      <main id="main-content" className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 pb-24 md:pb-8">
         {children}
       </main>
+
+      {/* Mobile bottom tab bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-surface/95 backdrop-blur-md md:hidden">
+        <div className="flex h-16 items-stretch">
+          {navItems.map((item) => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
+                  active
+                    ? "text-primary"
+                    : "text-text-muted",
+                )}
+              >
+                <item.icon active={active} />
+                <span className="text-[10px] font-semibold">{item.label}</span>
+              </Link>
+            );
+          })}
+          {/* Learn shortcut */}
+          <Link
+            href="/learn"
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
+              pathname.startsWith("/learn")
+                ? "text-primary"
+                : "text-text-muted",
+            )}
+          >
+            <LearnIcon active={pathname.startsWith("/learn")} />
+            <span className="text-[10px] font-semibold">Learn</span>
+          </Link>
+        </div>
+      </nav>
     </div>
   );
 }
@@ -81,7 +125,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 function HomeIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={cn("h-4 w-4", active ? "text-primary" : "text-text-muted")}
+      className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -98,7 +142,7 @@ function HomeIcon({ active }: { active: boolean }) {
 function HistoryIcon({ active }: { active: boolean }) {
   return (
     <svg
-      className={cn("h-4 w-4", active ? "text-primary" : "text-text-muted")}
+      className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -109,6 +153,23 @@ function HistoryIcon({ active }: { active: boolean }) {
       <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
       <path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
+function LearnIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
     </svg>
   );
 }
