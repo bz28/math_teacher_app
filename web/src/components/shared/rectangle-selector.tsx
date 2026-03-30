@@ -35,40 +35,37 @@ export function RectangleSelector({
   const [drawing, setDrawing] = useState<{ startX: number; startY: number } | null>(null);
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null);
   const [imgNatural, setImgNatural] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [displaySize, setDisplaySize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const nextId = useRef(1);
+
+  const scaleX = displaySize.w && imgNatural.w ? imgNatural.w / displaySize.w : 1;
+  const scaleY = displaySize.h && imgNatural.h ? imgNatural.h / displaySize.h : 1;
+  const invScaleX = displaySize.w && imgNatural.w ? displaySize.w / imgNatural.w : 1;
+  const invScaleY = displaySize.h && imgNatural.h ? displaySize.h / imgNatural.h : 1;
 
   // Convert display coordinates to image-space coordinates
   const toImageSpace = useCallback(
     (displayX: number, displayY: number) => {
       const img = imgRef.current;
-      if (!img || !imgNatural.w) return { x: 0, y: 0 };
+      if (!img) return { x: 0, y: 0 };
       const rect = img.getBoundingClientRect();
-      const scaleX = imgNatural.w / rect.width;
-      const scaleY = imgNatural.h / rect.height;
       return {
         x: Math.round((displayX - rect.left) * scaleX),
         y: Math.round((displayY - rect.top) * scaleY),
       };
     },
-    [imgNatural],
+    [scaleX, scaleY],
   );
 
-  // Convert image-space to display coordinates
+  // Convert image-space to display coordinates (pure computation, no ref access)
   const toDisplaySpace = useCallback(
-    (imgX: number, imgY: number, imgW: number, imgH: number) => {
-      const img = imgRef.current;
-      if (!img || !imgNatural.w) return { left: 0, top: 0, width: 0, height: 0 };
-      const rect = img.getBoundingClientRect();
-      const scaleX = rect.width / imgNatural.w;
-      const scaleY = rect.height / imgNatural.h;
-      return {
-        left: imgX * scaleX,
-        top: imgY * scaleY,
-        width: imgW * scaleX,
-        height: imgH * scaleY,
-      };
-    },
-    [imgNatural],
+    (imgX: number, imgY: number, imgW: number, imgH: number) => ({
+      left: imgX * invScaleX,
+      top: imgY * invScaleY,
+      width: imgW * invScaleX,
+      height: imgH * invScaleY,
+    }),
+    [invScaleX, invScaleY],
   );
 
   const handlePointerDown = useCallback(
@@ -171,6 +168,7 @@ export function RectangleSelector({
           onLoad={(e) => {
             const el = e.currentTarget;
             setImgNatural({ w: el.naturalWidth, h: el.naturalHeight });
+            setDisplaySize({ w: el.clientWidth, h: el.clientHeight });
           }}
           draggable={false}
         />

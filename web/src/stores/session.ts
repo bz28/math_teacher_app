@@ -602,23 +602,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ── Mock test ──
 
   async startMockTest(problems, generateCount, timeLimitMinutes) {
-    const { subject } = get();
+    const { subject, problemImages } = get();
     set({ phase: "loading", error: null });
     try {
       let questions: PracticeProblem[];
       if (generateCount > 0) {
+        const image = problemImages[problems[0]];
         const { problems: generated } = await practiceApi.generate({
           problem: problems[0],
           count: generateCount,
           subject,
+          ...(image && { image_base64: image }),
         });
         questions = generated;
       } else {
         // Solve each problem individually to get answers (matches mobile)
         const results = await Promise.allSettled(
-          problems.map((p) =>
-            practiceApi.generate({ problem: p, count: 0, subject }),
-          ),
+          problems.map((p) => {
+            const image = problemImages[p];
+            return practiceApi.generate({
+              problem: p, count: 0, subject,
+              ...(image && { image_base64: image }),
+            });
+          }),
         );
         questions = results.map((r, i) =>
           r.status === "fulfilled" && r.value.problems.length > 0

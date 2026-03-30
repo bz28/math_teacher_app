@@ -17,6 +17,7 @@ export default function LearnPage() {
   const {
     setSubject,
     problemQueue,
+    problemImages,
     setProblemQueue,
     addToQueue,
     removeFromQueue,
@@ -295,7 +296,17 @@ export default function LearnPage() {
               <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
                 {i + 1}
               </span>
-              <p className="flex-1 text-sm text-text-primary">{problem}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-text-primary">{problem}</p>
+                {problemImages[problem] && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={`data:image/jpeg;base64,${problemImages[problem]}`}
+                    alt=""
+                    className="mt-1.5 h-16 rounded border border-border object-contain"
+                  />
+                )}
+              </div>
               <button
                 onClick={() => removeFromQueue(i)}
                 className="flex-shrink-0 text-text-muted hover:text-error transition-colors"

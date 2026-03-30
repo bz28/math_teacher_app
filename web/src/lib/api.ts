@@ -358,7 +358,7 @@ export const session = {
 // ── Practice endpoints ──
 
 export const practice = {
-  generate(data: { problem: string; count: number; subject: string }) {
+  generate(data: { problem: string; count: number; subject: string; image_base64?: string }) {
     return apiFetch<PracticeGenerateResponse>("/practice/generate", {
       method: "POST",
       body: JSON.stringify(data),

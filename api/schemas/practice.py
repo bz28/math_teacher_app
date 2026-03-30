@@ -7,6 +7,7 @@ class PracticeGenerateRequest(BaseModel):
     problem: str = Field(..., min_length=1, max_length=5000)
     count: int = Field(3, ge=0, le=20)
     subject: str = Field("math")
+    image_base64: str | None = Field(None, max_length=7_000_000)
 
     @field_validator("subject")
     @classmethod
