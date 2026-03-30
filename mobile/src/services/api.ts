@@ -246,6 +246,15 @@ export const completeMockTestSession = (id: string, totalQuestions: number, corr
     correct_count: correctCount,
   });
 
+export const createPracticeBatchSession = (problem: string) =>
+  apiPost<{ id: string }>("/session/practice-batch", { problem });
+
+export const completePracticeBatchSession = (id: string, totalQuestions: number, correctCount: number) =>
+  apiPost<{ status: string }>(`/session/practice-batch/${id}/complete`, {
+    total_questions: totalQuestions,
+    correct_count: correctCount,
+  });
+
 // Auth API
 export const login = (email: string, password: string) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });

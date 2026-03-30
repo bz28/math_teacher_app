@@ -1,8 +1,8 @@
 import {
+  createPracticeBatchSession,
   createSession,
   generatePracticeProblems,
   getSession,
-
   respondToStep,
 } from "../services/api";
 import { initialState, type SessionPhase, type StoreGet, type StoreSet } from "./types";
@@ -124,9 +124,10 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
 
       set({ ...initialState, subject, phase: "loading" });
       try {
-        const results = await Promise.all(
-          flaggedProblems.map((p) => generatePracticeProblems(p, 1, subject)),
-        );
+        const [results, sessionId] = await Promise.all([
+          Promise.all(flaggedProblems.map((p) => generatePracticeProblems(p, 1, subject))),
+          createPracticeBatchSession(flaggedProblems[0]).then((r) => r.id).catch(() => null),
+        ]);
         const practiceProblemsList = results.map((r) => r.problems[0]);
 
         set({
@@ -142,6 +143,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
             workSubmissions: new Array(practiceProblemsList.length).fill(null),
             firstAttemptCorrect: new Array(practiceProblemsList.length).fill(null),
             currentFeedback: null,
+            sessionId,
           },
           phase: "awaiting_input",
         });

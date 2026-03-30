@@ -113,7 +113,7 @@ async def history(
         .where(
             SessionModel.user_id == current_user.user_id,
             SessionModel.subject == subject,
-            SessionModel.mode == SessionMode.LEARN,
+            SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
         )
         .order_by(SessionModel.created_at.desc())
         .offset(offset)
@@ -282,6 +282,56 @@ async def complete_mock_test(
 
     if session.mode != SessionMode.MOCK_TEST:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a mock test session")
+    if session.status == SessionStatus.COMPLETED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already completed")
+
+    session.status = SessionStatus.COMPLETED
+    session.total_steps = body.total_questions
+    session.current_step = body.correct_count
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/practice-batch", status_code=status.HTTP_201_CREATED)
+async def create_practice_batch(
+    body: CreateMockTestRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Record a practice batch session for history (no LLM calls)."""
+    session = SessionModel(
+        user_id=current_user.user_id,
+        problem=body.problem,
+        problem_type="practice_batch",
+        mode=SessionMode.PRACTICE,
+        status=SessionStatus.ACTIVE,
+        total_steps=0,
+        current_step=0,
+        steps=[],
+        exchanges=[],
+    )
+    db.add(session)
+    await db.commit()
+    return {"id": str(session.id)}
+
+
+@router.post("/practice-batch/{session_id}/complete")
+async def complete_practice_batch(
+    session_id: uuid.UUID,
+    body: CompleteMockTestRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Mark a practice batch as completed with score."""
+    try:
+        session = await get_owned_session(db, session_id, current_user.user_id)
+    except SessionError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session")
+
+    if session.mode != SessionMode.PRACTICE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a practice session")
     if session.status == SessionStatus.COMPLETED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already completed")
 

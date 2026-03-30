@@ -48,6 +48,7 @@ export interface PracticeBatch {
   workSubmissions: (DiagnosisResult | null)[];
   firstAttemptCorrect: (boolean | null)[];
   currentFeedback: 'correct' | 'wrong' | null;
+  sessionId: string | null;
 }
 
 export interface PracticeResult {
@@ -353,6 +354,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const { problems } = await practiceApi.generate({ problem, count: 1, subject });
         allProblems.push(...problems);
       }
+      const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0]);
       set({
         practiceBatch: {
           problems: allProblems,
@@ -362,6 +364,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           workSubmissions: new Array(allProblems.length).fill(null),
           firstAttemptCorrect: new Array(allProblems.length).fill(null),
           currentFeedback: null,
+          sessionId,
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -393,6 +396,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const { problems } = await practiceApi.generate({ problem: problem.question, count: 1, subject });
         allProblems.push(...problems);
       }
+      const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0].question);
       set({
         practiceBatch: {
           problems: allProblems,
@@ -402,6 +406,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           workSubmissions: new Array(allProblems.length).fill(null),
           firstAttemptCorrect: new Array(allProblems.length).fill(null),
           currentFeedback: null,
+          sessionId,
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -414,11 +419,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { subject } = get();
     set({ phase: "loading", error: null });
     try {
-      const { problems } = await practiceApi.generate({
-        problem,
-        count,
-        subject,
-      });
+      const [{ problems }, { id: sessionId }] = await Promise.all([
+        practiceApi.generate({ problem, count, subject }),
+        sessionApi.createPracticeBatch(problem),
+      ]);
       set({
         practiceBatch: {
           problems,
@@ -428,6 +432,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           workSubmissions: new Array(problems.length).fill(null),
           firstAttemptCorrect: new Array(problems.length).fill(null),
           currentFeedback: null,
+          sessionId,
         },
         phase: "awaiting_input",
       });

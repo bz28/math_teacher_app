@@ -43,6 +43,8 @@ export interface PracticeBatch {
   firstAttemptCorrect: (boolean | null)[];
   /** Inline feedback for the current problem after an answer check */
   currentFeedback: 'correct' | 'wrong' | null;
+  /** Backend session ID for history tracking */
+  sessionId: string | null;
 }
 
 export interface LearnQueue {

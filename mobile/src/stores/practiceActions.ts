@@ -1,5 +1,7 @@
 import {
   checkPracticeAnswer,
+  completePracticeBatchSession,
+  createPracticeBatchSession,
   generatePracticeProblems,
   submitWork,
   type PracticeProblem,
@@ -18,7 +20,10 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
       const { subject } = get();
       set({ ...initialState, subject, phase: "loading" });
       try {
-        const { problems } = await generatePracticeProblems(problem, count, subject);
+        const [{ problems }, { id: sessionId }] = await Promise.all([
+          generatePracticeProblems(problem, count, subject),
+          createPracticeBatchSession(problem),
+        ]);
         set({
           practiceBatch: {
             problems,
@@ -32,6 +37,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
             workSubmissions: new Array(problems.length).fill(null),
             firstAttemptCorrect: new Array(problems.length).fill(null),
             currentFeedback: null,
+            sessionId,
           },
           phase: "awaiting_input",
         });
@@ -45,6 +51,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
       const { subject } = get();
 
       const placeholders: PracticeProblem[] = problems.map((p) => ({ question: p, answer: "" }));
+      const sessionId = await createPracticeBatchSession(problems[0]).then((r) => r.id).catch(() => null);
       set({
         ...initialState,
         subject,
@@ -60,6 +67,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
           workSubmissions: new Array(problems.length).fill(null),
           firstAttemptCorrect: new Array(problems.length).fill(null),
           currentFeedback: null,
+          sessionId,
         },
         phase: "awaiting_input",
       });
@@ -226,9 +234,10 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
 
       set({ ...initialState, subject, phase: "loading" });
       try {
-        const results = await Promise.all(
-          flaggedQuestions.map((q) => generatePracticeProblems(q, 1, subject)),
-        );
+        const [results, sessionId] = await Promise.all([
+          Promise.all(flaggedQuestions.map((q) => generatePracticeProblems(q, 1, subject))),
+          createPracticeBatchSession(flaggedQuestions[0]).then((r) => r.id).catch(() => null),
+        ]);
         const similarProblems = results.map((r) => r.problems[0]);
 
         set({
@@ -244,6 +253,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
             workSubmissions: new Array(similarProblems.length).fill(null),
             firstAttemptCorrect: new Array(similarProblems.length).fill(null),
             currentFeedback: null,
+            sessionId,
           },
           phase: "awaiting_input",
           error: null,
