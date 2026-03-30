@@ -12,6 +12,8 @@ interface ImageUploadProps {
   onProblemsExtracted: (problems: { text: string; image?: string }[]) => void;
   maxProblems?: number;
   currentQueueLength?: number;
+  /** Called when the phase changes — parent can use this to adjust layout */
+  onPhaseChange?: (phase: "upload" | "select" | "extracting") => void;
 }
 
 export function ImageUpload({
@@ -19,8 +21,13 @@ export function ImageUpload({
   onProblemsExtracted,
   maxProblems = 10,
   currentQueueLength = 0,
+  onPhaseChange,
 }: ImageUploadProps) {
-  const [phase, setPhase] = useState<"upload" | "select" | "extracting">("upload");
+  const [phase, _setPhase] = useState<"upload" | "select" | "extracting">("upload");
+  const setPhase = useCallback((p: "upload" | "select" | "extracting") => {
+    _setPhase(p);
+    onPhaseChange?.(p);
+  }, [onPhaseChange]);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [extractProgress, setExtractProgress] = useState({ done: 0, total: 0 });
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
@@ -53,7 +60,7 @@ export function ImageUpload({
       };
       reader.readAsDataURL(file);
     },
-    [],
+    [setPhase],
   );
 
   const handleExtractRectangles = useCallback(
@@ -104,7 +111,7 @@ export function ImageUpload({
       setPhase("upload");
       setImageBase64(null);
     },
-    [imageBase64, subject],
+    [imageBase64, subject, setPhase],
   );
 
   function handleDrop(e: React.DragEvent) {

@@ -2,12 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/session";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { cn } from "@/lib/utils";
+
+const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string; bg: string }> = {
+  math: { name: "Mathematics", icon: "📐", color: "text-primary", bg: "bg-primary-bg" },
+  chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00B894]", bg: "bg-[#00B894]/10" },
+};
 
 export default function LearnPage() {
   const searchParams = useSearchParams();
@@ -36,8 +41,11 @@ export default function LearnPage() {
 
   useEffect(() => {
     setSubject(subject);
+    // Set subject color theme
+    document.documentElement.setAttribute("data-subject", subject);
     // Clear stale state when entering the input page
     setProblemQueue([]);
+    return () => { document.documentElement.removeAttribute("data-subject"); };
   }, [subject, setSubject, setProblemQueue]);
 
   function handleAddProblem() {
@@ -81,141 +89,138 @@ export default function LearnPage() {
   const canStart = problemQueue.length > 0 || input.trim().length > 0;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <button
-          onClick={() => router.push("/home")}
-          className="mb-4 flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            onClick={() => router.push("/home")}
+            className="flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          {SUBJECT_CONFIG[subject] && (
+            <span className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+              SUBJECT_CONFIG[subject].bg,
+              SUBJECT_CONFIG[subject].color,
+            )}>
+              {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
+            </span>
+          )}
+        </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           {isLearn ? "What do you need help with?" : "Build your exam"}
         </h1>
       </motion.div>
 
-      {/* Mode selector — Learn and Mock Test only */}
-      <div className="flex gap-2">
+      {/* Mode selector — pill toggle */}
+      <div className="relative flex rounded-full border border-border bg-surface p-1">
+        {/* Sliding background indicator */}
+        <motion.div
+          className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-primary"
+          initial={false}
+          animate={{ left: mode === "learn" ? "4px" : "calc(50% + 0px)" }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        />
         {([
-          { id: "learn" as const, label: "Learn", desc: "Step-by-step guided learning" },
-          { id: "mock-test" as const, label: "Mock Test", desc: "Practice or generate an exam" },
+          { id: "learn" as const, label: "Learn" },
+          { id: "mock-test" as const, label: "Mock Test" },
         ]).map((m) => (
           <button
             key={m.id}
             onClick={() => setMode(m.id)}
-            className={`flex-1 rounded-[--radius-md] border p-3 text-left transition-colors ${
-              mode === m.id
-                ? "border-primary bg-primary-bg"
-                : "border-border bg-surface hover:border-primary/30"
-            }`}
+            className={cn(
+              "relative z-10 flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
+              mode === m.id ? "text-white" : "text-text-secondary hover:text-text-primary",
+            )}
           >
-            <p className={`text-sm font-bold ${mode === m.id ? "text-primary" : "text-text-primary"}`}>
-              {m.label}
-            </p>
-            <p className="mt-0.5 text-xs text-text-muted">{m.desc}</p>
+            {m.label}
           </button>
         ))}
       </div>
 
       {/* Mock test config */}
+      <AnimatePresence initial={false}>
       {!isLearn && (
-        <Card variant="flat" className="space-y-4">
-          {/* Questions type */}
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
-              Questions
-            </p>
-            {([
-              { id: "use_as_exam" as const, label: "Use these as my exam", hint: null },
-              { id: "generate_similar" as const, label: "Generate a similar exam", hint: "Fresh questions based on yours" },
-            ]).map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => setExamType(opt.id)}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
-                  examType === opt.id
-                    ? "border-primary bg-primary-bg"
-                    : "border-border-light bg-surface hover:border-primary/30",
-                )}
-              >
-                <span
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden"
+        >
+        <Card variant="flat">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Questions type — inline pill toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted">Questions:</span>
+              <div className="flex rounded-full border border-border bg-surface p-0.5">
+                {([
+                  { id: "use_as_exam" as const, label: "Use mine" },
+                  { id: "generate_similar" as const, label: "Generate similar" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setExamType(opt.id)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                      examType === opt.id
+                        ? "bg-primary text-white"
+                        : "text-text-secondary hover:text-text-primary",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time limit — inline toggle + stepper */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted">Time:</span>
+              <div className="flex items-center rounded-full border border-border bg-surface p-0.5">
+                <button
+                  onClick={() => setUntimed(true)}
                   className={cn(
-                    "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2",
-                    examType === opt.id ? "border-primary" : "border-text-muted",
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                    untimed ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
                   )}
                 >
-                  {examType === opt.id && (
-                    <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                  Untimed
+                </button>
+                <button
+                  onClick={() => setUntimed(false)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                    !untimed ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
                   )}
-                </span>
-                <div>
-                  <p className={cn("text-sm font-semibold", examType === opt.id ? "text-primary" : "text-text-primary")}>
-                    {opt.label}
-                  </p>
-                  {opt.hint && (
-                    <p className="text-xs text-text-muted">{opt.hint}</p>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Time limit */}
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
-              Time Limit
-            </p>
-            <button
-              onClick={() => setUntimed(true)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
-                untimed
-                  ? "border-primary bg-primary-bg"
-                  : "border-border-light bg-surface hover:border-primary/30",
-              )}
-            >
-              <span className={cn("flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2", untimed ? "border-primary" : "border-text-muted")}>
-                {untimed && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-              </span>
-              <p className={cn("text-sm font-semibold", untimed ? "text-primary" : "text-text-primary")}>No time limit</p>
-            </button>
-            <div
-              onClick={() => setUntimed(false)}
-              className={cn(
-                "flex w-full cursor-pointer items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
-                !untimed
-                  ? "border-primary bg-primary-bg"
-                  : "border-border-light bg-surface hover:border-primary/30",
-              )}
-            >
-              <span className={cn("flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2", !untimed ? "border-primary" : "border-text-muted")}>
-                {!untimed && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-              </span>
-              <p className={cn("text-sm font-semibold", !untimed ? "text-primary" : "text-text-primary")}>Timed</p>
+                >
+                  Timed
+                </button>
+              </div>
               {!untimed && (
-                <div className="ml-auto flex items-center gap-0 rounded-[--radius-sm] border border-border-light bg-surface">
+                <div className="flex items-center rounded-full border border-border-light bg-surface">
                   <button
-                    onClick={(e) => { e.stopPropagation(); setTimeLimitMinutes(Math.max(1, timeLimitMinutes - 5)); }}
+                    onClick={() => setTimeLimitMinutes(Math.max(1, timeLimitMinutes - 5))}
                     disabled={timeLimitMinutes <= 1}
-                    className="flex h-8 w-8 items-center justify-center text-primary disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-primary disabled:opacity-30"
                   >
                     -
                   </button>
-                  <span className="min-w-[50px] text-center text-xs font-semibold text-primary">
-                    {timeLimitMinutes} min
+                  <span className="min-w-[40px] text-center text-xs font-semibold text-primary">
+                    {timeLimitMinutes}m
                   </span>
                   <button
-                    onClick={(e) => { e.stopPropagation(); setTimeLimitMinutes(Math.min(180, timeLimitMinutes + 5)); }}
+                    onClick={() => setTimeLimitMinutes(Math.min(180, timeLimitMinutes + 5))}
                     disabled={timeLimitMinutes >= 180}
-                    className="flex h-8 w-8 items-center justify-center text-primary disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-primary disabled:opacity-30"
                   >
                     +
                   </button>
@@ -224,101 +229,126 @@ export default function LearnPage() {
             </div>
           </div>
         </Card>
+        </motion.div>
       )}
+      </AnimatePresence>
 
-      {/* Image upload */}
-      <ImageUpload
-        subject={subject}
-        onProblemsExtracted={(problems) => {
-          problems.forEach((p) => addToQueue(p.text, p.image));
-        }}
-        maxProblems={10}
-        currentQueueLength={problemQueue.length}
-      />
+      {/* Add problems — image upload + text input */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* Image upload */}
+        <Card variant="flat" className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Upload a photo
+          </p>
+          <ImageUpload
+            subject={subject}
+            onProblemsExtracted={(problems) => {
+              problems.forEach((p) => addToQueue(p.text, p.image));
+            }}
+            maxProblems={10}
+            currentQueueLength={problemQueue.length}
+          />
+        </Card>
 
-      {/* Problem input */}
-      <Card variant="flat" className="space-y-4">
-        <Textarea
-          placeholder={
-            isLearn
-              ? "Type your problem here... (Shift+Enter for new line)"
-              : "Enter a problem (we'll generate similar questions for the exam)"
-          }
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="min-h-[80px]"
-        />
+        {/* Text input */}
+        <Card variant="flat" className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Or type a problem
+          </p>
+          <Textarea
+            placeholder="Enter your problem here... (Shift+Enter for new line)"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="min-h-[80px]"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleAddProblem}
+            disabled={!input.trim() || problemQueue.length >= 10}
+            className="w-full"
+          >
+            Add to Queue
+          </Button>
+        </Card>
+      </div>
 
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-text-muted">
-            {problemQueue.length}/10 problems
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleAddProblem}
-              disabled={!input.trim() || problemQueue.length >= 10}
-            >
-              Add to Queue
-            </Button>
-            <Button
-              size="sm"
-              gradient
-              onClick={handleStart}
-              loading={isLoading}
-              disabled={!canStart}
-            >
-              {isLearn
-                ? `Start Learn${problemQueue.length > 0 ? ` (${problemQueue.length})` : ""}`
-                : `Start Exam${problemQueue.length > 0 ? ` (${problemQueue.length})` : ""}`}
-            </Button>
-          </div>
-        </div>
-      </Card>
+      {/* Start button when queue is empty but input has text */}
+      {problemQueue.length === 0 && input.trim() && (
+        <Button
+          gradient
+          onClick={handleStart}
+          loading={isLoading}
+          className="w-full py-3 text-base"
+        >
+          {isLearn ? "Start Learning" : "Start Exam"}
+        </Button>
+      )}
 
       {/* Problem queue */}
       {problemQueue.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="space-y-2"
-        >
-          <h3 className="text-sm font-semibold text-text-secondary">
-            Problem Queue
-          </h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-secondary">
+              Problem Queue
+            </h3>
+            <span className="text-xs font-medium text-text-muted">
+              {problemQueue.length}/10
+            </span>
+          </div>
           {problemQueue.map((item, i) => (
-            <div
+            <motion.div
               key={i}
-              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 * i }}
+              className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
             >
-              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
-                {i + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-text-primary">{item.text}</p>
-                {item.image && (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={`data:image/jpeg;base64,${item.image}`}
-                    alt=""
-                    className="mt-1.5 h-16 rounded border border-border object-contain"
-                  />
-                )}
+              <div className="flex items-start gap-3 p-4">
+                <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
+                    {item.text}
+                  </p>
+                  {item.image && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={`data:image/jpeg;base64,${item.image}`}
+                      alt=""
+                      className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={() => removeFromQueue(i)}
+                  className="flex-shrink-0 rounded-full p-1.5 text-text-muted opacity-0 transition-all hover:bg-error-light hover:text-error group-hover:opacity-100"
+                  aria-label="Remove problem"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={() => removeFromQueue(i)}
-                className="flex-shrink-0 text-text-muted hover:text-error transition-colors"
-                aria-label="Remove problem"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+            </motion.div>
           ))}
-        </motion.div>
+
+          {/* Start button — full width */}
+          <Button
+            gradient
+            onClick={handleStart}
+            loading={isLoading}
+            disabled={!canStart}
+            className="w-full py-3 text-base"
+          >
+            {isLearn
+              ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
+              : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
+          </Button>
+        </div>
       )}
     </div>
   );
