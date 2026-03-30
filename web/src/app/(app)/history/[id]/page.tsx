@@ -6,8 +6,9 @@ import { motion } from "framer-motion";
 import { session as sessionApi, type SessionResponse } from "@/lib/api";
 import { useSessionStore } from "@/stores/session";
 import { Card, Badge, Button } from "@/components/ui";
+import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, renderBold } from "@/lib/utils";
 
 export default function SessionReviewPage({
   params,
@@ -153,7 +154,7 @@ export default function SessionReviewPage({
                           <p className="text-xs font-bold text-primary">{step.title}</p>
                         )}
                         <p className="text-sm font-medium text-text-primary">
-                          {step.description}
+                          {renderBold(step.description)}
                         </p>
                         {step.final_answer && (
                           <p className="mt-1 text-sm text-text-secondary">
@@ -174,12 +175,16 @@ export default function SessionReviewPage({
         })}
       </div>
 
+      {/* Chat — ask questions about this session */}
+      {(isCompleted || session.status === "abandoned") && (
+        <SessionChat sessionId={id} />
+      )}
+
       <div className="flex gap-3">
         {session.status === "active" && (
           <Button
             gradient
             onClick={() => {
-              // Resume by navigating to session page — the session ID is already known
               router.push(`/learn/session?subject=${subject}&resume=${id}`);
             }}
           >
@@ -189,6 +194,84 @@ export default function SessionReviewPage({
         <PracticeSimilarButton problem={session.problem} subject={subject} />
       </div>
     </div>
+  );
+}
+
+function SessionChat({ sessionId }: { sessionId: string }) {
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+
+  async function handleSend() {
+    const q = input.trim();
+    if (!q || thinking) return;
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", text: q }]);
+    setThinking(true);
+    try {
+      const response = await sessionApi.respond(sessionId, {
+        student_response: q,
+        request_advance: false,
+      });
+      setMessages((prev) => [...prev, { role: "assistant", text: response.feedback }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "Something went wrong. Try again." }]);
+    } finally {
+      setThinking(false);
+    }
+  }
+
+  return (
+    <Card variant="flat" className="space-y-3">
+      <p className="text-sm font-semibold text-text-primary">Have questions?</p>
+
+      {messages.length > 0 && (
+        <div className="space-y-2">
+          {messages.map((msg, i) => (
+            <div
+              key={i}
+              className={cn(
+                "rounded-[--radius-md] px-3 py-2 text-sm",
+                msg.role === "user"
+                  ? "bg-primary-bg text-primary ml-8"
+                  : "bg-surface-raised text-text-primary mr-8",
+              )}
+            >
+              {renderBold(msg.text)}
+            </div>
+          ))}
+          {thinking && (
+            <div className="bg-surface-raised text-text-muted rounded-[--radius-md] px-3 py-2 text-sm mr-8 animate-pulse">
+              Thinking...
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Input
+          placeholder="Ask about this problem..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          disabled={thinking}
+          className="flex-1"
+        />
+        <Button
+          onClick={handleSend}
+          loading={thinking}
+          disabled={!input.trim()}
+          size="sm"
+        >
+          Ask
+        </Button>
+      </div>
+    </Card>
   );
 }
 

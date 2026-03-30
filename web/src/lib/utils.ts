@@ -1,8 +1,19 @@
+import React from "react";
 import { type ClassValue, clsx } from "clsx";
 
 /** Merge Tailwind classes with conflict resolution via clsx. */
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
+}
+
+/** Render text with **bold** markdown into React elements. */
+export function renderBold(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? React.createElement("strong", { key: i }, part.slice(2, -2))
+      : part,
+  );
 }
 
 /** Format a date relative to now (e.g., "2 hours ago", "Mar 24"). */

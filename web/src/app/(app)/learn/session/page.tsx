@@ -7,7 +7,7 @@ import { useSessionStore } from "@/stores/session";
 import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
-import { cn } from "@/lib/utils";
+import { cn, renderBold } from "@/lib/utils";
 
 export default function LearnSessionPage() {
   const router = useRouter();
@@ -47,10 +47,10 @@ export default function LearnSessionPage() {
 
   // Resume session from history
   useEffect(() => {
-    if (resumeId && phase === "idle") {
+    if (resumeId) {
       resumeSession(resumeId);
     }
-  }, [resumeId, phase, resumeSession]);
+  }, [resumeId, resumeSession]);
 
   // Redirect if no session and not resuming
   useEffect(() => {
@@ -274,7 +274,7 @@ export default function LearnSessionPage() {
                         !expanded && "line-clamp-1",
                       )}
                     >
-                      {step.description}
+                      {renderBold(step.description)}
                     </p>
                     {expanded && step.final_answer && (
                       <p className="mt-1 text-sm font-medium text-text-primary">
@@ -494,7 +494,7 @@ export default function LearnSessionPage() {
                     Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
                   </p>
                   <p className="mt-1 text-base leading-relaxed text-text-primary">
-                    {currentStepData?.description ?? "Loading..."}
+                    {currentStepData ? renderBold(currentStepData.description) : "Loading..."}
                   </p>
                 </motion.div>
               </div>
