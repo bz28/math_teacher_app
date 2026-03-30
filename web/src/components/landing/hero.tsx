@@ -68,9 +68,8 @@ export function Hero() {
           style={{ y: subtitleY }}
           className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-text-secondary md:text-xl"
         >
-          Your AI tutor that breaks any math or chemistry problem into steps you
-          actually understand &mdash; then generates unlimited practice until you
-          master it.
+          Your AI tutor that breaks any problem into steps you actually
+          understand &mdash; math, chemistry, and more coming soon.
         </motion.p>
 
         {/* CTAs */}

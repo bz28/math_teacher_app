@@ -17,7 +17,7 @@ export function CTA() {
         className="mx-auto max-w-3xl rounded-[--radius-xl] bg-gradient-to-br from-primary to-primary-light p-10 text-center shadow-lg md:p-16"
       >
         <h2 className="text-3xl font-extrabold text-white md:text-4xl">
-          Ready to actually understand math?
+          Ready to actually understand your coursework?
         </h2>
         <p className="mt-4 text-lg text-white/80">
           Join students who are mastering problems step by step.

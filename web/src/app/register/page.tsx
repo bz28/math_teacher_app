@@ -75,7 +75,7 @@ export default function RegisterPage() {
           Create your account
         </h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Start mastering math and chemistry
+          Start mastering any subject
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

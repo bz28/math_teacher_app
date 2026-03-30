@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     template: "%s | Veradic AI",
   },
   description:
-    "Snap a photo or type any math or chemistry problem. Veradic AI breaks it into guided steps you actually understand, then generates unlimited practice until you master it.",
+    "Snap a photo or type any problem. Veradic AI breaks it into guided steps you actually understand, then generates unlimited practice until you master it.",
   metadataBase: new URL("https://veradicai.com"),
   openGraph: {
     title: "Veradic AI — Snap. Learn. Master.",
