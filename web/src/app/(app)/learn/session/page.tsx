@@ -30,6 +30,7 @@ export default function LearnSessionPage() {
     toggleLearnFlag,
     practiceFlaggedFromLearnQueue,
     resumeSession,
+    problemQueue,
     problemImages,
     reset,
   } = useSessionStore();
@@ -213,10 +214,10 @@ export default function LearnSessionPage() {
             <p className="mt-1 text-lg font-semibold text-text-primary">
               {session.problem}
             </p>
-            {problemImages[session.problem] && (
+            {problemImages[problemQueue.indexOf(session.problem)] && (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src={`data:image/jpeg;base64,${problemImages[session.problem]}`}
+                src={`data:image/jpeg;base64,${problemImages[problemQueue.indexOf(session.problem)]}`}
                 alt="Problem"
                 className="mt-2 max-h-40 rounded-[--radius-md] border border-border object-contain"
               />

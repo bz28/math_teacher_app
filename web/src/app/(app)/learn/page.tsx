@@ -298,10 +298,10 @@ export default function LearnPage() {
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-text-primary">{problem}</p>
-                {problemImages[problem] && (
+                {problemImages[i] && (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
-                    src={`data:image/jpeg;base64,${problemImages[problem]}`}
+                    src={`data:image/jpeg;base64,${problemImages[i]}`}
                     alt=""
                     className="mt-1.5 h-16 rounded border border-border object-contain"
                   />
