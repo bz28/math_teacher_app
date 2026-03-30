@@ -9,6 +9,11 @@ import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { cn } from "@/lib/utils";
 
+const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string; bg: string }> = {
+  math: { name: "Mathematics", icon: "📐", color: "text-primary", bg: "bg-primary-bg" },
+  chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00B894]", bg: "bg-[#00B894]/10" },
+};
+
 export default function LearnPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -87,15 +92,26 @@ export default function LearnPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <button
-          onClick={() => router.push("/home")}
-          className="mb-4 flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            onClick={() => router.push("/home")}
+            className="flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          {SUBJECT_CONFIG[subject] && (
+            <span className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+              SUBJECT_CONFIG[subject].bg,
+              SUBJECT_CONFIG[subject].color,
+            )}>
+              {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
+            </span>
+          )}
+        </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           {isLearn ? "What do you need help with?" : "Build your exam"}
         </h1>
