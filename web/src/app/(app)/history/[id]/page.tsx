@@ -149,6 +149,9 @@ export default function SessionReviewPage({
                   <div className="flex-1">
                     {isReached ? (
                       <>
+                        {step.title && (
+                          <p className="text-xs font-bold text-primary">{step.title}</p>
+                        )}
                         <p className="text-sm font-medium text-text-primary">
                           {step.description}
                         </p>

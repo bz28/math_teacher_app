@@ -266,7 +266,7 @@ export default function LearnSessionPage() {
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-success">
-                      Step {stepNum}
+                      Step {stepNum}{step.title ? ` — ${step.title}` : ""}
                     </p>
                     <p
                       className={cn(
@@ -491,7 +491,7 @@ export default function LearnSessionPage() {
                   transition={{ delay: 0.15 }}
                 >
                   <p className="text-xs font-semibold text-text-muted">
-                    Step {currentStep}
+                    Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
                   </p>
                   <p className="mt-1 text-base leading-relaxed text-text-primary">
                     {currentStepData?.description ?? "Loading..."}

@@ -13,6 +13,7 @@ const REFRESH_TOKEN_KEY = "refresh_token";
 
 // Session types
 export interface StepDetail {
+  title?: string;
   description: string;
   final_answer?: string;
   choices?: string[];

@@ -40,6 +40,7 @@ class RespondRequest(BaseModel):
 
 
 class StepDetail(BaseModel):
+    title: str = ""
     description: str
     final_answer: str | None = None
     choices: list[str] | None = None
