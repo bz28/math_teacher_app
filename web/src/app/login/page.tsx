@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { Button } from "@/components/ui";
+import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
 export default function LoginPage() {
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const { login, loading, error, clearError } = useAuthStore();
   const router = useRouter();
+  const toast = useToast();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -19,7 +20,8 @@ export default function LoginPage() {
       await login(email, password);
       router.replace("/home");
     } catch {
-      // Error is set in the store
+      const msg = useAuthStore.getState().error;
+      if (msg) toast.error(msg);
     }
   }
 
@@ -69,12 +71,6 @@ export default function LoginPage() {
             required
             autoComplete="current-password"
           />
-
-          {error && (
-            <p className="rounded-[--radius-sm] bg-error-light px-3 py-2 text-sm font-medium text-error">
-              {error}
-            </p>
-          )}
 
           <Button
             type="submit"

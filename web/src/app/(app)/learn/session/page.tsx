@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, useToast } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +32,7 @@ export default function LearnSessionPage() {
     reset,
   } = useSessionStore();
 
+  const toast = useToast();
   const [input, setInput] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
@@ -55,6 +56,11 @@ export default function LearnSessionPage() {
       router.replace("/learn");
     }
   }, [phase, router, resumeId]);
+
+  // Show toast on error
+  useEffect(() => {
+    if (phase === "error" && error) toast.error(error);
+  }, [phase, error, toast]);
 
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {

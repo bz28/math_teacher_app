@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, useToast } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ export default function PracticePage() {
     reset,
   } = useSessionStore();
 
+  const toast = useToast();
   const [answer, setAnswer] = useState("");
 
   useEffect(() => {
@@ -30,6 +31,10 @@ export default function PracticePage() {
       router.replace("/learn");
     }
   }, [phase, practiceBatch, router]);
+
+  useEffect(() => {
+    if (phase === "error" && error) toast.error(error);
+  }, [phase, error, toast]);
 
   if (phase === "loading" || !practiceBatch) {
     return (
