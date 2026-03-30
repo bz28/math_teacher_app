@@ -46,7 +46,7 @@ export function Subjects() {
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.15 * i, duration: 0.5 }}
-              className="group relative overflow-hidden rounded-[--radius-xl] border border-border-light bg-white p-8 transition-all hover:shadow-lg"
+              className="group relative overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface p-8 transition-all hover:shadow-lg"
             >
               {/* Gradient accent bar */}
               <div

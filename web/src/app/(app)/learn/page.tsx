@@ -112,7 +112,7 @@ export default function LearnPage() {
             className={`flex-1 rounded-[--radius-md] border p-3 text-left transition-colors ${
               mode === m.id
                 ? "border-primary bg-primary-bg"
-                : "border-border bg-white hover:border-primary/30"
+                : "border-border bg-surface hover:border-primary/30"
             }`}
           >
             <p className={`text-sm font-bold ${mode === m.id ? "text-primary" : "text-text-primary"}`}>
@@ -142,7 +142,7 @@ export default function LearnPage() {
                   "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
                   examType === opt.id
                     ? "border-primary bg-primary-bg"
-                    : "border-border-light bg-white hover:border-primary/30",
+                    : "border-border-light bg-surface hover:border-primary/30",
                 )}
               >
                 <span
@@ -178,7 +178,7 @@ export default function LearnPage() {
                 "flex w-full items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
                 untimed
                   ? "border-primary bg-primary-bg"
-                  : "border-border-light bg-white hover:border-primary/30",
+                  : "border-border-light bg-surface hover:border-primary/30",
               )}
             >
               <span className={cn("flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2", untimed ? "border-primary" : "border-text-muted")}>
@@ -192,7 +192,7 @@ export default function LearnPage() {
                 "flex w-full cursor-pointer items-center gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
                 !untimed
                   ? "border-primary bg-primary-bg"
-                  : "border-border-light bg-white hover:border-primary/30",
+                  : "border-border-light bg-surface hover:border-primary/30",
               )}
             >
               <span className={cn("flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2", !untimed ? "border-primary" : "border-text-muted")}>
@@ -200,7 +200,7 @@ export default function LearnPage() {
               </span>
               <p className={cn("text-sm font-semibold", !untimed ? "text-primary" : "text-text-primary")}>Timed</p>
               {!untimed && (
-                <div className="ml-auto flex items-center gap-0 rounded-[--radius-sm] border border-border-light bg-white">
+                <div className="ml-auto flex items-center gap-0 rounded-[--radius-sm] border border-border-light bg-surface">
                   <button
                     onClick={(e) => { e.stopPropagation(); setTimeLimitMinutes(Math.max(1, timeLimitMinutes - 5)); }}
                     disabled={timeLimitMinutes <= 1}
@@ -290,7 +290,7 @@ export default function LearnPage() {
           {problemQueue.map((problem, i) => (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-white px-4 py-3"
+              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3"
             >
               <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
                 {i + 1}

@@ -323,7 +323,7 @@ export default function LearnSessionPage() {
                       "flex w-full items-center justify-center gap-2 rounded-[--radius-md] border px-4 py-3 text-sm font-semibold transition-colors",
                       learnQueue.flags[learnQueue.currentIndex]
                         ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
-                        : "border-border bg-white text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
+                        : "border-border bg-surface text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
                     )}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill={learnQueue.flags[learnQueue.currentIndex] ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
@@ -492,7 +492,7 @@ export default function LearnSessionPage() {
                         "border-success bg-success-light text-success",
                       isWrong && "border-error bg-error-light text-error",
                       !isSelected &&
-                        "border-border bg-white text-text-primary hover:border-primary hover:bg-primary-bg",
+                        "border-border bg-surface text-text-primary hover:border-primary hover:bg-primary-bg",
                       isThinking && !isSelected && "opacity-50",
                     )}
                   >

@@ -38,6 +38,9 @@
   --color-border: #E8E5F0;
   --color-border-light: #F0EEF8;
 
+  /* Surface (white in light, dark in dark) */
+  --color-surface: #FFFFFF;
+
   /* Overlay */
   --color-overlay: rgba(108, 92, 231, 0.08);
 
@@ -47,6 +50,43 @@
   --gradient-success: linear-gradient(135deg, #00B894, #55EFC4);
   --gradient-warning: linear-gradient(135deg, #E17055, #FDCB6E);
   --gradient-card: linear-gradient(135deg, #F8F7FF, #F0EDFF);
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] {
+  --color-primary: #7C6CF7;
+  --color-primary-light: #B0A4FF;
+  --color-primary-bg: #1E1A3A;
+  --color-primary-dark: #9B8FFF;
+
+  --color-success: #2ED8A3;
+  --color-success-light: #0D2B22;
+  --color-success-border: #1A4D3A;
+
+  --color-error: #FF7B7B;
+  --color-error-light: #2B0F0F;
+  --color-error-border: #4D1A1A;
+
+  --color-warning: #FDCB6E;
+  --color-warning-dark: #F0965A;
+  --color-warning-bg: #2B2210;
+
+  --color-text: #EFEFEF;
+  --color-text-secondary: #A7A7BE;
+  --color-text-muted: #6B6B80;
+  --color-text-on-primary: #FFFFFF;
+
+  --color-bg: #0D0C14;
+  --color-card: #16152A;
+  --color-input-bg: #1C1B30;
+  --color-surface: #1A1926;
+
+  --color-border: #2E2D42;
+  --color-border-light: #232238;
+
+  --color-overlay: rgba(0, 0, 0, 0.3);
+
+  --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
 }
 
 /* ── Tailwind theme extension ── */
@@ -82,6 +122,8 @@
 
   --color-border: var(--color-border);
   --color-border-light: var(--color-border-light);
+
+  --color-surface: var(--color-surface);
 
   /* Shadows (purple-tinted, matching mobile) */
   --shadow-sm: 0 2px 8px rgba(108, 92, 231, 0.06);

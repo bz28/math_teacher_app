@@ -35,7 +35,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           className={cn(
             "h-11 rounded-[--radius-md] border border-border bg-input-bg px-4 text-base text-text-primary",
             "placeholder:text-text-muted",
-            "transition-colors focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20",
+            "transition-colors focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20",
             error && "border-error focus:border-error focus:ring-error/20",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             className,
@@ -78,7 +78,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           className={cn(
             "min-h-[100px] rounded-[--radius-md] border border-border bg-input-bg px-4 py-3 text-base text-text-primary resize-y",
             "placeholder:text-text-muted",
-            "transition-colors focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20",
+            "transition-colors focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20",
             error && "border-error focus:border-error focus:ring-error/20",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             className,

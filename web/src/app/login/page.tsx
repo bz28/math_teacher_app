@@ -38,7 +38,7 @@ export default function LoginPage() {
       </Link>
 
       {/* Card */}
-      <div className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-white p-8 shadow-md">
+      <div className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md">
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           Welcome back
         </h1>

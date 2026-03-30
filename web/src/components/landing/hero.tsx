@@ -62,7 +62,7 @@ export function Hero() {
           </Link>
           <a
             href="#how-it-works"
-            className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] border border-border bg-white px-8 text-base font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
+            className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] border border-border bg-surface px-8 text-base font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
           >
             See How It Works
           </a>
@@ -92,7 +92,7 @@ function FeaturePill({
   label: string;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-[--radius-pill] border border-border-light bg-white px-4 py-2 text-sm font-medium text-text-secondary shadow-sm">
+    <div className="flex items-center gap-2 rounded-[--radius-pill] border border-border-light bg-surface px-4 py-2 text-sm font-medium text-text-secondary shadow-sm">
       <span className="text-primary">{icon}</span>
       {label}
     </div>

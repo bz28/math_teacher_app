@@ -14,10 +14,10 @@ interface CardProps {
 }
 
 const variantStyles: Record<CardVariant, string> = {
-  elevated: "bg-white shadow-md border border-border-light",
+  elevated: "bg-surface shadow-md border border-border-light",
   flat: "bg-card border border-border-light",
   interactive:
-    "bg-white shadow-sm border border-border-light hover:shadow-md hover:border-primary/20 cursor-pointer transition-all",
+    "bg-surface shadow-sm border border-border-light hover:shadow-md hover:border-primary/20 cursor-pointer transition-all",
   gradient:
     "bg-gradient-to-br from-card to-primary-bg border border-border-light",
 };
