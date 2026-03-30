@@ -906,23 +906,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         if (r.isCorrect !== true) newFlags[i] = true;
       });
 
-      set({
-        mockTest: {
-          ...mockTest,
-          results,
-          flags: newFlags,
-          submittedAt: Date.now(),
-        },
-        phase: "mock_test_summary",
-      });
-
-      // Fire work diagnosis in background for attached images (max 3 concurrent)
+      // Process work diagnosis for attached images (max 3 concurrent)
       const images = mockTest.workImages;
       const pending = images
         .map((img, i) => (img ? { img, i } : null))
         .filter(Boolean) as { img: string; i: number }[];
 
-      const processBatch = async () => {
+      // Update state with results but don't show summary yet if work is pending
+      const updatedMockTest = {
+        ...mockTest,
+        results,
+        flags: newFlags,
+        submittedAt: Date.now(),
+      };
+
+      if (pending.length === 0) {
+        set({ mockTest: updatedMockTest, phase: "mock_test_summary" });
+      } else {
+        // Show loading while processing work submissions
+        set({ mockTest: updatedMockTest });
+
         for (let b = 0; b < pending.length; b += 3) {
           const batch = pending.slice(b, b + 3);
           await Promise.allSettled(
@@ -949,8 +952,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             }),
           );
         }
-      };
-      processBatch().catch(() => {});
+
+        // Show summary after all work is processed
+        set({ phase: "mock_test_summary" });
+      }
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
