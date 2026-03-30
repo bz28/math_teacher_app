@@ -38,6 +38,8 @@ export interface LearnQueue {
   currentIndex: number;
   flags: boolean[];
   preloadedSessions: Record<number, SessionResponse>;
+  /** Images keyed by problem text, for passing to solver */
+  imageMap: Record<string, string>;
 }
 
 export interface PracticeBatch {
@@ -301,12 +303,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // Build image lookup from queue
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
 
+    const imageRecord: Record<string, string> = {};
+    for (const [k, v] of imageMap) {
+      if (v) imageRecord[k] = v;
+    }
     set({
       learnQueue: {
         problems,
         currentIndex: 0,
         flags: new Array(problems.length).fill(false),
         preloadedSessions: {},
+        imageMap: imageRecord,
       },
     });
     // Start first session
@@ -348,10 +355,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return;
     }
 
+    const nextProblem = learnQueue.problems[nextIndex];
+    const nextImage = learnQueue.imageMap[nextProblem];
     const preloaded = learnQueue.preloadedSessions[nextIndex];
     if (preloaded) {
       set({
         session: preloaded,
+        sessionImage: nextImage ?? null,
         phase: "awaiting_input",
         lastResponse: null,
         chatHistory: {},
@@ -367,7 +377,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       lastResponse: null,
       chatHistory: {},
     });
-    await get().startSession(learnQueue.problems[nextIndex]);
+    await get().startSession(nextProblem, nextImage);
   },
 
   // ── Learn completion ──
@@ -465,7 +475,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   async startPracticeBatch(problem, count) {
     const { subject } = get();
-    set({ phase: "loading", error: null });
+    set({ phase: "loading", error: null, sessionImage: null });
     try {
       const [{ problems }, { id: sessionId }] = await Promise.all([
         practiceApi.generate({ problem, count, subject }),

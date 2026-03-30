@@ -14,6 +14,11 @@ export default function HistoryPage() {
   const { setSubject } = useSessionStore();
 
   const [subject, setLocalSubject] = useState<Subject>("math");
+
+  // Clean up subject color theme from other pages
+  useEffect(() => {
+    document.documentElement.removeAttribute("data-subject");
+  }, []);
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
