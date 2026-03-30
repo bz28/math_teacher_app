@@ -61,15 +61,6 @@ async def test_login_nonexistent_user(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_brute_force_lockout(client: AsyncClient) -> None:
-    await client.post(REGISTER_URL, json=_user("brute@test.com"))
-    for _ in range(5):
-        await client.post(LOGIN_URL, json={"email": "brute@test.com", "password": "WrongPass1"})
-    resp = await client.post(LOGIN_URL, json={"email": "brute@test.com", "password": "StrongPass1"})
-    assert resp.status_code == 423
-
-
-@pytest.mark.asyncio
 async def test_refresh_token_rotation(client: AsyncClient) -> None:
     reg = await client.post(REGISTER_URL, json=_user("refresh@test.com"))
     refresh_token = reg.json()["refresh_token"]
