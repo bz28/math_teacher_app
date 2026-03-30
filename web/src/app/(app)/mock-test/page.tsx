@@ -7,6 +7,7 @@ import { useSessionStore } from "@/stores/session";
 import { Button, Card, Badge, useToast } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
+import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 
 export default function MockTestPage() {
@@ -24,6 +25,7 @@ export default function MockTestPage() {
   } = useSessionStore();
 
   const toast = useToast();
+  const { fire: fireConfetti } = useConfetti();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   // Timer
@@ -50,6 +52,15 @@ export default function MockTestPage() {
   useEffect(() => {
     if (phase === "error" && error) toast.error(error);
   }, [phase, error, toast]);
+
+  // Confetti on good mock test score (>=70%)
+  useEffect(() => {
+    if (phase === "mock_test_summary" && mockTest?.results) {
+      const correct = mockTest.results.filter((r) => r.isCorrect === true).length;
+      const score = Math.round((correct / mockTest.results.length) * 100);
+      if (score >= 70) fireConfetti(score === 100);
+    }
+  }, [phase, mockTest, fireConfetti]);
 
   if (phase === "loading" || !mockTest) {
     return (

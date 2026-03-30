@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
 import { Button, Card, Badge, useToast } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
+import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 
 export default function LearnSessionPage() {
@@ -33,6 +34,7 @@ export default function LearnSessionPage() {
   } = useSessionStore();
 
   const toast = useToast();
+  const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
@@ -61,6 +63,11 @@ export default function LearnSessionPage() {
   useEffect(() => {
     if (phase === "error" && error) toast.error(error);
   }, [phase, error, toast]);
+
+  // Confetti on completion
+  useEffect(() => {
+    if (phase === "completed") fireConfetti();
+  }, [phase, fireConfetti]);
 
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {
