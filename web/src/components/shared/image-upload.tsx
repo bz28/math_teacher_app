@@ -4,6 +4,8 @@ import { useState, useRef, useCallback } from "react";
 import { image as imageApi, type ImageExtractResponse } from "@/lib/api";
 import { Button, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { cropImage } from "@/lib/crop-image";
+import { RectangleSelector, type Rectangle } from "./rectangle-selector";
 
 interface ImageUploadProps {
   subject: string;
@@ -18,7 +20,9 @@ export function ImageUpload({
   maxProblems = 10,
   currentQueueLength = 0,
 }: ImageUploadProps) {
-  const [extracting, setExtracting] = useState(false);
+  const [phase, setPhase] = useState<"upload" | "select" | "extracting">("upload");
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [extractProgress, setExtractProgress] = useState({ done: 0, total: 0 });
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
   const [selected, setSelected] = useState<boolean[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +32,9 @@ export function ImageUpload({
   const remaining = maxProblems - currentQueueLength;
 
   const processFile = useCallback(
-    async (file: File) => {
+    (file: File) => {
       setError(null);
 
-      // Validate
       if (!file.type.startsWith("image/")) {
         setError("Please upload an image file.");
         return;
@@ -41,24 +44,60 @@ export function ImageUpload({
         return;
       }
 
-      // Convert to base64
       const reader = new FileReader();
-      reader.onload = async () => {
+      reader.onload = () => {
         const base64 = (reader.result as string).split(",")[1];
-        setExtracting(true);
-        try {
-          const res = await imageApi.extract(base64, subject);
-          setResult(res);
-          setSelected(new Array(res.problems.length).fill(true));
-        } catch (err) {
-          setError((err as Error).message);
-        } finally {
-          setExtracting(false);
-        }
+        setImageBase64(base64);
+        setPhase("select");
       };
       reader.readAsDataURL(file);
     },
-    [subject],
+    [],
+  );
+
+  const handleExtractRectangles = useCallback(
+    async (rectangles: Rectangle[]) => {
+      if (!imageBase64) return;
+      setPhase("extracting");
+      setExtractProgress({ done: 0, total: rectangles.length });
+
+      const allProblems: string[] = [];
+      let worstConfidence: string = "high";
+
+      // Process in batches of 3
+      for (let i = 0; i < rectangles.length; i += 3) {
+        const batch = rectangles.slice(i, i + 3);
+        const results = await Promise.allSettled(
+          batch.map(async (rect) => {
+            const cropped = await cropImage(imageBase64, rect);
+            return imageApi.extract(cropped, subject);
+          }),
+        );
+
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            allProblems.push(...r.value.problems);
+            if (r.value.confidence === "low") worstConfidence = "low";
+            else if (r.value.confidence === "medium" && worstConfidence !== "low")
+              worstConfidence = "medium";
+          }
+        }
+        setExtractProgress({ done: Math.min(i + 3, rectangles.length), total: rectangles.length });
+      }
+
+      if (allProblems.length === 0) {
+        setError("No problems found in the selected areas. Try drawing larger rectangles.");
+        setPhase("upload");
+        setImageBase64(null);
+        return;
+      }
+
+      setResult({ problems: allProblems, confidence: worstConfidence as "high" | "medium" | "low" });
+      setSelected(new Array(allProblems.length).fill(true));
+      setPhase("upload");
+      setImageBase64(null);
+    },
+    [imageBase64, subject],
   );
 
   function handleDrop(e: React.DragEvent) {
@@ -71,7 +110,6 @@ export function ImageUpload({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) processFile(file);
-    // Reset input so same file can be uploaded again
     e.target.value = "";
   }
 
@@ -85,6 +123,38 @@ export function ImageUpload({
 
   function toggleSelected(index: number) {
     setSelected((prev) => prev.map((s, i) => (i === index ? !s : s)));
+  }
+
+  // Rectangle selection phase
+  if (phase === "select" && imageBase64) {
+    return (
+      <RectangleSelector
+        imageBase64={imageBase64}
+        onConfirm={handleExtractRectangles}
+        onCancel={() => {
+          setPhase("upload");
+          setImageBase64(null);
+        }}
+        maxRectangles={Math.min(10, remaining)}
+      />
+    );
+  }
+
+  // Extracting phase
+  if (phase === "extracting") {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed border-primary bg-primary-bg p-8 text-center">
+        <div className="h-1 w-32 overflow-hidden rounded-full bg-border-light">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${(extractProgress.done / extractProgress.total) * 100}%` }}
+          />
+        </div>
+        <p className="text-sm font-semibold text-primary">
+          Extracting problem {extractProgress.done} of {extractProgress.total}...
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -112,18 +182,11 @@ export function ImageUpload({
           </svg>
         </div>
         <div>
-          <p className="text-sm font-semibold text-text-primary">
-            {extracting ? "Extracting problems..." : "Upload a photo"}
-          </p>
+          <p className="text-sm font-semibold text-text-primary">Upload a photo</p>
           <p className="mt-1 text-xs text-text-muted">
             Drag and drop or click to browse. Max 5MB.
           </p>
         </div>
-        {extracting && (
-          <div className="h-1 w-32 overflow-hidden rounded-full bg-border-light">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-          </div>
-        )}
         <input
           ref={fileInputRef}
           type="file"

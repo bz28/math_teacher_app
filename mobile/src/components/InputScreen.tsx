@@ -17,6 +17,7 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
+import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useSessionStore } from "../stores/session";
@@ -60,7 +61,12 @@ export function InputScreen({
     editingIndex,
     editingText,
     lastSource,
+    phase: extractionPhase,
+    imageUri,
+    imageDimensions,
     pickImage,
+    confirmRectangles,
+    cancelSelection,
     dismiss: dismissExtraction,
     retry: retryExtraction,
     toggleSelected,
@@ -191,6 +197,19 @@ export function InputScreen({
     return `Start ${modeLabel} (${totalProblems})`;
   };
   const goButtonLabel = getGoButtonLabel();
+
+  // Rectangle selection phase — full screen overlay
+  if (extractionPhase === "selecting" && imageUri && imageDimensions) {
+    return (
+      <RectangleSelector
+        imageUri={imageUri}
+        imageDimensions={imageDimensions}
+        onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
+        onCancel={cancelSelection}
+        maxRectangles={Math.min(10, MAX_PROBLEMS - problemQueue.length)}
+      />
+    );
+  }
 
   return (
     <>

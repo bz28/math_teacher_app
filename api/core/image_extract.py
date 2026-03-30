@@ -12,9 +12,12 @@ _EXTRACT_TEMPLATE = """Extract all {problems_noun} from this image.
 
 Rules:
 - Return each problem as plain text (not LaTeX)
-- If problems are numbered, strip the number prefix (e.g. "1." or "a)")
 - For word problems, include the full text
 - Only include {problems_noun} — ignore instructions, headers, or unrelated text
+- If the image includes a diagram, figure, graph, or geometric shape, describe it in
+  brackets at the end of the problem text, e.g. "Find the area [Right triangle with
+  legs 3cm and 4cm, hypotenuse labeled c]"
+- For graphs, describe the axes, scale, and any plotted points or curves
 - If you cannot read something clearly, skip it rather than guessing
 
 Return valid JSON in this exact format:

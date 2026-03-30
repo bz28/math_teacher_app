@@ -3,8 +3,12 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { requestCameraAccess, requestGalleryAccess } from "./usePermissions";
 import { extractProblemsFromImage } from "../services/api";
+import { cropImage, type CropRegion } from "../utils/cropImage";
+
+export type ExtractionPhase = "idle" | "selecting" | "extracting" | "results";
 
 export interface ExtractionState {
+  phase: ExtractionPhase;
   extracting: boolean;
   extractionProgress: { done: number; total: number } | null;
   problems: string[] | null;
@@ -13,9 +17,14 @@ export interface ExtractionState {
   editingIndex: number | null;
   editingText: string;
   lastSource: "camera" | "gallery" | null;
+  /** Image URI for rectangle selection */
+  imageUri: string | null;
+  /** Image dimensions for coordinate scaling */
+  imageDimensions: { width: number; height: number } | null;
 }
 
 const INITIAL_STATE: ExtractionState = {
+  phase: "idle",
   extracting: false,
   extractionProgress: null,
   problems: null,
@@ -24,6 +33,8 @@ const INITIAL_STATE: ExtractionState = {
   editingIndex: null,
   editingText: "",
   lastSource: null,
+  imageUri: null,
+  imageDimensions: null,
 };
 
 export function useImageExtraction(
@@ -41,10 +52,9 @@ export function useImageExtraction(
     if (!granted) return;
 
     const options: ImagePicker.ImagePickerOptions = {
-      base64: true,
+      base64: false, // Don't need base64 yet — just URI for rectangle selection
       quality: 0.7,
       allowsEditing: false,
-      ...(source === "gallery" && { allowsMultipleSelection: true }),
     };
 
     const result = source === "camera"
@@ -53,94 +63,94 @@ export function useImageExtraction(
 
     if (result.canceled || !result.assets?.length) return;
 
-    // Validate all assets have base64 and aren't too large
-    const MAX_BASE64_LENGTH = 7 * 1024 * 1024;
-    const validAssets = result.assets.filter((asset) => {
-      if (!asset.base64) return false;
-      if (asset.base64.length > MAX_BASE64_LENGTH) return false;
-      return true;
-    });
-
-    if (validAssets.length === 0) {
-      setError(
-        result.assets.some((a) => a.base64 && a.base64.length > MAX_BASE64_LENGTH)
-          ? "Image(s) too large (max 5MB each). Try lower resolution photos."
-          : "Could not read selected image(s).",
-      );
+    const asset = result.assets[0];
+    if (!asset.uri) {
+      setError("Could not read selected image.");
       return;
     }
 
     setState((prev) => ({
       ...prev,
-      extracting: true,
-      extractionProgress: validAssets.length > 1 ? { done: 0, total: validAssets.length } : null,
+      phase: "selecting",
+      imageUri: asset.uri,
+      imageDimensions: asset.width && asset.height
+        ? { width: asset.width, height: asset.height }
+        : null,
       lastSource: source,
     }));
     setError(null);
+  };
+
+  const confirmRectangles = async (rectangles: CropRegion[]) => {
+    if (!state.imageUri) return;
+
+    setState((prev) => ({
+      ...prev,
+      phase: "extracting",
+      extracting: true,
+      extractionProgress: { done: 0, total: rectangles.length },
+    }));
 
     try {
       const allProblems: string[] = [];
       let worstConfidence = "high";
 
-      // Process images in parallel
-      const results = await Promise.allSettled(
-        validAssets.map((asset) => extractProblemsFromImage(asset.base64!, subject)),
-      );
+      // Process in batches of 3
+      for (let i = 0; i < rectangles.length; i += 3) {
+        const batch = rectangles.slice(i, i + 3);
+        const results = await Promise.allSettled(
+          batch.map(async (rect) => {
+            const cropped = await cropImage(state.imageUri!, rect);
+            return extractProblemsFromImage(cropped, subject);
+          }),
+        );
 
-      let done = 0;
-      for (const r of results) {
-        done++;
-        if (validAssets.length > 1) {
-          setState((prev) => ({
-            ...prev,
-            extractionProgress: { done, total: validAssets.length },
-          }));
-        }
-        if (r.status === "fulfilled") {
-          allProblems.push(...r.value.problems);
-          if (r.value.confidence === "low" || (r.value.confidence === "medium" && worstConfidence === "high")) {
-            worstConfidence = r.value.confidence;
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            allProblems.push(...r.value.problems);
+            if (r.value.confidence === "low") worstConfidence = "low";
+            else if (r.value.confidence === "medium" && worstConfidence !== "low")
+              worstConfidence = "medium";
           }
         }
+        setState((prev) => ({
+          ...prev,
+          extractionProgress: { done: Math.min(i + 3, rectangles.length), total: rectangles.length },
+        }));
       }
-
-      const failedCount = results.filter((r) => r.status === "rejected").length;
 
       if (allProblems.length === 0) {
-        setError(
-          failedCount > 0
-            ? `Failed to extract from ${failedCount} image${failedCount > 1 ? "s" : ""}. Try clearer photos.`
-            : "No problems found. Try clearer photos.",
-        );
+        setError("No problems found in the selected areas. Try drawing larger rectangles.");
+        setState(INITIAL_STATE);
         return;
-      }
-
-      if (failedCount > 0) {
-        setError(`${failedCount} image${failedCount > 1 ? "s" : ""} failed — showing results from the rest.`);
       }
 
       setState((prev) => ({
         ...prev,
+        phase: "results",
+        extracting: false,
+        extractionProgress: null,
         problems: allProblems,
         confidence: worstConfidence,
         selected: allProblems.map(() => true),
         editingIndex: null,
+        imageUri: null,
+        imageDimensions: null,
       }));
-    } catch (e) {
-      const msg = (e as Error).message || "";
-      if (msg.includes("Network") || msg.includes("fetch")) {
-        setError("Network error — check your connection and try again.");
-      } else {
-        setError(msg || "Failed to extract problems from image.");
-      }
-    } finally {
-      setState((prev) => ({ ...prev, extracting: false, extractionProgress: null }));
+    } catch {
+      setError("Failed to extract problems. Try again.");
+      setState(INITIAL_STATE);
     }
+  };
+
+  const cancelSelection = () => {
+    setState(INITIAL_STATE);
   };
 
   const dismiss = () => {
     setState((prev) => ({
       ...prev,
+      phase: "idle",
       problems: null,
       confidence: "high",
       selected: [],
@@ -203,6 +213,8 @@ export function useImageExtraction(
     selectedCount,
     canAddMore,
     pickImage,
+    confirmRectangles,
+    cancelSelection,
     dismiss,
     retry,
     toggleSelected,
