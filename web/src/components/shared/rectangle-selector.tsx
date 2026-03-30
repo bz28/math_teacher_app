@@ -109,6 +109,7 @@ export function RectangleSelector({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
+      setShowOnboarding(false);
       const pos = toImg(e.clientX, e.clientY);
       const test = hitTest(pos.x, pos.y);
 
@@ -168,7 +169,6 @@ export function RectangleSelector({
 
       if (width >= MIN_SIZE && height >= MIN_SIZE) {
         setRectangles((prev) => [...prev, { id: nextId.current++, x, y, width, height }]);
-        setShowOnboarding(false);
       } else if (width > 5 || height > 5) {
         // User tried to draw but it was too small
         setTooSmallToast(true);
@@ -226,12 +226,12 @@ export function RectangleSelector({
   }, [mode, currentPos, displaySize, toDsp]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-text-primary">
+        <p className="text-xs font-medium text-text-primary">
           Select problems in your image
         </p>
-        <span className="text-xs text-text-muted">
+        <span className="text-[10px] text-text-muted">
           {rectangles.length}/{maxRectangles}
         </span>
       </div>
@@ -252,7 +252,7 @@ export function RectangleSelector({
           ref={imgRef}
           src={`data:image/jpeg;base64,${imageBase64}`}
           alt="Uploaded"
-          className="block w-full"
+          className="block w-full max-h-[60vh] object-contain"
           onLoad={(e) => {
             const el = e.currentTarget;
             setImgNatural({ w: el.naturalWidth, h: el.naturalHeight });
@@ -361,22 +361,32 @@ export function RectangleSelector({
         })}
       </div>
 
-      <div className="flex gap-2">
-        <Button variant="secondary" onClick={onCancel} className="flex-1">
+      <div className="flex flex-wrap gap-1.5">
+        <Button variant="secondary" size="sm" onClick={onCancel}>
           Cancel
         </Button>
         {rectangles.length > 0 && (
-          <Button variant="secondary" onClick={() => setRectangles([])}>
-            Clear
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setRectangles((prev) => prev.slice(0, -1))}
+            >
+              Undo
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setRectangles([])}>
+              Clear
+            </Button>
+          </>
         )}
         <Button
           gradient
+          size="sm"
           onClick={() => onConfirm(rectangles)}
           disabled={rectangles.length === 0}
-          className="flex-1"
+          className="ml-auto"
         >
-          Extract {rectangles.length} Problem{rectangles.length !== 1 ? "s" : ""}
+          Extract ({rectangles.length})
         </Button>
       </div>
     </div>

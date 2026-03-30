@@ -34,6 +34,8 @@ export default function LearnPage() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
 
+  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
+
   // Mock test config
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
@@ -89,7 +91,7 @@ export default function LearnPage() {
   const canStart = problemQueue.length > 0 || input.trim().length > 0;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -247,6 +249,7 @@ export default function LearnPage() {
             }}
             maxProblems={10}
             currentQueueLength={problemQueue.length}
+            onPhaseChange={setImagePhase}
           />
         </Card>
 
