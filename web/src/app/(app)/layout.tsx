@@ -2,6 +2,7 @@
 
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { AppLayout } from "@/components/shared/app-layout";
+import { PageTransition } from "@/components/shared/page-transition";
 
 export default function AppRouteLayout({
   children,
@@ -10,7 +11,9 @@ export default function AppRouteLayout({
 }) {
   return (
     <AuthGuard>
-      <AppLayout>{children}</AppLayout>
+      <AppLayout>
+        <PageTransition>{children}</PageTransition>
+      </AppLayout>
     </AuthGuard>
   );
 }
