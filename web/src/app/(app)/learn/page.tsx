@@ -309,45 +309,67 @@ export default function LearnPage() {
 
       {/* Problem queue */}
       {problemQueue.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="space-y-2"
-        >
-          <h3 className="text-sm font-semibold text-text-secondary">
-            Problem Queue
-          </h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-secondary">
+              Problem Queue
+            </h3>
+            <span className="text-xs font-medium text-text-muted">
+              {problemQueue.length}/10
+            </span>
+          </div>
           {problemQueue.map((item, i) => (
-            <div
+            <motion.div
               key={i}
-              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 * i }}
+              className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
             >
-              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
-                {i + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-text-primary">{item.text}</p>
-                {item.image && (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={`data:image/jpeg;base64,${item.image}`}
-                    alt=""
-                    className="mt-1.5 h-16 rounded border border-border object-contain"
-                  />
-                )}
+              <div className="flex items-start gap-3 p-4">
+                <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
+                    {item.text}
+                  </p>
+                  {item.image && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={`data:image/jpeg;base64,${item.image}`}
+                      alt=""
+                      className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={() => removeFromQueue(i)}
+                  className="flex-shrink-0 rounded-full p-1.5 text-text-muted opacity-0 transition-all hover:bg-error-light hover:text-error group-hover:opacity-100"
+                  aria-label="Remove problem"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={() => removeFromQueue(i)}
-                className="flex-shrink-0 text-text-muted hover:text-error transition-colors"
-                aria-label="Remove problem"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+            </motion.div>
           ))}
-        </motion.div>
+
+          {/* Start button — full width */}
+          <Button
+            gradient
+            onClick={handleStart}
+            loading={isLoading}
+            disabled={!canStart}
+            className="w-full py-3 text-base"
+          >
+            {isLearn
+              ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
+              : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
+          </Button>
+        </div>
       )}
     </div>
   );
