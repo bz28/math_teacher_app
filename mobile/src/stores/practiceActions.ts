@@ -138,6 +138,8 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
             isCorrect: true,
           };
           const newResults = [...batch.results, result];
+          const newFlags = [...batch.flags];
+          newFlags[idx] = false;
           const nextIndex = idx + 1;
           const isLast = nextIndex >= batch.problems.length && !batch.loadingMore;
 
@@ -145,6 +147,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
             practiceBatch: {
               ...batch,
               results: newResults,
+              flags: newFlags,
               firstAttemptCorrect: newFirstAttempt,
               currentFeedback: "correct",
               currentIndex: isLast ? idx : nextIndex,

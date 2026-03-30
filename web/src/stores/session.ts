@@ -461,10 +461,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           correctAnswer: "",
           isCorrect: true,
         };
+        const newFlags = [...practiceBatch.flags];
+        newFlags[idx] = false;
         set({
           practiceBatch: {
             ...practiceBatch,
             results: [...practiceBatch.results, result],
+            flags: newFlags,
             firstAttemptCorrect: newFirstAttempt,
             currentFeedback: "correct",
           },
