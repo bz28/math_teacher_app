@@ -4,10 +4,12 @@ import { create } from "zustand";
 import {
   session as sessionApi,
   practice as practiceApi,
+  work as workApi,
   type SessionResponse,
   type StepResponse,
   type PracticeProblem,
   type PracticeCheckResponse,
+  type DiagnosisResult,
 } from "@/lib/api";
 
 // ── Types ──
@@ -43,6 +45,7 @@ export interface PracticeBatch {
   currentIndex: number;
   results: PracticeResult[];
   flags: boolean[];
+  workSubmissions: (DiagnosisResult | null)[];
 }
 
 export interface PracticeResult {
@@ -62,6 +65,8 @@ export interface MockTest {
   submittedAt: number | null;
   results: MockTestResult[] | null;
   sessionId: string | null;
+  workImages: (string | null)[];
+  workSubmissions: (DiagnosisResult | null)[];
 }
 
 export interface MockTestResult {
@@ -123,6 +128,7 @@ interface SessionState {
   // Practice actions
   startPracticeBatch: (problem: string, count: number) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
+  submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => void;
   nextPracticeProblem: () => void;
   togglePracticeFlag: (index: number) => void;
   retryFlaggedProblems: () => Promise<void>;
@@ -130,6 +136,7 @@ interface SessionState {
   // Mock test actions
   startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
   saveMockTestAnswer: (index: number, answer: string) => void;
+  attachMockTestWork: (index: number, imageBase64: string) => void;
   toggleMockTestFlag: (index: number) => void;
   setMockTestIndex: (index: number) => void;
   submitMockTest: () => Promise<void>;
@@ -366,6 +373,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           currentIndex: 0,
           results: [],
           flags: new Array(allProblems.length).fill(false),
+          workSubmissions: new Array(allProblems.length).fill(null),
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -403,6 +411,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           currentIndex: 0,
           results: [],
           flags: new Array(allProblems.length).fill(false),
+          workSubmissions: new Array(allProblems.length).fill(null),
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -426,6 +435,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           currentIndex: 0,
           results: [],
           flags: new Array(problems.length).fill(false),
+          workSubmissions: new Array(problems.length).fill(null),
         },
         phase: "awaiting_input",
       });
@@ -466,6 +476,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  submitPracticeWork(index, imageBase64, userAnswer) {
+    const { practiceBatch, subject } = get();
+    if (!practiceBatch) return;
+    const problem = practiceBatch.problems[index];
+
+    // Fire-and-forget — diagnosis happens in background
+    workApi
+      .submit({
+        image_base64: imageBase64,
+        problem_text: problem.question,
+        user_answer: userAnswer,
+        user_was_correct: false,
+        subject,
+      })
+      .then((res) => {
+        if (!res.diagnosis) return;
+        const { practiceBatch: current } = get();
+        if (!current) return;
+        const newSubmissions = [...current.workSubmissions];
+        newSubmissions[index] = res.diagnosis;
+        // Auto-flag if diagnosis has issues
+        const newFlags = [...current.flags];
+        if (res.diagnosis.has_issues && !newFlags[index]) {
+          newFlags[index] = true;
+        }
+        set({ practiceBatch: { ...current, workSubmissions: newSubmissions, flags: newFlags } });
+      })
+      .catch(() => {}); // Silent fail
   },
 
   nextPracticeProblem() {
@@ -524,6 +564,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           submittedAt: null,
           results: null,
           sessionId: id,
+          workImages: new Array(questions.length).fill(null),
+          workSubmissions: new Array(questions.length).fill(null),
         },
         phase: "mock_test_active",
       });
@@ -541,6 +583,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           answers: { ...state.mockTest.answers, [index]: answer },
         },
       };
+    });
+  },
+
+  attachMockTestWork(index, imageBase64) {
+    set((state) => {
+      if (!state.mockTest) return {};
+      const workImages = [...state.mockTest.workImages];
+      workImages[index] = imageBase64;
+      return { mockTest: { ...state.mockTest, workImages } };
     });
   },
 
@@ -616,6 +667,42 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         },
         phase: "mock_test_summary",
       });
+
+      // Fire work diagnosis in background for attached images (max 3 concurrent)
+      const images = mockTest.workImages;
+      const pending = images
+        .map((img, i) => (img ? { img, i } : null))
+        .filter(Boolean) as { img: string; i: number }[];
+
+      const processBatch = async () => {
+        for (let b = 0; b < pending.length; b += 3) {
+          const batch = pending.slice(b, b + 3);
+          await Promise.allSettled(
+            batch.map(async ({ img, i }) => {
+              const q = mockTest.questions[i];
+              const r = results[i];
+              const res = await workApi.submit({
+                image_base64: img,
+                problem_text: q.question,
+                user_answer: r?.userAnswer ?? "",
+                user_was_correct: r?.isCorrect === true,
+                subject,
+              });
+              if (!res.diagnosis) return;
+              const { mockTest: current } = get();
+              if (!current) return;
+              const newSubs = [...current.workSubmissions];
+              newSubs[i] = res.diagnosis;
+              const updatedFlags = [...current.flags];
+              if (res.diagnosis.has_issues && !updatedFlags[i]) {
+                updatedFlags[i] = true;
+              }
+              set({ mockTest: { ...current, workSubmissions: newSubs, flags: updatedFlags } });
+            }),
+          );
+        }
+      };
+      processBatch().catch(() => {});
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
