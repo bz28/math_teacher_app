@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge, useToast } from "@/components/ui";
+import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -111,7 +111,7 @@ export default function MockTestPage() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card variant="elevated" className="text-center space-y-3">
             <p className="text-sm font-semibold text-text-muted">Exam Results</p>
-            <p className="text-4xl font-extrabold text-primary">{correct}/{mockTest.results.length}</p>
+            <p className="text-4xl font-extrabold text-primary"><AnimatedCounter to={correct} />/{mockTest.results.length}</p>
 
             <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
               <div
@@ -119,7 +119,7 @@ export default function MockTestPage() {
                 style={{ width: `${score}%` }}
               />
             </div>
-            <p className="text-lg font-bold text-text-primary">{score}%</p>
+            <p className="text-lg font-bold text-text-primary"><AnimatedCounter to={score} />%</p>
             <p className="text-sm text-text-secondary">{getMessage()}</p>
 
             {timeTaken != null && (
@@ -131,15 +131,15 @@ export default function MockTestPage() {
             <div className="flex justify-center gap-4 pt-2">
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-success" />
-                <span className="text-xs text-text-secondary">{correct} correct</span>
+                <span className="text-xs text-text-secondary"><AnimatedCounter to={correct} /> correct</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-error" />
-                <span className="text-xs text-text-secondary">{answered - correct} wrong</span>
+                <span className="text-xs text-text-secondary"><AnimatedCounter to={answered - correct} /> wrong</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-text-muted" />
-                <span className="text-xs text-text-secondary">{unanswered} skipped</span>
+                <span className="text-xs text-text-secondary"><AnimatedCounter to={unanswered} /> skipped</span>
               </div>
             </div>
           </Card>

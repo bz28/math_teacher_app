@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge, useToast } from "@/components/ui";
+import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -90,7 +90,7 @@ export default function PracticePage() {
         {/* Score card */}
         <Card variant="elevated" className="text-center space-y-3">
           <p className="text-4xl font-extrabold text-primary">
-            {correct}/{results.length}
+            <AnimatedCounter to={correct} />/{results.length}
           </p>
           <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
             <div
