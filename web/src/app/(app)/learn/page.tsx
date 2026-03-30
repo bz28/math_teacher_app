@@ -63,8 +63,11 @@ export default function LearnPage() {
     }
   }
 
+  const [starting, setStarting] = useState(false);
   async function handleStart() {
+    if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
+    setStarting(true);
 
     const problems =
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
@@ -305,7 +308,7 @@ export default function LearnPage() {
         <Button
           gradient
           onClick={handleStart}
-          loading={isLoading}
+          loading={isLoading || starting}
           className="w-full py-3 text-base"
         >
           {isLearn ? "Start Learning" : "Start Exam"}
@@ -366,7 +369,7 @@ export default function LearnPage() {
           <Button
             gradient
             onClick={handleStart}
-            loading={isLoading}
+            loading={isLoading || starting}
             disabled={!canStart}
             className="w-full py-3 text-base"
           >

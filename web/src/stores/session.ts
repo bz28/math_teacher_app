@@ -365,7 +365,34 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     const nextProblem = learnQueue.problems[nextIndex];
     const nextImage = learnQueue.imageMap[nextProblem];
-    const preloaded = learnQueue.preloadedSessions[nextIndex];
+
+    // Check if preloaded, or wait up to 15s for it
+    let preloaded: SessionResponse | undefined | null = learnQueue.preloadedSessions[nextIndex];
+    if (!preloaded) {
+      set({
+        learnQueue: { ...learnQueue, currentIndex: nextIndex },
+        session: null,
+        lastResponse: null,
+        chatHistory: {},
+        phase: "loading" as SessionPhase,
+      });
+      // Wait for preload to finish instead of creating a duplicate
+      preloaded = await new Promise<SessionResponse | null>((resolve) => {
+        const timeout = setTimeout(() => resolve(null), 15_000);
+        const check = () => {
+          const lq = get().learnQueue;
+          const s = lq?.preloadedSessions[nextIndex];
+          if (s) { clearTimeout(timeout); resolve(s); return true; }
+          return false;
+        };
+        if (!check()) {
+          const interval = setInterval(() => {
+            if (check()) clearInterval(interval);
+          }, 500);
+        }
+      });
+    }
+
     if (preloaded) {
       set({
         session: preloaded,
@@ -373,18 +400,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         phase: "awaiting_input",
         lastResponse: null,
         chatHistory: {},
-        learnQueue: { ...learnQueue, currentIndex: nextIndex },
+        learnQueue: { ...get().learnQueue!, currentIndex: nextIndex },
       });
       return;
     }
 
-    // Fallback: generate on the fly if preload didn't finish
-    set({
-      learnQueue: { ...learnQueue, currentIndex: nextIndex },
-      session: null,
-      lastResponse: null,
-      chatHistory: {},
-    });
+    // Fallback: preload timed out, generate fresh
     await get().startSession(nextProblem, nextImage);
   },
 
