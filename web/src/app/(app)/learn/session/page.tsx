@@ -47,10 +47,10 @@ export default function LearnSessionPage() {
 
   // Resume session from history
   useEffect(() => {
-    if (resumeId && phase === "idle") {
+    if (resumeId) {
       resumeSession(resumeId);
     }
-  }, [resumeId, phase, resumeSession]);
+  }, [resumeId, resumeSession]);
 
   // Redirect if no session and not resuming
   useEffect(() => {
