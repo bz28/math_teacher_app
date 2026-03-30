@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import anthropic
 
 from api.core.constants import LLM_HISTORY_LIMIT
-from api.core.llm_client import MODEL_CLASSIFY, MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
