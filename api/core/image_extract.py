@@ -12,7 +12,6 @@ _EXTRACT_TEMPLATE = """Extract all {problems_noun} from this image.
 
 Rules:
 - Return each problem as plain text (not LaTeX)
-- If problems are numbered, strip the number prefix (e.g. "1." or "a)")
 - For word problems, include the full text
 - Only include {problems_noun} — ignore instructions, headers, or unrelated text
 - If you cannot read something clearly, skip it rather than guessing
