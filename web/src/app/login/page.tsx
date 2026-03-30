@@ -1,12 +1,21 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
+import { clearTokens } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
+
+const ERROR_MAP: Record<string, string> = {
+  "Account temporarily locked": "Too many failed attempts. Try again in 15 minutes.",
+};
+
+function friendlyError(msg: string): string {
+  return ERROR_MAP[msg] ?? msg;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,6 +24,11 @@ export default function LoginPage() {
   const router = useRouter();
   const toast = useToast();
 
+  // Clear stale tokens so loadUser() doesn't fire "Session expired"
+  useEffect(() => {
+    clearTokens();
+  }, []);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     try {
@@ -22,7 +36,7 @@ export default function LoginPage() {
       router.replace("/home");
     } catch {
       const msg = useAuthStore.getState().error;
-      if (msg) toast.error(msg);
+      if (msg) toast.error(friendlyError(msg));
     }
   }
 

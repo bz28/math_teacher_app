@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
-import { auth } from "@/lib/api";
+import { auth, clearTokens } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
@@ -27,6 +27,11 @@ export default function RegisterPage() {
   const { register, loading, error, clearError } = useAuthStore();
   const router = useRouter();
   const toast = useToast();
+
+  // Clear stale tokens so loadUser() doesn't fire "Session expired"
+  useEffect(() => {
+    clearTokens();
+  }, []);
 
   async function checkEmail() {
     if (!email) return;
