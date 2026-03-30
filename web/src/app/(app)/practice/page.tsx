@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
@@ -8,6 +8,8 @@ import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui"
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
+import { AttachWork } from "@/components/ui/attach-work";
+import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
 
 export default function PracticePage() {
@@ -17,6 +19,7 @@ export default function PracticePage() {
     phase,
     error,
     submitPracticeAnswer,
+    submitPracticeWork,
     nextPracticeProblem,
     togglePracticeFlag,
     retryFlaggedProblems,
@@ -27,6 +30,8 @@ export default function PracticePage() {
   const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
   const [answer, setAnswer] = useState("");
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [showNudge, setShowNudge] = useState(false);
 
   useEffect(() => {
     if (phase === "idle" && !practiceBatch) {
@@ -45,6 +50,32 @@ export default function PracticePage() {
       if (correct === practiceBatch.results.length) fireConfetti(true);
     }
   }, [phase, practiceBatch, fireConfetti]);
+
+  const doSubmit = useCallback(async () => {
+    if (!answer.trim() || !practiceBatch) return;
+    const idx = practiceBatch.currentIndex;
+    const text = answer.trim();
+
+    // Fire work diagnosis in background if image attached
+    if (attachedImage) {
+      submitPracticeWork(idx, attachedImage, text);
+    }
+
+    await submitPracticeAnswer(text);
+    setAnswer("");
+    setAttachedImage(null);
+    setShowNudge(false);
+  }, [answer, attachedImage, practiceBatch, submitPracticeAnswer, submitPracticeWork]);
+
+  function handleSubmitOrNudge() {
+    if (!answer.trim()) return;
+    // Nudge user to attach work if they haven't
+    if (!attachedImage) {
+      setShowNudge(true);
+      return;
+    }
+    doSubmit();
+  }
 
   if (phase === "loading" || !practiceBatch) {
     return (
@@ -68,7 +99,7 @@ export default function PracticePage() {
 
   // Summary view
   if (phase === "practice_summary") {
-    const { results, flags } = practiceBatch;
+    const { results, flags, workSubmissions } = practiceBatch;
     const correct = results.filter((r) => r.isCorrect).length;
     const flagged = flags.filter(Boolean).length;
     const percentage = Math.round((correct / results.length) * 100);
@@ -127,6 +158,7 @@ export default function PracticePage() {
                 {!result.isCorrect && (
                   <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
                 )}
+                <DiagnosisTeaser diagnosis={workSubmissions[i]} />
               </div>
               <button
                 onClick={() => togglePracticeFlag(i)}
@@ -189,12 +221,6 @@ export default function PracticePage() {
   const lastResult = practiceBatch.results[practiceBatch.currentIndex];
   const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
 
-  async function handleSubmit() {
-    if (!answer.trim()) return;
-    await submitPracticeAnswer(answer.trim());
-    setAnswer("");
-  }
-
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
@@ -219,28 +245,49 @@ export default function PracticePage() {
         </p>
 
         {!lastResult ? (
-          <div className="flex gap-2">
-            <Input
-              placeholder="Enter your answer..."
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              disabled={isThinking}
-              className="flex-1"
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter your answer..."
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSubmitOrNudge();
+                  }
+                }}
+                disabled={isThinking}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleSubmitOrNudge}
+                loading={isThinking}
+                disabled={!answer.trim()}
+                size="sm"
+              >
+                Answer
+              </Button>
+            </div>
+
+            {/* Attach work */}
+            <AttachWork
+              attached={!!attachedImage}
+              onAttach={(base64) => { setAttachedImage(base64); setShowNudge(false); }}
             />
-            <Button
-              onClick={handleSubmit}
-              loading={isThinking}
-              disabled={!answer.trim()}
-              size="sm"
-            >
-              Answer
-            </Button>
+
+            {/* Work nudge */}
+            {showNudge && (
+              <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg p-3 space-y-2">
+                <p className="text-sm font-medium text-primary">Attach your work?</p>
+                <p className="text-xs text-text-secondary">
+                  You&apos;ll get feedback on exactly where you went wrong.
+                </p>
+                <Button size="sm" variant="secondary" onClick={() => { setShowNudge(false); doSubmit(); }}>
+                  Skip &amp; submit without work
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

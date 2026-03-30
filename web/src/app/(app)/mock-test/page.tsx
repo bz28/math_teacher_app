@@ -8,6 +8,8 @@ import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui"
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
+import { AttachWork } from "@/components/ui/attach-work";
+import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
 
 export default function MockTestPage() {
@@ -19,6 +21,7 @@ export default function MockTestPage() {
     saveMockTestAnswer,
     toggleMockTestFlag,
     setMockTestIndex,
+    attachMockTestWork,
     submitMockTest,
     startLearnQueue,
     reset,
@@ -218,6 +221,10 @@ export default function MockTestPage() {
                   <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
                 </div>
               )}
+              <DiagnosisTeaser
+                diagnosis={mockTest.workSubmissions[i]}
+                analyzing={mockTest.workImages[i] != null && mockTest.workSubmissions[i] == null}
+              />
             </Card>
           ))}
         </div>
@@ -351,6 +358,12 @@ export default function MockTestPage() {
           onChange={(e) =>
             saveMockTestAnswer(mockTest.currentIndex, e.target.value)
           }
+        />
+
+        {/* Attach work */}
+        <AttachWork
+          attached={!!mockTest.workImages[mockTest.currentIndex]}
+          onAttach={(base64) => attachMockTestWork(mockTest.currentIndex, base64)}
         />
 
         <div className="flex justify-between">
