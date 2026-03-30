@@ -39,6 +39,8 @@ function AppRoot() {
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const resumeSession = useSessionStore((s) => s.resumeSession);
+  const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
+  const setStoreSubject = useSessionStore((s) => s.setSubject);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -156,10 +158,10 @@ function AppRoot() {
           <SessionReviewScreen
             sessionId={reviewSessionId}
             onBack={() => setScreen("mode-select")}
-            onPracticeSimilar={(problem) => {
-              setProblemQueue([problem]);
-              setMode("learn");
-              setScreen("input");
+            onPracticeSimilar={async (problem) => {
+              setStoreSubject(subject as "math" | "chemistry");
+              await startPracticeBatch(problem, 1);
+              setScreen("session");
             }}
             onResume={async (sessionId) => {
               await resumeSession(sessionId);
