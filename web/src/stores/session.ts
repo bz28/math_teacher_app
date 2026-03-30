@@ -84,6 +84,8 @@ export interface MockTestResult {
 interface SessionState {
   // Core session
   session: SessionResponse | null;
+  /** Cropped image for the current session (client-side only) */
+  sessionImage: string | null;
   phase: SessionPhase;
   lastResponse: StepResponse | null;
   error: string | null;
@@ -113,7 +115,7 @@ interface SessionState {
   removeFromQueue: (index: number) => void;
 
   // Learn actions
-  startSession: (problem: string) => Promise<void>;
+  startSession: (problem: string, image?: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   advanceStep: () => Promise<void>;
@@ -153,6 +155,7 @@ interface SessionState {
 
 const initialState = {
   session: null,
+  sessionImage: null,
   phase: "idle" as SessionPhase,
   lastResponse: null,
   error: null,
@@ -196,10 +199,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   // ── Learn session ──
 
-  async startSession(problem) {
-    const { subject, problemQueue, problemImages } = get();
-    const idx = problemQueue.indexOf(problem);
-    const image = idx >= 0 ? problemImages[idx] : undefined;
+  async startSession(problem, image) {
+    const { subject } = get();
     set({ phase: "loading", error: null });
     try {
       const session = await sessionApi.create({
@@ -208,7 +209,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         subject,
         ...(image && { image_base64: image }),
       });
-      set({ session, phase: "awaiting_input", chatHistory: {} });
+      set({ session, sessionImage: image ?? null, phase: "awaiting_input", chatHistory: {} });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
@@ -314,15 +315,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       },
     });
     // Start first session
-    await get().startSession(problems[0]);
+    const { problemImages } = get();
+    await get().startSession(problems[0], problemImages[0]);
 
     // Preload remaining sessions in background
     if (problems.length > 1) {
-      const { subject, problemQueue, problemImages } = get();
+      const { subject } = get();
       problems.slice(1).forEach((p, i) => {
         const queueIndex = i + 1;
-        const pIdx = problemQueue.indexOf(p);
-        const image = pIdx >= 0 ? problemImages[pIdx] : undefined;
+        const image = problemImages[queueIndex];
         sessionApi.create({
           problem: p,
           mode: "learn",
@@ -372,7 +373,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       lastResponse: null,
       chatHistory: {},
     });
-    await get().startSession(learnQueue.problems[nextIndex]);
+    const { problemImages } = get();
+    await get().startSession(learnQueue.problems[nextIndex], problemImages[nextIndex]);
   },
 
   // ── Learn completion ──

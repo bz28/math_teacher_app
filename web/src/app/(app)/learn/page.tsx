@@ -63,7 +63,7 @@ export default function LearnPage() {
 
     if (mode === "learn") {
       if (problems.length === 1) {
-        await startSession(problems[0]);
+        await startSession(problems[0], problemImages[0]);
       } else {
         await startLearnQueue(problems);
       }
