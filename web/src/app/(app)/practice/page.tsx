@@ -32,6 +32,7 @@ export default function PracticePage() {
   const [answer, setAnswer] = useState("");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [showNudge, setShowNudge] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
   useEffect(() => {
     if (phase === "idle" && !practiceBatch) {
@@ -69,8 +70,8 @@ export default function PracticePage() {
 
   function handleSubmitOrNudge() {
     if (!answer.trim()) return;
-    // Nudge user to attach work if they haven't
-    if (!attachedImage) {
+    // Nudge once if no work attached and nudge not yet dismissed
+    if (!attachedImage && !nudgeDismissed) {
       setShowNudge(true);
       return;
     }
@@ -283,7 +284,7 @@ export default function PracticePage() {
                 <p className="text-xs text-text-secondary">
                   You&apos;ll get feedback on exactly where you went wrong.
                 </p>
-                <Button size="sm" variant="secondary" onClick={() => { setShowNudge(false); doSubmit(); }}>
+                <Button size="sm" variant="secondary" onClick={() => { setShowNudge(false); setNudgeDismissed(true); doSubmit(); }}>
                   Skip &amp; submit without work
                 </Button>
               </div>
