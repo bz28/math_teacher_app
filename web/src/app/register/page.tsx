@@ -22,12 +22,14 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
   const [emailError, setEmailError] = useState("");
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const { register, loading, error, clearError } = useAuthStore();
   const router = useRouter();
   const toast = useToast();
 
   async function checkEmail() {
     if (!email) return;
+    setCheckingEmail(true);
     try {
       const res = await auth.checkEmail(email);
       if (!res.available) {
@@ -37,6 +39,8 @@ export default function RegisterPage() {
       }
     } catch {
       // Ignore check errors — server will validate on register
+    } finally {
+      setCheckingEmail(false);
     }
   }
 
@@ -84,21 +88,26 @@ export default function RegisterPage() {
             autoComplete="name"
           />
 
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setEmailError("");
-              if (error) clearError();
-            }}
-            onBlur={checkEmail}
-            error={emailError}
-            required
-            autoComplete="email"
-          />
+          <div className="relative">
+            <Input
+              label="Email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailError("");
+                if (error) clearError();
+              }}
+              onBlur={checkEmail}
+              error={emailError}
+              required
+              autoComplete="email"
+            />
+            {checkingEmail && (
+              <p className="mt-1 text-xs text-text-muted">Checking availability...</p>
+            )}
+          </div>
 
           <PasswordInput
             label="Password"
