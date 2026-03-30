@@ -10,10 +10,11 @@ import { initialState, type SessionPhase, type StoreGet, type StoreSet } from ".
 export function createLearnActions(set: StoreSet, get: StoreGet) {
   return {
     startSession: async (problem: string, mode = "learn") => {
-      const { subject } = get();
+      const { subject, problemImages } = get();
+      const image = problemImages[problem];
       set({ phase: "loading", error: null });
       try {
-        const session = await createSession(problem, mode, subject);
+        const session = await createSession(problem, mode, subject, image);
         set({ session, phase: "awaiting_input", lastResponse: null });
       } catch (e) {
         set({ phase: "error", error: (e as Error).message });

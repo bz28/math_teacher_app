@@ -37,7 +37,7 @@ export interface LearnQueue {
   problems: string[];
   currentIndex: number;
   flags: boolean[];
-  sessions: (SessionResponse | null)[];
+  preloadedSessions: Record<number, SessionResponse>;
 }
 
 export interface PracticeBatch {
@@ -84,6 +84,8 @@ export interface MockTestResult {
 interface SessionState {
   // Core session
   session: SessionResponse | null;
+  /** Cropped image for the current session (client-side only) */
+  sessionImage: string | null;
   phase: SessionPhase;
   lastResponse: StepResponse | null;
   error: string | null;
@@ -102,16 +104,16 @@ interface SessionState {
   mockTest: MockTest | null;
 
   // Problem input
-  problemQueue: string[];
+  problemQueue: { text: string; image?: string }[];
 
   // Actions
   setSubject: (subject: Subject) => void;
-  setProblemQueue: (queue: string[]) => void;
-  addToQueue: (problem: string) => void;
+  setProblemQueue: (queue: { text: string; image?: string }[]) => void;
+  addToQueue: (problem: string, image?: string) => void;
   removeFromQueue: (index: number) => void;
 
   // Learn actions
-  startSession: (problem: string) => Promise<void>;
+  startSession: (problem: string, image?: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   advanceStep: () => Promise<void>;
@@ -151,6 +153,7 @@ interface SessionState {
 
 const initialState = {
   session: null,
+  sessionImage: null,
   phase: "idle" as SessionPhase,
   lastResponse: null,
   error: null,
@@ -173,10 +176,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ problemQueue: queue });
   },
 
-  addToQueue(problem) {
+  addToQueue(problem, image) {
     const { problemQueue } = get();
     if (problemQueue.length < 10) {
-      set({ problemQueue: [...problemQueue, problem] });
+      set({ problemQueue: [...problemQueue, { text: problem, image }] });
     }
   },
 
@@ -187,7 +190,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   // ── Learn session ──
 
-  async startSession(problem) {
+  async startSession(problem, image) {
     const { subject } = get();
     set({ phase: "loading", error: null });
     try {
@@ -195,8 +198,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         problem,
         mode: "learn",
         subject,
+        ...(image && { image_base64: image }),
       });
-      set({ session, phase: "awaiting_input", chatHistory: {} });
+      set({ session, sessionImage: image ?? null, phase: "awaiting_input", chatHistory: {} });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
@@ -293,16 +297,46 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ── Learn queue ──
 
   async startLearnQueue(problems) {
+    const { problemQueue } = get();
+    // Build image lookup from queue
+    const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
+
     set({
       learnQueue: {
         problems,
         currentIndex: 0,
         flags: new Array(problems.length).fill(false),
-        sessions: new Array(problems.length).fill(null),
+        preloadedSessions: {},
       },
     });
     // Start first session
-    await get().startSession(problems[0]);
+    await get().startSession(problems[0], imageMap.get(problems[0]));
+
+    // Preload remaining sessions in background
+    if (problems.length > 1) {
+      const { subject } = get();
+      problems.slice(1).forEach((p, i) => {
+        const queueIndex = i + 1;
+        const image = imageMap.get(p);
+        sessionApi.create({
+          problem: p,
+          mode: "learn",
+          subject,
+          ...(image && { image_base64: image }),
+        })
+          .then((s) => {
+            const { learnQueue: lq } = get();
+            if (!lq) return;
+            set({
+              learnQueue: {
+                ...lq,
+                preloadedSessions: { ...lq.preloadedSessions, [queueIndex]: s },
+              },
+            });
+          })
+          .catch(() => {});
+      });
+    }
   },
 
   async advanceLearnQueue() {
@@ -313,6 +347,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ phase: "learn_summary" });
       return;
     }
+
+    const preloaded = learnQueue.preloadedSessions[nextIndex];
+    if (preloaded) {
+      set({
+        session: preloaded,
+        phase: "awaiting_input",
+        lastResponse: null,
+        chatHistory: {},
+        learnQueue: { ...learnQueue, currentIndex: nextIndex },
+      });
+      return;
+    }
+
+    // Fallback: generate on the fly if preload didn't finish
     set({
       learnQueue: { ...learnQueue, currentIndex: nextIndex },
       session: null,
@@ -588,23 +636,30 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ── Mock test ──
 
   async startMockTest(problems, generateCount, timeLimitMinutes) {
-    const { subject } = get();
+    const { subject, problemQueue } = get();
+    const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
     try {
       let questions: PracticeProblem[];
       if (generateCount > 0) {
+        const image = imageMap.get(problems[0]);
         const { problems: generated } = await practiceApi.generate({
           problem: problems[0],
           count: generateCount,
           subject,
+          ...(image && { image_base64: image }),
         });
         questions = generated;
       } else {
         // Solve each problem individually to get answers (matches mobile)
         const results = await Promise.allSettled(
-          problems.map((p) =>
-            practiceApi.generate({ problem: p, count: 0, subject }),
-          ),
+          problems.map((p) => {
+            const image = imageMap.get(p);
+            return practiceApi.generate({
+              problem: p, count: 0, subject,
+              ...(image && { image_base64: image }),
+            });
+          }),
         );
         questions = results.map((r, i) =>
           r.status === "fulfilled" && r.value.problems.length > 0

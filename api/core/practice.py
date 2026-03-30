@@ -48,6 +48,7 @@ async def generate_practice_problems(
     *,
     user_id: str | None = None,
     subject: str = Subject.MATH,
+    image_base64: str | None = None,
 ) -> list[dict[str, str]]:
     """Generate the original + count similar problems with answers.
 
@@ -59,7 +60,9 @@ async def generate_practice_problems(
     Returns list of {"question": ..., "answer": ...} dicts.
     """
     if count == 0:
-        decomposition = await decompose_problem(problem, user_id=user_id, subject=subject)
+        decomposition = await decompose_problem(
+            problem, user_id=user_id, subject=subject, image_base64=image_base64,
+        )
         return [{"question": problem, "answer": decomposition.final_answer}]
 
     # Generate question text only (no answers — they'd be unreliable)

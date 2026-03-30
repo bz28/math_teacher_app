@@ -29,6 +29,7 @@ async def generate(
         problems = await generate_practice_problems(
             body.problem, body.count,
             user_id=str(current_user.user_id), subject=body.subject,
+            image_base64=body.image_base64,
         )
     except RuntimeError:
         raise HTTPException(

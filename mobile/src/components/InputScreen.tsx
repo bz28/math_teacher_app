@@ -17,6 +17,7 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
+import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useSessionStore } from "../stores/session";
@@ -60,7 +61,12 @@ export function InputScreen({
     editingIndex,
     editingText,
     lastSource,
+    phase: extractionPhase,
+    imageUri,
+    imageDimensions,
     pickImage,
+    confirmRectangles,
+    cancelSelection,
     dismiss: dismissExtraction,
     retry: retryExtraction,
     toggleSelected,
@@ -68,14 +74,25 @@ export function InputScreen({
     setEditingText,
     finishEdit,
     getSelectedProblems,
+    getSelectedWithImages,
   } = useImageExtraction(problemQueue.length, MAX_PROBLEMS, setError, subject);
 
+  const {
+    problemImages,
+  } = useSessionStore();
+
   const handleConfirmExtraction = () => {
-    const selected = getSelectedProblems();
+    const items = getSelectedWithImages();
     const remaining = MAX_PROBLEMS - problemQueue.length;
-    const toAdd = selected.slice(0, remaining);
+    const toAdd = items.slice(0, remaining);
     if (toAdd.length > 0) {
-      setProblemQueue([...problemQueue, ...toAdd]);
+      const newQueue = [...problemQueue, ...toAdd.map((p) => p.text)];
+      const newImages = { ...problemImages };
+      for (const item of toAdd) {
+        if (item.image) newImages[item.text] = item.image;
+      }
+      setProblemQueue(newQueue);
+      useSessionStore.setState({ problemImages: newImages });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     dismissExtraction();
@@ -191,6 +208,19 @@ export function InputScreen({
     return `Start ${modeLabel} (${totalProblems})`;
   };
   const goButtonLabel = getGoButtonLabel();
+
+  // Rectangle selection phase — full screen overlay
+  if (extractionPhase === "selecting" && imageUri && imageDimensions) {
+    return (
+      <RectangleSelector
+        imageUri={imageUri}
+        imageDimensions={imageDimensions}
+        onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
+        onCancel={cancelSelection}
+        maxRectangles={Math.min(10, MAX_PROBLEMS - problemQueue.length)}
+      />
+    );
+  }
 
   return (
     <>

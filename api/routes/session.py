@@ -78,7 +78,7 @@ async def create(
     try:
         session = await create_session(
             db, current_user.user_id, body.problem, body.mode, current_user.role,
-            subject=body.subject,
+            subject=body.subject, image_base64=body.image_base64,
         )
     except RateLimitError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))

@@ -69,6 +69,7 @@ async def create_session(
     mode: str = SessionMode.LEARN,
     role: str = "student",
     subject: str = Subject.MATH,
+    image_base64: str | None = None,
 ) -> Session:
     """Create a new tutoring session for a problem."""
     problem = problem.strip()
@@ -81,7 +82,10 @@ async def create_session(
 
     if mode == SessionMode.PRACTICE:
         # Use full decomposition for accuracy — steps cached for learn mode reuse
-        decomp = await decompose_problem(problem, user_id=str(user_id), subject=subject)
+        decomp = await decompose_problem(
+            problem, user_id=str(user_id), subject=subject,
+            image_base64=image_base64,
+        )
         problem_type = decomp.problem_type
         steps_data: list[dict[str, Any]] = [
             {"description": "Final answer", "final_answer": decomp.final_answer},
@@ -116,7 +120,7 @@ async def create_session(
         # Full decomposition for learn mode
         decomposition = await decompose_problem(
             problem, user_id=str(user_id), work_diagnosis=prior_diagnosis,
-            subject=subject,
+            subject=subject, image_base64=image_base64,
         )
         problem_type = decomposition.problem_type
         steps_data = [

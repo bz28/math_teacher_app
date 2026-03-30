@@ -99,6 +99,7 @@ export interface SessionState {
 
   // Problem input state (shared between App and InputScreen)
   problemQueue: string[];
+  problemImages: Record<string, string>;
   practiceCount: number;
 
   // Actions
@@ -144,6 +145,7 @@ export const initialState = {
   learnQueue: null as LearnQueue | null,
   mockTest: null as MockTest | null,
   problemQueue: [] as string[],
+  problemImages: {} as Record<string, string>,
   practiceCount: 3,
 };
 
