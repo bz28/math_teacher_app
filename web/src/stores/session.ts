@@ -51,6 +51,12 @@ export interface PracticeBatch {
   firstAttemptCorrect: (boolean | null)[];
   currentFeedback: 'correct' | 'wrong' | null;
   sessionId: string | null;
+  /** True while additional problems are being generated in background */
+  loadingMore: boolean;
+  /** Total number of problems expected */
+  totalCount: number;
+  /** Problems that failed to process */
+  skippedProblems: string[];
 }
 
 export interface PracticeResult {
@@ -134,6 +140,7 @@ interface SessionState {
 
   // Practice actions
   startPracticeBatch: (problem: string, count: number) => Promise<void>;
+  startPracticeQueue: (problems: string[]) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
   skipPracticeProblem: () => void;
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => void;
@@ -423,6 +430,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           firstAttemptCorrect: new Array(allProblems.length).fill(null),
           currentFeedback: null,
           sessionId,
+          loadingMore: false,
+          totalCount: 0,
+          skippedProblems: [],
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -465,6 +475,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           firstAttemptCorrect: new Array(allProblems.length).fill(null),
           currentFeedback: null,
           sessionId,
+          loadingMore: false,
+          totalCount: 0,
+          skippedProblems: [],
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -491,12 +504,72 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           firstAttemptCorrect: new Array(problems.length).fill(null),
           currentFeedback: null,
           sessionId,
+          loadingMore: false,
+          totalCount: 0,
+          skippedProblems: [],
         },
         phase: "awaiting_input",
       });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  async startPracticeQueue(problems) {
+    if (problems.length === 0) return;
+    const { subject } = get();
+
+    // Show problems immediately with empty answers
+    const placeholders: PracticeProblem[] = problems.map((p) => ({
+      question: p,
+      answer: "",
+    }));
+    const sessionId = await sessionApi.createPracticeBatch(problems[0])
+      .then((r) => r.id)
+      .catch(() => null);
+
+    set({
+      practiceBatch: {
+        problems: placeholders,
+        currentIndex: 0,
+        results: [],
+        flags: new Array(problems.length).fill(false),
+        workSubmissions: new Array(problems.length).fill(null),
+        firstAttemptCorrect: new Array(problems.length).fill(null),
+        currentFeedback: null,
+        sessionId,
+        loadingMore: true,
+        totalCount: problems.length,
+        skippedProblems: [],
+      },
+      phase: "awaiting_input",
+    });
+
+    // Resolve correct answers in background
+    Promise.allSettled(
+      problems.map((p) => practiceApi.generate({ problem: p, count: 0, subject })),
+    ).then((results) => {
+      const { practiceBatch: batch } = get();
+      if (!batch) return;
+      const updated = [...batch.problems];
+      const skipped: string[] = [];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status === "fulfilled" && r.value.problems[0]) {
+          updated[i] = { question: problems[i], answer: r.value.problems[0].answer };
+        } else {
+          skipped.push(problems[i]);
+        }
+      }
+      set({
+        practiceBatch: {
+          ...batch,
+          problems: updated,
+          loadingMore: false,
+          skippedProblems: skipped,
+        },
+      });
+    });
   },
 
   async submitPracticeAnswer(answer) {
@@ -506,9 +579,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const current = practiceBatch.problems[idx];
     set({ phase: "thinking" });
     try {
+      // Wait for correct answer if still being resolved (queue mode)
+      let correctAnswer = current.answer;
+      if (!correctAnswer) {
+        correctAnswer = await new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Timed out")), 30_000);
+          const check = () => {
+            const batch = get().practiceBatch;
+            const ans = batch?.problems[idx]?.answer;
+            if (ans) { clearTimeout(timeout); resolve(ans); return true; }
+            return false;
+          };
+          if (!check()) {
+            const interval = setInterval(() => {
+              if (check()) clearInterval(interval);
+            }, 500);
+          }
+        });
+      }
+
       const { is_correct }: PracticeCheckResponse = await practiceApi.check({
         question: current.question,
-        correct_answer: current.answer,
+        correct_answer: correctAnswer,
         user_answer: answer,
         subject,
       });
@@ -650,8 +742,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
     try {
-      let questions: PracticeProblem[];
       if (generateCount > 0) {
+        // Generate similar — must wait for generation
         const image = imageMap.get(problems[0]);
         const { problems: generated } = await practiceApi.generate({
           problem: problems[0],
@@ -659,10 +751,49 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           subject,
           ...(image && { image_base64: image }),
         });
-        questions = generated;
+        const { id } = await sessionApi.createMockTest(problems[0]);
+        set({
+          mockTest: {
+            questions: generated,
+            answers: {},
+            flags: new Array(generated.length).fill(false),
+            currentIndex: 0,
+            timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
+            startedAt: Date.now(),
+            submittedAt: null,
+            results: null,
+            sessionId: id,
+            workImages: new Array(generated.length).fill(null),
+            workSubmissions: new Array(generated.length).fill(null),
+          },
+          phase: "mock_test_active",
+        });
       } else {
-        // Solve each problem individually to get answers (matches mobile)
-        const results = await Promise.allSettled(
+        // "Use as exam" — show questions immediately, solve answers in background
+        const placeholders: PracticeProblem[] = problems.map((p) => ({
+          question: p,
+          answer: "",
+        }));
+        const { id } = await sessionApi.createMockTest(problems[0]);
+        set({
+          mockTest: {
+            questions: placeholders,
+            answers: {},
+            flags: new Array(problems.length).fill(false),
+            currentIndex: 0,
+            timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
+            startedAt: Date.now(),
+            submittedAt: null,
+            results: null,
+            sessionId: id,
+            workImages: new Array(problems.length).fill(null),
+            workSubmissions: new Array(problems.length).fill(null),
+          },
+          phase: "mock_test_active",
+        });
+
+        // Resolve correct answers in background
+        Promise.allSettled(
           problems.map((p) => {
             const image = imageMap.get(p);
             return practiceApi.generate({
@@ -670,33 +801,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               ...(image && { image_base64: image }),
             });
           }),
-        );
-        questions = results.map((r, i) =>
-          r.status === "fulfilled" && r.value.problems.length > 0
-            ? r.value.problems[0]
-            : { question: problems[i], answer: "" },
-        );
+        ).then((results) => {
+          const { mockTest: mt } = get();
+          if (!mt) return;
+          const updated = [...mt.questions];
+          for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            if (r.status === "fulfilled" && r.value.problems.length > 0) {
+              updated[i] = r.value.problems[0];
+            }
+          }
+          set({ mockTest: { ...mt, questions: updated } });
+        });
       }
-
-      // Create analytics session
-      const { id } = await sessionApi.createMockTest(problems[0]);
-
-      set({
-        mockTest: {
-          questions,
-          answers: {},
-          flags: new Array(questions.length).fill(false),
-          currentIndex: 0,
-          timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-          startedAt: Date.now(),
-          submittedAt: null,
-          results: null,
-          sessionId: id,
-          workImages: new Array(questions.length).fill(null),
-          workSubmissions: new Array(questions.length).fill(null),
-        },
-        phase: "mock_test_active",
-      });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
