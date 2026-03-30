@@ -55,14 +55,16 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "solution. Those will only confuse the student.\n\n"
 
     "Given a {domain} problem, produce a JSON object with:\n"
-    '- "steps": an array of objects, each with:\n'
-    '  - "title": a short 2-5 word heading for the step (e.g., "Set Up the Equation")\n'
-    '  - "description": a clear explanation of the step\n'
+    '- "steps": an array of objects. EACH step MUST be an object with exactly two keys:\n'
+    '  - "title": a short 2-5 word heading (e.g., "Isolate the Variable")\n'
+    '  - "description": the full explanation of the step\n'
+    '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
     "Respond with ONLY valid JSON — no markdown, no explanation:\n"
-    '{{"steps": [{{"title": "...", "description": "..."}}, ...], "final_answer": "...", '
-    '"distractors": ["wrong1", "wrong2", "wrong3"]}}'
+    '{{"steps": [{{"title": "Understand the Problem", "description": "We have..."}}, '
+    '{{"title": "Isolate the Variable", "description": "Divide both sides..."}}], '
+    '"final_answer": "...", "distractors": ["wrong1", "wrong2", "wrong3"]}}'
 )
 
 
