@@ -41,72 +41,27 @@ function waitForChecksAndShowSummary(get: StoreGet, set: StoreSet, subscribe: St
 
 export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: StoreSubscribe) {
   return {
-    startPracticeBatch: async (problem: string, similarCount: number) => {
+    startPracticeBatch: async (problem: string, count: number) => {
       const { subject } = get();
-      const needsMore = similarCount > 0;
-      set({
-        ...initialState,
-        subject,
-        practiceBatch: {
-          problems: [{ question: problem, answer: "" }],
-          currentIndex: 0,
-          results: [],
-          flags: [false],
-          loadingMore: needsMore,
-          totalCount: 1 + similarCount,
-          skippedProblems: [],
-          pendingChecks: 0,
-          workSubmissions: [null],
-        },
-        phase: "awaiting_input",
-      });
-
-      // Resolve the correct answer in background
-      generatePracticeProblems(problem, 0, subject)
-        .then(({ problems: firstBatch }) => {
-          const { practiceBatch } = get();
-          if (!practiceBatch || !firstBatch[0]) return;
-          const updated = [...practiceBatch.problems];
-          updated[0] = { question: problem, answer: firstBatch[0].answer };
-          set({ practiceBatch: { ...practiceBatch, problems: updated } });
-        })
-        .catch(() => {
-          set({ phase: "error", error: "Failed to solve problem" });
+      set({ ...initialState, subject, phase: "loading" });
+      try {
+        const { problems } = await generatePracticeProblems(problem, count, subject);
+        set({
+          practiceBatch: {
+            problems,
+            currentIndex: 0,
+            results: [],
+            flags: new Array(problems.length).fill(false),
+            loadingMore: false,
+            totalCount: problems.length,
+            skippedProblems: [],
+            pendingChecks: 0,
+            workSubmissions: new Array(problems.length).fill(null),
+          },
+          phase: "awaiting_input",
         });
-
-      // Generate remaining similar problems in the background
-      if (needsMore) {
-        generatePracticeProblems(problem, similarCount, subject)
-          .then(({ problems: remaining }) => {
-            const { practiceBatch } = get();
-            if (!practiceBatch) return;
-            const newProblems = [
-              ...practiceBatch.problems,
-              ...remaining.filter((p) => p.question !== problem),
-            ];
-            const addedCount = newProblems.length - practiceBatch.problems.length;
-            set({
-              practiceBatch: {
-                ...practiceBatch,
-                problems: newProblems,
-                flags: [
-                  ...practiceBatch.flags,
-                  ...new Array(addedCount).fill(false),
-                ],
-                workSubmissions: [
-                  ...practiceBatch.workSubmissions,
-                  ...new Array(addedCount).fill(null),
-                ],
-                loadingMore: false,
-              },
-            });
-          })
-          .catch(() => {
-            const { practiceBatch } = get();
-            if (practiceBatch) {
-              set({ practiceBatch: { ...practiceBatch, loadingMore: false } });
-            }
-          });
+      } catch {
+        set({ phase: "error", error: "Failed to generate practice problems" });
       }
     },
 
