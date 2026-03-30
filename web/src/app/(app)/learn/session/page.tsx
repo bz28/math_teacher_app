@@ -69,18 +69,18 @@ export default function LearnSessionPage() {
     if (phase === "completed") fireConfetti();
   }, [phase, fireConfetti]);
 
-  // Keyboard shortcut: Cmd/Ctrl+Enter to submit answer or advance step
+  // Keyboard shortcut: Cmd/Ctrl+Enter to advance step
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isThinking && !isCompleted) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && phase === "awaiting_input") {
         e.preventDefault();
         advanceStep();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isThinking, isCompleted, advanceStep]);
+  }, [phase, advanceStep]);
 
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {
