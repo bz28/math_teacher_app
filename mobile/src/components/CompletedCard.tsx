@@ -18,7 +18,7 @@ export function CompletedCard({ onBack, onHome }: CompletedCardProps) {
     continueAsking,
     toggleLearnFlag,
     advanceLearnQueue,
-    tryPracticeProblem,
+    startPracticeBatch,
     reset,
   } = useSessionStore();
 
@@ -93,7 +93,7 @@ export function CompletedCard({ onBack, onHome }: CompletedCardProps) {
       </View>
       <Text style={styles.completedTitle}>Problem Solved!</Text>
       {isLearn && (
-        <AnimatedPressable onPress={tryPracticeProblem}>
+        <AnimatedPressable onPress={() => startPracticeBatch(session.problem, 1)}>
           <LinearGradient
             colors={gradients.success}
             start={{ x: 0, y: 0 }}
@@ -114,7 +114,7 @@ export function CompletedCard({ onBack, onHome }: CompletedCardProps) {
         </AnimatedPressable>
       )}
       {isPractice && (
-        <AnimatedPressable onPress={tryPracticeProblem}>
+        <AnimatedPressable onPress={() => startPracticeBatch(session.problem, 1)}>
           <LinearGradient
             colors={gradients.success}
             start={{ x: 0, y: 0 }}

@@ -2,7 +2,7 @@ import {
   createSession,
   generatePracticeProblems,
   getSession,
-  getSimilarProblem,
+
   respondToStep,
 } from "../services/api";
 import { initialState, type SessionPhase, type StoreGet, type StoreSet } from "./types";
@@ -215,18 +215,5 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       set({ phase: "completed" });
     },
 
-    tryPracticeProblem: async () => {
-      const { session, subject } = get();
-      if (!session) return;
-
-      set({ ...initialState, subject, phase: "loading" });
-      try {
-        const { similar_problem: similarProblem } = await getSimilarProblem(session.id);
-        const newSession = await createSession(similarProblem, "practice", subject);
-        set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
-      } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
-      }
-    },
-  };
+};
 }

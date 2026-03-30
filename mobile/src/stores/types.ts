@@ -121,7 +121,7 @@ export interface SessionState {
   switchToLearnMode: () => Promise<void>;
   continueAsking: () => void;
   finishAsking: () => void;
-  tryPracticeProblem: () => Promise<void>;
+
   startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
   saveMockTestAnswer: (index: number, answer: string) => void;
   navigateMockQuestion: (index: number) => void;

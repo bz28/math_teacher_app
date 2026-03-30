@@ -26,7 +26,7 @@ export default function LearnSessionPage() {
     advanceLearnQueue,
     continueAsking,
     finishAsking,
-    tryPracticeProblem,
+    startPracticeBatch,
     toggleLearnFlag,
     practiceFlaggedFromLearnQueue,
     resumeSession,
@@ -366,9 +366,8 @@ export default function LearnSessionPage() {
                   <Button
                     gradient
                     onClick={async () => {
-                      await tryPracticeProblem();
-                      // tryPracticeProblem creates a learn-style practice session, not a batch
-                      router.push("/learn/session");
+                      await startPracticeBatch(session.problem, 1);
+                      router.push("/practice");
                     }}
                     className="w-full"
                   >

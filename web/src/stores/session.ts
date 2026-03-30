@@ -119,7 +119,7 @@ interface SessionState {
   // Learn completion actions
   continueAsking: () => void;
   finishAsking: () => void;
-  tryPracticeProblem: () => Promise<void>;
+
 
   // Learn queue actions
   startLearnQueue: (problems: string[]) => Promise<void>;
@@ -331,23 +331,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ phase: "completed" as SessionPhase });
   },
 
-  async tryPracticeProblem() {
-    const { session, subject } = get();
-    if (!session) return;
-    set({ ...initialState, subject, phase: "loading" as SessionPhase });
-    try {
-      // Get a single similar problem (matches mobile: getSimilarProblem + createSession)
-      const { similar_problem } = await sessionApi.similar(session.id);
-      const newSession = await sessionApi.create({
-        problem: similar_problem,
-        mode: "practice",
-        subject,
-      });
-      set({ session: newSession, phase: "awaiting_input" });
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
-    }
-  },
 
   toggleLearnFlag(index) {
     const { learnQueue } = get();
