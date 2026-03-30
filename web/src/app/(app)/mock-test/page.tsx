@@ -293,7 +293,8 @@ export default function MockTestPage() {
       </div>
 
       {/* Question navigator */}
-      <div className="flex flex-wrap gap-2">
+      <div className="overflow-x-auto -mx-2 px-2 pb-1">
+        <div className="flex gap-2 min-w-min md:flex-wrap">
         {mockTest.questions.map((_, i) => (
           <button
             key={i}
@@ -311,6 +312,7 @@ export default function MockTestPage() {
             {i + 1}
           </button>
         ))}
+        </div>
       </div>
 
       {/* Current question */}
