@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
-import { abandonSession, getSession, respondToStep, type SessionData } from "../services/api";
+import { getSession, respondToStep, type SessionData } from "../services/api";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface SessionReviewScreenProps {
@@ -144,43 +144,14 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
 
         {/* Action buttons */}
         {isActive ? (
-          <>
-            <AnimatedPressable
-              style={[styles.resumeButton, shadows.sm]}
-              onPress={() => onResume(sessionId)}
-              scaleDown={0.97}
-            >
-              <Ionicons name="play" size={18} color={colors.white} />
-              <Text style={styles.actionButtonText}>Resume Session</Text>
-            </AnimatedPressable>
-
-            <AnimatedPressable
-              style={styles.endSessionButton}
-              onPress={() => {
-                Alert.alert(
-                  "End Session",
-                  "End this session? You won't be able to resume it.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "End Session",
-                      style: "destructive",
-                      onPress: async () => {
-                        try {
-                          await abandonSession(sessionId);
-                          onBack();
-                        } catch {
-                          Alert.alert("Error", "Failed to end session. Try again.");
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <Text style={styles.endSessionText}>End Session</Text>
-            </AnimatedPressable>
-          </>
+          <AnimatedPressable
+            style={[styles.resumeButton, shadows.sm]}
+            onPress={() => onResume(sessionId)}
+            scaleDown={0.97}
+          >
+            <Ionicons name="play" size={18} color={colors.white} />
+            <Text style={styles.actionButtonText}>Resume Session</Text>
+          </AnimatedPressable>
         ) : (
           <AnimatedPressable
             style={[styles.practiceButton, shadows.sm, practiceLoading && { opacity: 0.7 }]}
