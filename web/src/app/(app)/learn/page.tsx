@@ -34,8 +34,6 @@ export default function LearnPage() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
 
-  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
-
   // Mock test config
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
@@ -249,7 +247,6 @@ export default function LearnPage() {
             }}
             maxProblems={10}
             currentQueueLength={problemQueue.length}
-            onPhaseChange={setImagePhase}
           />
         </Card>
 

@@ -24,10 +24,10 @@ export function ImageUpload({
   onPhaseChange,
 }: ImageUploadProps) {
   const [phase, _setPhase] = useState<"upload" | "select" | "extracting">("upload");
-  const setPhase = (p: "upload" | "select" | "extracting") => {
+  const setPhase = useCallback((p: "upload" | "select" | "extracting") => {
     _setPhase(p);
     onPhaseChange?.(p);
-  };
+  }, [onPhaseChange]);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [extractProgress, setExtractProgress] = useState({ done: 0, total: 0 });
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
@@ -60,7 +60,7 @@ export function ImageUpload({
       };
       reader.readAsDataURL(file);
     },
-    [],
+    [setPhase],
   );
 
   const handleExtractRectangles = useCallback(
@@ -111,7 +111,7 @@ export function ImageUpload({
       setPhase("upload");
       setImageBase64(null);
     },
-    [imageBase64, subject],
+    [imageBase64, subject, setPhase],
   );
 
   function handleDrop(e: React.DragEvent) {
