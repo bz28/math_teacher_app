@@ -455,26 +455,48 @@ export default function LearnSessionPage() {
       {/* ── Active step (only when session is truly active, not in continue-asking) ── */}
       {!isCompleted && session.status !== "completed" && (
         <div className="space-y-4">
-          {/* Current step card */}
-          <Card variant="elevated">
-            <div className="flex items-start gap-4">
-              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white">
-                {currentStep}
-              </span>
-              <div>
-                <p className="text-xs font-semibold text-text-muted">
-                  Step {currentStep}
-                </p>
-                <p className="mt-1 text-base leading-relaxed text-text-primary">
-                  {currentStepData?.description ?? "Loading..."}
-                </p>
+          {/* Current step card — re-animates when step changes */}
+          <motion.div
+            key={stepIndex}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <Card variant="elevated">
+              <div className="flex items-start gap-4">
+                <motion.span
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 20 }}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white"
+                >
+                  {currentStep}
+                </motion.span>
+                <motion.div
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <p className="text-xs font-semibold text-text-muted">
+                    Step {currentStep}
+                  </p>
+                  <p className="mt-1 text-base leading-relaxed text-text-primary">
+                    {currentStepData?.description ?? "Loading..."}
+                  </p>
+                </motion.div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
 
           {/* Final step: multiple choice or text answer fallback */}
           {isFinalStep && currentStepData?.choices && (
-            <div className="space-y-2">
+            <motion.div
+              key={`choices-${stepIndex}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-2"
+            >
               <p className="text-sm font-semibold text-text-secondary">
                 What is the result?
               </p>
@@ -518,7 +540,7 @@ export default function LearnSessionPage() {
                   </button>
                 );
               })}
-            </div>
+            </motion.div>
           )}
 
           {/* ── Inline chat: question bubbles + tutor responses ── */}
