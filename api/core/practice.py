@@ -63,7 +63,7 @@ async def generate_practice_problems(
         decomposition = await decompose_problem(
             problem, user_id=user_id, subject=subject, image_base64=image_base64,
         )
-        return [{"question": problem, "answer": decomposition.final_answer}]
+        return [{"question": problem, "answer": decomposition.final_answer, "distractors": decomposition.distractors}]
 
     # Generate question text only (no answers — they'd be unreliable)
     user_msg = f"{problem}\n\nGenerate {count} similar problems (do not include the originals)."
@@ -92,7 +92,7 @@ async def generate_practice_problems(
     async def solve_one(q: str) -> dict[str, str] | None:
         try:
             decomp = await decompose_problem(q, user_id=user_id, subject=subject)
-            return {"question": q, "answer": decomp.final_answer}
+            return {"question": q, "answer": decomp.final_answer, "distractors": decomp.distractors}
         except RuntimeError:
             logger.warning("Failed to solve generated problem: %s", q[:80])
             return None

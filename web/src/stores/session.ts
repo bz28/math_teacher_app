@@ -78,6 +78,7 @@ export interface MockTest {
   sessionId: string | null;
   workImages: (string | null)[];
   workSubmissions: (DiagnosisResult | null)[];
+  multipleChoice: boolean;
 }
 
 export interface MockTestResult {
@@ -149,7 +150,7 @@ interface SessionState {
   retryFlaggedProblems: () => Promise<void>;
 
   // Mock test actions
-  startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
+  startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null, multipleChoice?: boolean) => Promise<void>;
   saveMockTestAnswer: (index: number, answer: string) => void;
   attachMockTestWork: (index: number, imageBase64: string) => void;
   toggleMockTestFlag: (index: number) => void;
@@ -737,7 +738,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   // ── Mock test ──
 
-  async startMockTest(problems, generateCount, timeLimitMinutes) {
+  async startMockTest(problems, generateCount, timeLimitMinutes, multipleChoice = true) {
     const { subject, problemQueue } = get();
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
@@ -765,6 +766,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             sessionId: id,
             workImages: new Array(generated.length).fill(null),
             workSubmissions: new Array(generated.length).fill(null),
+            multipleChoice,
           },
           phase: "mock_test_active",
         });
@@ -788,6 +790,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             sessionId: id,
             workImages: new Array(problems.length).fill(null),
             workSubmissions: new Array(problems.length).fill(null),
+            multipleChoice,
           },
           phase: "mock_test_active",
         });
