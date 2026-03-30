@@ -168,7 +168,7 @@ async def completed_chat(
     )
     data = await call_claude_json(
         _build_completed_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
-        session_id=session_id, user_id=user_id, model=MODEL_CLASSIFY,
+        session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
 
