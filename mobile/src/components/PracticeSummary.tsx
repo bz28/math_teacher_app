@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   ScrollView,
   Text,
@@ -7,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
+import { completePracticeBatchSession } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
 import { colors, spacing } from "../theme";
@@ -25,6 +27,17 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
     startLearnQueue,
     reset,
   } = useSessionStore();
+
+  // Record practice batch in history
+  useEffect(() => {
+    if (!practiceBatch?.sessionId || practiceBatch.results.length === 0) return;
+    const correct = practiceBatch.results.filter((r) => r.isCorrect).length;
+    completePracticeBatchSession(
+      practiceBatch.sessionId,
+      practiceBatch.results.length,
+      correct,
+    ).catch(() => {}); // Silent fail — history is non-critical
+  }, [practiceBatch?.sessionId, practiceBatch?.results.length]);
 
   if (!practiceBatch) return null;
 

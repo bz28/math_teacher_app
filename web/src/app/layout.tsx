@@ -49,7 +49,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("veradic-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
           }}
         />
       </head>

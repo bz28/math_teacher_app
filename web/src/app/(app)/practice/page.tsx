@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
+import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
@@ -45,11 +46,20 @@ export default function PracticePage() {
     if (phase === "error" && error) toast.error(error);
   }, [phase, error, toast]);
 
-  // Confetti on perfect practice score
+  // Confetti on perfect practice score + complete session for history
   useEffect(() => {
     if (phase === "practice_summary" && practiceBatch) {
       const allCorrect = practiceBatch.results.every((r) => r.isCorrect);
       if (allCorrect) fireConfetti(true);
+
+      // Record in history
+      if (practiceBatch.sessionId) {
+        const correct = practiceBatch.results.filter((r) => r.isCorrect).length;
+        sessionApi.completePracticeBatch(practiceBatch.sessionId, {
+          total_questions: practiceBatch.results.length,
+          correct_count: correct,
+        }).catch(() => {}); // Silent fail — history is non-critical
+      }
     }
   }, [phase, practiceBatch, fireConfetti]);
 

@@ -331,6 +331,26 @@ export const session = {
       },
     );
   },
+
+  createPracticeBatch(problem: string) {
+    return apiFetch<{ id: string }>("/session/practice-batch", {
+      method: "POST",
+      body: JSON.stringify({ problem }),
+    });
+  },
+
+  completePracticeBatch(
+    sessionId: string,
+    data: { total_questions: number; correct_count: number },
+  ) {
+    return apiFetch<{ status: string }>(
+      `/session/practice-batch/${sessionId}/complete`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    );
+  },
 };
 
 // ── Practice endpoints ──
