@@ -192,7 +192,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   async startSession(problem, image) {
     const { subject } = get();
-    console.log("[startSession] image present:", !!image, "image length:", image?.length ?? 0);
     set({ phase: "loading", error: null });
     try {
       const session = await sessionApi.create({

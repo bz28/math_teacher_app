@@ -163,8 +163,6 @@ async def decompose_problem(
 
     llm_mode = LLMMode.DECOMPOSE_DIAGNOSIS if work_diagnosis else LLMMode.DECOMPOSE
 
-    print(f"[DEBUG] decompose_problem image_base64 present: {bool(image_base64)}, length: {len(image_base64) if image_base64 else 0}")
-
     if image_base64:
         # Use Vision API when an image is attached
         from api.core.image_utils import validate_and_decode_image
