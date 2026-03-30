@@ -59,7 +59,7 @@ export function Modal({
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ type: "spring", stiffness: 350, damping: 25 }}
             className={cn(
-              "relative z-10 w-full max-w-lg rounded-[--radius-xl] bg-white p-6 shadow-lg",
+              "relative z-10 w-full max-w-lg rounded-[--radius-xl] bg-surface p-6 shadow-lg",
               className,
             )}
             role="dialog"

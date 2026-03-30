@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { auth } from "@/lib/api";
-import { Button } from "@/components/ui";
+import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
 const GRADE_OPTIONS = [
@@ -24,6 +24,7 @@ export default function RegisterPage() {
   const [emailError, setEmailError] = useState("");
   const { register, loading, error, clearError } = useAuthStore();
   const router = useRouter();
+  const toast = useToast();
 
   async function checkEmail() {
     if (!email) return;
@@ -47,7 +48,8 @@ export default function RegisterPage() {
       await register({ email, password, name, grade_level: gradeLevel });
       router.replace("/home");
     } catch {
-      // Error is set in the store
+      const msg = useAuthStore.getState().error;
+      if (msg) toast.error(msg);
     }
   }
 
@@ -64,7 +66,7 @@ export default function RegisterPage() {
       </Link>
 
       {/* Card */}
-      <div className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-white p-8 shadow-md">
+      <div className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md">
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           Create your account
         </h1>
@@ -133,12 +135,6 @@ export default function RegisterPage() {
               ))}
             </div>
           </div>
-
-          {error && (
-            <p className="rounded-[--radius-sm] bg-error-light px-3 py-2 text-sm font-medium text-error">
-              {error}
-            </p>
-          )}
 
           <Button
             type="submit"

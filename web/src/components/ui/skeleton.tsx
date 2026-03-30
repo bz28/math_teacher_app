@@ -25,7 +25,7 @@ export function SkeletonCard({ className }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "rounded-[--radius-lg] border border-border-light bg-white p-5 space-y-3",
+        "rounded-[--radius-lg] border border-border-light bg-surface p-5 space-y-3",
         className,
       )}
     >
@@ -41,7 +41,7 @@ export function SkeletonStep({ className }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "rounded-[--radius-lg] border border-border-light bg-white p-5 space-y-4",
+        "rounded-[--radius-lg] border border-border-light bg-surface p-5 space-y-4",
         className,
       )}
     >

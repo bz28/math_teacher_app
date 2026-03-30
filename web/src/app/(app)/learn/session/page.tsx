@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
+import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 
 export default function LearnSessionPage() {
@@ -32,6 +33,8 @@ export default function LearnSessionPage() {
     reset,
   } = useSessionStore();
 
+  const toast = useToast();
+  const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
@@ -55,6 +58,29 @@ export default function LearnSessionPage() {
       router.replace("/learn");
     }
   }, [phase, router, resumeId]);
+
+  // Show toast on error
+  useEffect(() => {
+    if (phase === "error" && error) toast.error(error);
+  }, [phase, error, toast]);
+
+  // Confetti on completion
+  useEffect(() => {
+    if (phase === "completed") fireConfetti();
+  }, [phase, fireConfetti]);
+
+  // Keyboard shortcut: Cmd/Ctrl+Enter to advance step
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && phase === "awaiting_input") {
+        e.preventDefault();
+        advanceStep();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, advanceStep]);
 
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {
@@ -317,7 +343,7 @@ export default function LearnSessionPage() {
                       "flex w-full items-center justify-center gap-2 rounded-[--radius-md] border px-4 py-3 text-sm font-semibold transition-colors",
                       learnQueue.flags[learnQueue.currentIndex]
                         ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
-                        : "border-border bg-white text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
+                        : "border-border bg-surface text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
                     )}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill={learnQueue.flags[learnQueue.currentIndex] ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
@@ -410,10 +436,7 @@ export default function LearnSessionPage() {
           ))}
 
           {isThinking && (
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              Thinking...
-            </div>
+            <TypingIndicator />
           )}
 
           <div className="space-y-3">
@@ -445,26 +468,48 @@ export default function LearnSessionPage() {
       {/* ── Active step (only when session is truly active, not in continue-asking) ── */}
       {!isCompleted && session.status !== "completed" && (
         <div className="space-y-4">
-          {/* Current step card */}
-          <Card variant="elevated">
-            <div className="flex items-start gap-4">
-              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white">
-                {currentStep}
-              </span>
-              <div>
-                <p className="text-xs font-semibold text-text-muted">
-                  Step {currentStep}
-                </p>
-                <p className="mt-1 text-base leading-relaxed text-text-primary">
-                  {currentStepData?.description ?? "Loading..."}
-                </p>
+          {/* Current step card — re-animates when step changes */}
+          <motion.div
+            key={stepIndex}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <Card variant="elevated">
+              <div className="flex items-start gap-4">
+                <motion.span
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 20 }}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white"
+                >
+                  {currentStep}
+                </motion.span>
+                <motion.div
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <p className="text-xs font-semibold text-text-muted">
+                    Step {currentStep}
+                  </p>
+                  <p className="mt-1 text-base leading-relaxed text-text-primary">
+                    {currentStepData?.description ?? "Loading..."}
+                  </p>
+                </motion.div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
 
           {/* Final step: multiple choice or text answer fallback */}
           {isFinalStep && currentStepData?.choices && (
-            <div className="space-y-2">
+            <motion.div
+              key={`choices-${stepIndex}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-2"
+            >
               <p className="text-sm font-semibold text-text-secondary">
                 What is the result?
               </p>
@@ -486,7 +531,7 @@ export default function LearnSessionPage() {
                         "border-success bg-success-light text-success",
                       isWrong && "border-error bg-error-light text-error",
                       !isSelected &&
-                        "border-border bg-white text-text-primary hover:border-primary hover:bg-primary-bg",
+                        "border-border bg-surface text-text-primary hover:border-primary hover:bg-primary-bg",
                       isThinking && !isSelected && "opacity-50",
                     )}
                   >
@@ -508,7 +553,7 @@ export default function LearnSessionPage() {
                   </button>
                 );
               })}
-            </div>
+            </motion.div>
           )}
 
           {/* ── Inline chat: question bubbles + tutor responses ── */}
@@ -595,10 +640,7 @@ export default function LearnSessionPage() {
 
           {/* Thinking indicator */}
           {isThinking && (
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              Thinking...
-            </div>
+            <TypingIndicator />
           )}
 
           {/* ── Chat input + I Understand / Ask button ── */}

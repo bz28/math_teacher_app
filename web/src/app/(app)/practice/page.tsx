@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
+import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 
 export default function PracticePage() {
@@ -23,6 +24,8 @@ export default function PracticePage() {
     reset,
   } = useSessionStore();
 
+  const toast = useToast();
+  const { fire: fireConfetti } = useConfetti();
   const [answer, setAnswer] = useState("");
 
   useEffect(() => {
@@ -30,6 +33,18 @@ export default function PracticePage() {
       router.replace("/learn");
     }
   }, [phase, practiceBatch, router]);
+
+  useEffect(() => {
+    if (phase === "error" && error) toast.error(error);
+  }, [phase, error, toast]);
+
+  // Confetti on perfect practice score
+  useEffect(() => {
+    if (phase === "practice_summary" && practiceBatch) {
+      const correct = practiceBatch.results.filter((r) => r.isCorrect).length;
+      if (correct === practiceBatch.results.length) fireConfetti(true);
+    }
+  }, [phase, practiceBatch, fireConfetti]);
 
   if (phase === "loading" || !practiceBatch) {
     return (
@@ -75,7 +90,7 @@ export default function PracticePage() {
         {/* Score card */}
         <Card variant="elevated" className="text-center space-y-3">
           <p className="text-4xl font-extrabold text-primary">
-            {correct}/{results.length}
+            <AnimatedCounter to={correct} />/{results.length}
           </p>
           <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
             <div

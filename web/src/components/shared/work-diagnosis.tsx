@@ -65,7 +65,7 @@ export function WorkDiagnosis({
           {diagnosis.steps.map((step, i) => (
             <div
               key={i}
-              className="rounded-[--radius-md] border border-border-light bg-white p-3 space-y-1"
+              className="rounded-[--radius-md] border border-border-light bg-surface p-3 space-y-1"
             >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-text-primary">

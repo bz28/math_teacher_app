@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -17,7 +18,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-1 flex-col">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-border-light bg-white/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-border-light bg-surface/90 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-6">
             {/* Logo */}
@@ -55,6 +56,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* User menu */}
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <span className="hidden text-sm font-medium text-text-secondary sm:block">
               {user?.name}
             </span>

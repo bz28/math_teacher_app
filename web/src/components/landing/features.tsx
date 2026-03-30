@@ -74,7 +74,7 @@ export function Features() {
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.08 * i, duration: 0.5 }}
-              className="group rounded-[--radius-xl] border border-border-light bg-white p-6 transition-all hover:border-primary/20 hover:shadow-md"
+              className="group rounded-[--radius-xl] border border-border-light bg-surface p-6 transition-all hover:border-primary/20 hover:shadow-md"
             >
               <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary transition-colors group-hover:bg-primary group-hover:text-white">
                 <feature.icon />

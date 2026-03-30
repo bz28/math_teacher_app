@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
+import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 
 export default function MockTestPage() {
@@ -23,6 +24,8 @@ export default function MockTestPage() {
     reset,
   } = useSessionStore();
 
+  const toast = useToast();
+  const { fire: fireConfetti } = useConfetti();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   // Timer
@@ -45,6 +48,46 @@ export default function MockTestPage() {
       router.replace("/learn");
     }
   }, [phase, mockTest, router]);
+
+  useEffect(() => {
+    if (phase === "error" && error) toast.error(error);
+  }, [phase, error, toast]);
+
+  // Confetti on good mock test score (>=70%)
+  useEffect(() => {
+    if (phase === "mock_test_summary" && mockTest?.results) {
+      const correct = mockTest.results.filter((r) => r.isCorrect === true).length;
+      const score = Math.round((correct / mockTest.results.length) * 100);
+      if (score >= 70) fireConfetti(score === 100);
+    }
+  }, [phase, mockTest, fireConfetti]);
+
+  // Keyboard shortcuts for mock test navigation
+  useEffect(() => {
+    if (phase !== "mock_test_active" || !mockTest) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setMockTestIndex(Math.max(0, mockTest!.currentIndex - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setMockTestIndex(Math.min(mockTest!.questions.length - 1, mockTest!.currentIndex + 1));
+      } else if (e.key >= "1" && e.key <= "9") {
+        const idx = parseInt(e.key) - 1;
+        if (idx < mockTest!.questions.length) {
+          e.preventDefault();
+          setMockTestIndex(idx);
+        }
+      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        submitMockTest();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, mockTest, setMockTestIndex, submitMockTest]);
 
   if (phase === "loading" || !mockTest) {
     return (
@@ -95,7 +138,7 @@ export default function MockTestPage() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card variant="elevated" className="text-center space-y-3">
             <p className="text-sm font-semibold text-text-muted">Exam Results</p>
-            <p className="text-4xl font-extrabold text-primary">{correct}/{mockTest.results.length}</p>
+            <p className="text-4xl font-extrabold text-primary"><AnimatedCounter to={correct} />/{mockTest.results.length}</p>
 
             <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
               <div
@@ -103,7 +146,7 @@ export default function MockTestPage() {
                 style={{ width: `${score}%` }}
               />
             </div>
-            <p className="text-lg font-bold text-text-primary">{score}%</p>
+            <p className="text-lg font-bold text-text-primary"><AnimatedCounter to={score} />%</p>
             <p className="text-sm text-text-secondary">{getMessage()}</p>
 
             {timeTaken != null && (
@@ -115,15 +158,15 @@ export default function MockTestPage() {
             <div className="flex justify-center gap-4 pt-2">
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-success" />
-                <span className="text-xs text-text-secondary">{correct} correct</span>
+                <span className="text-xs text-text-secondary"><AnimatedCounter to={correct} /> correct</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-error" />
-                <span className="text-xs text-text-secondary">{answered - correct} wrong</span>
+                <span className="text-xs text-text-secondary"><AnimatedCounter to={answered - correct} /> wrong</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-text-muted" />
-                <span className="text-xs text-text-secondary">{unanswered} skipped</span>
+                <span className="text-xs text-text-secondary"><AnimatedCounter to={unanswered} /> skipped</span>
               </div>
             </div>
           </Card>
@@ -314,6 +357,7 @@ export default function MockTestPage() {
             onClick={() => setMockTestIndex(Math.max(0, mockTest.currentIndex - 1))}
             disabled={mockTest.currentIndex === 0}
           >
+            <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&larr;</kbd>
             Previous
           </Button>
           <Button
@@ -330,6 +374,7 @@ export default function MockTestPage() {
             disabled={mockTest.currentIndex === mockTest.questions.length - 1}
           >
             Next
+            <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&rarr;</kbd>
           </Button>
         </div>
       </Card>
