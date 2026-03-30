@@ -1,6 +1,13 @@
 "use client";
 
-import { forwardRef, type ReactNode, type MouseEventHandler } from "react";
+import {
+  forwardRef,
+  useState,
+  useCallback,
+  type ReactNode,
+  type MouseEventHandler,
+  type PointerEvent,
+} from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +41,15 @@ const sizeStyles: Record<Size, string> = {
   lg: "h-13 px-8 text-base rounded-[--radius-lg]",
 };
 
+interface Ripple {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+}
+
+let rippleId = 0;
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
@@ -50,6 +66,23 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const isDisabled = disabled || loading;
+    const [ripples, setRipples] = useState<Ripple[]>([]);
+
+    const handlePointerDown = useCallback(
+      (e: PointerEvent<HTMLButtonElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height) * 2;
+        const id = ++rippleId;
+        setRipples((prev) => [
+          ...prev,
+          { id, x: e.clientX - rect.left, y: e.clientY - rect.top, size },
+        ]);
+        setTimeout(() => {
+          setRipples((prev) => prev.filter((r) => r.id !== id));
+        }, 600);
+      },
+      [],
+    );
 
     return (
       <motion.button
@@ -58,7 +91,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         whileTap={isDisabled ? undefined : { scale: 0.97 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
         className={cn(
-          "inline-flex items-center justify-center gap-2 font-bold transition-colors cursor-pointer",
+          "relative overflow-hidden inline-flex items-center justify-center gap-2 font-bold transition-colors cursor-pointer",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           "disabled:opacity-50 disabled:cursor-not-allowed",
           variantStyles[variant],
@@ -70,7 +103,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         disabled={isDisabled}
         onClick={onClick}
+        onPointerDown={isDisabled ? undefined : handlePointerDown}
       >
+        {ripples.map((ripple) => (
+          <span
+            key={ripple.id}
+            className="animate-ripple pointer-events-none absolute rounded-full bg-white/20"
+            style={{
+              left: ripple.x - ripple.size / 2,
+              top: ripple.y - ripple.size / 2,
+              width: ripple.size,
+              height: ripple.size,
+            }}
+          />
+        ))}
         {loading && <Spinner />}
         {children}
       </motion.button>
