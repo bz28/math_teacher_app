@@ -62,6 +62,33 @@ export default function MockTestPage() {
     }
   }, [phase, mockTest, fireConfetti]);
 
+  // Keyboard shortcuts for mock test navigation
+  useEffect(() => {
+    if (phase !== "mock_test_active" || !mockTest) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setMockTestIndex(Math.max(0, mockTest!.currentIndex - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setMockTestIndex(Math.min(mockTest!.questions.length - 1, mockTest!.currentIndex + 1));
+      } else if (e.key >= "1" && e.key <= "9") {
+        const idx = parseInt(e.key) - 1;
+        if (idx < mockTest!.questions.length) {
+          e.preventDefault();
+          setMockTestIndex(idx);
+        }
+      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        submitMockTest();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, mockTest, setMockTestIndex, submitMockTest]);
+
   if (phase === "loading" || !mockTest) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
@@ -330,6 +357,7 @@ export default function MockTestPage() {
             onClick={() => setMockTestIndex(Math.max(0, mockTest.currentIndex - 1))}
             disabled={mockTest.currentIndex === 0}
           >
+            <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&larr;</kbd>
             Previous
           </Button>
           <Button
@@ -346,6 +374,7 @@ export default function MockTestPage() {
             disabled={mockTest.currentIndex === mockTest.questions.length - 1}
           >
             Next
+            <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&rarr;</kbd>
           </Button>
         </div>
       </Card>

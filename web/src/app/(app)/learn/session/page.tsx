@@ -69,6 +69,19 @@ export default function LearnSessionPage() {
     if (phase === "completed") fireConfetti();
   }, [phase, fireConfetti]);
 
+  // Keyboard shortcut: Cmd/Ctrl+Enter to submit answer or advance step
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isThinking && !isCompleted) {
+        e.preventDefault();
+        advanceStep();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isThinking, isCompleted, advanceStep]);
+
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {
     const flaggedCount = learnQueue.flags.filter(Boolean).length;
