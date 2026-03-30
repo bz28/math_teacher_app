@@ -49,7 +49,7 @@ async def generate_practice_problems(
     user_id: str | None = None,
     subject: str = Subject.MATH,
     image_base64: str | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     """Generate the original + count similar problems with answers.
 
     When count=0, solves the original problem using step-by-step decomposition
