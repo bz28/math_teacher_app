@@ -18,8 +18,9 @@ import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
-import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { clearAuth, generatePracticeProblems, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { useSessionStore } from "./src/stores/session";
+import { initialState } from "./src/stores/types";
 import { colors } from "./src/theme";
 
 Sentry.init({
@@ -39,7 +40,6 @@ function AppRoot() {
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const resumeSession = useSessionStore((s) => s.resumeSession);
-  const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
   const setStoreSubject = useSessionStore((s) => s.setSubject);
 
   useEffect(() => {
@@ -159,9 +159,33 @@ function AppRoot() {
             sessionId={reviewSessionId}
             onBack={() => setScreen("mode-select")}
             onPracticeSimilar={async (problem) => {
-              setStoreSubject(subject as "math" | "chemistry");
-              await startPracticeBatch(problem, 1);
+              setStoreSubject(subject);
+              useSessionStore.setState({
+                ...initialState,
+                subject,
+                phase: "loading",
+              });
               setScreen("session");
+              try {
+                const { problems } = await generatePracticeProblems(problem, 1, subject);
+                if (problems.length === 0) throw new Error("No problems generated");
+                useSessionStore.setState({
+                  practiceBatch: {
+                    problems,
+                    currentIndex: 0,
+                    results: [],
+                    flags: new Array(problems.length).fill(false),
+                    loadingMore: false,
+                    totalCount: problems.length,
+                    skippedProblems: [],
+                    pendingChecks: 0,
+                    workSubmissions: new Array(problems.length).fill(null),
+                  },
+                  phase: "awaiting_input",
+                });
+              } catch {
+                useSessionStore.setState({ phase: "error", error: "Failed to generate similar problem" });
+              }
             }}
             onResume={async (sessionId) => {
               await resumeSession(sessionId);
