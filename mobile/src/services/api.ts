@@ -198,8 +198,14 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 // Session API — LLM-backed endpoints use longer timeout
-export const createSession = (problem: string, mode: string = "learn", subject: string = "math") =>
-  apiPost<SessionData>("/session", { problem, mode, subject }, LLM_TIMEOUT_MS);
+export const createSession = (
+  problem: string, mode: string = "learn", subject: string = "math", imageBase64?: string,
+) =>
+  apiPost<SessionData>(
+    "/session",
+    { problem, mode, subject, ...(imageBase64 && { image_base64: imageBase64 }) },
+    LLM_TIMEOUT_MS,
+  );
 
 export const getSession = (id: string) =>
   apiGet<SessionData>(`/session/${id}`);

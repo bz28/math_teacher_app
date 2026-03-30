@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 from api.core.constants import DECOMPOSITION_CACHE_MAX_SIZE, DECOMPOSITION_CACHE_TTL_SECONDS
-from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,7 @@ async def decompose_problem(
     user_id: str | None = None,
     work_diagnosis: dict[str, object] | None = None,
     subject: str = Subject.MATH,
+    image_base64: str | None = None,
 ) -> Decomposition:
     """Generate step-by-step decomposition for a problem.
 
@@ -133,8 +134,8 @@ async def decompose_problem(
     will be personalized to reference the student's specific mistakes.
     """
     cache_key = f"{subject}:{problem}"
-    # Return cached result for non-personalized calls
-    if not work_diagnosis:
+    # Return cached result for non-personalized, non-image calls
+    if not work_diagnosis and not image_base64:
         cached = _cache_get(cache_key)
         if cached is not None:
             logger.info("Decomposition cache hit for %s", problem)
@@ -161,14 +162,41 @@ async def decompose_problem(
         )
 
     llm_mode = LLMMode.DECOMPOSE_DIAGNOSIS if work_diagnosis else LLMMode.DECOMPOSE
-    data = await call_claude_json(
-        _build_system_prompt(subject),
-        prompt,
-        mode=llm_mode,
-        model=MODEL_REASON,
-        max_tokens=1024,
-        user_id=user_id,
-    )
+
+    if image_base64:
+        # Use Vision API when an image is attached
+        from api.core.image_utils import validate_and_decode_image
+        _, media_type = validate_and_decode_image(image_base64)
+        user_content: list[dict[str, object]] = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": image_base64,
+                },
+            },
+            {
+                "type": "text",
+                "text": _build_system_prompt(subject) + "\n\n" + prompt,
+            },
+        ]
+        data = await call_claude_vision(
+            user_content,
+            mode=llm_mode,
+            model=MODEL_REASON,
+            max_tokens=1024,
+            user_id=user_id,
+        )
+    else:
+        data = await call_claude_json(
+            _build_system_prompt(subject),
+            prompt,
+            mode=llm_mode,
+            model=MODEL_REASON,
+            max_tokens=1024,
+            user_id=user_id,
+        )
 
     steps, final_answer, distractors = _parse_decomposition(data)
     if not steps:

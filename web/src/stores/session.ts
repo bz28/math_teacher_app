@@ -103,11 +103,13 @@ interface SessionState {
 
   // Problem input
   problemQueue: string[];
+  /** Optional images keyed by problem text, passed to solver for Vision */
+  problemImages: Record<string, string>;
 
   // Actions
   setSubject: (subject: Subject) => void;
   setProblemQueue: (queue: string[]) => void;
-  addToQueue: (problem: string) => void;
+  addToQueue: (problem: string, image?: string) => void;
   removeFromQueue: (index: number) => void;
 
   // Learn actions
@@ -160,6 +162,7 @@ const initialState = {
   practiceBatch: null,
   mockTest: null,
   problemQueue: [],
+  problemImages: {},
 };
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -173,28 +176,39 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ problemQueue: queue });
   },
 
-  addToQueue(problem) {
-    const { problemQueue } = get();
+  addToQueue(problem, image) {
+    const { problemQueue, problemImages } = get();
     if (problemQueue.length < 10) {
-      set({ problemQueue: [...problemQueue, problem] });
+      set({
+        problemQueue: [...problemQueue, problem],
+        problemImages: image ? { ...problemImages, [problem]: image } : problemImages,
+      });
     }
   },
 
   removeFromQueue(index) {
-    const { problemQueue } = get();
-    set({ problemQueue: problemQueue.filter((_, i) => i !== index) });
+    const { problemQueue, problemImages } = get();
+    const removed = problemQueue[index];
+    const newImages = { ...problemImages };
+    delete newImages[removed];
+    set({
+      problemQueue: problemQueue.filter((_, i) => i !== index),
+      problemImages: newImages,
+    });
   },
 
   // ── Learn session ──
 
   async startSession(problem) {
-    const { subject } = get();
+    const { subject, problemImages } = get();
+    const image = problemImages[problem];
     set({ phase: "loading", error: null });
     try {
       const session = await sessionApi.create({
         problem,
         mode: "learn",
         subject,
+        ...(image && { image_base64: image }),
       });
       set({ session, phase: "awaiting_input", chatHistory: {} });
     } catch (err) {

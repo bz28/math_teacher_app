@@ -12,6 +12,8 @@ export interface ExtractionState {
   extracting: boolean;
   extractionProgress: { done: number; total: number } | null;
   problems: string[] | null;
+  /** Cropped images parallel to problems array */
+  cropImages: (string | undefined)[];
   confidence: string;
   selected: boolean[];
   editingIndex: number | null;
@@ -28,6 +30,7 @@ const INITIAL_STATE: ExtractionState = {
   extracting: false,
   extractionProgress: null,
   problems: null,
+  cropImages: [],
   confidence: "high",
   selected: [],
   editingIndex: null,
@@ -93,21 +96,26 @@ export function useImageExtraction(
 
     try {
       const allProblems: string[] = [];
+      const allCropImages: (string | undefined)[] = [];
       let worstConfidence = "high";
 
       // Process in batches of 3
       for (let i = 0; i < rectangles.length; i += 3) {
         const batch = rectangles.slice(i, i + 3);
+        const crops = await Promise.all(
+          batch.map((rect) => cropImage(state.imageUri!, rect)),
+        );
         const results = await Promise.allSettled(
-          batch.map(async (rect) => {
-            const cropped = await cropImage(state.imageUri!, rect);
-            return extractProblemsFromImage(cropped, subject);
-          }),
+          crops.map((cropped) => extractProblemsFromImage(cropped, subject)),
         );
 
-        for (const r of results) {
+        for (let j = 0; j < results.length; j++) {
+          const r = results[j];
           if (r.status === "fulfilled") {
-            allProblems.push(...r.value.problems);
+            for (const p of r.value.problems) {
+              allProblems.push(p);
+              allCropImages.push(crops[j]);
+            }
             if (r.value.confidence === "low") worstConfidence = "low";
             else if (r.value.confidence === "medium" && worstConfidence !== "low")
               worstConfidence = "medium";
@@ -131,6 +139,7 @@ export function useImageExtraction(
         extracting: false,
         extractionProgress: null,
         problems: allProblems,
+        cropImages: allCropImages,
         confidence: worstConfidence,
         selected: allProblems.map(() => true),
         editingIndex: null,
@@ -205,6 +214,13 @@ export function useImageExtraction(
     return state.problems.filter((_, i) => state.selected[i]);
   };
 
+  const getSelectedWithImages = (): { text: string; image?: string }[] => {
+    if (!state.problems) return [];
+    return state.problems
+      .map((text, i) => ({ text, image: state.cropImages[i] }))
+      .filter((_, i) => state.selected[i]);
+  };
+
   const selectedCount = state.selected.filter(Boolean).length;
   const canAddMore = queueLength < maxProblems;
 
@@ -222,5 +238,6 @@ export function useImageExtraction(
     setEditingText,
     finishEdit,
     getSelectedProblems,
+    getSelectedWithImages,
   };
 }

@@ -229,7 +229,7 @@ export default function LearnPage() {
       <ImageUpload
         subject={subject}
         onProblemsExtracted={(problems) => {
-          problems.forEach((p) => addToQueue(p));
+          problems.forEach((p) => addToQueue(p.text, p.image));
         }}
         maxProblems={10}
         currentQueueLength={problemQueue.length}

@@ -9,7 +9,7 @@ import { RectangleSelector, type Rectangle } from "./rectangle-selector";
 
 interface ImageUploadProps {
   subject: string;
-  onProblemsExtracted: (problems: string[]) => void;
+  onProblemsExtracted: (problems: { text: string; image?: string }[]) => void;
   maxProblems?: number;
   currentQueueLength?: number;
 }
@@ -24,6 +24,7 @@ export function ImageUpload({
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [extractProgress, setExtractProgress] = useState({ done: 0, total: 0 });
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
+  const [cropImages, setCropImages] = useState<(string | undefined)[]>([]);
   const [selected, setSelected] = useState<boolean[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -62,21 +63,26 @@ export function ImageUpload({
       setExtractProgress({ done: 0, total: rectangles.length });
 
       const allProblems: string[] = [];
+      const allCropImages: (string | undefined)[] = [];
       let worstConfidence: string = "high";
 
       // Process in batches of 3
       for (let i = 0; i < rectangles.length; i += 3) {
         const batch = rectangles.slice(i, i + 3);
+        const crops = await Promise.all(
+          batch.map((rect) => cropImage(imageBase64, rect)),
+        );
         const results = await Promise.allSettled(
-          batch.map(async (rect) => {
-            const cropped = await cropImage(imageBase64, rect);
-            return imageApi.extract(cropped, subject);
-          }),
+          crops.map((cropped) => imageApi.extract(cropped, subject)),
         );
 
-        for (const r of results) {
+        for (let j = 0; j < results.length; j++) {
+          const r = results[j];
           if (r.status === "fulfilled") {
-            allProblems.push(...r.value.problems);
+            for (const p of r.value.problems) {
+              allProblems.push(p);
+              allCropImages.push(crops[j]);
+            }
             if (r.value.confidence === "low") worstConfidence = "low";
             else if (r.value.confidence === "medium" && worstConfidence !== "low")
               worstConfidence = "medium";
@@ -93,6 +99,7 @@ export function ImageUpload({
       }
 
       setResult({ problems: allProblems, confidence: worstConfidence as "high" | "medium" | "low" });
+      setCropImages(allCropImages);
       setSelected(new Array(allProblems.length).fill(true));
       setPhase("upload");
       setImageBase64(null);
@@ -115,9 +122,13 @@ export function ImageUpload({
 
   function handleConfirm() {
     if (!result) return;
-    const selectedProblems = result.problems.filter((_, i) => selected[i]);
-    onProblemsExtracted(selectedProblems.slice(0, remaining));
+    const items = result.problems
+      .map((text, i) => ({ text, image: cropImages[i] }))
+      .filter((_, i) => selected[i])
+      .slice(0, remaining);
+    onProblemsExtracted(items);
     setResult(null);
+    setCropImages([]);
     setSelected([]);
   }
 

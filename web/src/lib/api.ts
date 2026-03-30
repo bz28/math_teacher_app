@@ -265,6 +265,7 @@ export const session = {
     problem: string;
     mode: "learn" | "practice";
     subject: string;
+    image_base64?: string;
   }) {
     return apiFetch<SessionResponse>("/session", {
       method: "POST",

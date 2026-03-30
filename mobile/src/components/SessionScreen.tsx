@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -65,6 +66,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     learnQueue,
     switchToLearnMode,
     finishAsking,
+    problemImages,
     reset,
   } = useSessionStore();
 
@@ -184,6 +186,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         <View style={[styles.problemCard, shadows.sm]}>
           <Text style={styles.cardLabel}>Problem</Text>
           <Text style={styles.problemText}>{session.problem}</Text>
+          {problemImages[session.problem] && (
+            <Image
+              source={{ uri: `data:image/jpeg;base64,${problemImages[session.problem]}` }}
+              style={{ height: 120, marginTop: 8, borderRadius: 8 }}
+              resizeMode="contain"
+            />
+          )}
         </View>
         {isLearn && (
           <View style={styles.progressRow}>
