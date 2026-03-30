@@ -6,8 +6,24 @@ import { motion } from "framer-motion";
 export function Hero() {
   return (
     <section className="relative overflow-hidden px-6 pb-20 pt-16 md:pb-28 md:pt-24">
-      {/* Background gradient blob */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/8 via-primary-light/6 to-transparent blur-3xl" />
+      {/* Animated gradient mesh */}
+      <div className="pointer-events-none absolute inset-0 -top-40 overflow-hidden">
+        <motion.div
+          className="absolute left-1/2 top-0 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl"
+          animate={{ x: [-20, 20, -20], y: [-10, 15, -10], scale: [1, 1.08, 1] }}
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute left-1/3 top-10 h-[400px] w-[400px] rounded-full bg-gradient-to-br from-primary-light/8 to-transparent blur-3xl"
+          animate={{ x: [15, -25, 15], y: [10, -20, 10], scale: [1, 1.1, 1] }}
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute right-1/3 top-20 h-[350px] w-[350px] rounded-full bg-gradient-to-br from-success/5 to-transparent blur-3xl"
+          animate={{ x: [-10, 30, -10], y: [-15, 10, -15], scale: [1, 1.05, 1] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
 
       <div className="relative mx-auto max-w-4xl text-center">
         {/* Pill badge */}
