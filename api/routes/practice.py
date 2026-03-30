@@ -38,7 +38,14 @@ async def generate(
         )
 
     return PracticeGenerateResponse(
-        problems=[PracticeProblem(question=p["question"], answer=p["answer"], distractors=p.get("distractors", [])) for p in problems],
+        problems=[
+            PracticeProblem(
+                question=p["question"],
+                answer=p["answer"],
+                distractors=p.get("distractors", []),
+            )
+            for p in problems
+        ],
     )
 
 
