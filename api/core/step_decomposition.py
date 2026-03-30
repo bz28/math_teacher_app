@@ -57,7 +57,7 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "Given a {domain} problem, produce a JSON object with:\n"
     '- "steps": an array of objects. EACH step MUST be an object with exactly two keys:\n'
     '  - "title": a short 2-5 word heading (e.g., "Isolate the Variable")\n'
-    '  - "description": the full explanation of the step\n'
+    '  - "description": the full explanation of the step. Wrap key terms, formulas, and operations in **double asterisks** for emphasis (e.g., "We need to **divide both sides** by **4** to isolate **x**")\n'
     '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'

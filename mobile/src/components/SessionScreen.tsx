@@ -35,6 +35,16 @@ interface SessionScreenProps {
   onHome: () => void;
 }
 
+/** Render text with **bold** markdown into React Native Text elements. */
+function renderBold(text: string, style: object) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <Text key={i} style={[style, { fontWeight: "700" }]}>{part.slice(2, -2)}</Text>
+      : part,
+  );
+}
+
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -212,7 +222,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             <Text style={styles.stepDescLabel}>
               Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
             </Text>
-            <Text style={styles.stepDescText}>{currentStep.description}</Text>
+            <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
           </View>
         )}
 
@@ -223,7 +233,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
               <Text style={styles.stepDescLabel}>
                 Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
               </Text>
-              <Text style={styles.stepDescText}>{currentStep.description}</Text>
+              <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
             </View>
             <Text style={styles.promptText}>
               What is the result?
@@ -481,7 +491,7 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
           Step {index + 1}{title ? ` — ${title}` : ""}
         </Text>
         <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
-          {description}
+          {renderBold(description, compactStyles.historyText)}
         </Text>
       </View>
       <Ionicons

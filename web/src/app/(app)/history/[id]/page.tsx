@@ -7,7 +7,7 @@ import { session as sessionApi, type SessionResponse } from "@/lib/api";
 import { useSessionStore } from "@/stores/session";
 import { Card, Badge, Button } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, renderBold } from "@/lib/utils";
 
 export default function SessionReviewPage({
   params,
@@ -153,7 +153,7 @@ export default function SessionReviewPage({
                           <p className="text-xs font-bold text-primary">{step.title}</p>
                         )}
                         <p className="text-sm font-medium text-text-primary">
-                          {step.description}
+                          {renderBold(step.description)}
                         </p>
                         {step.final_answer && (
                           <p className="mt-1 text-sm text-text-secondary">
