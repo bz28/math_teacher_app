@@ -199,10 +199,14 @@ function PracticeSimilarButton({ problem, subject }: { problem: string; subject:
       loading={loading}
       onClick={async () => {
         setLoading(true);
-        const store = useSessionStore.getState();
-        store.setSubject(subject as "math" | "chemistry");
-        await store.startPracticeBatch(problem, 1);
-        router.push("/practice");
+        try {
+          const store = useSessionStore.getState();
+          store.setSubject(subject as "math" | "chemistry");
+          await store.startPracticeBatch(problem, 1);
+          router.push("/practice");
+        } finally {
+          setLoading(false);
+        }
       }}
     >
       Practice Similar Problem

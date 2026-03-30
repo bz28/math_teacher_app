@@ -140,6 +140,8 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
             skippedProblems: [],
             pendingChecks: 0,
             workSubmissions: new Array(practiceProblemsList.length).fill(null),
+            firstAttemptCorrect: new Array(practiceProblemsList.length).fill(null),
+            currentFeedback: null,
           },
           phase: "awaiting_input",
         });

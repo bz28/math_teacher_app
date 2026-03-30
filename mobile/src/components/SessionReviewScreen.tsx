@@ -9,7 +9,7 @@ import { colors, spacing, radii, typography, shadows } from "../theme";
 interface SessionReviewScreenProps {
   sessionId: string;
   onBack: () => void;
-  onPracticeSimilar: (problem: string) => void;
+  onPracticeSimilar: (problem: string) => void | Promise<void>;
   onResume: (sessionId: string) => void;
 }
 
@@ -31,6 +31,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [practiceLoading, setPracticeLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -176,12 +177,26 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
           </>
         ) : (
           <AnimatedPressable
-            style={[styles.practiceButton, shadows.sm]}
-            onPress={() => onPracticeSimilar(session.problem)}
+            style={[styles.practiceButton, shadows.sm, practiceLoading && { opacity: 0.7 }]}
+            onPress={async () => {
+              setPracticeLoading(true);
+              try {
+                await onPracticeSimilar(session.problem);
+              } finally {
+                setPracticeLoading(false);
+              }
+            }}
             scaleDown={0.97}
+            disabled={practiceLoading}
           >
-            <Ionicons name="refresh" size={18} color={colors.white} />
-            <Text style={styles.actionButtonText}>Practice Similar Problem</Text>
+            {practiceLoading ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Ionicons name="refresh" size={18} color={colors.white} />
+            )}
+            <Text style={styles.actionButtonText}>
+              {practiceLoading ? "Generating..." : "Practice Similar Problem"}
+            </Text>
           </AnimatedPressable>
         )}
       </ScrollView>
