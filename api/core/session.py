@@ -72,6 +72,9 @@ async def create_session(
     image_base64: str | None = None,
 ) -> Session:
     """Create a new tutoring session for a problem."""
+    import logging as _log
+    _log.getLogger(__name__).info("create_session image_base64 present: %s, length: %d",
+                                  bool(image_base64), len(image_base64) if image_base64 else 0)
     problem = problem.strip()
     if not problem:
         raise ValueError("Problem cannot be empty")
