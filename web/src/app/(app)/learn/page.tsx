@@ -60,6 +60,7 @@ export default function LearnPage() {
     const problems =
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
     const firstImage = problemQueue.length > 0 ? problemQueue[0].image : undefined;
+    console.log("[handleStart] queue:", problemQueue.length, "firstImage:", !!firstImage, "imageLen:", firstImage?.length ?? 0);
 
     if (mode === "learn") {
       if (problems.length === 1) {
