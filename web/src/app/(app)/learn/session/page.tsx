@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
-import { Button, Card, Badge, useToast } from "@/components/ui";
+import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
@@ -423,10 +423,7 @@ export default function LearnSessionPage() {
           ))}
 
           {isThinking && (
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              Thinking...
-            </div>
+            <TypingIndicator />
           )}
 
           <div className="space-y-3">
@@ -608,10 +605,7 @@ export default function LearnSessionPage() {
 
           {/* Thinking indicator */}
           {isThinking && (
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              Thinking...
-            </div>
+            <TypingIndicator />
           )}
 
           {/* ── Chat input + I Understand / Ask button ── */}
