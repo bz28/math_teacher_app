@@ -119,7 +119,11 @@ async def create_session(
             subject=subject,
         )
         problem_type = decomposition.problem_type
-        steps_data = [{"title": s.get("title", ""), "description": s["description"]} for s in decomposition.steps]
+        steps_data = [
+            {"title": s.get("title", ""), "description": s["description"]} if isinstance(s, dict)
+            else {"title": "", "description": str(s)}
+            for s in decomposition.steps
+        ]
         if not steps_data:
             raise RuntimeError("Decomposition returned no steps")
 
