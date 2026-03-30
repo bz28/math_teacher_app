@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { session as sessionApi, type SessionHistoryItem } from "@/lib/api";
 import { useSessionStore, type Subject } from "@/stores/session";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { formatRelativeDate, cn } from "@/lib/utils";
 
@@ -86,16 +86,18 @@ export default function HistoryPage() {
           <SkeletonCard />
         </div>
       ) : items.length === 0 ? (
-        <div className="py-12 text-center">
-          <p className="text-text-muted">No sessions yet.</p>
-          <Button
-            variant="secondary"
-            className="mt-4"
-            onClick={() => router.push(`/learn?subject=${subject}`)}
-          >
-            Start Learning
-          </Button>
-        </div>
+        <EmptyState
+          title="No sessions yet"
+          description="Start learning to see your history here"
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => router.push(`/learn?subject=${subject}`)}
+            >
+              Start Learning
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {items.map((item, i) => (
