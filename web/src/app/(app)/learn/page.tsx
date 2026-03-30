@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/session";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
@@ -117,31 +117,42 @@ export default function LearnPage() {
         </h1>
       </motion.div>
 
-      {/* Mode selector — Learn and Mock Test only */}
-      <div className="flex gap-2">
+      {/* Mode selector — pill toggle */}
+      <div className="relative flex rounded-full border border-border bg-surface p-1">
+        {/* Sliding background indicator */}
+        <motion.div
+          className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-primary"
+          initial={false}
+          animate={{ left: mode === "learn" ? "4px" : "calc(50% + 0px)" }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        />
         {([
-          { id: "learn" as const, label: "Learn", desc: "Step-by-step guided learning" },
-          { id: "mock-test" as const, label: "Mock Test", desc: "Practice or generate an exam" },
+          { id: "learn" as const, label: "Learn" },
+          { id: "mock-test" as const, label: "Mock Test" },
         ]).map((m) => (
           <button
             key={m.id}
             onClick={() => setMode(m.id)}
-            className={`flex-1 rounded-[--radius-md] border p-3 text-left transition-colors ${
-              mode === m.id
-                ? "border-primary bg-primary-bg"
-                : "border-border bg-surface hover:border-primary/30"
-            }`}
+            className={cn(
+              "relative z-10 flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
+              mode === m.id ? "text-white" : "text-text-secondary hover:text-text-primary",
+            )}
           >
-            <p className={`text-sm font-bold ${mode === m.id ? "text-primary" : "text-text-primary"}`}>
-              {m.label}
-            </p>
-            <p className="mt-0.5 text-xs text-text-muted">{m.desc}</p>
+            {m.label}
           </button>
         ))}
       </div>
 
       {/* Mock test config */}
+      <AnimatePresence initial={false}>
       {!isLearn && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden"
+        >
         <Card variant="flat" className="space-y-4">
           {/* Questions type */}
           <div className="space-y-2">
@@ -240,7 +251,9 @@ export default function LearnPage() {
             </div>
           </div>
         </Card>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Image upload */}
       <ImageUpload
