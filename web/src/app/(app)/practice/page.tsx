@@ -19,6 +19,7 @@ export default function PracticePage() {
     phase,
     error,
     submitPracticeAnswer,
+    skipPracticeProblem,
     submitPracticeWork,
     nextPracticeProblem,
     togglePracticeFlag,
@@ -47,8 +48,8 @@ export default function PracticePage() {
   // Confetti on perfect practice score
   useEffect(() => {
     if (phase === "practice_summary" && practiceBatch) {
-      const correct = practiceBatch.results.filter((r) => r.isCorrect).length;
-      if (correct === practiceBatch.results.length) fireConfetti(true);
+      const allCorrect = practiceBatch.results.every((r) => r.isCorrect);
+      if (allCorrect) fireConfetti(true);
     }
   }, [phase, practiceBatch, fireConfetti]);
 
@@ -137,43 +138,45 @@ export default function PracticePage() {
 
         {/* Per-result breakdown */}
         <div className="space-y-2">
-          {results.map((result, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex items-start gap-3 rounded-[--radius-md] border px-4 py-3",
-                result.isCorrect ? "border-success-border bg-success-light" : "border-error-border bg-error-light",
-              )}
-            >
-              <span
+          {results.map((result, i) => {
+            const wasCorrect = result.isCorrect;
+            return (
+              <div
+                key={i}
                 className={cn(
-                  "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-                  result.isCorrect ? "bg-success" : "bg-error",
+                  "flex items-start gap-3 rounded-[--radius-md] border px-4 py-3",
+                  wasCorrect ? "border-success-border bg-success-light" : "border-error-border bg-error-light",
                 )}
               >
-                {result.isCorrect ? "\u2713" : "\u2717"}
-              </span>
-              <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-sm font-medium text-text-primary">{result.problem}</p>
-                <p className="text-xs text-text-secondary">Your answer: {result.userAnswer}</p>
-                {!result.isCorrect && (
-                  <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
-                )}
-                <DiagnosisTeaser diagnosis={workSubmissions[i]} />
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                    wasCorrect ? "bg-success" : "bg-error",
+                  )}
+                >
+                  {wasCorrect ? "\u2713" : "\u2717"}
+                </span>
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className="text-sm font-medium text-text-primary">{result.problem}</p>
+                  <p className="text-xs text-text-secondary">
+                    {result.userAnswer === "(skipped)" ? "Skipped" : `Your answer: ${result.userAnswer}`}
+                  </p>
+                  <DiagnosisTeaser diagnosis={workSubmissions[i]} />
+                </div>
+                <button
+                  onClick={() => togglePracticeFlag(i)}
+                  className={cn(
+                    "rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors flex-shrink-0",
+                    flags[i]
+                      ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
+                      : "border-border text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
+                  )}
+                >
+                  {flags[i] ? "Flagged" : "Flag"}
+                </button>
               </div>
-              <button
-                onClick={() => togglePracticeFlag(i)}
-                className={cn(
-                  "rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors flex-shrink-0",
-                  flags[i]
-                    ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
-                    : "border-border text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
-                )}
-              >
-                {flags[i] ? "Flagged" : "Flag"}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Action buttons */}
@@ -219,7 +222,7 @@ export default function PracticePage() {
   // Active practice
   const current = practiceBatch.problems[practiceBatch.currentIndex];
   const isThinking = phase === "thinking";
-  const lastResult = practiceBatch.results[practiceBatch.currentIndex];
+  const feedback = practiceBatch.currentFeedback;
   const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
 
   return (
@@ -245,8 +248,26 @@ export default function PracticePage() {
           {current.question}
         </p>
 
-        {!lastResult ? (
+        {feedback === "correct" ? (
           <div className="space-y-3">
+            <div className="rounded-[--radius-md] p-3 bg-success-light border border-success-border">
+              <p className="text-sm font-medium">Correct!</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={nextPracticeProblem}>
+              {practiceBatch.currentIndex < practiceBatch.problems.length - 1
+                ? "Next Problem"
+                : "See Results"}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Wrong answer feedback */}
+            {feedback === "wrong" && (
+              <div className="rounded-[--radius-md] p-3 bg-error-light border border-error-border">
+                <p className="text-sm font-medium">Not quite, try again!</p>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Input
                 placeholder="Enter your answer..."
@@ -271,6 +292,15 @@ export default function PracticePage() {
               </Button>
             </div>
 
+            {/* Skip button */}
+            <button
+              onClick={skipPracticeProblem}
+              disabled={isThinking}
+              className="text-xs font-medium text-text-muted hover:text-text-secondary transition-colors"
+            >
+              Skip this problem
+            </button>
+
             {/* Attach work */}
             <AttachWork
               attached={!!attachedImage}
@@ -289,31 +319,6 @@ export default function PracticePage() {
                 </Button>
               </div>
             )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div
-              className={cn(
-                "rounded-[--radius-md] p-3",
-                lastResult.isCorrect
-                  ? "bg-success-light border border-success-border"
-                  : "bg-error-light border border-error-border",
-              )}
-            >
-              <p className="text-sm font-medium">
-                {lastResult.isCorrect ? "Correct!" : "Incorrect"}
-              </p>
-              {!lastResult.isCorrect && (
-                <p className="mt-1 text-sm text-text-muted italic">
-                  Flag and learn this problem to see the answer
-                </p>
-              )}
-            </div>
-            <Button variant="secondary" size="sm" onClick={nextPracticeProblem}>
-              {practiceBatch.currentIndex < practiceBatch.problems.length - 1
-                ? "Next Problem"
-                : "See Results"}
-            </Button>
           </div>
         )}
       </Card>

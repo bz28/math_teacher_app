@@ -46,6 +46,8 @@ export interface PracticeBatch {
   results: PracticeResult[];
   flags: boolean[];
   workSubmissions: (DiagnosisResult | null)[];
+  firstAttemptCorrect: (boolean | null)[];
+  currentFeedback: 'correct' | 'wrong' | null;
 }
 
 export interface PracticeResult {
@@ -117,7 +119,7 @@ interface SessionState {
   // Learn completion actions
   continueAsking: () => void;
   finishAsking: () => void;
-  tryPracticeProblem: () => Promise<void>;
+
 
   // Learn queue actions
   startLearnQueue: (problems: string[]) => Promise<void>;
@@ -128,6 +130,7 @@ interface SessionState {
   // Practice actions
   startPracticeBatch: (problem: string, count: number) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
+  skipPracticeProblem: () => void;
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => void;
   nextPracticeProblem: () => void;
   togglePracticeFlag: (index: number) => void;
@@ -328,23 +331,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ phase: "completed" as SessionPhase });
   },
 
-  async tryPracticeProblem() {
-    const { session, subject } = get();
-    if (!session) return;
-    set({ ...initialState, subject, phase: "loading" as SessionPhase });
-    try {
-      // Get a single similar problem (matches mobile: getSimilarProblem + createSession)
-      const { similar_problem } = await sessionApi.similar(session.id);
-      const newSession = await sessionApi.create({
-        problem: similar_problem,
-        mode: "practice",
-        subject,
-      });
-      set({ session: newSession, phase: "awaiting_input" });
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
-    }
-  },
 
   toggleLearnFlag(index) {
     const { learnQueue } = get();
@@ -374,6 +360,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           results: [],
           flags: new Array(allProblems.length).fill(false),
           workSubmissions: new Array(allProblems.length).fill(null),
+          firstAttemptCorrect: new Array(allProblems.length).fill(null),
+          currentFeedback: null,
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -412,6 +400,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           results: [],
           flags: new Array(allProblems.length).fill(false),
           workSubmissions: new Array(allProblems.length).fill(null),
+          firstAttemptCorrect: new Array(allProblems.length).fill(null),
+          currentFeedback: null,
         },
         phase: "awaiting_input" as SessionPhase,
       });
@@ -436,6 +426,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           results: [],
           flags: new Array(problems.length).fill(false),
           workSubmissions: new Array(problems.length).fill(null),
+          firstAttemptCorrect: new Array(problems.length).fill(null),
+          currentFeedback: null,
         },
         phase: "awaiting_input",
       });
@@ -447,7 +439,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async submitPracticeAnswer(answer) {
     const { practiceBatch, subject } = get();
     if (!practiceBatch) return;
-    const current = practiceBatch.problems[practiceBatch.currentIndex];
+    const idx = practiceBatch.currentIndex;
+    const current = practiceBatch.problems[idx];
     set({ phase: "thinking" });
     try {
       const { is_correct }: PracticeCheckResponse = await practiceApi.check({
@@ -456,25 +449,90 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         user_answer: answer,
         subject,
       });
-      const result: PracticeResult = {
-        problem: current.question,
-        userAnswer: answer,
-        correctAnswer: current.answer,
-        isCorrect: is_correct,
-      };
-      const newFlags = [...practiceBatch.flags];
-      if (!is_correct) newFlags[practiceBatch.currentIndex] = true;
 
+      // Track first-attempt result
+      const newFirstAttempt = [...practiceBatch.firstAttemptCorrect];
+      if (newFirstAttempt[idx] === null) newFirstAttempt[idx] = is_correct;
+
+      if (is_correct) {
+        const result: PracticeResult = {
+          problem: current.question,
+          userAnswer: answer,
+          correctAnswer: "",
+          isCorrect: true,
+        };
+        const newFlags = [...practiceBatch.flags];
+        newFlags[idx] = false;
+        set({
+          practiceBatch: {
+            ...practiceBatch,
+            results: [...practiceBatch.results, result],
+            flags: newFlags,
+            firstAttemptCorrect: newFirstAttempt,
+            currentFeedback: "correct",
+          },
+          phase: "awaiting_input",
+        });
+      } else {
+        const newFlags = [...practiceBatch.flags];
+        newFlags[idx] = true;
+        set({
+          practiceBatch: {
+            ...practiceBatch,
+            flags: newFlags,
+            firstAttemptCorrect: newFirstAttempt,
+            currentFeedback: "wrong",
+          },
+          phase: "awaiting_input",
+        });
+      }
+    } catch (err) {
+      set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
+  skipPracticeProblem() {
+    const { practiceBatch } = get();
+    if (!practiceBatch) return;
+    const idx = practiceBatch.currentIndex;
+    const current = practiceBatch.problems[idx];
+
+    const newFlags = [...practiceBatch.flags];
+    newFlags[idx] = true;
+    const newFirstAttempt = [...practiceBatch.firstAttemptCorrect];
+    if (newFirstAttempt[idx] === null) newFirstAttempt[idx] = false;
+
+    const result: PracticeResult = {
+      problem: current.question,
+      userAnswer: "(skipped)",
+      correctAnswer: "",
+      isCorrect: false,
+    };
+
+    const next = idx + 1;
+    if (next >= practiceBatch.problems.length) {
       set({
         practiceBatch: {
           ...practiceBatch,
           results: [...practiceBatch.results, result],
           flags: newFlags,
+          firstAttemptCorrect: newFirstAttempt,
+          currentFeedback: null,
+        },
+        phase: "practice_summary",
+      });
+    } else {
+      set({
+        practiceBatch: {
+          ...practiceBatch,
+          results: [...practiceBatch.results, result],
+          flags: newFlags,
+          firstAttemptCorrect: newFirstAttempt,
+          currentFeedback: null,
+          currentIndex: next,
         },
         phase: "awaiting_input",
       });
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
     }
   },
 
@@ -516,7 +574,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set({ phase: "practice_summary" });
     } else {
       set({
-        practiceBatch: { ...practiceBatch, currentIndex: next },
+        practiceBatch: { ...practiceBatch, currentIndex: next, currentFeedback: null },
         phase: "awaiting_input",
       });
     }
