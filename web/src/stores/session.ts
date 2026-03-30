@@ -138,6 +138,7 @@ interface SessionState {
 
   // Practice actions
   startPracticeBatch: (problem: string, count: number) => Promise<void>;
+  startPracticeQueue: (problems: string[]) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
   skipPracticeProblem: () => void;
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => void;
@@ -502,6 +503,63 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  async startPracticeQueue(problems) {
+    if (problems.length === 0) return;
+    const { subject } = get();
+
+    // Show problems immediately with empty answers
+    const placeholders: PracticeProblem[] = problems.map((p) => ({
+      question: p,
+      answer: "",
+    }));
+    const sessionId = await sessionApi.createPracticeBatch(problems[0])
+      .then((r) => r.id)
+      .catch(() => null);
+
+    set({
+      practiceBatch: {
+        problems: placeholders,
+        currentIndex: 0,
+        results: [],
+        flags: new Array(problems.length).fill(false),
+        workSubmissions: new Array(problems.length).fill(null),
+        firstAttemptCorrect: new Array(problems.length).fill(null),
+        currentFeedback: null,
+        sessionId,
+        loadingMore: true,
+        totalCount: problems.length,
+        skippedProblems: [],
+      },
+      phase: "awaiting_input",
+    });
+
+    // Resolve correct answers in background
+    Promise.allSettled(
+      problems.map((p) => practiceApi.generate({ problem: p, count: 0, subject })),
+    ).then((results) => {
+      const { practiceBatch: batch } = get();
+      if (!batch) return;
+      const updated = [...batch.problems];
+      const skipped: string[] = [];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status === "fulfilled" && r.value.problems[0]) {
+          updated[i] = { question: problems[i], answer: r.value.problems[0].answer };
+        } else {
+          skipped.push(problems[i]);
+        }
+      }
+      set({
+        practiceBatch: {
+          ...batch,
+          problems: updated,
+          loadingMore: false,
+          skippedProblems: skipped,
+        },
+      });
+    });
   },
 
   async submitPracticeAnswer(answer) {
