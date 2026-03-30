@@ -89,7 +89,7 @@ async def generate_practice_problems(
         raise RuntimeError("Failed to generate practice problems")
 
     # Step 2: Solve each generated problem via decompose_problem for accuracy
-    async def solve_one(q: str) -> dict[str, str] | None:
+    async def solve_one(q: str) -> dict[str, object] | None:
         try:
             decomp = await decompose_problem(q, user_id=user_id, subject=subject)
             return {"question": q, "answer": decomp.final_answer, "distractors": decomp.distractors}
