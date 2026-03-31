@@ -89,6 +89,7 @@ function LearnPageContent() {
 
   const [starting, setStarting] = useState(false);
   const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
+  const [quotaConfirm, setQuotaConfirm] = useState(false);
 
   async function handleStart() {
     if (starting) return;
@@ -97,6 +98,13 @@ function LearnPageContent() {
       setUpgradePrompt({ entitlement: "create_session", message: "You've used all 5 problems for today. Upgrade to Pro for unlimited access." });
       return;
     }
+
+    const problemCount = problemQueue.length > 0 ? problemQueue.length : 1;
+    if (!isPro && problemCount > 1 && !quotaConfirm) {
+      setQuotaConfirm(true);
+      return;
+    }
+    setQuotaConfirm(false);
     setStarting(true);
 
     const problems =
@@ -318,6 +326,7 @@ function LearnPageContent() {
               entitlement: "image_scan",
               message: "You've used all 3 image scans for today. Upgrade to Pro for unlimited scans.",
             })}
+            onExtractComplete={fetchEntitlements}
           />
         </Card>
 
@@ -408,18 +417,34 @@ function LearnPageContent() {
           ))}
 
           {/* Start button — full width */}
-          <Button
-            gradient
-            onClick={handleStart}
-            loading={isLoading || starting}
-            disabled={!canStart}
-            className="w-full py-3 text-base"
-          >
-            {isLearn
-              ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
-              : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
-          </Button>
-          {!isPro && remainingSessions < Infinity && (
+          {quotaConfirm ? (
+            <div className="space-y-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg p-4">
+              <p className="text-sm font-semibold text-warning-dark">
+                This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
+              </p>
+              <div className="flex gap-2">
+                <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
+                  Continue
+                </Button>
+                <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              gradient
+              onClick={handleStart}
+              loading={isLoading || starting}
+              disabled={!canStart}
+              className="w-full py-3 text-base"
+            >
+              {isLearn
+                ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
+                : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
+            </Button>
+          )}
+          {!isPro && remainingSessions < Infinity && !quotaConfirm && (
             <p className="text-center text-xs text-text-muted">
               {remainingSessions} of 5 problems remaining today
             </p>

@@ -16,6 +16,8 @@ interface ImageUploadProps {
   scansRemaining?: number;
   /** Called when scan limit is reached and user tries to upload */
   onScanLimitReached?: () => void;
+  /** Called after extraction completes (use to refresh quota counts) */
+  onExtractComplete?: () => void;
   /** Called when the phase changes — parent can use this to adjust layout */
   onPhaseChange?: (phase: "upload" | "select" | "extracting") => void;
 }
@@ -27,6 +29,7 @@ export function ImageUpload({
   currentQueueLength = 0,
   scansRemaining = Infinity,
   onScanLimitReached,
+  onExtractComplete,
   onPhaseChange,
 }: ImageUploadProps) {
   const [phase, _setPhase] = useState<"upload" | "select" | "extracting">("upload");
@@ -111,13 +114,14 @@ export function ImageUpload({
         return;
       }
 
+      onExtractComplete?.();
       setResult({ problems: allProblems, confidence: worstConfidence as "high" | "medium" | "low" });
       setCropImages(allCropImages);
       setSelected(new Array(allProblems.length).fill(true));
       setPhase("upload");
       setImageBase64(null);
     },
-    [imageBase64, subject, setPhase],
+    [imageBase64, subject, setPhase, onExtractComplete],
   );
 
   function handleDrop(e: React.DragEvent) {

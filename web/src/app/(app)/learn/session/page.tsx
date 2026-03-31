@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
+import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -38,9 +40,12 @@ export default function LearnSessionPage() {
     reset,
   } = useSessionStore();
   const { startPracticeBatch, practiceFlaggedProblems } = usePracticeStore();
+  const { chatsRemaining, isPro, fetchEntitlements } = useEntitlementStore();
+  const remainingChats = chatsRemaining();
 
   const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
+  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
   );
@@ -140,9 +145,17 @@ export default function LearnSessionPage() {
 
   async function handleAsk() {
     if (!input.trim()) return;
+    if (!isPro && remainingChats <= 0) {
+      setUpgradePrompt({
+        entitlement: "chat_message",
+        message: "You've used all 20 chat messages for today. Upgrade to Pro for unlimited chat.",
+      });
+      return;
+    }
     const q = input.trim();
     setInput("");
     await askAboutStep(q);
+    fetchEntitlements();
   }
 
   async function handleChoiceSelect(choice: string, index: number) {
@@ -302,7 +315,12 @@ export default function LearnSessionPage() {
           )}
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-text-muted">Ask a question about the problem</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-text-muted">Ask a question about the problem</p>
+              {!isPro && remainingChats < Infinity && (
+                <p className="text-xs text-text-muted">{remainingChats} chats remaining</p>
+              )}
+            </div>
             <div className="flex gap-2">
               <input
                 placeholder="Ask a question..."
@@ -508,9 +526,12 @@ export default function LearnSessionPage() {
           {/* ── Chat input + I Understand / Ask button ── */}
           {!isFinalStep && (
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-text-muted">
-                Have a question about this step?
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-text-muted">Have a question about this step?</p>
+                {!isPro && remainingChats < Infinity && (
+                  <p className="text-xs text-text-muted">{remainingChats} chats remaining</p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <input
                   placeholder="Ask a question..."
@@ -548,6 +569,12 @@ export default function LearnSessionPage() {
           )}
         </div>
       )}
+      <UpgradePrompt
+        open={upgradePrompt !== null}
+        onClose={() => setUpgradePrompt(null)}
+        entitlement={upgradePrompt?.entitlement}
+        message={upgradePrompt?.message}
+      />
     </div>
   );
 }
