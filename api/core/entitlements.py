@@ -83,7 +83,9 @@ async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID, since: da
     return result.scalar_one()
 
 
-async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str, since: datetime | None = None) -> int:
+async def get_daily_llm_call_count(
+    db: AsyncSession, user_id: uuid.UUID, function_name: str, since: datetime | None = None,
+) -> int:
     """Count LLM calls today for a specific function."""
     from api.models.llm_call import LLMCall
 
