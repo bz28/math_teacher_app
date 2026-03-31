@@ -24,7 +24,7 @@ interface PaywallProps {
   trigger?: string;
 }
 
-type PlanId = "annual" | "monthly";
+type PlanId = "annual" | "weekly";
 
 interface PlanOption {
   id: PlanId;
