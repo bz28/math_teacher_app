@@ -71,6 +71,16 @@ export default function Users() {
     }
   };
 
+  const handleResetLimit = async (userId: string) => {
+    if (!confirm("Reset this user's daily usage limits? They'll be able to use the app as if the day just started.")) return;
+    try {
+      await api.resetDailyLimit(userId);
+      reload();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
   const handleDelete = async (userId: string, email: string) => {
     if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
     try {
@@ -217,6 +227,11 @@ export default function Users() {
                         <button onClick={() => { setOpenMenu(null); handleToggleRole(u.id, u.role); }}>
                           {u.role === "admin" ? "Remove Admin" : "Make Admin"}
                         </button>
+                        {u.subscription_tier !== "pro" && (
+                          <button onClick={() => { setOpenMenu(null); handleResetLimit(u.id); }}>
+                            Reset Daily Limits
+                          </button>
+                        )}
                         <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}>
                           Delete User
                         </button>

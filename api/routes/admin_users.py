@@ -312,3 +312,20 @@ async def delete_user(
     await db.delete(user)
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/users/{user_id}/reset-daily-limit")
+async def reset_daily_limit(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Reset a user's daily usage limits by shifting the counting window to now."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.daily_limit_reset_at = datetime.now(UTC)
+    await db.commit()
+    return {"status": "ok"}

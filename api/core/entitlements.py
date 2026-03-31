@@ -54,7 +54,20 @@ def today_start() -> datetime:
     return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+def usage_cutoff(user: object) -> datetime:
+    """Return the effective start time for counting daily usage.
+
+    If an admin has reset the user's limits today, usage is only counted
+    from the reset timestamp forward.  Otherwise falls back to midnight UTC.
+    """
+    midnight = today_start()
+    reset_at = getattr(user, "daily_limit_reset_at", None)
+    if reset_at is not None and reset_at > midnight:
+        return reset_at
+    return midnight
+
+
+async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID, since: datetime | None = None) -> int:
     """Count decomposition LLM calls today (the real cost of analyzing a problem)."""
     from api.models.llm_call import LLMCall
 
@@ -64,13 +77,13 @@ async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID) -> int:
         .where(
             LLMCall.user_id == user_id,
             LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
-            LLMCall.created_at >= today_start(),
+            LLMCall.created_at >= (since or today_start()),
         )
     )
     return result.scalar_one()
 
 
-async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str) -> int:
+async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str, since: datetime | None = None) -> int:
     """Count LLM calls today for a specific function."""
     from api.models.llm_call import LLMCall
 
@@ -80,13 +93,13 @@ async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, functio
         .where(
             LLMCall.user_id == user_id,
             LLMCall.function == function_name,
-            LLMCall.created_at >= today_start(),
+            LLMCall.created_at >= (since or today_start()),
         )
     )
     return result.scalar_one()
 
 
-async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID, since: datetime | None = None) -> int:
     """Count chat-related LLM calls today (step_chat + final_answer_chat)."""
     from api.models.llm_call import LLMCall
 
@@ -96,7 +109,7 @@ async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID) -> int:
         .where(
             LLMCall.user_id == user_id,
             LLMCall.function.in_(["step_chat", "judge"]),
-            LLMCall.created_at >= today_start(),
+            LLMCall.created_at >= (since or today_start()),
         )
     )
     return result.scalar_one()
@@ -113,12 +126,13 @@ async def check_entitlement(
         return
 
     user_id = getattr(user, "id")
+    cutoff = usage_cutoff(user)
 
     if entitlement == Entitlement.CREATE_SESSION:
         # Count decomposition LLM calls (not session records) since
         # mock tests and practice also consume decomps without creating
         # individual session records per problem.
-        count = await get_daily_decomp_count(db, user_id)
+        count = await get_daily_decomp_count(db, user_id, cutoff)
         if count >= FREE_DAILY_SESSION_LIMIT:
             raise EntitlementError(
                 entitlement,
@@ -129,7 +143,7 @@ async def check_entitlement(
         return
 
     if entitlement == Entitlement.CHAT_MESSAGE:
-        count = await get_daily_chat_count(db, user_id)
+        count = await get_daily_chat_count(db, user_id, cutoff)
         if count >= FREE_DAILY_CHAT_LIMIT:
             raise EntitlementError(
                 entitlement,
@@ -140,7 +154,7 @@ async def check_entitlement(
         return
 
     if entitlement == Entitlement.IMAGE_SCAN:
-        count = await get_daily_llm_call_count(db, user_id, "image_extract")
+        count = await get_daily_llm_call_count(db, user_id, "image_extract", cutoff)
         if count >= FREE_DAILY_IMAGE_SCAN_LIMIT:
             raise EntitlementError(
                 entitlement,
