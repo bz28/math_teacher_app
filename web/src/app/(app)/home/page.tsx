@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
+import Link from "next/link";
 import { Card } from "@/components/ui";
 
 const subjects = [
@@ -103,6 +104,30 @@ export default function HomePage() {
           </motion.div>
         ))}
       </div>
+
+      {/* Upgrade CTA for free users */}
+      {user && !user.is_pro && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Link
+            href="/pricing"
+            className="flex items-center justify-between rounded-[--radius-xl] border border-primary/20 bg-primary-bg/50 p-5 transition-colors hover:bg-primary-bg"
+          >
+            <div>
+              <p className="font-bold text-text-primary">Upgrade to Pro</p>
+              <p className="mt-0.5 text-sm text-text-secondary">
+                Unlimited sessions, mock exams, work diagnosis, and more
+              </p>
+            </div>
+            <span className="shrink-0 rounded-[--radius-pill] bg-primary px-4 py-2 text-xs font-bold text-white">
+              View Plans
+            </span>
+          </Link>
+        </motion.div>
+      )}
     </div>
   );
 }

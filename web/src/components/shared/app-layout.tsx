@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { label: "Home", href: "/home", icon: HomeIcon },
   { label: "History", href: "/history", icon: HistoryIcon },
+  { label: "Account", href: "/account", icon: AccountIcon },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -153,6 +154,23 @@ function HistoryIcon({ active }: { active: boolean }) {
       <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
       <path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
+function AccountIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   );
 }

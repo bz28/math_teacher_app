@@ -29,6 +29,9 @@ class User(Base):
     rc_customer_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
 
     # Brute force protection
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
