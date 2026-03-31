@@ -7,6 +7,8 @@ import { useSessionStore, type Subject } from "@/stores/session";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
+import { EntitlementError } from "@/lib/api";
+import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
 import { cn } from "@/lib/utils";
 
 const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string; bg: string }> = {
@@ -64,6 +66,8 @@ export default function LearnPage() {
   }
 
   const [starting, setStarting] = useState(false);
+  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
+
   async function handleStart() {
     if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
@@ -73,18 +77,25 @@ export default function LearnPage() {
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
     const firstImage = problemQueue.length > 0 ? problemQueue[0].image : undefined;
 
-    if (mode === "learn") {
-      if (problems.length === 1) {
-        await startSession(problems[0], firstImage);
+    try {
+      if (mode === "learn") {
+        if (problems.length === 1) {
+          await startSession(problems[0], firstImage);
+        } else {
+          await startLearnQueue(problems);
+        }
+        router.push(`/learn/session?subject=${subject}`);
       } else {
-        await startLearnQueue(problems);
+        const generateCount = examType === "generate_similar" ? problems.length : 0;
+        const timeLimit = untimed ? null : timeLimitMinutes;
+        await startMockTest(problems, generateCount, timeLimit, multipleChoice);
+        router.push(`/mock-test?subject=${subject}`);
       }
-      router.push(`/learn/session?subject=${subject}`);
-    } else {
-      const generateCount = examType === "generate_similar" ? problems.length : 0;
-      const timeLimit = untimed ? null : timeLimitMinutes;
-      await startMockTest(problems, generateCount, timeLimit, multipleChoice);
-      router.push(`/mock-test?subject=${subject}`);
+    } catch (err) {
+      if (err instanceof EntitlementError) {
+        setUpgradePrompt({ entitlement: err.entitlement, message: err.message });
+      }
+      setStarting(false);
     }
   }
 
@@ -379,6 +390,12 @@ export default function LearnPage() {
           </Button>
         </div>
       )}
+      <UpgradePrompt
+        open={upgradePrompt !== null}
+        onClose={() => setUpgradePrompt(null)}
+        entitlement={upgradePrompt?.entitlement}
+        message={upgradePrompt?.message}
+      />
     </div>
   );
 }
