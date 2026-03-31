@@ -1,17 +1,20 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Dimensions,
   Image,
   PanResponder,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 import { GradientButton } from "./GradientButton";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii } from "../theme";
+import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 export interface Rectangle {
   id: number;
@@ -30,10 +33,11 @@ interface RectangleSelectorProps {
 }
 
 const MIN_SIZE = 30;
-const HANDLE_RADIUS = 18; // touch hit area for corner handles
-const HANDLE_SIZE = 12; // visual size of corner handle dots
-const RECT_COLOR = "rgba(108, 92, 231, 0.25)";
-const RECT_BORDER = "rgba(108, 92, 231, 0.8)";
+const HANDLE_RADIUS = 20;
+const HANDLE_SIZE = 14;
+const RECT_COLOR = "rgba(108, 92, 231, 0.18)";
+const RECT_BORDER = "rgba(108, 92, 231, 0.85)";
+const TOAST_DURATION = 1800;
 
 type InteractionMode =
   | { type: "draw"; startX: number; startY: number; currentX: number; currentY: number }
@@ -52,11 +56,40 @@ export function RectangleSelector({
   const insets = useSafeAreaInsets();
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
   const [interaction, setInteraction] = useState<InteractionMode | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
   const nextId = useRef(1);
+  const toastTimeout = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Compute displayed image size (contain mode)
+  // Animations
+  const onboardingOpacity = useRef(new Animated.Value(1)).current;
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  // Auto-dismiss onboarding on first draw
+  useEffect(() => {
+    if (rectangles.length > 0 && showOnboarding) {
+      Animated.timing(onboardingOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setShowOnboarding(false));
+    }
+  }, [rectangles.length]);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    toastOpacity.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(TOAST_DURATION - 400),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+  }, []);
+
+  // Image layout
   const screenWidth = Dimensions.get("window").width;
-  const screenHeight = Dimensions.get("window").height - insets.top - insets.bottom - 120;
+  const screenHeight = Dimensions.get("window").height - insets.top - insets.bottom - 140;
   const imgAspect = imageDimensions.width / imageDimensions.height;
   const containerAspect = screenWidth / screenHeight;
   let displayWidth: number;
@@ -70,7 +103,6 @@ export function RectangleSelector({
   }
   const offsetX = (screenWidth - displayWidth) / 2;
   const offsetY = (screenHeight - displayHeight) / 2;
-
   const scaleX = imageDimensions.width / displayWidth;
   const scaleY = imageDimensions.height / displayHeight;
 
@@ -92,13 +124,12 @@ export function RectangleSelector({
     [scaleX, scaleY, offsetX, offsetY],
   );
 
-  // Use refs for mutable access inside PanResponder callbacks
+  // Refs for PanResponder access
   const rectsRef = useRef(rectangles);
   rectsRef.current = rectangles;
   const interactionRef = useRef(interaction);
   interactionRef.current = interaction;
 
-  /** Find if touch hits a corner handle of any rectangle (returns rectId + corner). */
   const hitTestCorner = useCallback(
     (tx: number, ty: number): { rectId: number; corner: Corner } | null => {
       for (const r of rectsRef.current) {
@@ -120,10 +151,8 @@ export function RectangleSelector({
     [toDisplaySpace],
   );
 
-  /** Find if touch is inside any rectangle body. */
   const hitTestRect = useCallback(
     (tx: number, ty: number): number | null => {
-      // Check in reverse order so topmost rect wins
       for (let i = rectsRef.current.length - 1; i >= 0; i--) {
         const r = rectsRef.current[i];
         const d = toDisplaySpace(r.x, r.y, r.width, r.height);
@@ -152,11 +181,11 @@ export function RectangleSelector({
         onPanResponderGrant: (e) => {
           const { locationX, locationY } = e.nativeEvent;
 
-          // Priority: corner handle > rect body > draw new
           const cornerHit = hitTestCorner(locationX, locationY);
           if (cornerHit) {
             const rect = rectsRef.current.find((r) => r.id === cornerHit.rectId);
             if (rect) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setInteraction({
                 type: "resize",
                 rectId: cornerHit.rectId,
@@ -173,6 +202,7 @@ export function RectangleSelector({
           if (rectHit != null) {
             const rect = rectsRef.current.find((r) => r.id === rectHit);
             if (rect) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setInteraction({
                 type: "move",
                 rectId: rectHit,
@@ -184,16 +214,19 @@ export function RectangleSelector({
             }
           }
 
-          // Draw new
-          if (rectsRef.current.length < maxRectangles) {
-            setInteraction({
-              type: "draw",
-              startX: locationX,
-              startY: locationY,
-              currentX: locationX,
-              currentY: locationY,
-            });
+          if (rectsRef.current.length >= maxRectangles) {
+            showToast(`Maximum ${maxRectangles} selections`);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            return;
           }
+
+          setInteraction({
+            type: "draw",
+            startX: locationX,
+            startY: locationY,
+            currentX: locationX,
+            currentY: locationY,
+          });
         },
 
         onPanResponderMove: (e) => {
@@ -217,21 +250,16 @@ export function RectangleSelector({
             const dx = (locationX - cur.startX) * scaleX;
             const dy = (locationY - cur.startY) * scaleY;
             const o = cur.origRect;
-            let x = o.x;
-            let y = o.y;
-            let w = o.width;
-            let h = o.height;
+            let x = o.x, y = o.y, w = o.width, h = o.height;
 
             if (cur.corner === "br") { w += dx; h += dy; }
             else if (cur.corner === "bl") { x += dx; w -= dx; h += dy; }
             else if (cur.corner === "tr") { y += dy; w += dx; h -= dy; }
-            else { x += dx; y += dy; w -= dx; h -= dy; } // tl
+            else { x += dx; y += dy; w -= dx; h -= dy; }
 
-            // Enforce minimum size
             if (w < MIN_SIZE) { w = MIN_SIZE; if (cur.corner === "tl" || cur.corner === "bl") x = o.x + o.width - MIN_SIZE; }
             if (h < MIN_SIZE) { h = MIN_SIZE; if (cur.corner === "tl" || cur.corner === "tr") y = o.y + o.height - MIN_SIZE; }
 
-            // Clamp to image bounds
             x = Math.max(0, x);
             y = Math.max(0, y);
             w = Math.min(w, imageDimensions.width - x);
@@ -258,19 +286,32 @@ export function RectangleSelector({
                 ...prev,
                 { id: nextId.current++, x, y, width, height },
               ]);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            } else {
+              showToast("Too small — draw a larger area");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             }
           }
           setInteraction(null);
         },
       }),
-    [hitTestCorner, hitTestRect, clampRect, toImageSpace, scaleX, scaleY, maxRectangles, imageDimensions.width, imageDimensions.height],
+    [hitTestCorner, hitTestRect, clampRect, toImageSpace, showToast, scaleX, scaleY, maxRectangles, imageDimensions.width, imageDimensions.height],
   );
 
+  const undoLast = () => {
+    setRectangles((prev) => {
+      if (prev.length === 0) return prev;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      return prev.slice(0, -1);
+    });
+  };
+
   const deleteRect = (id: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRectangles((prev) => prev.filter((r) => r.id !== id));
   };
 
-  // Active drawing rectangle display coords
+  // Active drawing rectangle
   let activeDisplay: { left: number; top: number; width: number; height: number } | null = null;
   if (interaction?.type === "draw") {
     const l = Math.min(interaction.startX, interaction.currentX);
@@ -280,211 +321,363 @@ export function RectangleSelector({
     activeDisplay = { left: l, top: t, width: w, height: h };
   }
 
+  const remaining = maxRectangles - rectangles.length;
+
   return (
-    <View style={[s.container, { paddingTop: insets.top }]}>
-      <Text style={s.title}>Draw rectangles around each problem</Text>
-      <Text style={s.subtitle}>
-        {rectangles.length}/{maxRectangles} selected · Drag to move · Corners to resize
-      </Text>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <LinearGradient colors={gradients.header} style={styles.header}>
+        <AnimatedPressable onPress={onCancel} style={styles.headerBackBtn} scaleDown={0.9}>
+          <Ionicons name="chevron-back" size={22} color={colors.white} />
+        </AnimatedPressable>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Select Problems</Text>
+          <Text style={styles.headerSubtitle}>
+            {rectangles.length === 0
+              ? "Draw around each problem"
+              : remaining > 0
+                ? `${rectangles.length} selected · ${remaining} more available`
+                : `${rectangles.length} selected (max)`}
+          </Text>
+        </View>
+        <View style={styles.headerBackBtn} />
+      </LinearGradient>
 
-      <View
-        style={[s.imageContainer, { width: screenWidth, height: screenHeight }]}
-        {...panResponder.panHandlers}
-      >
-        <Image
-          source={{ uri: imageUri }}
-          style={{
-            width: displayWidth,
-            height: displayHeight,
-            marginLeft: offsetX,
-            marginTop: offsetY,
-          }}
-          resizeMode="contain"
-        />
-
-        {/* Finalized rectangles */}
-        {rectangles.map((r, i) => {
-          const d = toDisplaySpace(r.x, r.y, r.width, r.height);
-          const isActive =
-            interaction?.type !== "draw" &&
-            interaction != null &&
-            "rectId" in interaction &&
-            interaction.rectId === r.id;
-          return (
-            <View
-              key={r.id}
-              style={[
-                s.rect,
-                { left: d.left, top: d.top, width: d.width, height: d.height },
-                isActive && s.rectActive,
-              ]}
-            >
-              {/* Number label */}
-              <View style={s.rectLabel}>
-                <Text style={s.rectLabelText}>{i + 1}</Text>
-              </View>
-              {/* Delete button */}
-              <TouchableOpacity
-                style={s.rectDelete}
-                onPress={() => deleteRect(r.id)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={s.rectDeleteText}>&times;</Text>
-              </TouchableOpacity>
-              {/* Corner resize handles */}
-              <View style={[s.handle, s.handleTL]} />
-              <View style={[s.handle, s.handleTR]} />
-              <View style={[s.handle, s.handleBL]} />
-              <View style={[s.handle, s.handleBR]} />
-            </View>
-          );
-        })}
-
-        {/* Active drawing rectangle */}
-        {activeDisplay && (
-          <View
-            style={[
-              s.rect,
-              {
-                left: activeDisplay.left,
-                top: activeDisplay.top,
-                width: activeDisplay.width,
-                height: activeDisplay.height,
-              },
-            ]}
+      {/* Image area */}
+      <View style={styles.imageArea}>
+        <View
+          style={[styles.imageContainer, { width: screenWidth, height: screenHeight }]}
+          {...panResponder.panHandlers}
+        >
+          <Image
+            source={{ uri: imageUri }}
+            style={{
+              width: displayWidth,
+              height: displayHeight,
+              marginLeft: offsetX,
+              marginTop: offsetY,
+            }}
+            resizeMode="contain"
           />
-        )}
+
+          {/* Dim overlay outside image bounds */}
+          {offsetY > 0 && (
+            <>
+              <View style={[styles.dimOverlay, { top: 0, left: 0, right: 0, height: offsetY }]} />
+              <View style={[styles.dimOverlay, { bottom: 0, left: 0, right: 0, height: offsetY }]} />
+            </>
+          )}
+          {offsetX > 0 && (
+            <>
+              <View style={[styles.dimOverlay, { top: offsetY, left: 0, width: offsetX, bottom: offsetY }]} />
+              <View style={[styles.dimOverlay, { top: offsetY, right: 0, width: offsetX, bottom: offsetY }]} />
+            </>
+          )}
+
+          {/* Finalized rectangles */}
+          {rectangles.map((r, i) => {
+            const d = toDisplaySpace(r.x, r.y, r.width, r.height);
+            const isActive =
+              interaction?.type !== "draw" &&
+              interaction != null &&
+              "rectId" in interaction &&
+              interaction.rectId === r.id;
+            return (
+              <View
+                key={r.id}
+                style={[
+                  styles.rect,
+                  { left: d.left, top: d.top, width: d.width, height: d.height },
+                  isActive && styles.rectActive,
+                ]}
+              >
+                <View style={styles.rectLabel}>
+                  <Text style={styles.rectLabelText}>{i + 1}</Text>
+                </View>
+                <AnimatedPressable
+                  style={styles.rectDelete}
+                  onPress={() => deleteRect(r.id)}
+                  scaleDown={0.85}
+                >
+                  <Ionicons name="close" size={10} color={colors.white} />
+                </AnimatedPressable>
+                <View style={[styles.handle, styles.handleTL]} />
+                <View style={[styles.handle, styles.handleTR]} />
+                <View style={[styles.handle, styles.handleBL]} />
+                <View style={[styles.handle, styles.handleBR]} />
+              </View>
+            );
+          })}
+
+          {/* Active drawing rectangle */}
+          {activeDisplay && (
+            <View
+              style={[
+                styles.rect,
+                styles.rectDrawing,
+                {
+                  left: activeDisplay.left,
+                  top: activeDisplay.top,
+                  width: activeDisplay.width,
+                  height: activeDisplay.height,
+                },
+              ]}
+            />
+          )}
+
+          {/* Onboarding overlay */}
+          {showOnboarding && rectangles.length === 0 && (
+            <Animated.View
+              style={[styles.onboarding, { opacity: onboardingOpacity }]}
+              pointerEvents="none"
+            >
+              <View style={styles.onboardingCard}>
+                <Ionicons name="finger-print-outline" size={28} color={colors.primary} />
+                <Text style={styles.onboardingTitle}>Draw to select</Text>
+                <Text style={styles.onboardingDesc}>
+                  Drag your finger to draw a rectangle{"\n"}around each problem you want to extract
+                </Text>
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Toast */}
+          {toast && (
+            <Animated.View style={[styles.toast, { opacity: toastOpacity }]} pointerEvents="none">
+              <Text style={styles.toastText}>{toast}</Text>
+            </Animated.View>
+          )}
+        </View>
       </View>
 
-      <View style={s.buttons}>
-        <AnimatedPressable style={s.cancelButton} onPress={onCancel}>
-          <Text style={s.cancelText}>Cancel</Text>
-        </AnimatedPressable>
+      {/* Bottom toolbar */}
+      <View style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+        {/* Undo / Clear row */}
         {rectangles.length > 0 && (
-          <AnimatedPressable
-            style={s.clearButton}
-            onPress={() => setRectangles([])}
-          >
-            <Text style={s.cancelText}>Clear</Text>
-          </AnimatedPressable>
+          <View style={styles.toolbarActions}>
+            <AnimatedPressable style={styles.toolbarBtn} onPress={undoLast} scaleDown={0.92}>
+              <Ionicons name="arrow-undo-outline" size={18} color={colors.textSecondary} />
+              <Text style={styles.toolbarBtnText}>Undo</Text>
+            </AnimatedPressable>
+            <AnimatedPressable
+              style={styles.toolbarBtn}
+              onPress={() => {
+                setRectangles([]);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              scaleDown={0.92}
+            >
+              <Ionicons name="trash-outline" size={18} color={colors.textSecondary} />
+              <Text style={styles.toolbarBtnText}>Clear All</Text>
+            </AnimatedPressable>
+          </View>
         )}
+
+        {/* Extract button */}
         <GradientButton
-          onPress={() => onConfirm(rectangles)}
-          label={`Extract ${rectangles.length} Problem${rectangles.length !== 1 ? "s" : ""}`}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onConfirm(rectangles);
+          }}
+          label={
+            rectangles.length === 0
+              ? "Select problems to extract"
+              : `Extract ${rectangles.length} Problem${rectangles.length !== 1 ? "s" : ""}`
+          }
           disabled={rectangles.length === 0}
-          style={s.extractButton}
+          style={styles.extractButton}
         />
       </View>
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#1A1A2E",
   },
-  title: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-    textAlign: "center",
-    paddingTop: spacing.md,
+
+  // Header
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
-  subtitle: {
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: "center",
-    marginBottom: spacing.sm,
+  headerBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
+  },
+  headerTitle: {
+    ...typography.bodyBold,
+    color: colors.white,
+    fontSize: 17,
+  },
+  headerSubtitle: {
+    ...typography.caption,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 2,
+  },
+
+  // Image area
+  imageArea: {
+    flex: 1,
+    backgroundColor: "#1A1A2E",
   },
   imageContainer: {
     position: "relative",
     overflow: "hidden",
   },
+  dimOverlay: {
+    position: "absolute",
+    backgroundColor: "rgba(26, 26, 46, 0.6)",
+  },
+
+  // Rectangles
   rect: {
     position: "absolute",
     backgroundColor: RECT_COLOR,
     borderWidth: 2,
     borderColor: RECT_BORDER,
-    borderRadius: 4,
+    borderRadius: 6,
+  },
+  rectDrawing: {
+    borderStyle: "dashed",
   },
   rectActive: {
     borderColor: colors.primary,
     borderWidth: 2.5,
+    backgroundColor: "rgba(108, 92, 231, 0.25)",
   },
   rectLabel: {
     position: "absolute",
-    top: -10,
-    left: -10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -11,
+    left: -11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.sm,
   },
   rectLabelText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.white,
   },
   rectDelete: {
     position: "absolute",
-    top: -10,
-    right: -10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -11,
+    right: -11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: colors.error,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.sm,
   },
-  rectDeleteText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.white,
-    lineHeight: 16,
-  },
+
+  // Corner handles
   handle: {
     position: "absolute",
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
     borderRadius: HANDLE_SIZE / 2,
     backgroundColor: colors.white,
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: colors.primary,
+    ...shadows.sm,
   },
   handleTL: { top: -HANDLE_SIZE / 2, left: -HANDLE_SIZE / 2 },
   handleTR: { top: -HANDLE_SIZE / 2, right: -HANDLE_SIZE / 2 },
   handleBL: { bottom: -HANDLE_SIZE / 2, left: -HANDLE_SIZE / 2 },
   handleBR: { bottom: -HANDLE_SIZE / 2, right: -HANDLE_SIZE / 2 },
-  buttons: {
-    flexDirection: "row",
+
+  // Onboarding overlay
+  onboarding: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  onboardingCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.xxxl,
+    alignItems: "center",
     gap: spacing.sm,
-    padding: spacing.md,
+    ...shadows.lg,
+    maxWidth: 280,
   },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
+  onboardingTitle: {
+    ...typography.heading,
+    color: colors.text,
+    fontSize: 18,
   },
-  clearButton: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-  },
-  cancelText: {
-    fontSize: 14,
-    fontWeight: "600",
+  onboardingDesc: {
+    ...typography.caption,
     color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  // Toast
+  toast: {
+    position: "absolute",
+    bottom: 24,
+    left: 40,
+    right: 40,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    borderRadius: radii.pill,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+  },
+  toastText: {
+    ...typography.label,
+    color: colors.white,
+    fontSize: 13,
+  },
+
+  // Bottom toolbar
+  toolbar: {
+    backgroundColor: colors.white,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    ...shadows.lg,
+  },
+  toolbarActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.xxl,
+    marginBottom: spacing.md,
+  },
+  toolbarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  toolbarBtnText: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 13,
   },
   extractButton: {
-    flex: 1,
+    borderRadius: radii.md,
   },
 });
