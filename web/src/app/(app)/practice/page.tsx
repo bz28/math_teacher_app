@@ -58,7 +58,7 @@ export default function PracticePage() {
         sessionApi.completePracticeBatch(practiceBatch.sessionId, {
           total_questions: practiceBatch.results.length,
           correct_count: correct,
-        }).catch(() => {}); // Silent fail — history is non-critical
+        }).catch(console.error);
       }
     }
   }, [phase, practiceBatch, fireConfetti]);

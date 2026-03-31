@@ -349,7 +349,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               },
             });
           })
-          .catch(() => {});
+          .catch(console.error);
       });
     }
   },
@@ -740,7 +740,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         }
         set({ practiceBatch: { ...current, workSubmissions: newSubmissions, flags: newFlags } });
       })
-      .catch(() => {}); // Silent fail
+      .catch(console.error); // Silent fail
   },
 
   nextPracticeProblem() {
