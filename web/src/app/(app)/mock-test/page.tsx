@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
+import { useMockTestStore } from "@/stores/mock-test";
 import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 export default function MockTestPage() {
   const router = useRouter();
+  const { startLearnQueue, subject } = useSessionStore();
   const {
     mockTest,
     phase,
@@ -24,9 +26,8 @@ export default function MockTestPage() {
     setMockTestIndex,
     attachMockTestWork,
     submitMockTest,
-    startLearnQueue,
     reset,
-  } = useSessionStore();
+  } = useMockTestStore();
 
   const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
@@ -41,11 +42,11 @@ export default function MockTestPage() {
       setTimeLeft(Math.max(0, remaining));
       if (remaining <= 0) {
         clearInterval(interval);
-        submitMockTest();
+        submitMockTest(subject);
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [mockTest, phase, submitMockTest]);
+  }, [mockTest, phase, submitMockTest, subject]);
 
   useEffect(() => {
     if (phase === "idle" && !mockTest) {
@@ -86,12 +87,12 @@ export default function MockTestPage() {
         }
       } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        submitMockTest();
+        submitMockTest(subject);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [phase, mockTest, setMockTestIndex, submitMockTest]);
+  }, [phase, mockTest, setMockTestIndex, submitMockTest, subject]);
 
   if (phase === "loading" || !mockTest) {
     return (
@@ -293,7 +294,7 @@ export default function MockTestPage() {
           <Button
             variant="danger"
             size="sm"
-            onClick={submitMockTest}
+            onClick={() => submitMockTest(subject)}
           >
             Submit Test
           </Button>

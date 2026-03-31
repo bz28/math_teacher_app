@@ -22,8 +22,6 @@ export type SessionPhase =
   | "completed"
   | "practice_summary"
   | "learn_summary"
-  | "mock_test_active"
-  | "mock_test_summary"
   | "error";
 
 export type Subject = "math" | "chemistry";
@@ -66,27 +64,7 @@ export interface PracticeResult {
   isCorrect: boolean;
 }
 
-export interface MockTest {
-  questions: PracticeProblem[];
-  answers: Record<number, string>;
-  flags: boolean[];
-  currentIndex: number;
-  timeLimitSeconds: number | null;
-  startedAt: number;
-  submittedAt: number | null;
-  results: MockTestResult[] | null;
-  sessionId: string | null;
-  workImages: (string | null)[];
-  workSubmissions: (DiagnosisResult | null)[];
-  multipleChoice: boolean;
-}
 
-export interface MockTestResult {
-  question: string;
-  userAnswer: string | null;
-  correctAnswer: string;
-  isCorrect: boolean | null;
-}
 
 // ── Store ──
 
@@ -109,8 +87,6 @@ interface SessionState {
   // Practice batch
   practiceBatch: PracticeBatch | null;
 
-  // Mock test
-  mockTest: MockTest | null;
 
   // Problem input
   problemQueue: { text: string; image?: string }[];
@@ -149,13 +125,6 @@ interface SessionState {
   togglePracticeFlag: (index: number) => void;
   retryFlaggedProblems: () => Promise<void>;
 
-  // Mock test actions
-  startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null, multipleChoice?: boolean) => Promise<void>;
-  saveMockTestAnswer: (index: number, answer: string) => void;
-  attachMockTestWork: (index: number, imageBase64: string) => void;
-  toggleMockTestFlag: (index: number) => void;
-  setMockTestIndex: (index: number) => void;
-  submitMockTest: () => Promise<void>;
 
   // Reset
   reset: () => void;
@@ -185,28 +154,6 @@ function pollForState<T>(
   });
 }
 
-function createMockTest(
-  questions: PracticeProblem[],
-  sessionId: string,
-  timeLimitMinutes: number | null,
-  multipleChoice: boolean,
-): MockTest {
-  const len = questions.length;
-  return {
-    questions,
-    answers: {},
-    flags: new Array(len).fill(false),
-    currentIndex: 0,
-    timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-    startedAt: Date.now(),
-    submittedAt: null,
-    results: null,
-    sessionId,
-    workImages: new Array(len).fill(null),
-    workSubmissions: new Array(len).fill(null),
-    multipleChoice,
-  };
-}
 
 function createPracticeBatch(
   problems: PracticeProblem[],
@@ -240,7 +187,6 @@ const initialState = {
   chatHistory: {},
   learnQueue: null,
   practiceBatch: null,
-  mockTest: null,
   problemQueue: [],
 };
 
@@ -763,204 +709,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  // ── Mock test ──
-
-  async startMockTest(problems, generateCount, timeLimitMinutes, multipleChoice = true) {
-    const { subject, problemQueue } = get();
-    const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
-    set({ phase: "loading", error: null });
-    try {
-      if (generateCount > 0) {
-        // Generate similar — must wait for generation
-        const image = imageMap.get(problems[0]);
-        const { problems: generated } = await practiceApi.generate({
-          problem: problems[0],
-          count: generateCount,
-          subject,
-          ...(image && { image_base64: image }),
-        });
-        const { id } = await sessionApi.createMockTest(problems[0]);
-        set({
-          mockTest: createMockTest(generated, id, timeLimitMinutes, multipleChoice),
-          phase: "mock_test_active",
-        });
-      } else {
-        // "Use as exam" — show questions immediately, solve answers in background
-        const placeholders: PracticeProblem[] = problems.map((p) => ({
-          question: p,
-          answer: "",
-        }));
-        const { id } = await sessionApi.createMockTest(problems[0]);
-        set({
-          mockTest: createMockTest(placeholders, id, timeLimitMinutes, multipleChoice),
-          phase: "mock_test_active",
-        });
-
-        // Resolve correct answers in background
-        Promise.allSettled(
-          problems.map((p) => {
-            const image = imageMap.get(p);
-            return practiceApi.generate({
-              problem: p, count: 0, subject,
-              ...(image && { image_base64: image }),
-            });
-          }),
-        ).then((results) => {
-          const { mockTest: mt } = get();
-          if (!mt) return;
-          const updated = [...mt.questions];
-          for (let i = 0; i < results.length; i++) {
-            const r = results[i];
-            if (r.status === "fulfilled" && r.value.problems.length > 0) {
-              updated[i] = r.value.problems[0];
-            }
-          }
-          set({ mockTest: { ...mt, questions: updated } });
-        });
-      }
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
-    }
-  },
-
-  saveMockTestAnswer(index, answer) {
-    set((state) => {
-      if (!state.mockTest) return {};
-      return {
-        mockTest: {
-          ...state.mockTest,
-          answers: { ...state.mockTest.answers, [index]: answer },
-        },
-      };
-    });
-  },
-
-  attachMockTestWork(index, imageBase64) {
-    set((state) => {
-      if (!state.mockTest) return {};
-      const workImages = [...state.mockTest.workImages];
-      workImages[index] = imageBase64;
-      return { mockTest: { ...state.mockTest, workImages } };
-    });
-  },
-
-  toggleMockTestFlag(index) {
-    set((state) => {
-      if (!state.mockTest) return {};
-      const flags = [...state.mockTest.flags];
-      flags[index] = !flags[index];
-      return { mockTest: { ...state.mockTest, flags } };
-    });
-  },
-
-  setMockTestIndex(index) {
-    set((state) => {
-      if (!state.mockTest) return {};
-      return { mockTest: { ...state.mockTest, currentIndex: index } };
-    });
-  },
-
-  async submitMockTest() {
-    const { mockTest, subject } = get();
-    if (!mockTest) return;
-    set({ phase: "loading" });
-
-    try {
-      const results: MockTestResult[] = await Promise.all(
-        mockTest.questions.map(async (q, i) => {
-          const userAnswer = mockTest.answers[i] ?? null;
-          if (!userAnswer) {
-            return {
-              question: q.question,
-              userAnswer: null,
-              correctAnswer: q.answer,
-              isCorrect: null,
-            };
-          }
-          const { is_correct } = await practiceApi.check({
-            question: q.question,
-            correct_answer: q.answer,
-            user_answer: userAnswer,
-            subject,
-          });
-          return {
-            question: q.question,
-            userAnswer,
-            correctAnswer: q.answer,
-            isCorrect: is_correct,
-          };
-        }),
-      );
-
-      // Record analytics
-      if (mockTest.sessionId) {
-        const correctCount = results.filter((r) => r.isCorrect === true).length;
-        await sessionApi.completeMockTest(mockTest.sessionId, {
-          total_questions: results.length,
-          correct_count: correctCount,
-        });
-      }
-
-      // Auto-flag incorrect and skipped questions (matches mobile)
-      const newFlags = [...mockTest.flags];
-      results.forEach((r, i) => {
-        if (r.isCorrect !== true) newFlags[i] = true;
-      });
-
-      // Process work diagnosis for attached images (max 3 concurrent)
-      const images = mockTest.workImages;
-      const pending = images
-        .map((img, i) => (img ? { img, i } : null))
-        .filter(Boolean) as { img: string; i: number }[];
-
-      // Update state with results but don't show summary yet if work is pending
-      const updatedMockTest = {
-        ...mockTest,
-        results,
-        flags: newFlags,
-        submittedAt: Date.now(),
-      };
-
-      if (pending.length === 0) {
-        set({ mockTest: updatedMockTest, phase: "mock_test_summary" });
-      } else {
-        // Show loading while processing work submissions
-        set({ mockTest: updatedMockTest });
-
-        for (let b = 0; b < pending.length; b += 3) {
-          const batch = pending.slice(b, b + 3);
-          await Promise.allSettled(
-            batch.map(async ({ img, i }) => {
-              const q = mockTest.questions[i];
-              const r = results[i];
-              const res = await workApi.submit({
-                image_base64: img,
-                problem_text: q.question,
-                user_answer: r?.userAnswer ?? "",
-                user_was_correct: r?.isCorrect === true,
-                subject,
-              });
-              if (!res.diagnosis) return;
-              const { mockTest: current } = get();
-              if (!current) return;
-              const newSubs = [...current.workSubmissions];
-              newSubs[i] = res.diagnosis;
-              const updatedFlags = [...current.flags];
-              if (res.diagnosis.has_issues && !updatedFlags[i]) {
-                updatedFlags[i] = true;
-              }
-              set({ mockTest: { ...current, workSubmissions: newSubs, flags: updatedFlags } });
-            }),
-          );
-        }
-
-        // Show summary after all work is processed
-        set({ phase: "mock_test_summary" });
-      }
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
-    }
-  },
 
   reset() {
     set(initialState);
