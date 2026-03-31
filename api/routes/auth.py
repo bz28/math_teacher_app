@@ -9,6 +9,7 @@ from api.core.auth import (
     rotate_refresh_token,
     verify_password,
 )
+from api.core.entitlements import is_pro
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.user import User
@@ -89,4 +90,14 @@ async def me(
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return UserResponse(id=user.id, email=user.email, name=user.name, grade_level=user.grade_level, role=user.role)
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        grade_level=user.grade_level,
+        role=user.role,
+        subscription_tier=user.subscription_tier,
+        subscription_status=user.subscription_status,
+        subscription_expires_at=user.subscription_expires_at,
+        is_pro=is_pro(user),
+    )

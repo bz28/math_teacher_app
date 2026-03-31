@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     # Request size limit (bytes) - 10MB
     max_request_size: int = 10 * 1024 * 1024
 
+    # Subscriptions
+    revenuecat_webhook_secret: str = ""
+    bypass_subscription: bool = False
+
+    # Stripe
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_id_monthly: str = ""
+    stripe_price_id_yearly: str = ""
+
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:

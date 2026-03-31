@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -49,3 +50,7 @@ class UserResponse(BaseModel):
     name: str
     grade_level: int
     role: str
+    subscription_tier: str = "free"
+    subscription_status: str = "none"
+    subscription_expires_at: datetime | None = None
+    is_pro: bool = False

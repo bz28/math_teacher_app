@@ -19,6 +19,20 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Subscription
+    subscription_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
+    subscription_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
+    subscription_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    subscription_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rc_customer_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+
     # Brute force protection
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

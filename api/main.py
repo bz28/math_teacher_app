@@ -3,11 +3,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, or_, text, update
 
 from api.config import settings
 from api.core.constants import STALE_SESSION_HOURS
+from api.core.entitlements import EntitlementError
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
@@ -15,6 +17,8 @@ from api.routes.health import router as health_router
 from api.routes.image import router as image_router
 from api.routes.practice import router as practice_router
 from api.routes.session import router as session_router
+from api.routes.stripe import router as stripe_router
+from api.routes.stripe_webhook import router as stripe_webhook_router
 from api.routes.work import router as work_router
 
 logger = logging.getLogger(__name__)
@@ -90,6 +94,21 @@ app = FastAPI(
 )
 
 configure_middleware(app)
+
+
+@app.exception_handler(EntitlementError)
+async def entitlement_error_handler(request: Request, exc: EntitlementError) -> JSONResponse:
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": "entitlement_required",
+            "entitlement": exc.entitlement.value,
+            "message": exc.message,
+            "is_limit": exc.is_limit,
+        },
+    )
+
+
 app.include_router(health_router, prefix="/v1")
 app.include_router(auth_router, prefix="/v1")
 app.include_router(session_router, prefix="/v1")
@@ -97,3 +116,5 @@ app.include_router(practice_router, prefix="/v1")
 app.include_router(image_router, prefix="/v1")
 app.include_router(work_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
+app.include_router(stripe_router, prefix="/v1")
+app.include_router(stripe_webhook_router, prefix="/v1")
