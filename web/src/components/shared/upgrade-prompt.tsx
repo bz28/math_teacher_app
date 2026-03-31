@@ -12,6 +12,14 @@ const FEATURE_LABELS: Record<string, { title: string; description: string }> = {
     title: "Work Diagnosis is Pro Only",
     description: "Upload your handwritten work and get AI-powered step-by-step grading.",
   },
+  image_scan: {
+    title: "Daily Scan Limit Reached",
+    description: "Free accounts are limited to 3 image scans per day. Upgrade to Pro for unlimited scans.",
+  },
+  chat_message: {
+    title: "Daily Chat Limit Reached",
+    description: "Free accounts are limited to 20 chat messages per day. Upgrade to Pro for unlimited chat.",
+  },
 };
 
 const DEFAULT_FEATURE = {
