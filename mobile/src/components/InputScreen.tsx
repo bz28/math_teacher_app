@@ -645,25 +645,6 @@ const styles = StyleSheet.create({
   captureCardDisabled: {
     opacity: 0.45,
   },
-  lockOverlay: {
-    position: "absolute",
-    top: spacing.sm,
-    right: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    zIndex: 1,
-  },
-  lockBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.white,
-    letterSpacing: 0.5,
-  },
   captureLabel: {
     ...typography.bodyBold,
     color: colors.white,
