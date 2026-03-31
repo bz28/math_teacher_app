@@ -161,6 +161,28 @@ interface SessionState {
   reset: () => void;
 }
 
+function createPracticeBatch(
+  problems: PracticeProblem[],
+  sessionId: string | null,
+  overrides?: Partial<PracticeBatch>,
+): PracticeBatch {
+  const len = problems.length;
+  return {
+    problems,
+    currentIndex: 0,
+    results: [],
+    flags: new Array(len).fill(false),
+    workSubmissions: new Array(len).fill(null),
+    firstAttemptCorrect: new Array(len).fill(null),
+    currentFeedback: null,
+    sessionId,
+    loadingMore: false,
+    totalCount: 0,
+    skippedProblems: [],
+    ...overrides,
+  };
+}
+
 const initialState = {
   session: null,
   sessionImage: null,
@@ -443,19 +465,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0]);
       set({
-        practiceBatch: {
-          problems: allProblems,
-          currentIndex: 0,
-          results: [],
-          flags: new Array(allProblems.length).fill(false),
-          workSubmissions: new Array(allProblems.length).fill(null),
-          firstAttemptCorrect: new Array(allProblems.length).fill(null),
-          currentFeedback: null,
-          sessionId,
-          loadingMore: false,
-          totalCount: 0,
-          skippedProblems: [],
-        },
+        practiceBatch: createPracticeBatch(allProblems, sessionId),
         phase: "awaiting_input" as SessionPhase,
       });
     } catch (err) {
@@ -488,19 +498,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0].question);
       set({
-        practiceBatch: {
-          problems: allProblems,
-          currentIndex: 0,
-          results: [],
-          flags: new Array(allProblems.length).fill(false),
-          workSubmissions: new Array(allProblems.length).fill(null),
-          firstAttemptCorrect: new Array(allProblems.length).fill(null),
-          currentFeedback: null,
-          sessionId,
-          loadingMore: false,
-          totalCount: 0,
-          skippedProblems: [],
-        },
+        practiceBatch: createPracticeBatch(allProblems, sessionId),
         phase: "awaiting_input" as SessionPhase,
       });
     } catch (err) {
@@ -517,19 +515,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         sessionApi.createPracticeBatch(problem),
       ]);
       set({
-        practiceBatch: {
-          problems,
-          currentIndex: 0,
-          results: [],
-          flags: new Array(problems.length).fill(false),
-          workSubmissions: new Array(problems.length).fill(null),
-          firstAttemptCorrect: new Array(problems.length).fill(null),
-          currentFeedback: null,
-          sessionId,
-          loadingMore: false,
-          totalCount: 0,
-          skippedProblems: [],
-        },
+        practiceBatch: createPracticeBatch(problems, sessionId),
         phase: "awaiting_input",
       });
     } catch (err) {
@@ -551,19 +537,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       .catch(() => null);
 
     set({
-      practiceBatch: {
-        problems: placeholders,
-        currentIndex: 0,
-        results: [],
-        flags: new Array(problems.length).fill(false),
-        workSubmissions: new Array(problems.length).fill(null),
-        firstAttemptCorrect: new Array(problems.length).fill(null),
-        currentFeedback: null,
-        sessionId,
+      practiceBatch: createPracticeBatch(placeholders, sessionId, {
         loadingMore: true,
         totalCount: problems.length,
-        skippedProblems: [],
-      },
+      }),
       phase: "awaiting_input",
     });
 
