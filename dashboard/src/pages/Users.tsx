@@ -34,6 +34,22 @@ export default function Users() {
     }
   };
 
+  const handleToggleSubscription = async (userId: string, currentTier: string) => {
+    const isPro = currentTier === "pro";
+    const action = isPro ? "downgrade to Free" : "upgrade to Pro";
+    if (!confirm(`${action} for this user?`)) return;
+    try {
+      await api.updateUserSubscription(
+        userId,
+        isPro ? "free" : "pro",
+        isPro ? "none" : "active",
+      );
+      reload();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
   const handleDelete = async (userId: string, email: string) => {
     if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
     try {
@@ -99,6 +115,7 @@ export default function Users() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Plan</th>
               <th>Grade</th>
               <th>Sessions</th>
               <th>Total Cost</th>
@@ -114,6 +131,20 @@ export default function Users() {
                 <td>
                   <span className={`badge ${u.role === "admin" ? "badge-active" : "badge-completed"}`}>
                     {u.role}
+                  </span>
+                </td>
+                <td>
+                  <span
+                    className="badge"
+                    style={{
+                      background: u.subscription_tier === "pro" ? "#dbeafe" : "#f1f5f9",
+                      color: u.subscription_tier === "pro" ? "#2563eb" : "#64748b",
+                    }}
+                  >
+                    {u.subscription_tier === "pro" ? "Pro" : "Free"}
+                    {u.subscription_tier === "pro" && u.subscription_status !== "active"
+                      ? ` (${u.subscription_status})`
+                      : ""}
                   </span>
                 </td>
                 <td>{u.grade_level}</td>
@@ -133,6 +164,17 @@ export default function Users() {
                       title="View LLM calls"
                     >
                       Calls
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleSubscription(u.id, u.subscription_tier); }}
+                      style={{
+                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                        border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff",
+                        color: u.subscription_tier === "pro" ? "#f59e0b" : "#10b981",
+                      }}
+                      title={u.subscription_tier === "pro" ? "Downgrade to Free" : "Upgrade to Pro"}
+                    >
+                      {u.subscription_tier === "pro" ? "Downgrade" : "Upgrade"}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleToggleRole(u.id, u.role); }}
@@ -160,7 +202,7 @@ export default function Users() {
               </tr>
             ))}
             {data.users.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
             )}
           </tbody>
         </table>
