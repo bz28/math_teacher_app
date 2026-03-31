@@ -235,16 +235,17 @@ export function RectangleSelector({
           Select problems in your image
         </p>
         <span className="text-[10px] text-text-muted">
-          {rectangles.length}/{maxRectangles}
-          {limitHint && ` · ${limitHint}`}
+          {rectangles.length}/{maxRectangles} selected
+          {limitHint && ` · ${maxRectangles - rectangles.length} left (${limitHint})`}
         </span>
       </div>
 
       {rectangles.length >= maxRectangles && maxRectangles > 0 && (
         <div className="rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-3 py-2 text-center">
           <p className="text-xs font-semibold text-warning-dark">
-            Selection limit reached ({maxRectangles}/{maxRectangles}).
-            {limitHint ? ` ${limitHint}.` : ""} Tap a rectangle to remove it, or confirm your selection.
+            {limitHint
+              ? "You've used all your available scans. Remove a selection or upgrade to Pro for unlimited scans."
+              : "Selection limit reached. Tap a rectangle to remove it, or confirm your selection."}
           </p>
         </div>
       )}
@@ -252,7 +253,7 @@ export function RectangleSelector({
       {maxRectangles === 0 && (
         <div className="rounded-[--radius-md] border border-error-border bg-error-light px-3 py-2 text-center">
           <p className="text-xs font-semibold text-error">
-            {limitHint ?? "No selections available."}
+            No selections available — your daily limit is reached. Upgrade to Pro for unlimited access.
           </p>
         </div>
       )}

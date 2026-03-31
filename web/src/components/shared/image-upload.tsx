@@ -164,7 +164,7 @@ export function ImageUpload({
           setImageBase64(null);
         }}
         maxRectangles={Math.min(10, remaining, scansRemaining)}
-        limitHint={scansRemaining < Infinity ? `${scansRemaining} scan${scansRemaining !== 1 ? "s" : ""} remaining` : undefined}
+        limitHint={scansRemaining < Infinity && scansRemaining <= remaining ? "scan limit" : undefined}
       />
     );
   }
