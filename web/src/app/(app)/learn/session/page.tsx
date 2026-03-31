@@ -40,8 +40,8 @@ export default function LearnSessionPage() {
     reset,
   } = useSessionStore();
   const { startPracticeBatch, practiceFlaggedProblems } = usePracticeStore();
-  const { chatsRemaining, isPro, fetchEntitlements } = useEntitlementStore();
-  const remainingChats = chatsRemaining();
+  const { isPro, dailyChatsUsed, dailyChatsLimit, fetchEntitlements } = useEntitlementStore();
+  const remainingChats = isPro ? Infinity : Math.max(0, dailyChatsLimit - dailyChatsUsed);
 
   const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");

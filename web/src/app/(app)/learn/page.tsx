@@ -42,9 +42,9 @@ function LearnPageContent() {
     phase,
   } = useSessionStore();
   const { startMockTest } = useMockTestStore();
-  const { sessionsRemaining, scansRemaining, isPro, fetchEntitlements } = useEntitlementStore();
-  const remainingSessions = sessionsRemaining();
-  const remainingScans = scansRemaining();
+  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } = useEntitlementStore();
+  const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
+  const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
