@@ -90,6 +90,8 @@ function LearnPageContent() {
   const [starting, setStarting] = useState(false);
   const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
+  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
+  const isScanning = imagePhase === "select" || imagePhase === "extracting";
 
   async function handleStart() {
     if (starting) return;
@@ -327,6 +329,7 @@ function LearnPageContent() {
               message: "You've used all 3 image scans for today. Upgrade to Pro for unlimited scans.",
             })}
             onExtractComplete={fetchEntitlements}
+            onPhaseChange={setImagePhase}
           />
         </Card>
 
@@ -336,17 +339,18 @@ function LearnPageContent() {
             Or type a problem
           </p>
           <Textarea
-            placeholder="Enter your problem here... (Shift+Enter for new line)"
+            placeholder={isScanning ? "Finish scanning first..." : "Enter your problem here... (Shift+Enter for new line)"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={isScanning}
             className="min-h-[80px]"
           />
           <Button
             variant="secondary"
             size="sm"
             onClick={handleAddProblem}
-            disabled={!input.trim() || problemQueue.length >= 10}
+            disabled={isScanning || !input.trim() || problemQueue.length >= maxQueueSize}
             className="w-full"
           >
             Add to Queue

@@ -240,6 +240,23 @@ export function RectangleSelector({
         </span>
       </div>
 
+      {rectangles.length >= maxRectangles && maxRectangles > 0 && (
+        <div className="rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-3 py-2 text-center">
+          <p className="text-xs font-semibold text-warning-dark">
+            Selection limit reached ({maxRectangles}/{maxRectangles}).
+            {limitHint ? ` ${limitHint}.` : ""} Tap a rectangle to remove it, or confirm your selection.
+          </p>
+        </div>
+      )}
+
+      {maxRectangles === 0 && (
+        <div className="rounded-[--radius-md] border border-error-border bg-error-light px-3 py-2 text-center">
+          <p className="text-xs font-semibold text-error">
+            {limitHint ?? "No selections available."}
+          </p>
+        </div>
+      )}
+
       <div
         className="relative select-none overflow-hidden rounded-[--radius-md] border border-border"
         onPointerDown={handlePointerDown}
