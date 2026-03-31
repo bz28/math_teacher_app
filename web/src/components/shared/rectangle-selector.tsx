@@ -245,7 +245,7 @@ export function RectangleSelector({
           <p className="text-xs font-semibold text-warning-dark">
             {limitHint
               ? "You've used all your available scans. Remove a selection or upgrade to Pro for unlimited scans."
-              : "Selection limit reached. Tap a rectangle to remove it, or confirm your selection."}
+              : "You've reached your daily problem limit. Remove a selection or upgrade to Pro for unlimited access."}
           </p>
         </div>
       )}
