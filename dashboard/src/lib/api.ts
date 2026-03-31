@@ -65,6 +65,8 @@ export const api = {
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
+  updateUserSubscription: (userId: string, tier: string, status: string) =>
+    mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -187,5 +189,7 @@ export interface UsersData {
     avg_cost_per_session: number;
     last_active: string | null;
     registered: string;
+    subscription_tier: string;
+    subscription_status: string;
   }[];
 }

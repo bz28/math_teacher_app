@@ -9,12 +9,20 @@ from api.core.auth import (
     rotate_refresh_token,
     verify_password,
 )
-from api.core.entitlements import is_pro
+from api.core.entitlements import (
+    FREE_DAILY_SESSION_LIMIT,
+    Entitlement,
+    get_daily_session_count,
+    get_history_limit,
+    is_pro,
+)
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user
+from api.middleware.auth import get_current_user_full
 from api.models.user import User
 from api.schemas.auth import (
     CheckEmailRequest,
+    EntitlementLimits,
+    EntitlementsResponse,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -83,13 +91,9 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> T
 
 @router.get("/me", response_model=UserResponse)
 async def me(
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    result = await db.execute(select(User).where(User.id == current_user.user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -100,4 +104,32 @@ async def me(
         subscription_status=user.subscription_status,
         subscription_expires_at=user.subscription_expires_at,
         is_pro=is_pro(user),
+    )
+
+
+@router.get("/entitlements", response_model=EntitlementsResponse)
+async def entitlements(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> EntitlementsResponse:
+    """Return the current user's entitlement state."""
+    user_is_pro = is_pro(user)
+    daily_used = await get_daily_session_count(db, user.id)
+    history_limit = get_history_limit(user)
+
+    gated_features = []
+    if not user_is_pro:
+        gated_features = [e.value for e in Entitlement if e != Entitlement.CREATE_SESSION]
+
+    return EntitlementsResponse(
+        is_pro=user_is_pro,
+        subscription_tier=user.subscription_tier,
+        subscription_status=user.subscription_status,
+        subscription_expires_at=user.subscription_expires_at,
+        limits=EntitlementLimits(
+            daily_sessions_used=daily_used,
+            daily_sessions_limit=None if user_is_pro else FREE_DAILY_SESSION_LIMIT,
+            history_limit=history_limit,
+        ),
+        gated_features=gated_features,
     )

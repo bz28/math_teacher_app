@@ -1,19 +1,14 @@
-"""Session orchestration: manages the tutoring loop.
-
-Handles step advancement and per-user daily request caps.
-"""
+"""Session orchestration: manages the tutoring loop."""
 
 import random
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import settings
 from api.core.constants import (
     MAX_PROBLEM_LENGTH,
     MAX_STUDENT_MESSAGES,
@@ -31,33 +26,6 @@ class SessionError(Exception):
     pass
 
 
-class RateLimitError(SessionError):
-    pass
-
-
-# ---------------------------------------------------------------------------
-# Per-user daily request cap
-# ---------------------------------------------------------------------------
-
-async def _check_daily_cap(db: AsyncSession, user_id: uuid.UUID, role: str) -> None:
-    """Enforce per-user daily session creation cap based on user role."""
-    today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
-    result = await db.execute(
-        select(func.count(Session.id)).where(
-            Session.user_id == user_id,
-            Session.created_at >= today_start,
-        )
-    )
-    count = result.scalar() or 0
-    cap = (
-        settings.daily_request_cap_school
-        if role == "school"
-        else settings.daily_request_cap_free
-    )
-    if count >= cap:
-        raise RateLimitError(f"Daily session limit reached ({cap})")
-
-
 # ---------------------------------------------------------------------------
 # Session creation
 # ---------------------------------------------------------------------------
@@ -67,7 +35,6 @@ async def create_session(
     user_id: uuid.UUID,
     problem: str,
     mode: str = SessionMode.LEARN,
-    role: str = "student",
     subject: str = Subject.MATH,
     image_base64: str | None = None,
 ) -> Session:
@@ -77,8 +44,6 @@ async def create_session(
         raise ValueError("Problem cannot be empty")
     if len(problem) > MAX_PROBLEM_LENGTH:
         raise ValueError(f"Problem too long (max {MAX_PROBLEM_LENGTH} characters)")
-
-    await _check_daily_cap(db, user_id, role)
 
     if mode == SessionMode.PRACTICE:
         # Use full decomposition for accuracy — steps cached for learn mode reuse

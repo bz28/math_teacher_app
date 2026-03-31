@@ -54,3 +54,18 @@ class UserResponse(BaseModel):
     subscription_status: str = "none"
     subscription_expires_at: datetime | None = None
     is_pro: bool = False
+
+
+class EntitlementLimits(BaseModel):
+    daily_sessions_used: int
+    daily_sessions_limit: int | None
+    history_limit: int | None
+
+
+class EntitlementsResponse(BaseModel):
+    is_pro: bool
+    subscription_tier: str
+    subscription_status: str
+    subscription_expires_at: datetime | None
+    limits: EntitlementLimits
+    gated_features: list[str]

@@ -43,6 +43,7 @@ def is_pro(user: object) -> bool:
     if status in ("active", "trial"):
         return True
 
+    # Grace period: subscription still valid if expires_at is in the future
     if expires_at is not None and expires_at > datetime.now(UTC):
         return True
 

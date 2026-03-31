@@ -27,10 +27,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: list[str] = ["http://localhost:8081", "http://localhost:3000"]
 
-    # Rate Limits
-    daily_request_cap_free: int = 50
-    daily_request_cap_school: int = 500
-
     # LLM Models
     llm_model_sonnet: str = "claude-sonnet-4-20250514"
     llm_model_haiku: str = "claude-haiku-4-5-20251001"
@@ -50,7 +46,6 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     stripe_price_id_monthly: str = ""
     stripe_price_id_yearly: str = ""
-
 
     @field_validator("cors_origins", mode="before")
     @classmethod

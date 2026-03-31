@@ -43,12 +43,14 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const LLM_TIMEOUT_MS = 30_000;
 
 const USER_NAME_KEY = "user_name";
+const USER_ID_KEY = "user_id";
 
 let _authToken: string | null = null;
 let _refreshToken: string | null = null;
 let _refreshPromise: Promise<boolean> | null = null;
 let _onSessionExpired: (() => void) | null = null;
 let _userName: string | null = null;
+let _userId: string | null = null;
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -78,16 +80,42 @@ export function getUserName(): string | null {
   return _userName;
 }
 
+export async function saveUserId(id: string) {
+  _userId = id;
+  await SecureStore.setItemAsync(USER_ID_KEY, id);
+}
+
+export function getUserId(): string | null {
+  return _userId;
+}
+
+/**
+ * Fetch current user info from /auth/me and store the user ID.
+ * Useful after login/register when we only have tokens but no user ID yet.
+ */
+export async function fetchAndStoreUserId(): Promise<string | null> {
+  try {
+    const data = await apiGet<{ id: string; name?: string }>("/auth/me");
+    if (data.id) await saveUserId(data.id);
+    if (data.name) await saveUserName(data.name);
+    return data.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadStoredAuth(): Promise<boolean> {
-  const [access, refresh, storedName] = await Promise.all([
+  const [access, refresh, storedName, storedId] = await Promise.all([
     SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
     SecureStore.getItemAsync(USER_NAME_KEY),
+    SecureStore.getItemAsync(USER_ID_KEY),
   ]);
   if (!access || !refresh) return false;
   _authToken = access;
   _refreshToken = refresh;
   _userName = storedName;
+  _userId = storedId;
   // Verify the access token is still valid
   try {
     const resp = await fetchWithTimeout(`${API_BASE}/auth/me`, {
@@ -96,6 +124,7 @@ export async function loadStoredAuth(): Promise<boolean> {
     if (resp.ok) {
       const data = await resp.json();
       if (data.name) await saveUserName(data.name);
+      if (data.id) await saveUserId(data.id);
       return true;
     }
     if (resp.status === 401) return await _tryRefresh();
@@ -109,10 +138,12 @@ export async function clearAuth() {
   _authToken = null;
   _refreshToken = null;
   _userName = null;
+  _userId = null;
   await Promise.all([
     SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
     SecureStore.deleteItemAsync(USER_NAME_KEY),
+    SecureStore.deleteItemAsync(USER_ID_KEY),
   ]);
 }
 
@@ -151,7 +182,12 @@ function authHeaders(): Record<string, string> {
 }
 
 function extractError(data: Record<string, unknown> | null, status: number): string {
-  if (!data?.detail) return `Request failed (${status})`;
+  if (!data) return `Request failed (${status})`;
+  // Handle entitlement error format: { error: "entitlement_required", message: "..." }
+  if (data.error === "entitlement_required" && typeof data.message === "string") {
+    return data.message;
+  }
+  if (!data.detail) return `Request failed (${status})`;
   if (typeof data.detail === "string") return data.detail;
   if (Array.isArray(data.detail)) {
     return data.detail.map((e: { msg?: string }) => e.msg ?? String(e)).join(". ");
@@ -277,10 +313,30 @@ export const register = (email: string, password: string, name: string, gradeLev
     grade_level: gradeLevel,
   });
 
+// Entitlements
+export interface EntitlementLimits {
+  daily_sessions_used: number;
+  daily_sessions_limit: number;
+  history_limit: number | null;
+}
+
+export interface EntitlementsData {
+  is_pro: boolean;
+  subscription_tier: string;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  limits: EntitlementLimits;
+  gated_features: string[];
+}
+
+export const getEntitlements = () =>
+  apiGet<EntitlementsData>("/auth/entitlements");
+
 // Practice API
 export interface PracticeProblem {
   question: string;
   answer: string;
+  distractors?: string[];
 }
 
 export const generatePracticeProblems = (problem: string, count: number, subject: string = "math") =>

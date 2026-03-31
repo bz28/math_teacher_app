@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -17,10 +19,12 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
+import { PaywallScreen } from "./PaywallScreen";
 import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useSessionStore } from "../stores/session";
+import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
@@ -42,6 +46,9 @@ export function InputScreen({
 }: Props) {
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
+  const canUseFeature = useEntitlementStore((s) => s.canUseFeature);
+  const imageScanGated = !canUseFeature("image_scan");
+  const [paywallVisible, setPaywallVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +56,7 @@ export function InputScreen({
   const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(true);
+  const [mockMultipleChoice, setMockMultipleChoice] = useState(true);
 
   const {
     extracting,
@@ -61,18 +69,15 @@ export function InputScreen({
     editingIndex,
     editingText,
     lastSource,
-    lastImageUri,
-    lastImageDimensions,
-    manualSelecting,
     phase: extractionPhase,
     imageUri,
     imageDimensions,
     pickImage,
+    extractFullImage,
     startManualSelect,
-    cancelManualSelect,
-    confirmRectangles,
     confirmRectangles,
     cancelSelection,
+    cancelPreview,
     dismiss: dismissExtraction,
     retry: retryExtraction,
     toggleSelected,
@@ -163,7 +168,7 @@ export function InputScreen({
       onSessionStart();
       const generateCount = mockExamType === "generate_similar" ? allProblems.length : 0;
       const timeLimitMinutes = mockUntimed ? null : mockTimeLimitMinutes;
-      await startMockTest(allProblems, generateCount, timeLimitMinutes);
+      await startMockTest(allProblems, generateCount, timeLimitMinutes, mockMultipleChoice);
       const postPhase = useSessionStore.getState().phase;
       if (postPhase === "error") {
         onSessionError();
@@ -215,6 +220,61 @@ export function InputScreen({
   };
   const goButtonLabel = getGoButtonLabel();
 
+  // Image preview phase — choose extraction method
+  if (extractionPhase === "preview" && imageUri) {
+    return (
+      <View style={styles.previewContainer}>
+        <SafeAreaView style={styles.previewSafe}>
+          <View style={styles.previewHeader}>
+            <AnimatedPressable onPress={cancelPreview} style={styles.previewBackBtn} scaleDown={0.9}>
+              <Ionicons name="chevron-back" size={22} color={colors.white} />
+            </AnimatedPressable>
+            <Text style={styles.previewTitle}>Extract Problems</Text>
+            <View style={styles.previewBackBtn} />
+          </View>
+
+          <View style={styles.previewImageWrap}>
+            <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="contain" />
+          </View>
+
+          <View style={styles.previewActions}>
+            {extracting ? (
+              <View style={styles.previewLoadingCard}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.previewLoadingTitle}>Extracting problems...</Text>
+                <Text style={styles.previewLoadingSubtitle}>This usually takes a few seconds</Text>
+              </View>
+            ) : (
+              <>
+                {error && (
+                  <View style={styles.previewErrorCard}>
+                    <Ionicons name="alert-circle" size={18} color={colors.warningDark} />
+                    <Text style={styles.previewErrorText}>{error}</Text>
+                  </View>
+                )}
+                <GradientButton
+                  onPress={extractFullImage}
+                  label="Extract All Problems"
+                  style={styles.previewMainBtn}
+                />
+                {imageDimensions && (
+                  <AnimatedPressable
+                    onPress={startManualSelect}
+                    style={styles.previewSecondaryBtn}
+                    scaleDown={0.97}
+                  >
+                    <Ionicons name="crop-outline" size={18} color={colors.textSecondary} />
+                    <Text style={styles.previewSecondaryText}>Select areas manually</Text>
+                  </AnimatedPressable>
+                )}
+              </>
+            )}
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   // Rectangle selection phase — full screen overlay
   if (extractionPhase === "selecting" && imageUri && imageDimensions) {
     return (
@@ -253,8 +313,11 @@ export function InputScreen({
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
-              onPress={() => pickImage("camera")}
-              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              onPress={() => {
+                if (imageScanGated) { setPaywallVisible(true); return; }
+                pickImage("camera");
+              }}
+              disabled={!imageScanGated && (extracting || problemQueue.length >= MAX_PROBLEMS)}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -263,6 +326,12 @@ export function InputScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.captureCard}
               >
+                {imageScanGated && (
+                  <View style={styles.lockOverlay}>
+                    <Ionicons name="lock-closed" size={16} color={colors.white} />
+                    <Text style={styles.lockBadgeText}>PRO</Text>
+                  </View>
+                )}
                 <Ionicons name="camera" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Take a photo</Text>
               </LinearGradient>
@@ -271,8 +340,11 @@ export function InputScreen({
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
-              onPress={() => pickImage("gallery")}
-              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              onPress={() => {
+                if (imageScanGated) { setPaywallVisible(true); return; }
+                pickImage("gallery");
+              }}
+              disabled={!imageScanGated && (extracting || problemQueue.length >= MAX_PROBLEMS)}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -281,6 +353,12 @@ export function InputScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.captureCard}
               >
+                {imageScanGated && (
+                  <View style={styles.lockOverlay}>
+                    <Ionicons name="lock-closed" size={16} color={colors.white} />
+                    <Text style={styles.lockBadgeText}>PRO</Text>
+                  </View>
+                )}
                 <Ionicons name="images" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Choose photo</Text>
               </LinearGradient>
@@ -400,6 +478,8 @@ export function InputScreen({
             onUntimedChange={setMockUntimed}
             timeLimitMinutes={mockTimeLimitMinutes}
             onTimeLimitChange={setMockTimeLimitMinutes}
+            multipleChoice={mockMultipleChoice}
+            onMultipleChoiceChange={setMockMultipleChoice}
           />
         )}
 
@@ -441,13 +521,111 @@ export function InputScreen({
         onConfirm={handleConfirmExtraction}
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
+        onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
+      <PaywallScreen
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onPurchaseComplete={() => setPaywallVisible(false)}
+        trigger="input_image_scan"
+      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  // Preview screen
+  previewContainer: {
+    flex: 1,
+    backgroundColor: "#1A1A2E",
+  },
+  previewSafe: {
+    flex: 1,
+  },
+  previewHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  previewBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  previewTitle: {
+    ...typography.bodyBold,
+    color: colors.white,
+    fontSize: 17,
+    flex: 1,
+    textAlign: "center" as const,
+  },
+  previewImageWrap: {
+    flex: 1,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    paddingHorizontal: spacing.md,
+  },
+  previewImage: {
+    width: "100%" as const,
+    height: "100%" as const,
+  },
+  previewActions: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    paddingTop: spacing.xl,
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xxxl,
+    ...shadows.lg,
+  },
+  previewMainBtn: {
+    borderRadius: radii.md,
+  },
+  previewSecondaryBtn: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+  },
+  previewSecondaryText: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  previewLoadingCard: {
+    alignItems: "center" as const,
+    gap: spacing.md,
+    paddingVertical: spacing.xl,
+  },
+  previewLoadingTitle: {
+    ...typography.bodyBold,
+    color: colors.text,
+  },
+  previewLoadingSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  previewErrorCard: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    marginBottom: spacing.md,
+  },
+  previewErrorText: {
+    ...typography.caption,
+    color: colors.warningDark,
+    flex: 1,
+  },
+
+  // Main screen
   scrollContent: {
     paddingHorizontal: spacing.xxl + 4,
     paddingBottom: spacing.xl,
@@ -495,6 +673,25 @@ const styles = StyleSheet.create({
   },
   captureCardDisabled: {
     opacity: 0.45,
+  },
+  lockOverlay: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    zIndex: 1,
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.white,
+    letterSpacing: 0.5,
   },
   captureLabel: {
     ...typography.bodyBold,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/session";
@@ -17,6 +17,14 @@ const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string
 };
 
 export default function LearnPage() {
+  return (
+    <Suspense>
+      <LearnPageContent />
+    </Suspense>
+  );
+}
+
+function LearnPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const subject = (searchParams.get("subject") ?? "math") as Subject;

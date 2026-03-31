@@ -1,14 +1,13 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, or_, text, update
+from sqlalchemy import delete, or_, text
 
 from api.config import settings
-from api.core.constants import STALE_SESSION_HOURS
 from api.core.entitlements import EntitlementError
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
@@ -19,26 +18,10 @@ from api.routes.practice import router as practice_router
 from api.routes.session import router as session_router
 from api.routes.stripe import router as stripe_router
 from api.routes.stripe_webhook import router as stripe_webhook_router
+from api.routes.webhook import router as webhook_router
 from api.routes.work import router as work_router
 
 logger = logging.getLogger(__name__)
-
-
-async def _cleanup_stale_sessions() -> None:
-    """Mark sessions with no activity for 1 hour as abandoned."""
-    from api.database import get_session_factory
-    from api.models.session import Session, SessionStatus
-
-    cutoff = datetime.now(UTC) - timedelta(hours=STALE_SESSION_HOURS)
-    async with get_session_factory()() as db:
-        result = await db.execute(
-            update(Session)
-            .where(Session.status == SessionStatus.ACTIVE, Session.updated_at < cutoff)
-            .values(status=SessionStatus.ABANDONED)
-        )
-        await db.commit()
-        if result.rowcount:  # type: ignore[attr-defined]
-            logger.info("Marked %d stale sessions as abandoned", result.rowcount)  # type: ignore[attr-defined]
 
 
 async def _cleanup_expired_tokens() -> None:
@@ -78,8 +61,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
 
-    # Run cleanup on startup
-    await _cleanup_stale_sessions()
     await _cleanup_expired_tokens()
 
     yield
@@ -116,5 +97,6 @@ app.include_router(practice_router, prefix="/v1")
 app.include_router(image_router, prefix="/v1")
 app.include_router(work_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
+app.include_router(webhook_router, prefix="/v1")
 app.include_router(stripe_router, prefix="/v1")
 app.include_router(stripe_webhook_router, prefix="/v1")

@@ -101,6 +101,8 @@ async def users(
             func.coalesce(user_cost.c.total_cost, 0.0).label("total_cost"),
             func.coalesce(user_cost.c.llm_call_count, 0).label("llm_call_count"),
             user_sessions.c.last_active,
+            User.subscription_tier,
+            User.subscription_status,
         )
         .outerjoin(user_cost, user_cost.c.user_id == User.id)
         .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
@@ -128,6 +130,8 @@ async def users(
                 "avg_cost_per_session": round(r.total_cost / r.session_count, 4) if r.session_count else 0.0,
                 "last_active": r.last_active.isoformat() if r.last_active else None,
                 "registered": r.created_at.isoformat(),
+                "subscription_tier": r.subscription_tier,
+                "subscription_status": r.subscription_status,
             }
             for r in all_users
         ],
@@ -136,6 +140,11 @@ async def users(
 
 class UpdateRoleRequest(BaseModel):
     role: str
+
+
+class UpdateSubscriptionRequest(BaseModel):
+    tier: str
+    status: str
 
 
 @router.patch("/users/{user_id}/role")
@@ -160,6 +169,40 @@ async def update_user_role(
     user.role = body.role
     await db.commit()
     return {"status": "ok", "role": body.role}
+
+
+@router.patch("/users/{user_id}/subscription")
+async def update_user_subscription(
+    user_id: str,
+    body: UpdateSubscriptionRequest,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Manually set a user's subscription tier and status (e.g. grant Pro for free)."""
+    valid_tiers = ("free", "pro")
+    valid_statuses = ("none", "active", "trial", "cancelled", "expired", "billing_issue")
+    if body.tier not in valid_tiers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tier must be one of: {', '.join(valid_tiers)}",
+        )
+    if body.status not in valid_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Status must be one of: {', '.join(valid_statuses)}",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.subscription_tier = body.tier
+    user.subscription_status = body.status
+    if body.tier == "pro" and body.status == "active":
+        user.subscription_provider = user.subscription_provider or "admin"
+    await db.commit()
+    return {"status": "ok", "tier": body.tier, "subscription_status": body.status}
 
 
 @router.delete("/users/{user_id}")

@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
 import { useSessionStore } from "../stores/session";
@@ -14,6 +16,7 @@ interface Props {
 
 export function MockTestSummary({ onBack, onHome }: Props) {
   const { mockTest, startLearnQueue, toggleMockTestFlag, reset } = useSessionStore();
+  const confettiRef = useRef<ConfettiOverlayRef>(null);
 
   if (!mockTest || !mockTest.results) return null;
 
@@ -49,6 +52,11 @@ export function MockTestSummary({ onBack, onHome }: Props) {
     await startLearnQueue(flaggedQuestions.map((q) => q.question));
   };
 
+  // Confetti on good score (>=70%), intense at 100%
+  useEffect(() => {
+    if (score >= 70) confettiRef.current?.fire(score === 100);
+  }, []);
+
   const handleNewExam = () => {
     reset();
     onBack();
@@ -56,6 +64,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {score >= 70 && <ConfettiOverlay ref={confettiRef} />}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Score card */}
         <View style={[styles.scoreCard, shadows.md]}>
