@@ -94,11 +94,15 @@ async def users(
 
     daily_sessions = (
         select(
-            Session.user_id,
+            LLMCall.user_id,
             func.count().label("daily_sessions"),
         )
-        .where(Session.created_at >= today)
-        .group_by(Session.user_id)
+        .where(
+            LLMCall.created_at >= today,
+            LLMCall.user_id.isnot(None),
+            LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
+        )
+        .group_by(LLMCall.user_id)
         .subquery()
     )
 
