@@ -106,6 +106,8 @@ body {
   padding: 32px 40px;
   flex: 1;
   min-height: 100vh;
+  max-width: calc(100vw - 240px);
+  overflow-x: hidden;
 }
 
 .page-header {
@@ -215,17 +217,18 @@ h3 {
   padding: 20px;
   border: 1px solid #e2e8f0;
   margin-bottom: 24px;
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 th {
   text-align: left;
-  padding: 10px 12px;
+  padding: 8px 10px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -233,16 +236,25 @@ th {
   color: #94a3b8;
   border-bottom: 1px solid #e2e8f0;
   background: #fafbfc;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 th:first-child { border-radius: 6px 0 0 0; }
 th:last-child { border-radius: 0 6px 0 0; }
 
 td {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid #f1f5f9;
   font-size: 13px;
   color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 tr:last-child td {
@@ -259,6 +271,69 @@ tr.clickable {
 
 tr.clickable:hover {
   background: #f1f5f9;
+}
+
+/* Action menu */
+.action-menu-wrapper {
+  position: relative;
+}
+
+.action-toggle {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+.action-toggle:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+}
+
+.action-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+  min-width: 160px;
+  padding: 4px;
+}
+
+.action-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.action-dropdown button:hover {
+  background: #f1f5f9;
+}
+
+.action-dropdown button.danger {
+  color: #ef4444;
+}
+
+.action-dropdown button.danger:hover {
+  background: #fef2f2;
 }
 
 /* Badges */
