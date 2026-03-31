@@ -55,6 +55,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
   const { problems, currentIndex, totalCount } = practiceBatch;
   const currentProblem = problems[currentIndex];
+  if (!currentProblem) return null;
 
   const handleAttachWork = async () => {
     const base64 = await captureWorkImage();
