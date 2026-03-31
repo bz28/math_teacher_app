@@ -80,7 +80,7 @@ export function SearchInput({
   value, onChange, placeholder = "Search...", debounceMs = 300,
 }: SearchInputProps) {
   const [local, setLocal] = useState(value);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Sync external resets (e.g. clearing from parent)
   useEffect(() => { setLocal(value); }, [value]);
