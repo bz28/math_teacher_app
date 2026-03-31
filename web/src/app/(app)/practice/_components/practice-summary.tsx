@@ -12,18 +12,22 @@ import type { Subject } from "@/stores/learn";
 interface PracticeSummaryProps {
   practiceBatch: PracticeBatch;
   subject: Subject;
+  sessionsRemaining: number;
   onToggleFlag: (index: number) => void;
   onStartLearnQueue: (problems: string[]) => Promise<void>;
   onRetryFlagged: (subject: Subject) => Promise<void>;
+  onUpgradeNeeded: (entitlement: string, message: string) => void;
   onReset: () => void;
 }
 
 export function PracticeSummary({
   practiceBatch,
   subject,
+  sessionsRemaining,
   onToggleFlag,
   onStartLearnQueue,
   onRetryFlagged,
+  onUpgradeNeeded,
   onReset,
 }: PracticeSummaryProps) {
   const router = useRouter();
@@ -129,6 +133,14 @@ export function PracticeSummary({
               variant="secondary"
               loading={loading}
               onClick={async () => {
+                if (sessionsRemaining < flagged) {
+                  onUpgradeNeeded("create_session",
+                    sessionsRemaining <= 0
+                      ? "You've used all 5 problems for today. Upgrade to Pro for unlimited access."
+                      : `You only have ${sessionsRemaining} problem${sessionsRemaining !== 1 ? "s" : ""} remaining today, but this would use ${flagged}. Upgrade to Pro for unlimited access.`
+                  );
+                  return;
+                }
                 setLoading(true);
                 await onRetryFlagged(subject);
               }}

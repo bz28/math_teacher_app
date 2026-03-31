@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
+import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -30,11 +32,15 @@ export default function PracticePage() {
     reset,
   } = usePracticeStore();
 
+  const { isPro, dailySessionsUsed, dailySessionsLimit } = useEntitlementStore();
+  const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
+
   const { fire: fireConfetti } = useConfetti();
   const [answer, setAnswer] = useState("");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
 
   useRedirectOnIdle(phase, practiceBatch);
   useErrorToast(phase, error);
@@ -108,9 +114,11 @@ export default function PracticePage() {
       <PracticeSummary
         practiceBatch={practiceBatch}
         subject={subject}
+        sessionsRemaining={remainingSessions}
         onToggleFlag={togglePracticeFlag}
         onStartLearnQueue={startLearnQueue}
         onRetryFlagged={retryFlaggedProblems}
+        onUpgradeNeeded={(ent, msg) => setUpgradePrompt({ entitlement: ent, message: msg })}
         onReset={reset}
       />
     );
@@ -219,6 +227,12 @@ export default function PracticePage() {
           </div>
         )}
       </Card>
+      <UpgradePrompt
+        open={upgradePrompt !== null}
+        onClose={() => setUpgradePrompt(null)}
+        entitlement={upgradePrompt?.entitlement}
+        message={upgradePrompt?.message}
+      />
     </div>
   );
 }
