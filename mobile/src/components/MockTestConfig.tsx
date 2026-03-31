@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii, typography } from "../theme";
+import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface MockTestConfigProps {
   examType: "use_as_exam" | "generate_similar";
@@ -12,6 +12,36 @@ interface MockTestConfigProps {
   onTimeLimitChange: (minutes: number) => void;
   multipleChoice: boolean;
   onMultipleChoiceChange: (mc: boolean) => void;
+}
+
+function PillToggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <View style={styles.pillGroup}>
+      {options.map((opt) => {
+        const active = opt.id === value;
+        return (
+          <AnimatedPressable
+            key={opt.id}
+            style={[styles.pill, active && styles.pillActive]}
+            onPress={() => onChange(opt.id)}
+            scaleDown={0.95}
+          >
+            <Text style={[styles.pillText, active && styles.pillTextActive]}>
+              {opt.label}
+            </Text>
+          </AnimatedPressable>
+        );
+      })}
+    </View>
+  );
 }
 
 export function MockTestConfig({
@@ -25,199 +55,149 @@ export function MockTestConfig({
   onMultipleChoiceChange,
 }: MockTestConfigProps) {
   return (
-    <View style={styles.mockConfig}>
+    <View style={[styles.card, shadows.sm]}>
       {/* Questions */}
-      <Text style={styles.mockSectionLabel}>QUESTIONS</Text>
-      <AnimatedPressable
-        style={[styles.mockRadioCard, examType === "use_as_exam" && styles.mockRadioCardActive]}
-        onPress={() => onExamTypeChange("use_as_exam")}
-        scaleDown={0.98}
-      >
-        <View style={[styles.mockRadioDot, examType === "use_as_exam" && styles.mockRadioDotActive]}>
-          {examType === "use_as_exam" && <View style={styles.mockRadioDotInner} />}
-        </View>
-        <Text style={[styles.mockRadioLabel, examType === "use_as_exam" && styles.mockRadioLabelActive]}>
-          Use these as my exam
-        </Text>
-      </AnimatedPressable>
-      <AnimatedPressable
-        style={[styles.mockRadioCard, examType === "generate_similar" && styles.mockRadioCardActive]}
-        onPress={() => onExamTypeChange("generate_similar")}
-        scaleDown={0.98}
-      >
-        <View style={[styles.mockRadioDot, examType === "generate_similar" && styles.mockRadioDotActive]}>
-          {examType === "generate_similar" && <View style={styles.mockRadioDotInner} />}
-        </View>
-        <View style={styles.mockRadioTextWrap}>
-          <Text style={[styles.mockRadioLabel, examType === "generate_similar" && styles.mockRadioLabelActive]}>
-            Generate a similar exam
-          </Text>
-          <Text style={styles.mockRadioHint}>Fresh questions based on yours</Text>
-        </View>
-      </AnimatedPressable>
+      <View style={styles.row}>
+        <Text style={styles.label}>Questions</Text>
+        <PillToggle
+          options={[
+            { id: "use_as_exam" as const, label: "Use mine" },
+            { id: "generate_similar" as const, label: "Generate" },
+          ]}
+          value={examType}
+          onChange={onExamTypeChange}
+        />
+      </View>
 
-      {/* Time limit */}
-      <Text style={[styles.mockSectionLabel, { marginTop: spacing.xl }]}>TIME LIMIT</Text>
-      <AnimatedPressable
-        style={[styles.mockRadioCard, untimed && styles.mockRadioCardActive]}
-        onPress={() => onUntimedChange(true)}
-        scaleDown={0.98}
-      >
-        <View style={[styles.mockRadioDot, untimed && styles.mockRadioDotActive]}>
-          {untimed && <View style={styles.mockRadioDotInner} />}
-        </View>
-        <Text style={[styles.mockRadioLabel, untimed && styles.mockRadioLabelActive]}>
-          No time limit
-        </Text>
-      </AnimatedPressable>
-      <AnimatedPressable
-        style={[styles.mockRadioCard, !untimed && styles.mockRadioCardActive]}
-        onPress={() => onUntimedChange(false)}
-        scaleDown={0.98}
-      >
-        <View style={[styles.mockRadioDot, !untimed && styles.mockRadioDotActive]}>
-          {!untimed && <View style={styles.mockRadioDotInner} />}
-        </View>
-        <Text style={[styles.mockRadioLabel, !untimed && styles.mockRadioLabelActive]}>
-          Timed
-        </Text>
-        {!untimed && (
-          <View style={styles.mockTimeStepper}>
-            <AnimatedPressable
-              style={[styles.mockStepperBtn, timeLimitMinutes <= 1 && styles.mockStepperBtnDisabled]}
-              onPress={() => onTimeLimitChange(Math.max(1, timeLimitMinutes - 5))}
-              scaleDown={0.9}
-              disabled={timeLimitMinutes <= 1}
-            >
-              <Ionicons name="remove" size={14} color={timeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
-            </AnimatedPressable>
-            <Text style={styles.mockStepperValue}>{timeLimitMinutes} min</Text>
-            <AnimatedPressable
-              style={[styles.mockStepperBtn, timeLimitMinutes >= 180 && styles.mockStepperBtnDisabled]}
-              onPress={() => onTimeLimitChange(Math.min(180, timeLimitMinutes + 5))}
-              scaleDown={0.9}
-              disabled={timeLimitMinutes >= 180}
-            >
-              <Ionicons name="add" size={14} color={timeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
-            </AnimatedPressable>
-          </View>
-        )}
-      </AnimatedPressable>
+      <View style={styles.divider} />
 
-      {/* Answer format */}
-      <Text style={[styles.mockSectionLabel, { marginTop: spacing.xl }]}>ANSWERS</Text>
-      <AnimatedPressable
-        style={[styles.mockRadioCard, multipleChoice && styles.mockRadioCardActive]}
-        onPress={() => onMultipleChoiceChange(true)}
-        scaleDown={0.98}
-      >
-        <View style={[styles.mockRadioDot, multipleChoice && styles.mockRadioDotActive]}>
-          {multipleChoice && <View style={styles.mockRadioDotInner} />}
+      {/* Time */}
+      <View style={styles.row}>
+        <Text style={styles.label}>Time</Text>
+        <View style={styles.rowRight}>
+          <PillToggle
+            options={[
+              { id: "untimed" as const, label: "Untimed" },
+              { id: "timed" as const, label: "Timed" },
+            ]}
+            value={untimed ? "untimed" : "timed"}
+            onChange={(id) => onUntimedChange(id === "untimed")}
+          />
+          {!untimed && (
+            <View style={styles.stepper}>
+              <AnimatedPressable
+                style={[styles.stepperBtn, timeLimitMinutes <= 1 && styles.stepperBtnDisabled]}
+                onPress={() => onTimeLimitChange(Math.max(1, timeLimitMinutes - 5))}
+                scaleDown={0.9}
+                disabled={timeLimitMinutes <= 1}
+              >
+                <Ionicons name="remove" size={14} color={timeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
+              </AnimatedPressable>
+              <Text style={styles.stepperValue}>{timeLimitMinutes}m</Text>
+              <AnimatedPressable
+                style={[styles.stepperBtn, timeLimitMinutes >= 180 && styles.stepperBtnDisabled]}
+                onPress={() => onTimeLimitChange(Math.min(180, timeLimitMinutes + 5))}
+                scaleDown={0.9}
+                disabled={timeLimitMinutes >= 180}
+              >
+                <Ionicons name="add" size={14} color={timeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
+              </AnimatedPressable>
+            </View>
+          )}
         </View>
-        <Text style={[styles.mockRadioLabel, multipleChoice && styles.mockRadioLabelActive]}>
-          Multiple choice
-        </Text>
-      </AnimatedPressable>
-      <AnimatedPressable
-        style={[styles.mockRadioCard, !multipleChoice && styles.mockRadioCardActive]}
-        onPress={() => onMultipleChoiceChange(false)}
-        scaleDown={0.98}
-      >
-        <View style={[styles.mockRadioDot, !multipleChoice && styles.mockRadioDotActive]}>
-          {!multipleChoice && <View style={styles.mockRadioDotInner} />}
-        </View>
-        <Text style={[styles.mockRadioLabel, !multipleChoice && styles.mockRadioLabelActive]}>
-          Free response
-        </Text>
-      </AnimatedPressable>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Answers */}
+      <View style={styles.row}>
+        <Text style={styles.label}>Answers</Text>
+        <PillToggle
+          options={[
+            { id: "mc" as const, label: "Multiple choice" },
+            { id: "free" as const, label: "Free response" },
+          ]}
+          value={multipleChoice ? "mc" : "free"}
+          onChange={(id) => onMultipleChoiceChange(id === "mc")}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  mockConfig: {
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: spacing.lg,
     marginTop: spacing.lg,
     width: "100%",
   },
-  mockSectionLabel: {
-    ...typography.small,
-    color: colors.textMuted,
-    letterSpacing: 1,
-    marginBottom: spacing.sm,
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 36,
   },
-  mockRadioCard: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
-    borderColor: colors.borderLight,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-    gap: spacing.md,
+  rowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
-  mockRadioCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
+  label: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 13,
   },
-  mockRadioDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.textMuted,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: spacing.md,
   },
-  mockRadioDotActive: {
-    borderColor: colors.primary,
+  pillGroup: {
+    flexDirection: "row",
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.pill,
+    padding: 3,
   },
-  mockRadioDotInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  pill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+  },
+  pillActive: {
     backgroundColor: colors.primary,
   },
-  mockRadioTextWrap: {
-    flex: 1,
-  },
-  mockRadioLabel: {
-    ...typography.bodyBold,
-    color: colors.text,
-    fontSize: 14,
-  },
-  mockRadioLabelActive: {
-    color: colors.primary,
-  },
-  mockRadioHint: {
-    ...typography.caption,
-    color: colors.textMuted,
+  pillText: {
+    ...typography.label,
     fontSize: 12,
-    marginTop: 2,
+    color: colors.textSecondary,
   },
-  mockTimeStepper: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    marginLeft: "auto" as const,
-    backgroundColor: colors.white,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+  pillTextActive: {
+    color: colors.white,
   },
-  mockStepperBtn: {
-    width: 30,
-    height: 30,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.pill,
   },
-  mockStepperBtnDisabled: {
+  stepperBtn: {
+    width: 28,
+    height: 28,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stepperBtnDisabled: {
     opacity: 0.35,
   },
-  mockStepperValue: {
+  stepperValue: {
     ...typography.label,
     color: colors.primary,
-    minWidth: 46,
-    textAlign: "center" as const,
-    fontSize: 13,
+    minWidth: 32,
+    textAlign: "center",
+    fontSize: 12,
   },
 });
