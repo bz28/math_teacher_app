@@ -17,7 +17,7 @@ import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
-import { colors, spacing, shadows } from "../theme";
+import { colors, spacing, radii, shadows } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface PracticeBatchViewProps {
@@ -204,7 +204,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
                 alignSelf: "flex-start",
                 paddingVertical: spacing.sm,
                 paddingHorizontal: spacing.lg,
-                borderRadius: 20,
+                borderRadius: radii.xl,
                 borderWidth: 1.5,
                 borderColor: attachedImage ? colors.success : colors.border,
                 backgroundColor: attachedImage ? colors.successLight : "transparent",

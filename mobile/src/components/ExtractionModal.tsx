@@ -320,6 +320,6 @@ const styles = StyleSheet.create({
   manualSelectText: {
     fontSize: 13,
     fontWeight: "600" as const,
-    color: "#6C5CE7",
+    color: colors.primary,
   },
 });

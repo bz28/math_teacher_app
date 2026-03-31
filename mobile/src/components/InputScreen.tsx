@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   // Preview screen
   previewContainer: {
     flex: 1,
-    backgroundColor: "#1A1A2E",
+    backgroundColor: colors.backgroundDark,
   },
   previewSafe: {
     flex: 1,
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
   previewBackBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     justifyContent: "center" as const,
     alignItems: "center" as const,
   },

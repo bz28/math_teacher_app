@@ -5,7 +5,7 @@ import { colors } from "../theme";
 
 const { width, height } = Dimensions.get("window");
 
-const COLORS = [colors.primary, "#A29BFE", colors.success, colors.warning, colors.error];
+const COLORS = [colors.primary, colors.primaryLight, colors.success, colors.warning, colors.error];
 
 export interface ConfettiOverlayRef {
   fire: (intense?: boolean) => void;
