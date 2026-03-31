@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
@@ -26,6 +27,7 @@ export function PracticeSummary({
   onReset,
 }: PracticeSummaryProps) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const { results, flags, workSubmissions } = practiceBatch;
   const correct = results.filter((r) => r.isCorrect).length;
   const flagged = flags.filter(Boolean).length;
@@ -110,7 +112,9 @@ export function PracticeSummary({
           <>
             <Button
               gradient
+              loading={loading}
               onClick={async () => {
+                setLoading(true);
                 const flaggedProblems = results
                   .filter((_, i) => flags[i])
                   .map((r) => r.problem);
@@ -123,7 +127,9 @@ export function PracticeSummary({
             </Button>
             <Button
               variant="secondary"
+              loading={loading}
               onClick={async () => {
+                setLoading(true);
                 await onRetryFlagged(subject);
               }}
               className="w-full"
