@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -30,8 +30,17 @@ interface RectangleSelectorProps {
 }
 
 const MIN_SIZE = 30;
+const HANDLE_RADIUS = 18; // touch hit area for corner handles
+const HANDLE_SIZE = 12; // visual size of corner handle dots
 const RECT_COLOR = "rgba(108, 92, 231, 0.25)";
 const RECT_BORDER = "rgba(108, 92, 231, 0.8)";
+
+type InteractionMode =
+  | { type: "draw"; startX: number; startY: number; currentX: number; currentY: number }
+  | { type: "move"; rectId: number; startX: number; startY: number; origRect: Rectangle }
+  | { type: "resize"; rectId: number; corner: Corner; startX: number; startY: number; origRect: Rectangle };
+
+type Corner = "tl" | "tr" | "bl" | "br";
 
 export function RectangleSelector({
   imageUri,
@@ -42,23 +51,12 @@ export function RectangleSelector({
 }: RectangleSelectorProps) {
   const insets = useSafeAreaInsets();
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
-  const [activeRect, setActiveRect] = useState<{
-    startX: number;
-    startY: number;
-    currentX: number;
-    currentY: number;
-  } | null>(null);
-  const [displayLayout, setDisplayLayout] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  const [interaction, setInteraction] = useState<InteractionMode | null>(null);
   const nextId = useRef(1);
 
   // Compute displayed image size (contain mode)
   const screenWidth = Dimensions.get("window").width;
-  const screenHeight = Dimensions.get("window").height - insets.top - insets.bottom - 120; // leave room for buttons
+  const screenHeight = Dimensions.get("window").height - insets.top - insets.bottom - 120;
   const imgAspect = imageDimensions.width / imageDimensions.height;
   const containerAspect = screenWidth / screenHeight;
   let displayWidth: number;
@@ -76,81 +74,221 @@ export function RectangleSelector({
   const scaleX = imageDimensions.width / displayWidth;
   const scaleY = imageDimensions.height / displayHeight;
 
-  const toImageSpace = (dx: number, dy: number) => ({
-    x: Math.round(Math.max(0, Math.min((dx - offsetX) * scaleX, imageDimensions.width))),
-    y: Math.round(Math.max(0, Math.min((dy - offsetY) * scaleY, imageDimensions.height))),
-  });
-
-  const toDisplaySpace = (ix: number, iy: number, iw: number, ih: number) => ({
-    left: ix / scaleX + offsetX,
-    top: iy / scaleY + offsetY,
-    width: iw / scaleX,
-    height: ih / scaleY,
-  });
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        if (rectangles.length >= maxRectangles) return;
-        const { locationX, locationY } = e.nativeEvent;
-        setActiveRect({
-          startX: locationX,
-          startY: locationY,
-          currentX: locationX,
-          currentY: locationY,
-        });
-      },
-      onPanResponderMove: (e) => {
-        const { locationX, locationY } = e.nativeEvent;
-        setActiveRect((prev) =>
-          prev ? { ...prev, currentX: locationX, currentY: locationY } : null,
-        );
-      },
-      onPanResponderRelease: () => {
-        setActiveRect((cur) => {
-          if (!cur) return null;
-          const imgStart = toImageSpace(cur.startX, cur.startY);
-          const imgEnd = toImageSpace(cur.currentX, cur.currentY);
-          const x = Math.min(imgStart.x, imgEnd.x);
-          const y = Math.min(imgStart.y, imgEnd.y);
-          const width = Math.abs(imgEnd.x - imgStart.x);
-          const height = Math.abs(imgEnd.y - imgStart.y);
-
-          if (width >= MIN_SIZE && height >= MIN_SIZE) {
-            setRectangles((prev) => [
-              ...prev,
-              { id: nextId.current++, x, y, width, height },
-            ]);
-          }
-          return null;
-        });
-      },
+  const toImageSpace = useCallback(
+    (dx: number, dy: number) => ({
+      x: Math.round(Math.max(0, Math.min((dx - offsetX) * scaleX, imageDimensions.width))),
+      y: Math.round(Math.max(0, Math.min((dy - offsetY) * scaleY, imageDimensions.height))),
     }),
-  ).current;
+    [offsetX, offsetY, scaleX, scaleY, imageDimensions.width, imageDimensions.height],
+  );
+
+  const toDisplaySpace = useCallback(
+    (ix: number, iy: number, iw: number, ih: number) => ({
+      left: ix / scaleX + offsetX,
+      top: iy / scaleY + offsetY,
+      width: iw / scaleX,
+      height: ih / scaleY,
+    }),
+    [scaleX, scaleY, offsetX, offsetY],
+  );
+
+  // Use refs for mutable access inside PanResponder callbacks
+  const rectsRef = useRef(rectangles);
+  rectsRef.current = rectangles;
+  const interactionRef = useRef(interaction);
+  interactionRef.current = interaction;
+
+  /** Find if touch hits a corner handle of any rectangle (returns rectId + corner). */
+  const hitTestCorner = useCallback(
+    (tx: number, ty: number): { rectId: number; corner: Corner } | null => {
+      for (const r of rectsRef.current) {
+        const d = toDisplaySpace(r.x, r.y, r.width, r.height);
+        const corners: [Corner, number, number][] = [
+          ["tl", d.left, d.top],
+          ["tr", d.left + d.width, d.top],
+          ["bl", d.left, d.top + d.height],
+          ["br", d.left + d.width, d.top + d.height],
+        ];
+        for (const [corner, cx, cy] of corners) {
+          if (Math.abs(tx - cx) <= HANDLE_RADIUS && Math.abs(ty - cy) <= HANDLE_RADIUS) {
+            return { rectId: r.id, corner };
+          }
+        }
+      }
+      return null;
+    },
+    [toDisplaySpace],
+  );
+
+  /** Find if touch is inside any rectangle body. */
+  const hitTestRect = useCallback(
+    (tx: number, ty: number): number | null => {
+      // Check in reverse order so topmost rect wins
+      for (let i = rectsRef.current.length - 1; i >= 0; i--) {
+        const r = rectsRef.current[i];
+        const d = toDisplaySpace(r.x, r.y, r.width, r.height);
+        if (tx >= d.left && tx <= d.left + d.width && ty >= d.top && ty <= d.top + d.height) {
+          return r.id;
+        }
+      }
+      return null;
+    },
+    [toDisplaySpace],
+  );
+
+  const clampRect = useCallback(
+    (rect: Rectangle): Rectangle => ({
+      ...rect,
+      x: Math.max(0, Math.min(rect.x, imageDimensions.width - rect.width)),
+      y: Math.max(0, Math.min(rect.y, imageDimensions.height - rect.height)),
+    }),
+    [imageDimensions.width, imageDimensions.height],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: (e) => {
+          const { locationX, locationY } = e.nativeEvent;
+
+          // Priority: corner handle > rect body > draw new
+          const cornerHit = hitTestCorner(locationX, locationY);
+          if (cornerHit) {
+            const rect = rectsRef.current.find((r) => r.id === cornerHit.rectId);
+            if (rect) {
+              setInteraction({
+                type: "resize",
+                rectId: cornerHit.rectId,
+                corner: cornerHit.corner,
+                startX: locationX,
+                startY: locationY,
+                origRect: { ...rect },
+              });
+              return;
+            }
+          }
+
+          const rectHit = hitTestRect(locationX, locationY);
+          if (rectHit != null) {
+            const rect = rectsRef.current.find((r) => r.id === rectHit);
+            if (rect) {
+              setInteraction({
+                type: "move",
+                rectId: rectHit,
+                startX: locationX,
+                startY: locationY,
+                origRect: { ...rect },
+              });
+              return;
+            }
+          }
+
+          // Draw new
+          if (rectsRef.current.length < maxRectangles) {
+            setInteraction({
+              type: "draw",
+              startX: locationX,
+              startY: locationY,
+              currentX: locationX,
+              currentY: locationY,
+            });
+          }
+        },
+
+        onPanResponderMove: (e) => {
+          const { locationX, locationY } = e.nativeEvent;
+          const cur = interactionRef.current;
+          if (!cur) return;
+
+          if (cur.type === "draw") {
+            setInteraction({ ...cur, currentX: locationX, currentY: locationY });
+          } else if (cur.type === "move") {
+            const dx = (locationX - cur.startX) * scaleX;
+            const dy = (locationY - cur.startY) * scaleY;
+            setRectangles((prev) =>
+              prev.map((r) =>
+                r.id === cur.rectId
+                  ? clampRect({ ...r, x: cur.origRect.x + dx, y: cur.origRect.y + dy })
+                  : r,
+              ),
+            );
+          } else if (cur.type === "resize") {
+            const dx = (locationX - cur.startX) * scaleX;
+            const dy = (locationY - cur.startY) * scaleY;
+            const o = cur.origRect;
+            let x = o.x;
+            let y = o.y;
+            let w = o.width;
+            let h = o.height;
+
+            if (cur.corner === "br") { w += dx; h += dy; }
+            else if (cur.corner === "bl") { x += dx; w -= dx; h += dy; }
+            else if (cur.corner === "tr") { y += dy; w += dx; h -= dy; }
+            else { x += dx; y += dy; w -= dx; h -= dy; } // tl
+
+            // Enforce minimum size
+            if (w < MIN_SIZE) { w = MIN_SIZE; if (cur.corner === "tl" || cur.corner === "bl") x = o.x + o.width - MIN_SIZE; }
+            if (h < MIN_SIZE) { h = MIN_SIZE; if (cur.corner === "tl" || cur.corner === "tr") y = o.y + o.height - MIN_SIZE; }
+
+            // Clamp to image bounds
+            x = Math.max(0, x);
+            y = Math.max(0, y);
+            w = Math.min(w, imageDimensions.width - x);
+            h = Math.min(h, imageDimensions.height - y);
+
+            setRectangles((prev) =>
+              prev.map((r) => (r.id === cur.rectId ? { ...r, x, y, width: w, height: h } : r)),
+            );
+          }
+        },
+
+        onPanResponderRelease: () => {
+          const cur = interactionRef.current;
+          if (cur?.type === "draw") {
+            const imgStart = toImageSpace(cur.startX, cur.startY);
+            const imgEnd = toImageSpace(cur.currentX, cur.currentY);
+            const x = Math.min(imgStart.x, imgEnd.x);
+            const y = Math.min(imgStart.y, imgEnd.y);
+            const width = Math.abs(imgEnd.x - imgStart.x);
+            const height = Math.abs(imgEnd.y - imgStart.y);
+
+            if (width >= MIN_SIZE && height >= MIN_SIZE) {
+              setRectangles((prev) => [
+                ...prev,
+                { id: nextId.current++, x, y, width, height },
+              ]);
+            }
+          }
+          setInteraction(null);
+        },
+      }),
+    [hitTestCorner, hitTestRect, clampRect, toImageSpace, scaleX, scaleY, maxRectangles, imageDimensions.width, imageDimensions.height],
+  );
 
   const deleteRect = (id: number) => {
     setRectangles((prev) => prev.filter((r) => r.id !== id));
   };
 
-  // Active rectangle display coords
+  // Active drawing rectangle display coords
   let activeDisplay: { left: number; top: number; width: number; height: number } | null = null;
-  if (activeRect) {
-    const l = Math.min(activeRect.startX, activeRect.currentX);
-    const t = Math.min(activeRect.startY, activeRect.currentY);
-    const w = Math.abs(activeRect.currentX - activeRect.startX);
-    const h = Math.abs(activeRect.currentY - activeRect.startY);
+  if (interaction?.type === "draw") {
+    const l = Math.min(interaction.startX, interaction.currentX);
+    const t = Math.min(interaction.startY, interaction.currentY);
+    const w = Math.abs(interaction.currentX - interaction.startX);
+    const h = Math.abs(interaction.currentY - interaction.startY);
     activeDisplay = { left: l, top: t, width: w, height: h };
   }
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
       <Text style={s.title}>Draw rectangles around each problem</Text>
-      <Text style={s.subtitle}>{rectangles.length}/{maxRectangles} selected</Text>
+      <Text style={s.subtitle}>
+        {rectangles.length}/{maxRectangles} selected · Drag to move · Corners to resize
+      </Text>
 
       <View
         style={[s.imageContainer, { width: screenWidth, height: screenHeight }]}
-        onLayout={(e) => setDisplayLayout(e.nativeEvent.layout)}
         {...panResponder.panHandlers}
       >
         <Image
@@ -167,14 +305,25 @@ export function RectangleSelector({
         {/* Finalized rectangles */}
         {rectangles.map((r, i) => {
           const d = toDisplaySpace(r.x, r.y, r.width, r.height);
+          const isActive =
+            interaction?.type !== "draw" &&
+            interaction != null &&
+            "rectId" in interaction &&
+            interaction.rectId === r.id;
           return (
             <View
               key={r.id}
-              style={[s.rect, { left: d.left, top: d.top, width: d.width, height: d.height }]}
+              style={[
+                s.rect,
+                { left: d.left, top: d.top, width: d.width, height: d.height },
+                isActive && s.rectActive,
+              ]}
             >
+              {/* Number label */}
               <View style={s.rectLabel}>
                 <Text style={s.rectLabelText}>{i + 1}</Text>
               </View>
+              {/* Delete button */}
               <TouchableOpacity
                 style={s.rectDelete}
                 onPress={() => deleteRect(r.id)}
@@ -182,6 +331,11 @@ export function RectangleSelector({
               >
                 <Text style={s.rectDeleteText}>&times;</Text>
               </TouchableOpacity>
+              {/* Corner resize handles */}
+              <View style={[s.handle, s.handleTL]} />
+              <View style={[s.handle, s.handleTR]} />
+              <View style={[s.handle, s.handleBL]} />
+              <View style={[s.handle, s.handleBR]} />
             </View>
           );
         })}
@@ -254,6 +408,10 @@ const s = StyleSheet.create({
     borderColor: RECT_BORDER,
     borderRadius: 4,
   },
+  rectActive: {
+    borderColor: colors.primary,
+    borderWidth: 2.5,
+  },
   rectLabel: {
     position: "absolute",
     top: -10,
@@ -287,6 +445,19 @@ const s = StyleSheet.create({
     color: colors.white,
     lineHeight: 16,
   },
+  handle: {
+    position: "absolute",
+    width: HANDLE_SIZE,
+    height: HANDLE_SIZE,
+    borderRadius: HANDLE_SIZE / 2,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  handleTL: { top: -HANDLE_SIZE / 2, left: -HANDLE_SIZE / 2 },
+  handleTR: { top: -HANDLE_SIZE / 2, right: -HANDLE_SIZE / 2 },
+  handleBL: { bottom: -HANDLE_SIZE / 2, left: -HANDLE_SIZE / 2 },
+  handleBR: { bottom: -HANDLE_SIZE / 2, right: -HANDLE_SIZE / 2 },
   buttons: {
     flexDirection: "row",
     gap: spacing.sm,
