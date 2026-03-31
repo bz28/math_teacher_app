@@ -1,6 +1,7 @@
 """Stripe Checkout and Customer Portal endpoints."""
 
 import logging
+from typing import Any
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -50,7 +51,7 @@ async def create_checkout_session(
     customer_id = await _ensure_stripe_customer(db, user)
     stripe.api_key = settings.stripe_secret_key
 
-    session_params: dict[str, object] = {
+    session_params: dict[str, Any] = {
         "mode": "subscription",
         "customer": customer_id,
         "line_items": [{"price": body.price_id, "quantity": 1}],
