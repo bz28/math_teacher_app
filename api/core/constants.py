@@ -10,7 +10,6 @@ reviewed and adjusted in one place.
 MAX_PROBLEM_LENGTH = 10_000
 RECENT_EXCHANGES_LIMIT = 10
 MAX_STUDENT_MESSAGES = 10
-STALE_SESSION_HOURS = 1
 
 # ---------------------------------------------------------------------------
 # LLM / tutor

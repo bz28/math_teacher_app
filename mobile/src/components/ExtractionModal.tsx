@@ -29,6 +29,7 @@ interface Props {
   onConfirm: () => void;
   onDismiss: () => void;
   onRetry: () => void;
+  onManualSelect?: () => void;
 }
 
 export function ExtractionModal({
@@ -47,6 +48,7 @@ export function ExtractionModal({
   onConfirm,
   onDismiss,
   onRetry,
+  onManualSelect,
 }: Props) {
   return (
     <Modal
@@ -142,6 +144,12 @@ export function ExtractionModal({
             </Text>
           )}
 
+          {onManualSelect && (
+            <TouchableOpacity style={styles.manualSelectBtn} onPress={onManualSelect}>
+              <Ionicons name="crop-outline" size={16} color={colors.primary} />
+              <Text style={styles.manualSelectText}>Select areas manually instead</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onDismiss}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -301,4 +309,17 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   disabled: { opacity: 0.4 },
+  manualSelectBtn: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 4,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  manualSelectText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: "#6C5CE7",
+  },
 });

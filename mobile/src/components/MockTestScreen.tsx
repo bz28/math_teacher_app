@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -251,20 +252,68 @@ export function MockTestScreen({ onBack }: Props) {
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
         </View>
 
-        {/* Answer input */}
+        {/* Answer input — MC choices or free response */}
         <View style={styles.answerSection}>
           <Text style={styles.answerLabel}>Your answer</Text>
-          <TextInput
-            ref={inputRef}
-            style={styles.answerInput}
-            value={localAnswer}
-            onChangeText={setLocalAnswer}
-            placeholder="Enter your answer..."
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            inputAccessoryViewID="math-mock-test"
-          />
+          {mockTest.multipleChoice ? (
+            currentQuestion.distractors && currentQuestion.distractors.length > 0 ? (
+              <View style={styles.choicesGrid}>
+                {(() => {
+                  const choices = [currentQuestion.answer, ...currentQuestion.distractors];
+                  const seed = currentIndex;
+                  const shuffled = [...choices].sort((a, b) => {
+                    const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
+                    const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
+                    return ha - hb;
+                  });
+                  const letters = ["A", "B", "C", "D"];
+                  return shuffled.map((choice, i) => {
+                    const isSelected = localAnswer === choice;
+                    return (
+                      <AnimatedPressable
+                        key={choice}
+                        style={[styles.choiceButton, isSelected && styles.choiceButtonSelected]}
+                        onPress={() => {
+                          setLocalAnswer(choice);
+                          saveMockTestAnswer(currentIndex, choice);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        scaleDown={0.97}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Choice ${letters[i]}: ${choice}`}
+                      >
+                        <View style={[styles.choiceLetter, isSelected && styles.choiceLetterSelected]}>
+                          <Text style={[styles.choiceLetterText, isSelected && styles.choiceLetterTextSelected]}>
+                            {letters[i]}
+                          </Text>
+                        </View>
+                        <Text style={[styles.choiceText, isSelected && styles.choiceTextSelected]}>
+                          {choice}
+                        </Text>
+                      </AnimatedPressable>
+                    );
+                  });
+                })()}
+              </View>
+            ) : (
+              <View style={styles.choicesLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.choicesLoadingText}>Loading choices…</Text>
+              </View>
+            )
+          ) : (
+            <TextInput
+              ref={inputRef}
+              style={styles.answerInput}
+              value={localAnswer}
+              onChangeText={setLocalAnswer}
+              placeholder="Enter your answer..."
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              inputAccessoryViewID="math-mock-test"
+            />
+          )}
         </View>
 
         {/* Attach work button */}
@@ -320,7 +369,9 @@ export function MockTestScreen({ onBack }: Props) {
         </View>
       </ScrollView>
 
-      <MathKeyboard onInsert={handleInsert} accessoryID="math-mock-test" />
+      {!mockTest.multipleChoice && (
+        <MathKeyboard onInsert={handleInsert} accessoryID="math-mock-test" />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -445,6 +496,62 @@ const styles = StyleSheet.create({
     ...typography.body,
     backgroundColor: colors.inputBg,
     color: colors.text,
+  },
+  choicesGrid: {
+    gap: spacing.sm,
+  },
+  choiceButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    borderWidth: 1.5,
+    borderColor: colors.borderLight,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    backgroundColor: colors.white,
+    gap: spacing.md,
+  },
+  choiceButtonSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  choiceLetter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.inputBg,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  choiceLetterSelected: {
+    backgroundColor: colors.primary,
+  },
+  choiceLetterText: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  choiceLetterTextSelected: {
+    color: colors.white,
+  },
+  choiceText: {
+    ...typography.body,
+    color: colors.text,
+    flex: 1,
+  },
+  choiceTextSelected: {
+    color: colors.primary,
+    fontWeight: "600" as const,
+  },
+  choicesLoading: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: spacing.sm,
+    paddingVertical: spacing.xxl,
+  },
+  choicesLoadingText: {
+    ...typography.body,
+    color: colors.textMuted,
   },
   flagButton: {
     flexDirection: "row",

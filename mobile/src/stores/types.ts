@@ -76,6 +76,8 @@ export interface MockTest {
   workImages: (string | null)[];
   /** Diagnosis results from submitted work photos, parallel to questions array */
   workSubmissions: (WorkDiagnosis | null)[];
+  /** Whether the test uses multiple choice or free response */
+  multipleChoice: boolean;
 }
 
 export interface SessionState {
@@ -125,7 +127,7 @@ export interface SessionState {
   continueAsking: () => void;
   finishAsking: () => void;
 
-  startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
+  startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null, multipleChoice?: boolean) => Promise<void>;
   saveMockTestAnswer: (index: number, answer: string) => void;
   navigateMockQuestion: (index: number) => void;
   toggleMockTestFlag: (index: number) => void;

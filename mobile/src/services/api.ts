@@ -336,6 +336,7 @@ export const getEntitlements = () =>
 export interface PracticeProblem {
   question: string;
   answer: string;
+  distractors?: string[];
 }
 
 export const generatePracticeProblems = (problem: string, count: number, subject: string = "math") =>
