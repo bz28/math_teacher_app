@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { session as sessionApi, type SessionResponse } from "@/lib/api";
 import { useSessionStore } from "@/stores/session";
+import { usePracticeStore } from "@/stores/practice";
 import { Card, Badge, Button } from "@/components/ui";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
@@ -291,9 +292,8 @@ function PracticeSimilarButton({ problem, subject }: { problem: string; subject:
       onClick={async () => {
         setLoading(true);
         try {
-          const store = useSessionStore.getState();
-          store.setSubject(subject as "math" | "chemistry");
-          await store.startPracticeBatch(problem, 1);
+          useSessionStore.getState().setSubject(subject as "math" | "chemistry");
+          await usePracticeStore.getState().startPracticeBatch(problem, 1, subject as "math" | "chemistry");
           router.push("/practice");
         } finally {
           setLoading(false);

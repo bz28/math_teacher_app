@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
+import { usePracticeStore } from "@/stores/practice";
 import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -27,13 +28,13 @@ export default function LearnSessionPage() {
     advanceLearnQueue,
     continueAsking,
     finishAsking,
-    startPracticeBatch,
     toggleLearnFlag,
-    practiceFlaggedFromLearnQueue,
     resumeSession,
     sessionImage,
+    subject,
     reset,
   } = useSessionStore();
+  const { startPracticeBatch, practiceFlaggedProblems } = usePracticeStore();
 
   const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
@@ -130,7 +131,8 @@ export default function LearnSessionPage() {
             <Button
               gradient
               onClick={async () => {
-                await practiceFlaggedFromLearnQueue();
+                const flagged = learnQueue!.problems.filter((_, i) => learnQueue!.flags[i]);
+                await practiceFlaggedProblems(flagged, subject);
                 router.push("/practice");
               }}
               className="w-full"
@@ -367,7 +369,7 @@ export default function LearnSessionPage() {
                   <Button
                     gradient
                     onClick={async () => {
-                      await startPracticeBatch(session.problem, 1);
+                      await startPracticeBatch(session.problem, 1, subject);
                       router.push("/practice");
                     }}
                     className="w-full"

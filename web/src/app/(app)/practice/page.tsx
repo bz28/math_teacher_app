@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/session";
+import { usePracticeStore } from "@/stores/practice";
 import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 export default function PracticePage() {
   const router = useRouter();
+  const { startLearnQueue, subject } = useSessionStore();
   const {
     practiceBatch,
     phase,
@@ -25,9 +27,8 @@ export default function PracticePage() {
     nextPracticeProblem,
     togglePracticeFlag,
     retryFlaggedProblems,
-    startLearnQueue,
     reset,
-  } = useSessionStore();
+  } = usePracticeStore();
 
   const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
@@ -70,10 +71,10 @@ export default function PracticePage() {
 
     // Fire work diagnosis in background if image attached
     if (attachedImage) {
-      submitPracticeWork(idx, attachedImage, text);
+      submitPracticeWork(idx, attachedImage, text, subject);
     }
 
-    await submitPracticeAnswer(text);
+    await submitPracticeAnswer(text, subject);
     setAnswer("");
     setAttachedImage(null);
     setShowNudge(false);
@@ -209,7 +210,7 @@ export default function PracticePage() {
               <Button
                 variant="secondary"
                 onClick={async () => {
-                  await retryFlaggedProblems();
+                  await retryFlaggedProblems(subject);
                   // Stay on /practice — store resets to new batch
                 }}
                 className="w-full"
