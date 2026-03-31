@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from api.routes.admin_llm import router as llm_router
+from api.routes.admin_notifications import router as notifications_router
 from api.routes.admin_overview import router as overview_router
 from api.routes.admin_quality import router as quality_router
 from api.routes.admin_sessions import router as sessions_router
@@ -15,3 +16,4 @@ router.include_router(llm_router)
 router.include_router(quality_router)
 router.include_router(sessions_router)
 router.include_router(users_router)
+router.include_router(notifications_router)
