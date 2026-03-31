@@ -19,12 +19,10 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
-import { PaywallScreen } from "./PaywallScreen";
 import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useSessionStore } from "../stores/session";
-import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
@@ -46,8 +44,6 @@ export function InputScreen({
 }: Props) {
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
-  const canCreateSession = useEntitlementStore((s) => s.canCreateSession);
-  const [paywallVisible, setPaywallVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -505,12 +501,6 @@ export function InputScreen({
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
-      <PaywallScreen
-        visible={paywallVisible}
-        onClose={() => setPaywallVisible(false)}
-        onPurchaseComplete={() => setPaywallVisible(false)}
-        trigger="input_image_scan"
-      />
     </>
   );
 }

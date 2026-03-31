@@ -56,7 +56,6 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
   const [loading, setLoading] = useState(true);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const isPro = useEntitlementStore((s) => s.isPro);
-  const canUseFeature = useEntitlementStore((s) => s.canUseFeature);
   const canCreateSession = useEntitlementStore((s) => s.canCreateSession);
   const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
