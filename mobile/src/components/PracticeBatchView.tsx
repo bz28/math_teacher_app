@@ -17,7 +17,7 @@ import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
-import { colors, spacing, radii, shadows } from "../theme";
+import { colors, spacing, shadows } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
 interface PracticeBatchViewProps {
@@ -198,19 +198,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
             {/* Attach work button */}
             <AnimatedPressable
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: spacing.sm,
-                alignSelf: "flex-start",
-                paddingVertical: spacing.sm,
-                paddingHorizontal: spacing.lg,
-                borderRadius: radii.xl,
-                borderWidth: 1.5,
-                borderColor: attachedImage ? colors.success : colors.border,
-                backgroundColor: attachedImage ? colors.successLight : "transparent",
-                marginTop: spacing.md,
-              }}
+              style={[styles.attachWorkBtn, attachedImage && styles.attachWorkBtnActive]}
               onPress={handleAttachWork}
             >
               <Ionicons
@@ -218,11 +206,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
                 size={18}
                 color={attachedImage ? colors.success : colors.textSecondary}
               />
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "600",
-                color: attachedImage ? colors.success : colors.textSecondary,
-              }}>
+              <Text style={[styles.attachWorkText, attachedImage && styles.attachWorkTextActive]}>
                 {attachedImage ? "Work attached" : "Attach your work"}
               </Text>
             </AnimatedPressable>
