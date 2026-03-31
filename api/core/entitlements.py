@@ -66,7 +66,7 @@ async def get_daily_session_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     return result.scalar_one()
 
 
-async def _get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str) -> int:
+async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str) -> int:
     """Count LLM calls today for a specific function."""
     from api.models.llm_call import LLMCall
 
@@ -82,7 +82,7 @@ async def _get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, functi
     return result.scalar_one()
 
 
-async def _get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     """Count chat-related LLM calls today (step_chat + final_answer_chat)."""
     from api.models.llm_call import LLMCall
 
@@ -122,7 +122,7 @@ async def check_entitlement(
         return
 
     if entitlement == Entitlement.CHAT_MESSAGE:
-        count = await _get_daily_chat_count(db, user_id)
+        count = await get_daily_chat_count(db, user_id)
         if count >= FREE_DAILY_CHAT_LIMIT:
             raise EntitlementError(
                 entitlement,
@@ -133,7 +133,7 @@ async def check_entitlement(
         return
 
     if entitlement == Entitlement.IMAGE_SCAN:
-        count = await _get_daily_llm_call_count(db, user_id, "image_extract")
+        count = await get_daily_llm_call_count(db, user_id, "image_extract")
         if count >= FREE_DAILY_IMAGE_SCAN_LIMIT:
             raise EntitlementError(
                 entitlement,

@@ -44,7 +44,7 @@ async def create_checkout_session(
     db: AsyncSession = Depends(get_db),
 ) -> CheckoutSessionResponse:
     """Create a Stripe Checkout Session for subscription purchase."""
-    valid_prices = {settings.stripe_price_id_monthly, settings.stripe_price_id_yearly}
+    valid_prices = {settings.stripe_price_id_weekly, settings.stripe_price_id_yearly}
     if body.price_id not in valid_prices:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid price ID")
 
@@ -60,8 +60,10 @@ async def create_checkout_session(
         "cancel_url": body.cancel_url,
     }
 
-    # 7-day free trial on yearly plan only
-    if body.price_id == settings.stripe_price_id_yearly:
+    # Free trials: 3 days for weekly, 7 days for yearly
+    if body.price_id == settings.stripe_price_id_weekly:
+        session_params["subscription_data"] = {"trial_period_days": 3}
+    elif body.price_id == settings.stripe_price_id_yearly:
         session_params["subscription_data"] = {"trial_period_days": 7}
 
     checkout_session = stripe.checkout.Session.create(**session_params)

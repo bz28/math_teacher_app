@@ -10,8 +10,12 @@ from api.core.auth import (
     verify_password,
 )
 from api.core.entitlements import (
+    FREE_DAILY_CHAT_LIMIT,
+    FREE_DAILY_IMAGE_SCAN_LIMIT,
     FREE_DAILY_SESSION_LIMIT,
     Entitlement,
+    get_daily_chat_count,
+    get_daily_llm_call_count,
     get_daily_session_count,
     is_pro,
 )
@@ -113,7 +117,9 @@ async def entitlements(
 ) -> EntitlementsResponse:
     """Return the current user's entitlement state."""
     user_is_pro = is_pro(user)
-    daily_used = await get_daily_session_count(db, user.id)
+    sessions_used = await get_daily_session_count(db, user.id)
+    scans_used = await get_daily_llm_call_count(db, user.id, "image_extract")
+    chats_used = await get_daily_chat_count(db, user.id)
 
     gated_features = []
     if not user_is_pro:
@@ -125,8 +131,12 @@ async def entitlements(
         subscription_status=user.subscription_status,
         subscription_expires_at=user.subscription_expires_at,
         limits=EntitlementLimits(
-            daily_sessions_used=daily_used,
+            daily_sessions_used=sessions_used,
             daily_sessions_limit=None if user_is_pro else FREE_DAILY_SESSION_LIMIT,
+            daily_scans_used=scans_used,
+            daily_scans_limit=None if user_is_pro else FREE_DAILY_IMAGE_SCAN_LIMIT,
+            daily_chats_used=chats_used,
+            daily_chats_limit=None if user_is_pro else FREE_DAILY_CHAT_LIMIT,
         ),
         gated_features=gated_features,
     )
