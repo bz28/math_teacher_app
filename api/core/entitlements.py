@@ -61,7 +61,7 @@ def usage_cutoff(user: object) -> datetime:
     from the reset timestamp forward.  Otherwise falls back to midnight UTC.
     """
     midnight = today_start()
-    reset_at = getattr(user, "daily_limit_reset_at", None)
+    reset_at: datetime | None = getattr(user, "daily_limit_reset_at", None)
     if reset_at is not None and reset_at > midnight:
         return reset_at
     return midnight

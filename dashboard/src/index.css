@@ -217,7 +217,7 @@ h3 {
   padding: 20px;
   border: 1px solid #e2e8f0;
   margin-bottom: 24px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 table {
@@ -273,7 +273,11 @@ tr.clickable:hover {
   background: #f1f5f9;
 }
 
-/* Action menu */
+/* Action menu — parent td must allow overflow for the dropdown */
+td:has(.action-menu-wrapper) {
+  overflow: visible !important;
+}
+
 .action-menu-wrapper {
   position: relative;
 }
