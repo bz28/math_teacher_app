@@ -19,6 +19,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { LoginForm } from "./LoginForm";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
+import { errorMessage } from "../utils/errorMessage";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AuthScreenProps {
@@ -82,7 +83,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAuth();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);

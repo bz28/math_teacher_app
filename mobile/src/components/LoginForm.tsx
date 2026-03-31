@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { login, saveTokens } from "../services/api";
+import { errorMessage } from "../utils/errorMessage";
 import { colors, spacing, radii, typography, gradients } from "../theme";
 
 interface LoginFormProps {
@@ -45,7 +46,7 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAuth();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);

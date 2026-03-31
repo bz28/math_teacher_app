@@ -5,6 +5,7 @@ import {
   getSession,
   respondToStep,
 } from "../services/api";
+import { errorMessage } from "../utils/errorMessage";
 import { initialState, type SessionPhase, type StoreGet, type StoreSet } from "./types";
 
 export function createLearnActions(set: StoreSet, get: StoreGet) {
@@ -17,7 +18,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const session = await createSession(problem, mode, subject, image);
         set({ session, phase: "awaiting_input", lastResponse: null });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -27,7 +28,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const session = await getSession(sessionId);
         set({ session, phase: "awaiting_input", lastResponse: null, subject: session.subject });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -68,7 +69,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           });
         }
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -104,7 +105,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           learnQueue: { ...learnQueue, currentIndex: nextIndex },
         });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -149,7 +150,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           phase: "awaiting_input",
         });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -164,7 +165,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const nextPhase: SessionPhase = resp.action === "completed" ? "completed" : "awaiting_input";
         set({ session: updated, lastResponse: resp, phase: nextPhase });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -178,7 +179,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const updated = await getSession(session.id);
         set({ session: updated, lastResponse: null, phase: "awaiting_input" });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -192,7 +193,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const updated = await getSession(session.id);
         set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
@@ -206,7 +207,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const newSession = await createSession(problem, "learn", subject);
         set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 

@@ -25,6 +25,9 @@ interface Props {
   onBack: () => void;
 }
 
+/** 5 minutes — threshold at which the timer turns red */
+const LOW_TIME_THRESHOLD_SECONDS = 300;
+
 export function MockTestScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -162,7 +165,7 @@ export function MockTestScreen({ onBack }: Props) {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const isTimeLow = remainingSeconds != null && remainingSeconds <= 300 && remainingSeconds > 0;
+  const isTimeLow = remainingSeconds != null && remainingSeconds <= LOW_TIME_THRESHOLD_SECONDS && remainingSeconds > 0;
 
   return (
     <KeyboardAvoidingView

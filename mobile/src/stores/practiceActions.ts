@@ -6,6 +6,7 @@ import {
   submitWork,
   type PracticeProblem,
 } from "../services/api";
+import { errorMessage } from "../utils/errorMessage";
 import {
   initialState,
   type PracticeResult,
@@ -259,7 +260,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
           error: null,
         });
       } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
+        set({ phase: "error", error: errorMessage(e) });
       }
     },
 
