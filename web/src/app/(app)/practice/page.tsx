@@ -210,6 +210,11 @@ export default function PracticePage() {
             <AttachWork
               attached={!!attachedImage}
               onAttach={(base64) => { setAttachedImage(base64); setShowNudge(false); }}
+              isPro={isPro}
+              onUpgradeNeeded={() => setUpgradePrompt({
+                entitlement: "work_diagnosis",
+                message: "Get detailed feedback on your work — step-by-step accuracy analysis and tailored learning. Upgrade to Pro to unlock.",
+              })}
             />
 
             {/* Work nudge */}

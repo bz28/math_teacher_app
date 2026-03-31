@@ -5,9 +5,11 @@ import { useRef } from "react";
 interface AttachWorkProps {
   attached: boolean;
   onAttach: (base64: string) => void;
+  isPro?: boolean;
+  onUpgradeNeeded?: () => void;
 }
 
-export function AttachWork({ attached, onAttach }: AttachWorkProps) {
+export function AttachWork({ attached, onAttach, isPro = true, onUpgradeNeeded }: AttachWorkProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   function handleFile(file: File) {
@@ -24,11 +26,16 @@ export function AttachWork({ attached, onAttach }: AttachWorkProps) {
     <>
       <button
         type="button"
-        onClick={() => fileRef.current?.click()}
+        onClick={() => {
+          if (!isPro) { onUpgradeNeeded?.(); return; }
+          fileRef.current?.click();
+        }}
         className={`flex w-full items-center gap-2 rounded-[--radius-md] border px-4 py-3 text-sm font-medium transition-colors ${
           attached
             ? "border-success bg-success-light text-success"
-            : "border-dashed border-border text-text-secondary hover:border-primary hover:text-primary"
+            : !isPro
+              ? "border-dashed border-border text-text-muted opacity-70"
+              : "border-dashed border-border text-text-secondary hover:border-primary hover:text-primary"
         }`}
       >
         {attached ? (
@@ -45,7 +52,7 @@ export function AttachWork({ attached, onAttach }: AttachWorkProps) {
               <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
               <circle cx="12" cy="13" r="4" />
             </svg>
-            Attach your work
+            {!isPro ? "Attach your work (Pro)" : "Attach your work"}
           </>
         )}
       </button>

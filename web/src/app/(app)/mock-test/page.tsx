@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
+import { useEntitlementStore } from "@/stores/entitlements";
+import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
 import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
@@ -29,8 +31,11 @@ export default function MockTestPage() {
     reset,
   } = useMockTestStore();
 
+  const { isPro } = useEntitlementStore();
+
   const { fire: fireConfetti } = useConfetti();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
 
   // Timer
   useEffect(() => {
@@ -245,6 +250,11 @@ export default function MockTestPage() {
         <AttachWork
           attached={!!mockTest.workImages[mockTest.currentIndex]}
           onAttach={(base64) => attachMockTestWork(mockTest.currentIndex, base64)}
+          isPro={isPro}
+          onUpgradeNeeded={() => setUpgradePrompt({
+            entitlement: "work_diagnosis",
+            message: "Get detailed feedback on your work — step-by-step accuracy analysis and tailored learning. Upgrade to Pro to unlock.",
+          })}
         />
 
         <div className="flex justify-between">
@@ -275,6 +285,12 @@ export default function MockTestPage() {
           </Button>
         </div>
       </Card>
+      <UpgradePrompt
+        open={upgradePrompt !== null}
+        onClose={() => setUpgradePrompt(null)}
+        entitlement={upgradePrompt?.entitlement}
+        message={upgradePrompt?.message}
+      />
     </div>
   );
 }
