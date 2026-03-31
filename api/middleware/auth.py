@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import uuid
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -7,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.auth import decode_access_token
 from api.database import get_db
+
+if TYPE_CHECKING:
+    from api.models.user import User
 
 security = HTTPBearer()
 
@@ -43,7 +49,7 @@ async def get_current_user(
 async def get_current_user_full(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
-) -> "User":  # noqa: F821
+) -> User:
     """Return the full User ORM object for the current authenticated user."""
     payload = decode_access_token(credentials.credentials)
     if payload is None:
