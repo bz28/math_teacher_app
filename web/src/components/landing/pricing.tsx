@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import { CheckIcon } from "@/components/ui/icons";
 
 const plans = [
   {
@@ -82,7 +83,7 @@ export function Pricing() {
           <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-1">
             {freeFeatures.map((f) => (
               <span key={f} className="text-sm text-text-secondary">
-                <CheckMark /> {f}
+                <CheckIcon className="inline h-4 w-4 shrink-0 text-success" /> {f}
               </span>
             ))}
           </div>
@@ -125,7 +126,7 @@ export function Pricing() {
               <ul className="mt-6 space-y-3">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-center gap-2 text-sm text-text-secondary">
-                    <CheckMark /> {f}
+                    <CheckIcon className="inline h-4 w-4 shrink-0 text-success" /> {f}
                   </li>
                 ))}
               </ul>
@@ -147,10 +148,3 @@ export function Pricing() {
   );
 }
 
-function CheckMark() {
-  return (
-    <svg className="inline h-4 w-4 shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}

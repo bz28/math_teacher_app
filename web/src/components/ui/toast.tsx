@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { CheckIcon } from "@/components/ui/icons";
 
 /* ── Types ── */
 type ToastVariant = "success" | "error" | "warning" | "info";
@@ -32,11 +33,7 @@ let nextId = 0;
 
 /* ── Icons ── */
 const icons: Record<ToastVariant, ReactNode> = {
-  success: (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  ),
+  success: <CheckIcon className="h-5 w-5" />,
   error: (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
       <circle cx="12" cy="12" r="10" />

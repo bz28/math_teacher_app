@@ -7,6 +7,7 @@ import { useSessionStore } from "@/stores/session";
 import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
+import { CheckIcon, ChatBubbleIcon, FlagIcon } from "@/components/ui/icons";
 import { cn, renderBold } from "@/lib/utils";
 
 export default function LearnSessionPage() {
@@ -107,7 +108,7 @@ export default function LearnSessionPage() {
         <div className="space-y-2">
           {learnQueue.problems.map((problem, i) => (
             <div key={i} className="flex items-center gap-3 rounded-[--radius-md] border border-success-border bg-success-light px-4 py-3">
-              <svg className="h-5 w-5 flex-shrink-0 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+              <CheckIcon className="h-5 w-5 flex-shrink-0 text-success" />
               <p className="flex-1 text-sm font-medium text-text-primary">{problem}</p>
               <button
                 onClick={() => toggleLearnFlag(i)}
@@ -263,15 +264,7 @@ export default function LearnSessionPage() {
                 {/* Timeline line + dot */}
                 <div className="flex flex-col items-center">
                   <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-success">
-                    <svg
-                      className="h-3 w-3 text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <CheckIcon className="h-3 w-3 text-white" strokeWidth={3} />
                   </div>
                   <div className="w-px flex-1 bg-border" />
                 </div>
@@ -326,15 +319,7 @@ export default function LearnSessionPage() {
           <Card variant="elevated" className="space-y-4 text-center">
             {/* Checkmark */}
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-              <svg
-                className="h-8 w-8 text-success"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
+              <CheckIcon className="h-8 w-8 text-success" />
             </div>
 
             <h2 className="text-xl font-extrabold text-text-primary">
@@ -349,7 +334,7 @@ export default function LearnSessionPage() {
                     onClick={continueAsking}
                     className="flex w-full items-center justify-center gap-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-dark transition-colors hover:bg-warning-dark/10"
                   >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                    <ChatBubbleIcon className="h-4 w-4" />
                     I still have questions
                   </button>
 
@@ -362,7 +347,7 @@ export default function LearnSessionPage() {
                         : "border-border bg-surface text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
                     )}
                   >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill={learnQueue.flags[learnQueue.currentIndex] ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                    <FlagIcon className="h-4 w-4" filled={learnQueue.flags[learnQueue.currentIndex]} />
                     {learnQueue.flags[learnQueue.currentIndex] ? "Flagged" : "Flag for Practice"}
                   </button>
 
@@ -394,7 +379,7 @@ export default function LearnSessionPage() {
                     onClick={continueAsking}
                     className="flex w-full items-center justify-center gap-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-dark transition-colors hover:bg-warning-dark/10"
                   >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                    <ChatBubbleIcon className="h-4 w-4" />
                     I still have questions
                   </button>
 

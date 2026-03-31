@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
+import { CheckIcon } from "@/components/ui/icons";
 
 export default function CheckoutSuccessPage() {
   const loadUser = useAuthStore((s) => s.loadUser);
@@ -30,17 +31,7 @@ export default function CheckoutSuccessPage() {
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-16 text-center">
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-        <svg
-          className="h-10 w-10 text-success"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
+        <CheckIcon className="h-10 w-10 text-success" />
       </div>
 
       <h1 className="text-2xl font-extrabold text-text-primary">

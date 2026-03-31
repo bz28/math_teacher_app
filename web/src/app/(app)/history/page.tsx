@@ -7,6 +7,7 @@ import { session as sessionApi, type SessionHistoryItem } from "@/lib/api";
 import { useSessionStore, type Subject } from "@/stores/session";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
+import { CheckIcon } from "@/components/ui/icons";
 import { formatRelativeDate, cn } from "@/lib/utils";
 
 export default function HistoryPage() {
@@ -126,9 +127,7 @@ export default function HistoryPage() {
                   )}
                 >
                   {item.status === "completed" ? (
-                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <CheckIcon className="h-3 w-3" strokeWidth={3} />
                   ) : (
                     <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                       <circle cx="12" cy="12" r="10" />

@@ -10,6 +10,7 @@ import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
+import { FlagIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 export default function MockTestPage() {
@@ -345,10 +346,7 @@ export default function MockTestPage() {
             title={isFlagged ? "Unflag" : "Flag for review"}
             aria-label={isFlagged ? "Unflag for review" : "Flag for review"}
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill={isFlagged ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-              <line x1="4" y1="22" x2="4" y2="15" />
-            </svg>
+            <FlagIcon className="h-5 w-5" filled={isFlagged} />
           </button>
         </div>
 
