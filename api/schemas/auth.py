@@ -59,6 +59,10 @@ class UserResponse(BaseModel):
 class EntitlementLimits(BaseModel):
     daily_sessions_used: int
     daily_sessions_limit: int | None
+    daily_scans_used: int
+    daily_scans_limit: int | None
+    daily_chats_used: int
+    daily_chats_limit: int | None
 
 
 class EntitlementsResponse(BaseModel):

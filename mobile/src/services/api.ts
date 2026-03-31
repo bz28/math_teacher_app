@@ -280,8 +280,8 @@ export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
 export const abandonSession = (sessionId: string) =>
   apiPost<{ status: string }>(`/session/${sessionId}/abandon`, {});
 
-export const createMockTestSession = (problem: string) =>
-  apiPost<{ id: string }>("/session/mock-test", { problem });
+export const createMockTestSession = (problem: string, allProblems?: string[]) =>
+  apiPost<{ id: string }>("/session/mock-test", { problem, all_problems: allProblems ?? [] });
 
 export const completeMockTestSession = (id: string, totalQuestions: number, correctCount: number) =>
   apiPost<{ status: string }>(`/session/mock-test/${id}/complete`, {
@@ -317,6 +317,10 @@ export const register = (email: string, password: string, name: string, gradeLev
 export interface EntitlementLimits {
   daily_sessions_used: number;
   daily_sessions_limit: number;
+  daily_scans_used: number;
+  daily_scans_limit: number;
+  daily_chats_used: number;
+  daily_chats_limit: number;
   history_limit: number | null;
 }
 

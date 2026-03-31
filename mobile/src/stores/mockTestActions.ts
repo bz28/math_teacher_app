@@ -44,8 +44,8 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
             phase: "mock_test_active",
           });
 
-          const problemText = generated.map((q) => q.question).join("\n");
-          createMockTestSession(problemText)
+          const allQuestions = generated.map((q) => q.question);
+          createMockTestSession(allQuestions.join("\n"), allQuestions)
             .then(({ id }) => {
               const current = get().mockTest;
               if (current) set({ mockTest: { ...current, sessionId: id } });
@@ -97,8 +97,8 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
       });
 
       // Fire-and-forget: track session for analytics
-      const problemText = questions.map((q) => q.question).join("\n");
-      createMockTestSession(problemText)
+      const allQuestions = questions.map((q) => q.question);
+      createMockTestSession(allQuestions.join("\n"), allQuestions)
         .then(({ id }) => {
           const current = get().mockTest;
           if (current) set({ mockTest: { ...current, sessionId: id } });

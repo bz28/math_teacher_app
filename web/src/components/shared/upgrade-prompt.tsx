@@ -2,15 +2,24 @@
 
 import Link from "next/link";
 import { Modal } from "@/components/ui/modal";
+import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, FREE_DAILY_CHAT_LIMIT } from "@/lib/constants";
 
 const FEATURE_LABELS: Record<string, { title: string; description: string }> = {
   create_session: {
     title: "Daily Problem Limit Reached",
-    description: "Free accounts are limited to 5 problems per day across all modes. Upgrade to Pro for unlimited access.",
+    description: `Free accounts are limited to ${FREE_DAILY_SESSION_LIMIT} problems per day across all modes. Upgrade to Pro for unlimited access.`,
   },
   work_diagnosis: {
     title: "Work Diagnosis is Pro Only",
     description: "Upload your handwritten work and get AI-powered step-by-step grading.",
+  },
+  image_scan: {
+    title: "Daily Scan Limit Reached",
+    description: `Free accounts are limited to ${FREE_DAILY_SCAN_LIMIT} image scans per day. Upgrade to Pro for unlimited scans.`,
+  },
+  chat_message: {
+    title: "Daily Chat Limit Reached",
+    description: `Free accounts are limited to ${FREE_DAILY_CHAT_LIMIT} chat messages per day. Upgrade to Pro for unlimited chat.`,
   },
 };
 

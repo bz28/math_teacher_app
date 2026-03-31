@@ -5,29 +5,29 @@ import { useAuthStore } from "@/stores/auth";
 import { stripe as stripeApi } from "@/lib/api";
 import { CheckIcon } from "@/components/ui/icons";
 
-const PRICE_MONTHLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "";
+const PRICE_WEEKLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_WEEKLY ?? "";
 const PRICE_YEARLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY ?? "";
 
 const plans = [
   {
-    id: "monthly",
-    name: "Monthly",
-    priceId: PRICE_MONTHLY,
-    price: "$9.99",
-    period: "/month",
+    id: "weekly",
+    name: "Weekly",
+    priceId: PRICE_WEEKLY,
+    price: "$2.99",
+    period: "/week",
     perMonth: null,
     badge: null,
-    trial: null,
-    cta: "Subscribe",
+    trial: "3-day free trial",
+    cta: "Start Free Trial",
   },
   {
     id: "yearly",
     name: "Yearly",
     priceId: PRICE_YEARLY,
-    price: "$59.99",
+    price: "$69.99",
     period: "/year",
-    perMonth: "$5.00/mo",
-    badge: "Most Popular",
+    perMonth: "$1.35/week",
+    badge: "Best Value — Save 55%",
     trial: "7-day free trial",
     cta: "Start Free Trial",
   },
@@ -37,7 +37,7 @@ const proFeatures = [
   "Unlimited sessions",
   "Mock exams with timer",
   "Work diagnosis (AI grading)",
-  "Image scanning",
+  "Unlimited image scanning",
   "Full session history",
 ];
 
@@ -100,7 +100,7 @@ export default function PricingPage() {
               <span className="text-sm text-text-secondary">{plan.period}</span>
             </div>
             {plan.perMonth && (
-              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth} — Save 50%</p>
+              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth} — Save 55%</p>
             )}
             {plan.trial && (
               <p className="mt-2 inline-block rounded-[--radius-sm] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary">

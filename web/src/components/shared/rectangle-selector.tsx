@@ -18,6 +18,8 @@ interface RectangleSelectorProps {
   onConfirm: (rectangles: Rectangle[]) => void;
   onCancel: () => void;
   maxRectangles?: number;
+  /** Hint text shown next to the rectangle count (e.g. "1 scan remaining") */
+  limitHint?: string;
 }
 
 const MIN_SIZE = 30;
@@ -36,6 +38,7 @@ export function RectangleSelector({
   onConfirm,
   onCancel,
   maxRectangles = 10,
+  limitHint,
 }: RectangleSelectorProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
@@ -232,9 +235,28 @@ export function RectangleSelector({
           Select problems in your image
         </p>
         <span className="text-[10px] text-text-muted">
-          {rectangles.length}/{maxRectangles}
+          {rectangles.length}/{maxRectangles} selected
+          {limitHint && ` · ${maxRectangles - rectangles.length} left (${limitHint})`}
         </span>
       </div>
+
+      {rectangles.length >= maxRectangles && maxRectangles > 0 && (
+        <div className="rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-3 py-2 text-center">
+          <p className="text-xs font-semibold text-warning-dark">
+            {limitHint
+              ? "You've used all your available scans. Remove a selection or upgrade to Pro for unlimited scans."
+              : "You've reached your daily problem limit. Remove a selection or upgrade to Pro for unlimited access."}
+          </p>
+        </div>
+      )}
+
+      {maxRectangles === 0 && (
+        <div className="rounded-[--radius-md] border border-error-border bg-error-light px-3 py-2 text-center">
+          <p className="text-xs font-semibold text-error">
+            No selections available — your daily limit is reached. Upgrade to Pro for unlimited access.
+          </p>
+        </div>
+      )}
 
       <div
         className="relative select-none overflow-hidden rounded-[--radius-md] border border-border"

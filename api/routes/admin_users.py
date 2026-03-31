@@ -12,6 +12,7 @@ from api.core.entitlements import (
     FREE_DAILY_CHAT_LIMIT,
     FREE_DAILY_IMAGE_SCAN_LIMIT,
     FREE_DAILY_SESSION_LIMIT,
+    today_start,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
@@ -24,10 +25,6 @@ router = APIRouter()
 
 def _time_range(hours: int) -> datetime:
     return datetime.now(UTC) - timedelta(hours=hours)
-
-
-def _today_start() -> datetime:
-    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 @router.get("/users")
@@ -90,15 +87,19 @@ async def users(
     )
 
     # Daily usage subqueries (today)
-    today = _today_start()
+    today = today_start()
 
     daily_sessions = (
         select(
-            Session.user_id,
+            LLMCall.user_id,
             func.count().label("daily_sessions"),
         )
-        .where(Session.created_at >= today)
-        .group_by(Session.user_id)
+        .where(
+            LLMCall.created_at >= today,
+            LLMCall.user_id.isnot(None),
+            LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
+        )
+        .group_by(LLMCall.user_id)
         .subquery()
     )
 

@@ -22,6 +22,7 @@ class CreateSessionRequest(BaseModel):
 
 class CreateMockTestRequest(BaseModel):
     problem: str = Field(..., min_length=1, max_length=5000)
+    all_problems: list[str] = Field(default_factory=list)
 
 
 class CompleteMockTestRequest(BaseModel):
