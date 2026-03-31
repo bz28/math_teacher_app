@@ -8,6 +8,11 @@ from pydantic import BaseModel
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.entitlements import (
+    FREE_DAILY_CHAT_LIMIT,
+    FREE_DAILY_IMAGE_SCAN_LIMIT,
+    FREE_DAILY_SESSION_LIMIT,
+)
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
@@ -19,6 +24,10 @@ router = APIRouter()
 
 def _time_range(hours: int) -> datetime:
     return datetime.now(UTC) - timedelta(hours=hours)
+
+
+def _today_start() -> datetime:
+    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 @router.get("/users")
@@ -80,6 +89,47 @@ async def users(
         .subquery()
     )
 
+    # Daily usage subqueries (today)
+    today = _today_start()
+
+    daily_sessions = (
+        select(
+            Session.user_id,
+            func.count().label("daily_sessions"),
+        )
+        .where(Session.created_at >= today)
+        .group_by(Session.user_id)
+        .subquery()
+    )
+
+    daily_chats = (
+        select(
+            LLMCall.user_id,
+            func.count().label("daily_chats"),
+        )
+        .where(
+            LLMCall.created_at >= today,
+            LLMCall.user_id.isnot(None),
+            LLMCall.function.in_(["step_chat", "judge"]),
+        )
+        .group_by(LLMCall.user_id)
+        .subquery()
+    )
+
+    daily_scans = (
+        select(
+            LLMCall.user_id,
+            func.count().label("daily_scans"),
+        )
+        .where(
+            LLMCall.created_at >= today,
+            LLMCall.user_id.isnot(None),
+            LLMCall.function == "image_extract",
+        )
+        .group_by(LLMCall.user_id)
+        .subquery()
+    )
+
     # Sort column mapping
     sort_columns = {
         "total_cost": func.coalesce(user_cost.c.total_cost, 0.0).desc(),
@@ -103,9 +153,15 @@ async def users(
             user_sessions.c.last_active,
             User.subscription_tier,
             User.subscription_status,
+            func.coalesce(daily_sessions.c.daily_sessions, 0).label("daily_sessions"),
+            func.coalesce(daily_chats.c.daily_chats, 0).label("daily_chats"),
+            func.coalesce(daily_scans.c.daily_scans, 0).label("daily_scans"),
         )
         .outerjoin(user_cost, user_cost.c.user_id == User.id)
         .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
+        .outerjoin(daily_sessions, daily_sessions.c.user_id == User.id)
+        .outerjoin(daily_chats, daily_chats.c.user_id == User.id)
+        .outerjoin(daily_scans, daily_scans.c.user_id == User.id)
         .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]))
     )).all()
 
@@ -132,6 +188,14 @@ async def users(
                 "registered": r.created_at.isoformat(),
                 "subscription_tier": r.subscription_tier,
                 "subscription_status": r.subscription_status,
+                "daily_usage": {
+                    "sessions": r.daily_sessions,
+                    "sessions_limit": None if r.subscription_tier == "pro" else FREE_DAILY_SESSION_LIMIT,
+                    "chats": r.daily_chats,
+                    "chats_limit": None if r.subscription_tier == "pro" else FREE_DAILY_CHAT_LIMIT,
+                    "scans": r.daily_scans,
+                    "scans_limit": None if r.subscription_tier == "pro" else FREE_DAILY_IMAGE_SCAN_LIMIT,
+                },
             }
             for r in all_users
         ],

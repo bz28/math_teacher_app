@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.entitlements import Entitlement, check_entitlement, get_history_limit
+from api.core.entitlements import Entitlement, check_entitlement
 from api.core.practice import generate_practice_problems
 from api.core.session import (
     SessionError,
@@ -108,10 +108,6 @@ async def history(
             detail=f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}",
         )
 
-    history_limit = get_history_limit(user)
-    if history_limit is not None:
-        limit = min(limit, history_limit)
-
     query = (
         select(SessionModel)
         .where(
@@ -184,12 +180,13 @@ async def get(
 async def respond(
     session_id: uuid.UUID,
     body: RespondRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> StepResponseSchema:
     """Submit a response for the current step or request a hint."""
+    await check_entitlement(db, user, Entitlement.CHAT_MESSAGE)
     try:
-        session = await get_owned_session(db, session_id, current_user.user_id)
+        session = await get_owned_session(db, session_id, user.id)
     except SessionError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except PermissionError:
@@ -253,7 +250,7 @@ async def create_mock_test(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Record a mock test session for analytics (no LLM calls)."""
-    await check_entitlement(db, user, Entitlement.MOCK_TEST)
+    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
     session = SessionModel(
         user_id=user.id,
         problem=body.problem,

@@ -191,5 +191,13 @@ export interface UsersData {
     registered: string;
     subscription_tier: string;
     subscription_status: string;
+    daily_usage: {
+      sessions: number;
+      sessions_limit: number | null;
+      chats: number;
+      chats_limit: number | null;
+      scans: number;
+      scans_limit: number | null;
+    };
   }[];
 }

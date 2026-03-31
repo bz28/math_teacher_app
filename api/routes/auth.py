@@ -13,7 +13,6 @@ from api.core.entitlements import (
     FREE_DAILY_SESSION_LIMIT,
     Entitlement,
     get_daily_session_count,
-    get_history_limit,
     is_pro,
 )
 from api.database import get_db
@@ -115,7 +114,6 @@ async def entitlements(
     """Return the current user's entitlement state."""
     user_is_pro = is_pro(user)
     daily_used = await get_daily_session_count(db, user.id)
-    history_limit = get_history_limit(user)
 
     gated_features = []
     if not user_is_pro:
@@ -129,7 +127,6 @@ async def entitlements(
         limits=EntitlementLimits(
             daily_sessions_used=daily_used,
             daily_sessions_limit=None if user_is_pro else FREE_DAILY_SESSION_LIMIT,
-            history_limit=history_limit,
         ),
         gated_features=gated_features,
     )

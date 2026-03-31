@@ -116,7 +116,7 @@ export default function Users() {
               <th>Email</th>
               <th>Role</th>
               <th>Plan</th>
-              <th>Grade</th>
+              <th>Today&apos;s Usage</th>
               <th>Sessions</th>
               <th>Total Cost</th>
               <th>Last Active</th>
@@ -147,7 +147,13 @@ export default function Users() {
                       : ""}
                   </span>
                 </td>
-                <td>{u.grade_level}</td>
+                <td>
+                  <div style={{ display: "flex", gap: 8, fontSize: 11 }}>
+                    <UsagePill label="Problems" used={u.daily_usage.sessions} limit={u.daily_usage.sessions_limit} />
+                    <UsagePill label="Chats" used={u.daily_usage.chats} limit={u.daily_usage.chats_limit} />
+                    <UsagePill label="Scans" used={u.daily_usage.scans} limit={u.daily_usage.scans_limit} />
+                  </div>
+                </td>
                 <td>{u.session_count}</td>
                 <td style={{ fontWeight: u.total_cost > 0 ? 600 : 400 }}>
                   ${u.total_cost.toFixed(4)}
@@ -208,5 +214,26 @@ export default function Users() {
         </table>
       </div>
     </div>
+  );
+}
+
+function UsagePill({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  const isUnlimited = limit === null;
+  const atLimit = !isUnlimited && used >= limit;
+  return (
+    <span
+      style={{
+        padding: "2px 6px",
+        borderRadius: 4,
+        fontWeight: 600,
+        background: atLimit ? "#fef2f2" : isUnlimited ? "#f0fdf4" : "#f8fafc",
+        color: atLimit ? "#ef4444" : isUnlimited ? "#16a34a" : "#475569",
+        border: `1px solid ${atLimit ? "#fecaca" : isUnlimited ? "#bbf7d0" : "#e2e8f0"}`,
+        whiteSpace: "nowrap" as const,
+      }}
+      title={`${label}: ${used}${isUnlimited ? " (unlimited)" : ` / ${limit}`}`}
+    >
+      {label}: {used}{isUnlimited ? " / ∞" : ` / ${limit}`}
+    </span>
   );
 }
