@@ -50,7 +50,7 @@ def is_pro(user: object) -> bool:
     return False
 
 
-def _today_start() -> datetime:
+def today_start() -> datetime:
     return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
@@ -61,7 +61,7 @@ async def get_daily_session_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     result = await db.execute(
         select(func.count())
         .select_from(Session)
-        .where(Session.user_id == user_id, Session.created_at >= _today_start())
+        .where(Session.user_id == user_id, Session.created_at >= today_start())
     )
     return result.scalar_one()
 
@@ -76,7 +76,7 @@ async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, functio
         .where(
             LLMCall.user_id == user_id,
             LLMCall.function == function_name,
-            LLMCall.created_at >= _today_start(),
+            LLMCall.created_at >= today_start(),
         )
     )
     return result.scalar_one()
@@ -92,7 +92,7 @@ async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID) -> int:
         .where(
             LLMCall.user_id == user_id,
             LLMCall.function.in_(["step_chat", "judge"]),
-            LLMCall.created_at >= _today_start(),
+            LLMCall.created_at >= today_start(),
         )
     )
     return result.scalar_one()

@@ -4,7 +4,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
@@ -69,6 +69,21 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
     )
 
 
+async def _has_session_for_problem_today(db: AsyncSession, user_id: uuid.UUID, problem: str) -> bool:
+    """Check if user already has a session for this exact problem today."""
+    from api.core.entitlements import today_start
+    result = await db.execute(
+        select(func.count())
+        .select_from(SessionModel)
+        .where(
+            SessionModel.user_id == user_id,
+            SessionModel.problem == problem.strip(),
+            SessionModel.created_at >= today_start(),
+        )
+    )
+    return result.scalar_one() > 0
+
+
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def create(
     body: CreateSessionRequest,
@@ -76,7 +91,10 @@ async def create(
     db: AsyncSession = Depends(get_db),
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
-    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
+    # Skip quota check if user already has a session for this problem today
+    # (e.g. learning a problem they already saw in a mock test)
+    if not await _has_session_for_problem_today(db, user.id, body.problem):
+        await check_entitlement(db, user, Entitlement.CREATE_SESSION)
     try:
         session = await create_session(
             db, user.id, body.problem, body.mode,
