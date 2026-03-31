@@ -49,7 +49,6 @@ export function InputScreen({
   const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(true);
-  const [mockMultipleChoice, setMockMultipleChoice] = useState(true);
 
   const {
     extracting,
@@ -66,6 +65,7 @@ export function InputScreen({
     imageUri,
     imageDimensions,
     pickImage,
+    startManualSelect,
     confirmRectangles,
     cancelSelection,
     dismiss: dismissExtraction,
@@ -158,7 +158,7 @@ export function InputScreen({
       onSessionStart();
       const generateCount = mockExamType === "generate_similar" ? allProblems.length : 0;
       const timeLimitMinutes = mockUntimed ? null : mockTimeLimitMinutes;
-      await startMockTest(allProblems, generateCount, timeLimitMinutes, mockMultipleChoice);
+      await startMockTest(allProblems, generateCount, timeLimitMinutes);
       const postPhase = useSessionStore.getState().phase;
       if (postPhase === "error") {
         onSessionError();
@@ -395,8 +395,6 @@ export function InputScreen({
             onUntimedChange={setMockUntimed}
             timeLimitMinutes={mockTimeLimitMinutes}
             onTimeLimitChange={setMockTimeLimitMinutes}
-            multipleChoice={mockMultipleChoice}
-            onMultipleChoiceChange={setMockMultipleChoice}
           />
         )}
 
@@ -438,6 +436,7 @@ export function InputScreen({
         onConfirm={handleConfirmExtraction}
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
+        onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
     </>

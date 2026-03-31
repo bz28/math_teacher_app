@@ -143,8 +143,6 @@ export function useImageExtraction(
         confidence: worstConfidence,
         selected: allProblems.map(() => true),
         editingIndex: null,
-        imageUri: null,
-        imageDimensions: null,
       }));
     } catch {
       setError("Failed to extract problems. Try again.");
@@ -154,6 +152,18 @@ export function useImageExtraction(
 
   const cancelSelection = () => {
     setState(INITIAL_STATE);
+  };
+
+  /** Re-enter rectangle selection from results (manual fallback). */
+  const startManualSelect = () => {
+    setState((prev) => ({
+      ...prev,
+      phase: "selecting",
+      problems: null,
+      cropImages: [],
+      selected: [],
+    }));
+    setError(null);
   };
 
   const dismiss = () => {
@@ -231,6 +241,7 @@ export function useImageExtraction(
     pickImage,
     confirmRectangles,
     cancelSelection,
+    startManualSelect,
     dismiss,
     retry,
     toggleSelected,
