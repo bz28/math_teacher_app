@@ -6,7 +6,7 @@ import { extractProblemsFromImage } from "../services/api";
 import { cropImage, type CropRegion } from "../utils/cropImage";
 import { imageToBase64 } from "../utils/imageToBase64";
 
-export type ExtractionPhase = "idle" | "selecting" | "extracting" | "results";
+export type ExtractionPhase = "idle" | "preview" | "selecting" | "extracting" | "results";
 
 export interface ExtractionState {
   phase: ExtractionPhase;
@@ -18,9 +18,7 @@ export interface ExtractionState {
   editingIndex: number | null;
   editingText: string;
   lastSource: "camera" | "gallery" | null;
-  /** Image URI preserved for manual rectangle fallback */
   imageUri: string | null;
-  /** Image dimensions for rectangle selector */
   imageDimensions: { width: number; height: number } | null;
 }
 
@@ -46,22 +44,16 @@ export function useImageExtraction(
 ) {
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
 
-  /** Pick image and auto-extract all problems from it. */
+  /** Pick image → show preview with Extract All / Select Areas options. */
   const pickImage = async (source: "camera" | "gallery") => {
     const granted = source === "camera"
       ? await requestCameraAccess()
       : await requestGalleryAccess();
     if (!granted) return;
 
-    const options: ImagePicker.ImagePickerOptions = {
-      base64: false,
-      quality: 0.7,
-      allowsEditing: false,
-    };
-
     const result = source === "camera"
-      ? await ImagePicker.launchCameraAsync(options)
-      : await ImagePicker.launchImageLibraryAsync(options);
+      ? await ImagePicker.launchCameraAsync({ base64: false, quality: 0.7, allowsEditing: false })
+      : await ImagePicker.launchImageLibraryAsync({ base64: false, quality: 0.7, allowsEditing: false });
 
     if (result.canceled || !result.assets?.length) return;
 
@@ -71,12 +63,9 @@ export function useImageExtraction(
       return;
     }
 
-    // Save URI/dimensions for manual fallback, then auto-extract
     setState((prev) => ({
       ...prev,
-      phase: "extracting",
-      extracting: true,
-      extractionProgress: null,
+      phase: "preview",
       imageUri: asset.uri,
       imageDimensions: asset.width && asset.height
         ? { width: asset.width, height: asset.height }
@@ -84,14 +73,26 @@ export function useImageExtraction(
       lastSource: source,
     }));
     setError(null);
+  };
+
+  /** Send the full image to API for automatic problem detection. */
+  const extractFullImage = async () => {
+    if (!state.imageUri) return;
+
+    setState((prev) => ({
+      ...prev,
+      phase: "extracting",
+      extracting: true,
+      extractionProgress: null,
+    }));
 
     try {
-      const base64 = await imageToBase64(asset.uri);
+      const base64 = await imageToBase64(state.imageUri);
       const { problems, confidence } = await extractProblemsFromImage(base64, subject);
 
       if (problems.length === 0) {
-        setError("No problems found. Try again or select areas manually.");
-        setState((prev) => ({ ...prev, phase: "idle", extracting: false }));
+        setError("No problems found. Try selecting areas manually.");
+        setState((prev) => ({ ...prev, phase: "preview", extracting: false }));
         return;
       }
 
@@ -111,11 +112,21 @@ export function useImageExtraction(
       } else {
         setError(msg || "Failed to extract problems from image.");
       }
-      setState((prev) => ({ ...prev, phase: "idle", extracting: false, extractionProgress: null }));
+      setState((prev) => ({ ...prev, phase: "preview", extracting: false }));
     }
   };
 
-  /** Process rectangles drawn by user in manual selection mode. */
+  /** Enter rectangle selection mode (from preview or from results as fallback).
+   *  Keeps existing problems so manual extractions can be appended. */
+  const startManualSelect = () => {
+    setState((prev) => ({
+      ...prev,
+      phase: "selecting",
+    }));
+    setError(null);
+  };
+
+  /** Process rectangles drawn by user. */
   const confirmRectangles = async (rectangles: CropRegion[]) => {
     if (!state.imageUri) return;
 
@@ -155,54 +166,43 @@ export function useImageExtraction(
 
       if (allProblems.length === 0) {
         setError("No problems found in the selected areas. Try drawing larger rectangles.");
-        setState((prev) => ({ ...prev, phase: "idle", extracting: false, extractionProgress: null }));
+        setState((prev) => ({ ...prev, phase: "preview", extracting: false, extractionProgress: null }));
         return;
       }
 
-      setState((prev) => ({
-        ...prev,
-        phase: "results",
-        extracting: false,
-        extractionProgress: null,
-        problems: allProblems,
-        confidence: worstConfidence,
-        selected: allProblems.map(() => true),
-        editingIndex: null,
-      }));
+      // Append to existing problems (user may have deselected bad auto-detect results)
+      setState((prev) => {
+        const existingProblems = prev.problems ?? [];
+        const existingSelected = prev.selected ?? [];
+        return {
+          ...prev,
+          phase: "results",
+          extracting: false,
+          extractionProgress: null,
+          problems: [...existingProblems, ...allProblems],
+          confidence: worstConfidence === "low" ? "low" : prev.confidence === "low" ? "low" : worstConfidence,
+          selected: [...existingSelected, ...allProblems.map(() => true)],
+          editingIndex: null,
+        };
+      });
     } catch {
       setError("Failed to extract problems. Try again.");
-      setState((prev) => ({ ...prev, phase: "idle", extracting: false, extractionProgress: null }));
+      setState((prev) => ({ ...prev, phase: "preview", extracting: false, extractionProgress: null }));
     }
   };
 
-  /** Enter manual rectangle selection (fallback from auto-detect results). */
-  const startManualSelect = () => {
-    setState((prev) => ({
-      ...prev,
-      phase: "selecting",
-      problems: null,
-      selected: [],
-    }));
-    setError(null);
+  /** Cancel rectangle selection → back to preview. */
+  const cancelSelection = () => {
+    setState((prev) => ({ ...prev, phase: "preview" }));
   };
 
-  /** Cancel rectangle selection and go back to idle. */
-  const cancelSelection = () => {
+  /** Cancel preview → back to idle. */
+  const cancelPreview = () => {
     setState(INITIAL_STATE);
   };
 
   const dismiss = () => {
-    setState((prev) => ({
-      ...prev,
-      phase: "idle",
-      problems: null,
-      confidence: "high",
-      selected: [],
-      editingIndex: null,
-      editingText: "",
-      imageUri: null,
-      imageDimensions: null,
-    }));
+    setState(INITIAL_STATE);
   };
 
   const retry = () => {
@@ -254,7 +254,7 @@ export function useImageExtraction(
   const getSelectedWithImages = (): { text: string; image?: string }[] => {
     if (!state.problems) return [];
     return state.problems
-      .map((text, i) => ({ text, image: undefined }))
+      .map((text) => ({ text, image: undefined }))
       .filter((_, i) => state.selected[i]);
   };
 
@@ -266,8 +266,10 @@ export function useImageExtraction(
     selectedCount,
     canAddMore,
     pickImage,
+    extractFullImage,
     confirmRectangles,
     cancelSelection,
+    cancelPreview,
     startManualSelect,
     dismiss,
     retry,
