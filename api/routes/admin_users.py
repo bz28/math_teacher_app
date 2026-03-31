@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from api.core.entitlements import today_start
 from pydantic import BaseModel
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,10 +25,6 @@ router = APIRouter()
 
 def _time_range(hours: int) -> datetime:
     return datetime.now(UTC) - timedelta(hours=hours)
-
-
-def _today_start() -> datetime:
-    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 @router.get("/users")
@@ -90,7 +87,7 @@ async def users(
     )
 
     # Daily usage subqueries (today)
-    today = _today_start()
+    today = today_start()
 
     daily_sessions = (
         select(

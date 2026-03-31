@@ -9,6 +9,7 @@ import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Card, Badge, Button } from "@/components/ui";
 import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
+import { FREE_DAILY_SESSION_LIMIT } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { cn, renderBold } from "@/lib/utils";
@@ -316,7 +317,7 @@ function PracticeSimilarButton({ problem, subject }: { problem: string; subject:
         open={showUpgrade}
         onClose={() => setShowUpgrade(false)}
         entitlement="create_session"
-        message="You've used all 5 problems for today. Upgrade to Pro for unlimited access."
+        message={`You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`}
       />
     </>
   );

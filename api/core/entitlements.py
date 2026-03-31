@@ -54,18 +54,6 @@ def today_start() -> datetime:
     return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-async def get_daily_session_count(db: AsyncSession, user_id: uuid.UUID) -> int:
-    """Count sessions created today (UTC) for a user."""
-    from api.models.session import Session
-
-    result = await db.execute(
-        select(func.count())
-        .select_from(Session)
-        .where(Session.user_id == user_id, Session.created_at >= today_start())
-    )
-    return result.scalar_one()
-
-
 async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     """Count decomposition LLM calls today (the real cost of analyzing a problem)."""
     from api.models.llm_call import LLMCall

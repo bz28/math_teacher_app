@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { CheckIcon } from "@/components/ui/icons";
+import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT } from "@/lib/constants";
 
 const plans = [
   {
@@ -40,10 +41,10 @@ const plans = [
 ];
 
 const freeFeatures = [
-  "5 problems per day",
+  `${FREE_DAILY_SESSION_LIMIT} problems per day`,
   "Step-by-step learning",
   "Chat with AI tutor",
-  "3 image scans per day",
+  `${FREE_DAILY_SCAN_LIMIT} image scans per day`,
 ];
 
 export function Pricing() {

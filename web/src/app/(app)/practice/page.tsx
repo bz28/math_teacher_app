@@ -9,7 +9,7 @@ import { useEntitlementStore } from "@/stores/entitlements";
 import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
-import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -40,7 +40,7 @@ export default function PracticePage() {
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
-  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   useRedirectOnIdle(phase, practiceBatch);
   useErrorToast(phase, error);
@@ -118,7 +118,7 @@ export default function PracticePage() {
         onToggleFlag={togglePracticeFlag}
         onStartLearnQueue={startLearnQueue}
         onRetryFlagged={retryFlaggedProblems}
-        onUpgradeNeeded={(ent, msg) => setUpgradePrompt({ entitlement: ent, message: msg })}
+        onUpgradeNeeded={showUpgrade}
         onReset={reset}
       />
     );
@@ -211,10 +211,7 @@ export default function PracticePage() {
               attached={!!attachedImage}
               onAttach={(base64) => { setAttachedImage(base64); setShowNudge(false); }}
               isPro={isPro}
-              onUpgradeNeeded={() => setUpgradePrompt({
-                entitlement: "work_diagnosis",
-                message: "Get detailed feedback on your work — step-by-step accuracy analysis and tailored learning. Upgrade to Pro to unlock.",
-              })}
+              onUpgradeNeeded={() => showUpgrade("work_diagnosis", "Get detailed feedback on your work — step-by-step accuracy analysis and tailored learning. Upgrade to Pro to unlock.")}
             />
 
             {/* Work nudge */}
@@ -232,12 +229,7 @@ export default function PracticePage() {
           </div>
         )}
       </Card>
-      <UpgradePrompt
-        open={upgradePrompt !== null}
-        onClose={() => setUpgradePrompt(null)}
-        entitlement={upgradePrompt?.entitlement}
-        message={upgradePrompt?.message}
-      />
+      {UpgradeModal}
     </div>
   );
 }

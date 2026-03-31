@@ -7,12 +7,13 @@ import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
-import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
 import { cn, renderBold } from "@/lib/utils";
+import { FREE_DAILY_CHAT_LIMIT } from "@/lib/constants";
 import { LearnSummary } from "./_components/learn-summary";
 import { LearnCompleted } from "./_components/learn-completed";
 
@@ -45,7 +46,7 @@ export default function LearnSessionPage() {
 
   const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
-  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
   );
@@ -146,10 +147,7 @@ export default function LearnSessionPage() {
   async function handleAsk() {
     if (!input.trim()) return;
     if (!isPro && remainingChats <= 0) {
-      setUpgradePrompt({
-        entitlement: "chat_message",
-        message: "You've used all 20 chat messages for today. Upgrade to Pro for unlimited chat.",
-      });
+      showUpgrade("chat_message", `You've used all ${FREE_DAILY_CHAT_LIMIT} chat messages for today. Upgrade to Pro for unlimited chat.`);
       return;
     }
     const q = input.trim();
@@ -569,12 +567,7 @@ export default function LearnSessionPage() {
           )}
         </div>
       )}
-      <UpgradePrompt
-        open={upgradePrompt !== null}
-        onClose={() => setUpgradePrompt(null)}
-        entitlement={upgradePrompt?.entitlement}
-        message={upgradePrompt?.message}
-      />
+      {UpgradeModal}
     </div>
   );
 }

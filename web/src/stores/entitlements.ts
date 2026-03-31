@@ -15,12 +15,9 @@ interface EntitlementState {
   loaded: boolean;
 
   fetchEntitlements: () => Promise<void>;
-  sessionsRemaining: () => number;
-  scansRemaining: () => number;
-  chatsRemaining: () => number;
 }
 
-export const useEntitlementStore = create<EntitlementState>((set, get) => ({
+export const useEntitlementStore = create<EntitlementState>((set) => ({
   isPro: false,
   dailySessionsUsed: 0,
   dailySessionsLimit: 5,
@@ -48,23 +45,5 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
     } catch {
       // Fail silently — use defaults
     }
-  },
-
-  sessionsRemaining() {
-    const { isPro, dailySessionsUsed, dailySessionsLimit } = get();
-    if (isPro) return Infinity;
-    return Math.max(0, dailySessionsLimit - dailySessionsUsed);
-  },
-
-  scansRemaining() {
-    const { isPro, dailyScansUsed, dailyScansLimit } = get();
-    if (isPro) return Infinity;
-    return Math.max(0, dailyScansLimit - dailyScansUsed);
-  },
-
-  chatsRemaining() {
-    const { isPro, dailyChatsUsed, dailyChatsLimit } = get();
-    if (isPro) return Infinity;
-    return Math.max(0, dailyChatsLimit - dailyChatsUsed);
   },
 }));

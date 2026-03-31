@@ -10,8 +10,9 @@ import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { EntitlementError } from "@/lib/api";
-import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
+import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT } from "@/lib/constants";
 
 const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string; bg: string }> = {
   math: { name: "Mathematics", icon: "📐", color: "text-primary", bg: "bg-primary-bg" },
@@ -72,8 +73,8 @@ function LearnPageContent() {
     if (!isPro && problemQueue.length >= maxQueueSize) {
       const msg = problemQueue.length > 0
         ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
-        : "You've used all 5 problems for today. Upgrade to Pro for unlimited access.";
-      setUpgradePrompt({ entitlement: "create_session", message: msg });
+        : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
+      showUpgrade("create_session", msg);
       return;
     }
     addToQueue(trimmed);
@@ -88,7 +89,7 @@ function LearnPageContent() {
   }
 
   const [starting, setStarting] = useState(false);
-  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
   const [quotaConfirm, setQuotaConfirm] = useState(false);
   const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
   const isScanning = imagePhase === "select" || imagePhase === "extracting";
@@ -97,7 +98,7 @@ function LearnPageContent() {
     if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
     if (!isPro && remainingSessions <= 0) {
-      setUpgradePrompt({ entitlement: "create_session", message: "You've used all 5 problems for today. Upgrade to Pro for unlimited access." });
+      showUpgrade("create_session", `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`);
       return;
     }
 
@@ -129,7 +130,7 @@ function LearnPageContent() {
       }
     } catch (err) {
       if (err instanceof EntitlementError) {
-        setUpgradePrompt({ entitlement: err.entitlement, message: err.message });
+        showUpgrade(err.entitlement, err.message);
       }
       setStarting(false);
     }
@@ -324,10 +325,7 @@ function LearnPageContent() {
             maxProblems={maxQueueSize}
             currentQueueLength={problemQueue.length}
             scansRemaining={remainingScans}
-            onScanLimitReached={() => setUpgradePrompt({
-              entitlement: "image_scan",
-              message: "You've used all 3 image scans for today. Upgrade to Pro for unlimited scans.",
-            })}
+            onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
             onExtractComplete={fetchEntitlements}
             onPhaseChange={setImagePhase}
           />
@@ -450,17 +448,12 @@ function LearnPageContent() {
           )}
           {!isPro && remainingSessions < Infinity && !quotaConfirm && (
             <p className="text-center text-xs text-text-muted">
-              {remainingSessions} of 5 problems remaining today
+              {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems remaining today
             </p>
           )}
         </div>
       )}
-      <UpgradePrompt
-        open={upgradePrompt !== null}
-        onClose={() => setUpgradePrompt(null)}
-        entitlement={upgradePrompt?.entitlement}
-        message={upgradePrompt?.message}
-      />
+      {UpgradeModal}
     </div>
   );
 }
