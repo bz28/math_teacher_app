@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** 5 minutes — threshold at which the timer turns red */
 export const LOW_TIME_THRESHOLD_SECONDS = 300;
@@ -15,6 +15,8 @@ interface MockTimerOptions {
  */
 export function useMockTimer({ startedAt, timeLimitSeconds, onTimeUp }: MockTimerOptions) {
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const onTimeUpRef = useRef(onTimeUp);
+  onTimeUpRef.current = onTimeUp;
 
   // Initialize timer
   useEffect(() => {
@@ -38,9 +40,9 @@ export function useMockTimer({ startedAt, timeLimitSeconds, onTimeUp }: MockTime
     return () => clearInterval(interval);
   }, [remainingSeconds]);
 
-  // Fire callback on time up
+  // Fire callback on time up (ref avoids stale closure)
   useEffect(() => {
-    if (remainingSeconds === 0) onTimeUp();
+    if (remainingSeconds === 0) onTimeUpRef.current();
   }, [remainingSeconds]);
 
   const isTimeLow =
