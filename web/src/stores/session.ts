@@ -161,6 +161,53 @@ interface SessionState {
   reset: () => void;
 }
 
+function pollForState<T>(
+  accessor: () => T | undefined | null,
+  timeoutMs: number,
+  intervalMs = 500,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), timeoutMs);
+    const check = () => {
+      const value = accessor();
+      if (value) {
+        clearTimeout(timeout);
+        resolve(value);
+        return true;
+      }
+      return false;
+    };
+    if (!check()) {
+      const interval = setInterval(() => {
+        if (check()) clearInterval(interval);
+      }, intervalMs);
+    }
+  });
+}
+
+function createMockTest(
+  questions: PracticeProblem[],
+  sessionId: string,
+  timeLimitMinutes: number | null,
+  multipleChoice: boolean,
+): MockTest {
+  const len = questions.length;
+  return {
+    questions,
+    answers: {},
+    flags: new Array(len).fill(false),
+    currentIndex: 0,
+    timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
+    startedAt: Date.now(),
+    submittedAt: null,
+    results: null,
+    sessionId,
+    workImages: new Array(len).fill(null),
+    workSubmissions: new Array(len).fill(null),
+    multipleChoice,
+  };
+}
+
 function createPracticeBatch(
   problems: PracticeProblem[],
   sessionId: string | null,
@@ -399,20 +446,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         phase: "loading" as SessionPhase,
       });
       // Wait for preload to finish instead of creating a duplicate
-      preloaded = await new Promise<SessionResponse | null>((resolve) => {
-        const timeout = setTimeout(() => resolve(null), 15_000);
-        const check = () => {
-          const lq = get().learnQueue;
-          const s = lq?.preloadedSessions[nextIndex];
-          if (s) { clearTimeout(timeout); resolve(s); return true; }
-          return false;
-        };
-        if (!check()) {
-          const interval = setInterval(() => {
-            if (check()) clearInterval(interval);
-          }, 500);
-        }
-      });
+      preloaded = await pollForState(
+        () => get().learnQueue?.preloadedSessions[nextIndex],
+        15_000,
+      );
     }
 
     if (preloaded) {
@@ -581,20 +618,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Wait for correct answer if still being resolved (queue mode)
       let correctAnswer = current.answer;
       if (!correctAnswer) {
-        correctAnswer = await new Promise<string>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error("Timed out")), 30_000);
-          const check = () => {
-            const batch = get().practiceBatch;
-            const ans = batch?.problems[idx]?.answer;
-            if (ans) { clearTimeout(timeout); resolve(ans); return true; }
-            return false;
-          };
-          if (!check()) {
-            const interval = setInterval(() => {
-              if (check()) clearInterval(interval);
-            }, 500);
-          }
-        });
+        const resolved = await pollForState(
+          () => get().practiceBatch?.problems[idx]?.answer,
+          30_000,
+        );
+        if (!resolved) throw new Error("Timed out waiting for answer");
+        correctAnswer = resolved;
       }
 
       const { is_correct }: PracticeCheckResponse = await practiceApi.check({
@@ -752,20 +781,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         });
         const { id } = await sessionApi.createMockTest(problems[0]);
         set({
-          mockTest: {
-            questions: generated,
-            answers: {},
-            flags: new Array(generated.length).fill(false),
-            currentIndex: 0,
-            timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-            startedAt: Date.now(),
-            submittedAt: null,
-            results: null,
-            sessionId: id,
-            workImages: new Array(generated.length).fill(null),
-            workSubmissions: new Array(generated.length).fill(null),
-            multipleChoice,
-          },
+          mockTest: createMockTest(generated, id, timeLimitMinutes, multipleChoice),
           phase: "mock_test_active",
         });
       } else {
@@ -776,20 +792,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         }));
         const { id } = await sessionApi.createMockTest(problems[0]);
         set({
-          mockTest: {
-            questions: placeholders,
-            answers: {},
-            flags: new Array(problems.length).fill(false),
-            currentIndex: 0,
-            timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-            startedAt: Date.now(),
-            submittedAt: null,
-            results: null,
-            sessionId: id,
-            workImages: new Array(problems.length).fill(null),
-            workSubmissions: new Array(problems.length).fill(null),
-            multipleChoice,
-          },
+          mockTest: createMockTest(placeholders, id, timeLimitMinutes, multipleChoice),
           phase: "mock_test_active",
         });
 
