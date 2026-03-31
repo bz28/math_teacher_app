@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
-import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
+import { Button, Card, Badge, AnimatedCounter } from "@/components/ui";
+import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -30,7 +31,6 @@ export default function MockTestPage() {
     reset,
   } = useMockTestStore();
 
-  const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
@@ -49,15 +49,8 @@ export default function MockTestPage() {
     return () => clearInterval(interval);
   }, [mockTest, phase, submitMockTest, subject]);
 
-  useEffect(() => {
-    if (phase === "idle" && !mockTest) {
-      router.replace("/learn");
-    }
-  }, [phase, mockTest, router]);
-
-  useEffect(() => {
-    if (phase === "error" && error) toast.error(error);
-  }, [phase, error, toast]);
+  useRedirectOnIdle(phase, mockTest);
+  useErrorToast(phase, error);
 
   // Confetti on good mock test score (>=70%)
   useEffect(() => {

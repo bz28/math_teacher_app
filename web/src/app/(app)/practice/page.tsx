@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { session as sessionApi } from "@/lib/api";
-import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
+import { Button, Card, Badge, AnimatedCounter } from "@/components/ui";
+import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -31,22 +32,14 @@ export default function PracticePage() {
     reset,
   } = usePracticeStore();
 
-  const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
   const [answer, setAnswer] = useState("");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
 
-  useEffect(() => {
-    if (phase === "idle" && !practiceBatch) {
-      router.replace("/learn");
-    }
-  }, [phase, practiceBatch, router]);
-
-  useEffect(() => {
-    if (phase === "error" && error) toast.error(error);
-  }, [phase, error, toast]);
+  useRedirectOnIdle(phase, practiceBatch);
+  useErrorToast(phase, error);
 
   // Confetti on perfect practice score + complete session for history
   useEffect(() => {

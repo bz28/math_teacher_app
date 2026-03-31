@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
-import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
+import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
+import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
@@ -38,7 +39,6 @@ export default function LearnSessionPage() {
   } = useSessionStore();
   const { startPracticeBatch, practiceFlaggedProblems } = usePracticeStore();
 
-  const toast = useToast();
   const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
@@ -64,17 +64,8 @@ export default function LearnSessionPage() {
     }
   }, [resumeId, resumeSession]);
 
-  // Redirect if no session and not resuming
-  useEffect(() => {
-    if (phase === "idle" && !resumeId) {
-      router.replace("/learn");
-    }
-  }, [phase, router, resumeId]);
-
-  // Show toast on error
-  useEffect(() => {
-    if (phase === "error" && error) toast.error(error);
-  }, [phase, error, toast]);
+  useRedirectOnIdle(phase, resumeId || session);
+  useErrorToast(phase, error);
 
   // Confetti on completion
   useEffect(() => {
