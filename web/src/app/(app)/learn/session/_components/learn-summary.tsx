@@ -9,13 +9,12 @@ import type { LearnQueue } from "@/stores/learn";
 
 interface LearnSummaryProps {
   learnQueue: LearnQueue;
-  subject: string;
   onToggleFlag: (index: number) => void;
   onPracticeFlagged: (flagged: string[]) => Promise<void>;
   onReset: () => void;
 }
 
-export function LearnSummary({ learnQueue, subject, onToggleFlag, onPracticeFlagged, onReset }: LearnSummaryProps) {
+export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onReset }: LearnSummaryProps) {
   const router = useRouter();
   const flaggedCount = learnQueue.flags.filter(Boolean).length;
 

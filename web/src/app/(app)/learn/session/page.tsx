@@ -90,7 +90,6 @@ export default function LearnSessionPage() {
     return (
       <LearnSummary
         learnQueue={learnQueue}
-        subject={subject}
         onToggleFlag={toggleLearnFlag}
         onPracticeFlagged={(flagged) => practiceFlaggedProblems(flagged, subject)}
         onReset={reset}

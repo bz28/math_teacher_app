@@ -2,16 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
-import { Button, Card, Badge, AnimatedCounter } from "@/components/ui";
+import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
-import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
 import { cn } from "@/lib/utils";

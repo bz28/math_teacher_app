@@ -6,14 +6,12 @@ import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { session as sessionApi } from "@/lib/api";
-import { Button, Card, Badge, AnimatedCounter } from "@/components/ui";
+import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
-import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
-import { cn } from "@/lib/utils";
 import { PracticeSummary } from "./_components/practice-summary";
 
 export default function PracticePage() {
@@ -72,7 +70,7 @@ export default function PracticePage() {
     setAnswer("");
     setAttachedImage(null);
     setShowNudge(false);
-  }, [answer, attachedImage, practiceBatch, submitPracticeAnswer, submitPracticeWork]);
+  }, [answer, attachedImage, practiceBatch, submitPracticeAnswer, submitPracticeWork, subject]);
 
   function handleSubmitOrNudge() {
     if (!answer.trim()) return;
