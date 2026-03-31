@@ -27,6 +27,7 @@ import { PracticeBatchView } from "./PracticeBatchView";
 import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
+import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { useSessionStore } from "../stores/session";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
@@ -50,6 +51,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const confettiRef = useRef<ConfettiOverlayRef>(null);
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean; pending: boolean } | null>(null);
@@ -100,6 +102,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     }
   }, [lastResponse, phase]);
+
+  // Confetti on learn completion
+  useEffect(() => {
+    if (phase === "completed") confettiRef.current?.fire();
+  }, [phase]);
 
   // Loading state
   if (phase === "loading") {
@@ -477,6 +484,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         )}
       </ScrollView>
       <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
+      {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
     </KeyboardAvoidingView>
   );
 }

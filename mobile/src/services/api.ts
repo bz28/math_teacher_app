@@ -281,6 +281,7 @@ export const register = (email: string, password: string, name: string, gradeLev
 export interface PracticeProblem {
   question: string;
   answer: string;
+  distractors?: string[];
 }
 
 export const generatePracticeProblems = (problem: string, count: number, subject: string = "math") =>
