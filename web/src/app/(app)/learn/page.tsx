@@ -70,12 +70,10 @@ function LearnPageContent() {
     const trimmed = input.trim();
     if (!trimmed) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      setUpgradePrompt({
-        entitlement: "create_session",
-        message: remainingSessions <= 0
-          ? "You've used all 5 problems for today. Upgrade to Pro for unlimited access."
-          : `You've reached your queue limit — free accounts can use ${remainingSessions} more problem${remainingSessions !== 1 ? "s" : ""} today. Remove a problem or upgrade to Pro.`,
-      });
+      const msg = problemQueue.length > 0
+        ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
+        : "You've used all 5 problems for today. Upgrade to Pro for unlimited access.";
+      setUpgradePrompt({ entitlement: "create_session", message: msg });
       return;
     }
     addToQueue(trimmed);
