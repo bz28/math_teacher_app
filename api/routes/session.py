@@ -180,12 +180,13 @@ async def get(
 async def respond(
     session_id: uuid.UUID,
     body: RespondRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> StepResponseSchema:
     """Submit a response for the current step or request a hint."""
+    await check_entitlement(db, user, Entitlement.CHAT_MESSAGE)
     try:
-        session = await get_owned_session(db, session_id, current_user.user_id)
+        session = await get_owned_session(db, session_id, user.id)
     except SessionError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except PermissionError:

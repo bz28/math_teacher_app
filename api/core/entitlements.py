@@ -10,10 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 
 FREE_DAILY_SESSION_LIMIT = 5
+FREE_DAILY_CHAT_LIMIT = 20
+FREE_DAILY_IMAGE_SCAN_LIMIT = 3
 
 
 class Entitlement(enum.StrEnum):
     CREATE_SESSION = "create_session"
+    CHAT_MESSAGE = "chat_message"
+    IMAGE_SCAN = "image_scan"
     WORK_DIAGNOSIS = "work_diagnosis"
 
 
@@ -46,15 +50,50 @@ def is_pro(user: object) -> bool:
     return False
 
 
+def _today_start() -> datetime:
+    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 async def get_daily_session_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     """Count sessions created today (UTC) for a user."""
     from api.models.session import Session
 
-    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
         select(func.count())
         .select_from(Session)
-        .where(Session.user_id == user_id, Session.created_at >= today_start)
+        .where(Session.user_id == user_id, Session.created_at >= _today_start())
+    )
+    return result.scalar_one()
+
+
+async def _get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str) -> int:
+    """Count LLM calls today for a specific function."""
+    from api.models.llm_call import LLMCall
+
+    result = await db.execute(
+        select(func.count())
+        .select_from(LLMCall)
+        .where(
+            LLMCall.user_id == user_id,
+            LLMCall.function == function_name,
+            LLMCall.created_at >= _today_start(),
+        )
+    )
+    return result.scalar_one()
+
+
+async def _get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Count chat-related LLM calls today (step_chat + final_answer_chat)."""
+    from api.models.llm_call import LLMCall
+
+    result = await db.execute(
+        select(func.count())
+        .select_from(LLMCall)
+        .where(
+            LLMCall.user_id == user_id,
+            LLMCall.function.in_(["step_chat", "judge"]),
+            LLMCall.created_at >= _today_start(),
+        )
     )
     return result.scalar_one()
 
@@ -78,6 +117,28 @@ async def check_entitlement(
                 entitlement,
                 f"Free plan limited to {FREE_DAILY_SESSION_LIMIT} problems per day."
                 " Upgrade to Pro for unlimited access.",
+                is_limit=True,
+            )
+        return
+
+    if entitlement == Entitlement.CHAT_MESSAGE:
+        count = await _get_daily_chat_count(db, user_id)
+        if count >= FREE_DAILY_CHAT_LIMIT:
+            raise EntitlementError(
+                entitlement,
+                f"Free plan limited to {FREE_DAILY_CHAT_LIMIT} messages per day."
+                " Upgrade to Pro for unlimited chat.",
+                is_limit=True,
+            )
+        return
+
+    if entitlement == Entitlement.IMAGE_SCAN:
+        count = await _get_daily_llm_call_count(db, user_id, "image_extract")
+        if count >= FREE_DAILY_IMAGE_SCAN_LIMIT:
+            raise EntitlementError(
+                entitlement,
+                f"Free plan limited to {FREE_DAILY_IMAGE_SCAN_LIMIT} image scans per day."
+                " Upgrade to Pro for unlimited scans.",
                 is_limit=True,
             )
         return
