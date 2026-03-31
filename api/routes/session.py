@@ -295,11 +295,8 @@ async def create_mock_test(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Record a mock test session for analytics (no LLM calls).
-
-    No entitlement check here — the real cost is in /practice/generate
-    which checks entitlement per problem decomposed.
-    """
+    """Record a mock test session for analytics (no LLM calls)."""
+    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
     session = SessionModel(
         user_id=user.id,
         problem=body.problem,
