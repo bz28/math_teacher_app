@@ -18,9 +18,9 @@ from api.core.session import (
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
-from api.models.user import User
 from api.models.session import Session as SessionModel
 from api.models.session import SessionMode, SessionStatus
+from api.models.user import User
 from api.schemas.session import (
     CompleteMockTestRequest,
     CreateMockTestRequest,

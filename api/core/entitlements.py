@@ -13,7 +13,7 @@ FREE_DAILY_SESSION_LIMIT = 3
 FREE_HISTORY_LIMIT = 5
 
 
-class Entitlement(str, enum.Enum):
+class Entitlement(enum.StrEnum):
     CREATE_SESSION = "create_session"
     MOCK_TEST = "mock_test"
     WORK_DIAGNOSIS = "work_diagnosis"

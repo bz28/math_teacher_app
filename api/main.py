@@ -5,10 +5,9 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, or_, text, update
+from sqlalchemy import delete, or_, text
 
 from api.config import settings
-from api.core.constants import STALE_SESSION_HOURS
 from api.core.entitlements import EntitlementError
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router

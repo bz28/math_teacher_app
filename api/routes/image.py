@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_extract import extract_problems_from_image
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
+from api.middleware.auth import get_current_user_full
 from api.models.user import User
 from api.schemas.image import ImageExtractRequest, ImageExtractResponse
 

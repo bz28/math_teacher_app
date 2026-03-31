@@ -43,7 +43,7 @@ async def get_current_user(
 async def get_current_user_full(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
-) -> "User":
+) -> "User":  # noqa: F821
     """Return the full User ORM object for the current authenticated user."""
     payload = decode_access_token(credentials.credentials)
     if payload is None:

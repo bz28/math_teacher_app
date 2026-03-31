@@ -17,7 +17,7 @@ from api.core.entitlements import (
     is_pro,
 )
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
+from api.middleware.auth import get_current_user_full
 from api.models.user import User
 from api.schemas.auth import (
     CheckEmailRequest,

@@ -9,7 +9,7 @@ from api.core.entitlements import Entitlement, check_entitlement
 from api.core.step_decomposition import decompose_problem
 from api.core.work_diagnosis import diagnose_work
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
+from api.middleware.auth import get_current_user_full
 from api.models.user import User
 from api.models.work_submission import WorkSubmission
 from api.schemas.work import DiagnosisResult, DiagnosisStep, SubmitWorkRequest, SubmitWorkResponse
