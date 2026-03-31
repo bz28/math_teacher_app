@@ -72,6 +72,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     ...typography.button,
-    color: "#fff",
+    color: colors.white,
   },
 });
