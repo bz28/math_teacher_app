@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextStyle,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -38,7 +39,7 @@ interface SessionScreenProps {
 }
 
 /** Render text with **bold** markdown into React Native Text elements. */
-function renderBold(text: string, style: object) {
+function renderBold(text: string, style: TextStyle) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
