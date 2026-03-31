@@ -16,7 +16,7 @@ import {
 
 export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: StoreSubscribe) {
   return {
-    startMockTest: async (problems: string[], generateCount: number, timeLimitMinutes: number | null) => {
+    startMockTest: async (problems: string[], generateCount: number, timeLimitMinutes: number | null, multipleChoice: boolean = true) => {
       const { subject } = get();
       if (generateCount > 0) {
         set({ ...initialState, subject, phase: "loading" });
@@ -38,6 +38,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
               results: null,
               workImages: new Array(generated.length).fill(null),
               workSubmissions: new Array(generated.length).fill(null),
+              multipleChoice,
             },
             phase: "mock_test_active",
           });
@@ -73,6 +74,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           results: null,
           workImages: new Array(questions.length).fill(null),
           workSubmissions: new Array(questions.length).fill(null),
+          multipleChoice,
         },
         phase: "mock_test_active",
       });

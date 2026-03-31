@@ -10,6 +10,8 @@ interface MockTestConfigProps {
   onUntimedChange: (untimed: boolean) => void;
   timeLimitMinutes: number;
   onTimeLimitChange: (minutes: number) => void;
+  multipleChoice: boolean;
+  onMultipleChoiceChange: (mc: boolean) => void;
 }
 
 export function MockTestConfig({
@@ -19,6 +21,8 @@ export function MockTestConfig({
   onUntimedChange,
   timeLimitMinutes,
   onTimeLimitChange,
+  multipleChoice,
+  onMultipleChoiceChange,
 }: MockTestConfigProps) {
   return (
     <View style={styles.mockConfig}>
@@ -98,6 +102,33 @@ export function MockTestConfig({
             </AnimatedPressable>
           </View>
         )}
+      </AnimatedPressable>
+
+      {/* Answer format */}
+      <Text style={[styles.mockSectionLabel, { marginTop: spacing.xl }]}>ANSWERS</Text>
+      <AnimatedPressable
+        style={[styles.mockRadioCard, multipleChoice && styles.mockRadioCardActive]}
+        onPress={() => onMultipleChoiceChange(true)}
+        scaleDown={0.98}
+      >
+        <View style={[styles.mockRadioDot, multipleChoice && styles.mockRadioDotActive]}>
+          {multipleChoice && <View style={styles.mockRadioDotInner} />}
+        </View>
+        <Text style={[styles.mockRadioLabel, multipleChoice && styles.mockRadioLabelActive]}>
+          Multiple choice
+        </Text>
+      </AnimatedPressable>
+      <AnimatedPressable
+        style={[styles.mockRadioCard, !multipleChoice && styles.mockRadioCardActive]}
+        onPress={() => onMultipleChoiceChange(false)}
+        scaleDown={0.98}
+      >
+        <View style={[styles.mockRadioDot, !multipleChoice && styles.mockRadioDotActive]}>
+          {!multipleChoice && <View style={styles.mockRadioDotInner} />}
+        </View>
+        <Text style={[styles.mockRadioLabel, !multipleChoice && styles.mockRadioLabelActive]}>
+          Free response
+        </Text>
       </AnimatedPressable>
     </View>
   );
