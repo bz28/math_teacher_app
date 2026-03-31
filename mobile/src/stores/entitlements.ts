@@ -8,7 +8,6 @@ interface EntitlementState {
   expiresAt: string | null;
   dailySessionsUsed: number;
   dailySessionsLimit: number;
-  historyLimit: number | null;
   gatedFeatures: string[];
   loaded: boolean;
 
@@ -24,8 +23,7 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
   status: "none",
   expiresAt: null,
   dailySessionsUsed: 0,
-  dailySessionsLimit: 3,
-  historyLimit: null,
+  dailySessionsLimit: 5,
   gatedFeatures: [],
   loaded: false,
 
@@ -38,7 +36,6 @@ export const useEntitlementStore = create<EntitlementState>((set, get) => ({
       expiresAt: data.subscription_expires_at,
       dailySessionsUsed: data.limits.daily_sessions_used,
       dailySessionsLimit: data.limits.daily_sessions_limit,
-      historyLimit: data.limits.history_limit,
       gatedFeatures: data.gated_features,
       loaded: true,
     });

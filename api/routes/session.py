@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.entitlements import Entitlement, check_entitlement, get_history_limit
+from api.core.entitlements import Entitlement, check_entitlement
 from api.core.practice import generate_practice_problems
 from api.core.session import (
     SessionError,
@@ -107,10 +107,6 @@ async def history(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}",
         )
-
-    history_limit = get_history_limit(user)
-    if history_limit is not None:
-        limit = min(limit, history_limit)
 
     query = (
         select(SessionModel)
@@ -253,7 +249,7 @@ async def create_mock_test(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Record a mock test session for analytics (no LLM calls)."""
-    await check_entitlement(db, user, Entitlement.MOCK_TEST)
+    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
     session = SessionModel(
         user_id=user.id,
         problem=body.problem,

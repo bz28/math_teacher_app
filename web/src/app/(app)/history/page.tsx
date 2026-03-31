@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import { session as sessionApi, type SessionHistoryItem } from "@/lib/api";
-import { useAuthStore } from "@/stores/auth";
 import { useSessionStore, type Subject } from "@/stores/session";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
@@ -14,7 +12,6 @@ import { formatRelativeDate, cn } from "@/lib/utils";
 export default function HistoryPage() {
   const router = useRouter();
   const { setSubject } = useSessionStore();
-  const user = useAuthStore((s) => s.user);
 
   const [subject, setLocalSubject] = useState<Subject>("math");
 
@@ -67,19 +64,6 @@ export default function HistoryPage() {
           Session History
         </h1>
       </motion.div>
-
-      {/* Free tier banner */}
-      {user && !user.is_pro && (
-        <Link
-          href="/pricing"
-          className="flex items-center gap-3 rounded-[--radius-md] border border-warning/20 bg-warning/5 px-4 py-3 text-sm transition-colors hover:bg-warning/10"
-        >
-          <span className="text-text-secondary">
-            Free plan shows your last 5 sessions.{" "}
-            <span className="font-semibold text-primary">Upgrade for full history</span>
-          </span>
-        </Link>
-      )}
 
       {/* Subject tabs */}
       <div className="flex gap-2">

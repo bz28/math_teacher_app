@@ -95,21 +95,14 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
         {/* Compact mode cards */}
         <View style={styles.modeList}>
           {MODES.map((mode) => {
-            const isMockGated = mode.id === "mock_test" && !canUseFeature("mock_test");
-            const showSessionCount = !isPro && (mode.id === "learn");
+            const showSessionCount = !isPro;
             const remaining = sessionsRemaining();
 
             return (
               <AnimatedPressable
                 key={mode.id}
                 style={[styles.modeCard, shadows.md]}
-                onPress={() => {
-                  if (isMockGated) {
-                    setPaywallVisible(true);
-                    return;
-                  }
-                  onSelect(mode.id);
-                }}
+                onPress={() => onSelect(mode.id)}
                 scaleDown={0.97}
               >
                 <LinearGradient
@@ -122,12 +115,6 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
                   <View style={styles.modeTextWrap}>
                     <View style={styles.modeLabelRow}>
                       <Text style={styles.modeLabel}>{mode.label}</Text>
-                      {isMockGated && (
-                        <View style={styles.proBadge}>
-                          <Ionicons name="lock-closed" size={10} color={colors.white} />
-                          <Text style={styles.proBadgeText}>PRO</Text>
-                        </View>
-                      )}
                     </View>
                     <Text style={styles.modeTagline}>{mode.tagline}</Text>
                     {showSessionCount && (

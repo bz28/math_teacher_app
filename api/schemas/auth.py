@@ -59,7 +59,6 @@ class UserResponse(BaseModel):
 class EntitlementLimits(BaseModel):
     daily_sessions_used: int
     daily_sessions_limit: int | None
-    history_limit: int | None
 
 
 class EntitlementsResponse(BaseModel):

@@ -46,8 +46,7 @@ export function InputScreen({
 }: Props) {
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
-  const canUseFeature = useEntitlementStore((s) => s.canUseFeature);
-  const imageScanGated = !canUseFeature("image_scan");
+  const canCreateSession = useEntitlementStore((s) => s.canCreateSession);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
@@ -313,11 +312,8 @@ export function InputScreen({
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
-              onPress={() => {
-                if (imageScanGated) { setPaywallVisible(true); return; }
-                pickImage("camera");
-              }}
-              disabled={!imageScanGated && (extracting || problemQueue.length >= MAX_PROBLEMS)}
+              onPress={() => pickImage("camera")}
+              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -326,12 +322,6 @@ export function InputScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.captureCard}
               >
-                {imageScanGated && (
-                  <View style={styles.lockOverlay}>
-                    <Ionicons name="lock-closed" size={16} color={colors.white} />
-                    <Text style={styles.lockBadgeText}>PRO</Text>
-                  </View>
-                )}
                 <Ionicons name="camera" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Take a photo</Text>
               </LinearGradient>
@@ -340,11 +330,8 @@ export function InputScreen({
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
-              onPress={() => {
-                if (imageScanGated) { setPaywallVisible(true); return; }
-                pickImage("gallery");
-              }}
-              disabled={!imageScanGated && (extracting || problemQueue.length >= MAX_PROBLEMS)}
+              onPress={() => pickImage("gallery")}
+              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -353,12 +340,6 @@ export function InputScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.captureCard}
               >
-                {imageScanGated && (
-                  <View style={styles.lockOverlay}>
-                    <Ionicons name="lock-closed" size={16} color={colors.white} />
-                    <Text style={styles.lockBadgeText}>PRO</Text>
-                  </View>
-                )}
                 <Ionicons name="images" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Choose photo</Text>
               </LinearGradient>

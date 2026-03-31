@@ -36,11 +36,9 @@ interface PlanOption {
 }
 
 const FEATURES = [
-  "Unlimited learn & practice sessions",
-  "Mock test mode",
+  "Unlimited problems per day",
   "Work photo diagnosis",
-  "Scan problems from photos",
-  "Full session history",
+  "Priority support",
 ];
 
 const TERMS_URL = "https://veradic.ai/terms";

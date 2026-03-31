@@ -9,16 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 
-FREE_DAILY_SESSION_LIMIT = 3
-FREE_HISTORY_LIMIT = 5
+FREE_DAILY_SESSION_LIMIT = 5
 
 
 class Entitlement(enum.StrEnum):
     CREATE_SESSION = "create_session"
-    MOCK_TEST = "mock_test"
     WORK_DIAGNOSIS = "work_diagnosis"
-    IMAGE_SCAN = "image_scan"
-    FULL_HISTORY = "full_history"
 
 
 class EntitlementError(Exception):
@@ -63,13 +59,6 @@ async def get_daily_session_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     return result.scalar_one()
 
 
-def get_history_limit(user: object) -> int | None:
-    """Return history limit: None for pro (unlimited), FREE_HISTORY_LIMIT for free."""
-    if is_pro(user):
-        return None
-    return FREE_HISTORY_LIMIT
-
-
 async def check_entitlement(
     db: AsyncSession, user: object, entitlement: Entitlement
 ) -> None:
@@ -87,19 +76,11 @@ async def check_entitlement(
         if count >= FREE_DAILY_SESSION_LIMIT:
             raise EntitlementError(
                 entitlement,
-                f"Free plan limited to {FREE_DAILY_SESSION_LIMIT} sessions per day",
+                f"Free plan limited to {FREE_DAILY_SESSION_LIMIT} problems per day."
+                " Upgrade to Pro for unlimited access.",
                 is_limit=True,
             )
         return
 
-    if entitlement == Entitlement.MOCK_TEST:
-        raise EntitlementError(entitlement, "Mock tests require a Pro subscription")
-
     if entitlement == Entitlement.WORK_DIAGNOSIS:
         raise EntitlementError(entitlement, "Work diagnosis requires a Pro subscription")
-
-    if entitlement == Entitlement.IMAGE_SCAN:
-        raise EntitlementError(entitlement, "Image scanning requires a Pro subscription")
-
-    if entitlement == Entitlement.FULL_HISTORY:
-        raise EntitlementError(entitlement, "Full history requires a Pro subscription")

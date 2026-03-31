@@ -5,24 +5,12 @@ import { Modal } from "@/components/ui/modal";
 
 const FEATURE_LABELS: Record<string, { title: string; description: string }> = {
   create_session: {
-    title: "Daily Session Limit Reached",
-    description: "Free accounts are limited to 3 sessions per day. Upgrade to Pro for unlimited sessions.",
-  },
-  mock_test: {
-    title: "Mock Exams are Pro Only",
-    description: "Simulate real exams with timers and comprehensive results. Upgrade to unlock mock exams.",
+    title: "Daily Problem Limit Reached",
+    description: "Free accounts are limited to 5 problems per day across all modes. Upgrade to Pro for unlimited access.",
   },
   work_diagnosis: {
     title: "Work Diagnosis is Pro Only",
     description: "Upload your handwritten work and get AI-powered step-by-step grading.",
-  },
-  image_scan: {
-    title: "Image Scanning is Pro Only",
-    description: "Scan photos of problems to extract and solve them instantly.",
-  },
-  full_history: {
-    title: "Full History is Pro Only",
-    description: "Free accounts can only view the last 5 sessions. Upgrade for full history access.",
   },
 };
 
