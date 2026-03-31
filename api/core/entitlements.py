@@ -66,6 +66,22 @@ async def get_daily_session_count(db: AsyncSession, user_id: uuid.UUID) -> int:
     return result.scalar_one()
 
 
+async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Count decomposition LLM calls today (the real cost of analyzing a problem)."""
+    from api.models.llm_call import LLMCall
+
+    result = await db.execute(
+        select(func.count())
+        .select_from(LLMCall)
+        .where(
+            LLMCall.user_id == user_id,
+            LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
+            LLMCall.created_at >= today_start(),
+        )
+    )
+    return result.scalar_one()
+
+
 async def get_daily_llm_call_count(db: AsyncSession, user_id: uuid.UUID, function_name: str) -> int:
     """Count LLM calls today for a specific function."""
     from api.models.llm_call import LLMCall
@@ -111,7 +127,10 @@ async def check_entitlement(
     user_id = getattr(user, "id")
 
     if entitlement == Entitlement.CREATE_SESSION:
-        count = await get_daily_session_count(db, user_id)
+        # Count decomposition LLM calls (not session records) since
+        # mock tests and practice also consume decomps without creating
+        # individual session records per problem.
+        count = await get_daily_decomp_count(db, user_id)
         if count >= FREE_DAILY_SESSION_LIMIT:
             raise EntitlementError(
                 entitlement,

@@ -15,8 +15,8 @@ from api.core.entitlements import (
     FREE_DAILY_SESSION_LIMIT,
     Entitlement,
     get_daily_chat_count,
+    get_daily_decomp_count,
     get_daily_llm_call_count,
-    get_daily_session_count,
     is_pro,
 )
 from api.database import get_db
@@ -117,7 +117,7 @@ async def entitlements(
 ) -> EntitlementsResponse:
     """Return the current user's entitlement state."""
     user_is_pro = is_pro(user)
-    sessions_used = await get_daily_session_count(db, user.id)
+    problems_used = await get_daily_decomp_count(db, user.id)
     scans_used = await get_daily_llm_call_count(db, user.id, "image_extract")
     chats_used = await get_daily_chat_count(db, user.id)
 
@@ -131,7 +131,7 @@ async def entitlements(
         subscription_status=user.subscription_status,
         subscription_expires_at=user.subscription_expires_at,
         limits=EntitlementLimits(
-            daily_sessions_used=sessions_used,
+            daily_sessions_used=problems_used,
             daily_sessions_limit=None if user_is_pro else FREE_DAILY_SESSION_LIMIT,
             daily_scans_used=scans_used,
             daily_scans_limit=None if user_is_pro else FREE_DAILY_IMAGE_SCAN_LIMIT,
