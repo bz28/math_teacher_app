@@ -37,7 +37,7 @@ const proFeatures = [
   "Unlimited sessions",
   "Mock exams with timer",
   "Work diagnosis (AI grading)",
-  "Image scanning",
+  "Unlimited image scanning",
   "Full session history",
 ];
 
@@ -100,7 +100,7 @@ export default function PricingPage() {
               <span className="text-sm text-text-secondary">{plan.period}</span>
             </div>
             {plan.perMonth && (
-              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth} — Save 50%</p>
+              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth} — Save 55%</p>
             )}
             {plan.trial && (
               <p className="mt-2 inline-block rounded-[--radius-sm] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary">

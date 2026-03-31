@@ -280,8 +280,8 @@ export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
 export const abandonSession = (sessionId: string) =>
   apiPost<{ status: string }>(`/session/${sessionId}/abandon`, {});
 
-export const createMockTestSession = (problem: string) =>
-  apiPost<{ id: string }>("/session/mock-test", { problem });
+export const createMockTestSession = (problem: string, allProblems?: string[]) =>
+  apiPost<{ id: string }>("/session/mock-test", { problem, all_problems: allProblems ?? [] });
 
 export const completeMockTestSession = (id: string, totalQuestions: number, correctCount: number) =>
   apiPost<{ status: string }>(`/session/mock-test/${id}/complete`, {

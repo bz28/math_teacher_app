@@ -70,18 +70,46 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
 
 
 async def _has_session_for_problem_today(db: AsyncSession, user_id: uuid.UUID, problem: str) -> bool:
-    """Check if user already has a session for this exact problem today."""
+    """Check if user already has a session for this exact problem today.
+
+    Checks both the session's primary problem text and any problem lists
+    stored in mock test exchanges (so "Learn These" after a mock test
+    doesn't double-count against the daily quota).
+    """
     from api.core.entitlements import today_start
+
+    stripped = problem.strip()
+    today = today_start()
+
+    # Check direct problem match
     result = await db.execute(
         select(func.count())
         .select_from(SessionModel)
         .where(
             SessionModel.user_id == user_id,
-            SessionModel.problem == problem.strip(),
-            SessionModel.created_at >= today_start(),
+            SessionModel.problem == stripped,
+            SessionModel.created_at >= today,
         )
     )
-    return result.scalar_one() > 0
+    if result.scalar_one() > 0:
+        return True
+
+    # Check mock test sessions that contain this problem in their exchanges
+    mock_sessions = await db.execute(
+        select(SessionModel.exchanges)
+        .where(
+            SessionModel.user_id == user_id,
+            SessionModel.mode == SessionMode.MOCK_TEST,
+            SessionModel.created_at >= today,
+        )
+    )
+    for (exchanges,) in mock_sessions:
+        if exchanges and isinstance(exchanges, list):
+            for entry in exchanges:
+                if isinstance(entry, dict) and stripped in entry.get("problems", []):
+                    return True
+
+    return False
 
 
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
@@ -278,7 +306,8 @@ async def create_mock_test(
         total_steps=0,
         current_step=0,
         steps=[],
-        exchanges=[],
+        # Store all problem texts so they can be matched for quota exemption
+        exchanges=[{"problems": body.all_problems}] if body.all_problems else [],
     )
     db.add(session)
     await db.commit()

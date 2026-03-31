@@ -357,10 +357,10 @@ export const session = {
     });
   },
 
-  createMockTest(problem: string) {
+  createMockTest(problem: string, allProblems?: string[]) {
     return apiFetch<{ id: string }>("/session/mock-test", {
       method: "POST",
-      body: JSON.stringify({ problem }),
+      body: JSON.stringify({ problem, all_problems: allProblems ?? [] }),
     });
   },
 
