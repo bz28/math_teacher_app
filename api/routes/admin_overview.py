@@ -48,6 +48,11 @@ async def overview(
         select(func.count(func.distinct(Session.user_id))).where(*session_filters)
     )).scalar() or 0
 
+    # New users registered in period
+    new_users = (await db.execute(
+        select(func.count()).select_from(User).where(User.created_at >= since)
+    )).scalar() or 0
+
     # Total cost in period
     total_cost = (await db.execute(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(*llm_filters)
@@ -129,6 +134,7 @@ async def overview(
     return {
         "total_sessions": total_sessions,
         "active_users": active_users,
+        "new_users": new_users,
         "total_cost": round(total_cost, 4),
         "total_calls": total_calls,
         "failed_calls": failed_calls,
