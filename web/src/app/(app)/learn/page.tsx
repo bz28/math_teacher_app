@@ -5,12 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { EntitlementError } from "@/lib/api";
-import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
+import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT } from "@/lib/constants";
 
 const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string; bg: string }> = {
   math: { name: "Mathematics", icon: "📐", color: "text-primary", bg: "bg-primary-bg" },
@@ -41,6 +43,9 @@ function LearnPageContent() {
     phase,
   } = useSessionStore();
   const { startMockTest } = useMockTestStore();
+  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } = useEntitlementStore();
+  const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
+  const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
@@ -53,16 +58,25 @@ function LearnPageContent() {
 
   useEffect(() => {
     setSubject(subject);
-    // Set subject color theme
     document.documentElement.setAttribute("data-subject", subject);
-    // Clear stale state when entering the input page
     setProblemQueue([]);
+    // Refresh quota counts so remaining is accurate
+    fetchEntitlements();
     return () => { document.documentElement.removeAttribute("data-subject"); };
-  }, [subject, setSubject, setProblemQueue]);
+  }, [subject, setSubject, setProblemQueue, fetchEntitlements]);
+
+  const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
 
   function handleAddProblem() {
     const trimmed = input.trim();
     if (!trimmed) return;
+    if (!isPro && problemQueue.length >= maxQueueSize) {
+      const msg = problemQueue.length > 0
+        ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
+        : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
+      showUpgrade("create_session", msg);
+      return;
+    }
     addToQueue(trimmed);
     setInput("");
   }
@@ -75,11 +89,25 @@ function LearnPageContent() {
   }
 
   const [starting, setStarting] = useState(false);
-  const [upgradePrompt, setUpgradePrompt] = useState<{ entitlement: string; message: string } | null>(null);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+  const [quotaConfirm, setQuotaConfirm] = useState(false);
+  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
+  const isScanning = imagePhase === "select" || imagePhase === "extracting";
 
   async function handleStart() {
     if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
+    if (!isPro && remainingSessions <= 0) {
+      showUpgrade("create_session", `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`);
+      return;
+    }
+
+    const problemCount = problemQueue.length > 0 ? problemQueue.length : 1;
+    if (!isPro && problemCount > 1 && !quotaConfirm) {
+      setQuotaConfirm(true);
+      return;
+    }
+    setQuotaConfirm(false);
     setStarting(true);
 
     const problems =
@@ -102,7 +130,7 @@ function LearnPageContent() {
       }
     } catch (err) {
       if (err instanceof EntitlementError) {
-        setUpgradePrompt({ entitlement: err.entitlement, message: err.message });
+        showUpgrade(err.entitlement, err.message);
       }
       setStarting(false);
     }
@@ -294,8 +322,12 @@ function LearnPageContent() {
             onProblemsExtracted={(problems) => {
               problems.forEach((p) => addToQueue(p.text, p.image));
             }}
-            maxProblems={10}
+            maxProblems={maxQueueSize}
             currentQueueLength={problemQueue.length}
+            scansRemaining={remainingScans}
+            onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
+            onExtractComplete={fetchEntitlements}
+            onPhaseChange={setImagePhase}
           />
         </Card>
 
@@ -305,17 +337,18 @@ function LearnPageContent() {
             Or type a problem
           </p>
           <Textarea
-            placeholder="Enter your problem here... (Shift+Enter for new line)"
+            placeholder={isScanning ? "Finish scanning first..." : "Enter your problem here... (Shift+Enter for new line)"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={isScanning}
             className="min-h-[80px]"
           />
           <Button
             variant="secondary"
             size="sm"
             onClick={handleAddProblem}
-            disabled={!input.trim() || problemQueue.length >= 10}
+            disabled={isScanning || !input.trim() || problemQueue.length >= maxQueueSize}
             className="w-full"
           >
             Add to Queue
@@ -386,25 +419,41 @@ function LearnPageContent() {
           ))}
 
           {/* Start button — full width */}
-          <Button
-            gradient
-            onClick={handleStart}
-            loading={isLoading || starting}
-            disabled={!canStart}
-            className="w-full py-3 text-base"
-          >
-            {isLearn
-              ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
-              : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
-          </Button>
+          {quotaConfirm ? (
+            <div className="space-y-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg p-4">
+              <p className="text-sm font-semibold text-warning-dark">
+                This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
+              </p>
+              <div className="flex gap-2">
+                <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
+                  Continue
+                </Button>
+                <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              gradient
+              onClick={handleStart}
+              loading={isLoading || starting}
+              disabled={!canStart}
+              className="w-full py-3 text-base"
+            >
+              {isLearn
+                ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
+                : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
+            </Button>
+          )}
+          {!isPro && remainingSessions < Infinity && !quotaConfirm && (
+            <p className="text-center text-xs text-text-muted">
+              {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems remaining today
+            </p>
+          )}
         </div>
       )}
-      <UpgradePrompt
-        open={upgradePrompt !== null}
-        onClose={() => setUpgradePrompt(null)}
-        entitlement={upgradePrompt?.entitlement}
-        message={upgradePrompt?.message}
-      />
+      {UpgradeModal}
     </div>
   );
 }

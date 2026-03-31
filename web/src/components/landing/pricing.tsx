@@ -4,46 +4,47 @@ import Link from "next/link";
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { CheckIcon } from "@/components/ui/icons";
+import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT } from "@/lib/constants";
 
 const plans = [
   {
-    name: "Monthly",
-    price: "$9.99",
-    period: "/month",
+    name: "Weekly",
+    price: "$2.99",
+    period: "/week",
     badge: null,
-    trial: null,
-    cta: "Subscribe",
+    trial: "3-day free trial",
+    cta: "Start Free Trial",
     features: [
       "Unlimited sessions",
       "Mock exams with timer",
       "Work diagnosis (AI grading)",
-      "Image scanning",
+      "Unlimited image scanning",
       "Full session history",
     ],
   },
   {
     name: "Yearly",
-    price: "$59.99",
+    price: "$69.99",
     period: "/year",
-    perMonth: "$5.00/mo",
-    badge: "Most Popular",
+    perMonth: "$1.35/week",
+    badge: "Best Value — Save 55%",
     trial: "7-day free trial",
     cta: "Start Free Trial",
     features: [
       "Unlimited sessions",
       "Mock exams with timer",
       "Work diagnosis (AI grading)",
-      "Image scanning",
+      "Unlimited image scanning",
       "Full session history",
     ],
   },
 ];
 
 const freeFeatures = [
-  "3 sessions per day",
+  `${FREE_DAILY_SESSION_LIMIT} problems per day`,
   "Step-by-step learning",
   "Chat with AI tutor",
-  "Last 5 sessions in history",
+  `${FREE_DAILY_SCAN_LIMIT} image scans per day`,
 ];
 
 export function Pricing() {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
@@ -16,6 +17,7 @@ interface MockTestSummaryProps {
 
 export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onReset }: MockTestSummaryProps) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const results = mockTest.results!;
   const correct = results.filter((r) => r.isCorrect === true).length;
   const answered = results.filter((r) => r.userAnswer !== null).length;
@@ -143,7 +145,9 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
           </h2>
           <Button
             gradient
+            loading={loading}
             onClick={async () => {
+              setLoading(true);
               const problems = flaggedQuestions.map((q) => q.question);
               await onStartLearnQueue(problems);
               router.push("/learn/session");

@@ -6,7 +6,10 @@ import { motion } from "framer-motion";
 import { session as sessionApi, type SessionResponse } from "@/lib/api";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { Card, Badge, Button } from "@/components/ui";
+import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
+import { FREE_DAILY_SESSION_LIMIT } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { cn, renderBold } from "@/lib/utils";
@@ -283,24 +286,39 @@ function SessionChat({ sessionId }: { sessionId: string }) {
 
 function PracticeSimilarButton({ problem, subject }: { problem: string; subject: string }) {
   const [loading, setLoading] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const router = useRouter();
+  const { isPro, dailySessionsUsed, dailySessionsLimit } = useEntitlementStore();
+  const remaining = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
 
   return (
-    <Button
-      variant="secondary"
-      loading={loading}
-      onClick={async () => {
-        setLoading(true);
-        try {
-          useSessionStore.getState().setSubject(subject as "math" | "chemistry");
-          await usePracticeStore.getState().startPracticeBatch(problem, 1, subject as "math" | "chemistry");
-          router.push("/practice");
-        } finally {
-          setLoading(false);
-        }
-      }}
-    >
-      Practice Similar Problem
-    </Button>
+    <>
+      <Button
+        variant="secondary"
+        loading={loading}
+        onClick={async () => {
+          if (!isPro && remaining <= 0) {
+            setShowUpgrade(true);
+            return;
+          }
+          setLoading(true);
+          try {
+            useSessionStore.getState().setSubject(subject as "math" | "chemistry");
+            await usePracticeStore.getState().startPracticeBatch(problem, 1, subject as "math" | "chemistry");
+            router.push("/practice");
+          } finally {
+            setLoading(false);
+          }
+        }}
+      >
+        Practice Similar Problem
+      </Button>
+      <UpgradePrompt
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        entitlement="create_session"
+        message={`You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`}
+      />
+    </>
   );
 }

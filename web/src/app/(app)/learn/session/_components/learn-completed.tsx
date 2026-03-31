@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
@@ -30,6 +31,7 @@ export function LearnCompleted({
   onReset,
 }: LearnCompletedProps) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   return (
     <motion.div
@@ -84,7 +86,9 @@ export function LearnCompleted({
             <>
               <Button
                 gradient
+                loading={loading}
                 onClick={async () => {
+                  setLoading(true);
                   await onStartPractice(session.problem, 1, subject);
                   router.push("/practice");
                 }}

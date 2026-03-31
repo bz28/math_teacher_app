@@ -5,12 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
 import { cn, renderBold } from "@/lib/utils";
+import { FREE_DAILY_CHAT_LIMIT } from "@/lib/constants";
 import { LearnSummary } from "./_components/learn-summary";
 import { LearnCompleted } from "./_components/learn-completed";
 
@@ -38,9 +41,12 @@ export default function LearnSessionPage() {
     reset,
   } = useSessionStore();
   const { startPracticeBatch, practiceFlaggedProblems } = usePracticeStore();
+  const { isPro, dailyChatsUsed, dailyChatsLimit, fetchEntitlements } = useEntitlementStore();
+  const remainingChats = isPro ? Infinity : Math.max(0, dailyChatsLimit - dailyChatsUsed);
 
   const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
   );
@@ -140,9 +146,14 @@ export default function LearnSessionPage() {
 
   async function handleAsk() {
     if (!input.trim()) return;
+    if (!isPro && remainingChats <= 0) {
+      showUpgrade("chat_message", `You've used all ${FREE_DAILY_CHAT_LIMIT} chat messages for today. Upgrade to Pro for unlimited chat.`);
+      return;
+    }
     const q = input.trim();
     setInput("");
     await askAboutStep(q);
+    fetchEntitlements();
   }
 
   async function handleChoiceSelect(choice: string, index: number) {
@@ -302,7 +313,12 @@ export default function LearnSessionPage() {
           )}
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-text-muted">Ask a question about the problem</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-text-muted">Ask a question about the problem</p>
+              {!isPro && remainingChats < Infinity && (
+                <p className="text-xs text-text-muted">{remainingChats} chats remaining</p>
+              )}
+            </div>
             <div className="flex gap-2">
               <input
                 placeholder="Ask a question..."
@@ -508,9 +524,12 @@ export default function LearnSessionPage() {
           {/* ── Chat input + I Understand / Ask button ── */}
           {!isFinalStep && (
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-text-muted">
-                Have a question about this step?
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-text-muted">Have a question about this step?</p>
+                {!isPro && remainingChats < Infinity && (
+                  <p className="text-xs text-text-muted">{remainingChats} chats remaining</p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <input
                   placeholder="Ask a question..."
@@ -548,6 +567,7 @@ export default function LearnSessionPage() {
           )}
         </div>
       )}
+      {UpgradeModal}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
@@ -16,6 +17,7 @@ interface LearnSummaryProps {
 
 export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onReset }: LearnSummaryProps) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const flaggedCount = learnQueue.flags.filter(Boolean).length;
 
   return (
@@ -53,7 +55,9 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
         {flaggedCount > 0 && (
           <Button
             gradient
+            loading={loading}
             onClick={async () => {
+              setLoading(true);
               const flagged = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
               await onPracticeFlagged(flagged);
               router.push("/practice");

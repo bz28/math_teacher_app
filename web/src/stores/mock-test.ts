@@ -110,7 +110,8 @@ export const useMockTestStore = create<MockTestState>((set, get) => ({
           subject,
           ...(image && { image_base64: image }),
         });
-        const { id } = await sessionApi.createMockTest(problems[0]);
+        const allQuestionTexts = generated.map((g) => g.question);
+        const { id } = await sessionApi.createMockTest(problems[0], allQuestionTexts);
         set({
           mockTest: createMockTest(generated, id, timeLimitMinutes, multipleChoice),
           phase: "mock_test_active",
@@ -120,7 +121,7 @@ export const useMockTestStore = create<MockTestState>((set, get) => ({
           question: p,
           answer: "",
         }));
-        const { id } = await sessionApi.createMockTest(problems[0]);
+        const { id } = await sessionApi.createMockTest(problems[0], problems);
         set({
           mockTest: createMockTest(placeholders, id, timeLimitMinutes, multipleChoice),
           phase: "mock_test_active",

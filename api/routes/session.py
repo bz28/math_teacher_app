@@ -4,7 +4,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
@@ -69,6 +69,49 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
     )
 
 
+async def _has_session_for_problem_today(db: AsyncSession, user_id: uuid.UUID, problem: str) -> bool:
+    """Check if user already has a session for this exact problem today.
+
+    Checks both the session's primary problem text and any problem lists
+    stored in mock test exchanges (so "Learn These" after a mock test
+    doesn't double-count against the daily quota).
+    """
+    from api.core.entitlements import today_start
+
+    stripped = problem.strip()
+    today = today_start()
+
+    # Check direct problem match
+    result = await db.execute(
+        select(func.count())
+        .select_from(SessionModel)
+        .where(
+            SessionModel.user_id == user_id,
+            SessionModel.problem == stripped,
+            SessionModel.created_at >= today,
+        )
+    )
+    if result.scalar_one() > 0:
+        return True
+
+    # Check mock test sessions that contain this problem in their exchanges
+    mock_sessions = await db.execute(
+        select(SessionModel.exchanges)
+        .where(
+            SessionModel.user_id == user_id,
+            SessionModel.mode == SessionMode.MOCK_TEST,
+            SessionModel.created_at >= today,
+        )
+    )
+    for (exchanges,) in mock_sessions:
+        if exchanges and isinstance(exchanges, list):
+            for entry in exchanges:
+                if isinstance(entry, dict) and stripped in entry.get("problems", []):
+                    return True
+
+    return False
+
+
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def create(
     body: CreateSessionRequest,
@@ -76,7 +119,10 @@ async def create(
     db: AsyncSession = Depends(get_db),
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
-    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
+    # Skip quota check if user already has a session for this problem today
+    # (e.g. learning a problem they already saw in a mock test)
+    if not await _has_session_for_problem_today(db, user.id, body.problem):
+        await check_entitlement(db, user, Entitlement.CREATE_SESSION)
     try:
         session = await create_session(
             db, user.id, body.problem, body.mode,
@@ -114,6 +160,7 @@ async def history(
             SessionModel.user_id == user.id,
             SessionModel.subject == subject,
             SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
+            SessionModel.total_steps > 0,  # Exclude analytics-only records
         )
         .order_by(SessionModel.created_at.desc())
         .offset(offset)
@@ -260,7 +307,8 @@ async def create_mock_test(
         total_steps=0,
         current_step=0,
         steps=[],
-        exchanges=[],
+        # Store all problem texts so they can be matched for quota exemption
+        exchanges=[{"problems": body.all_problems}] if body.all_problems else [],
     )
     db.add(session)
     await db.commit()

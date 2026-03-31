@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
@@ -30,11 +32,15 @@ export default function PracticePage() {
     reset,
   } = usePracticeStore();
 
+  const { isPro, dailySessionsUsed, dailySessionsLimit } = useEntitlementStore();
+  const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
+
   const { fire: fireConfetti } = useConfetti();
   const [answer, setAnswer] = useState("");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   useRedirectOnIdle(phase, practiceBatch);
   useErrorToast(phase, error);
@@ -108,9 +114,11 @@ export default function PracticePage() {
       <PracticeSummary
         practiceBatch={practiceBatch}
         subject={subject}
+        sessionsRemaining={remainingSessions}
         onToggleFlag={togglePracticeFlag}
         onStartLearnQueue={startLearnQueue}
         onRetryFlagged={retryFlaggedProblems}
+        onUpgradeNeeded={showUpgrade}
         onReset={reset}
       />
     );
@@ -202,6 +210,8 @@ export default function PracticePage() {
             <AttachWork
               attached={!!attachedImage}
               onAttach={(base64) => { setAttachedImage(base64); setShowNudge(false); }}
+              isPro={isPro}
+              onUpgradeNeeded={() => showUpgrade("work_diagnosis", "Get detailed feedback on your work — step-by-step accuracy analysis and tailored learning. Upgrade to Pro to unlock.")}
             />
 
             {/* Work nudge */}
@@ -219,6 +229,7 @@ export default function PracticePage() {
           </div>
         )}
       </Card>
+      {UpgradeModal}
     </div>
   );
 }

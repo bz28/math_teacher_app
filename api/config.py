@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
-    stripe_price_id_monthly: str = ""
+    stripe_price_id_weekly: str = ""
     stripe_price_id_yearly: str = ""
 
     @field_validator("cors_origins", mode="before")
