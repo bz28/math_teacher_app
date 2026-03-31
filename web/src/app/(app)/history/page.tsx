@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { session as sessionApi, type SessionHistoryItem } from "@/lib/api";
-import { useSessionStore, type Subject } from "@/stores/session";
+import { useSessionStore, type Subject } from "@/stores/learn";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { CheckIcon } from "@/components/ui/icons";

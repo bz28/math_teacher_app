@@ -9,7 +9,7 @@ import {
   type PracticeCheckResponse,
   type DiagnosisResult,
 } from "@/lib/api";
-import type { Subject } from "@/stores/session";
+import type { Subject } from "@/stores/learn";
 
 // ── Types ──
 

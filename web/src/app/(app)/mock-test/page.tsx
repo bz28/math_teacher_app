@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { useSessionStore } from "@/stores/session";
+import { useSessionStore } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";
 import { Input } from "@/components/ui/input";

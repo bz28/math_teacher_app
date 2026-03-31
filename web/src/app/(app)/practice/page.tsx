@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { useSessionStore } from "@/stores/session";
+import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge, useToast, AnimatedCounter } from "@/components/ui";

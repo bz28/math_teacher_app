@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { useSessionStore, type Subject } from "@/stores/session";
+import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
