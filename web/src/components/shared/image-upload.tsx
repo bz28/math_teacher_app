@@ -164,6 +164,7 @@ export function ImageUpload({
           setImageBase64(null);
         }}
         maxRectangles={Math.min(10, remaining, scansRemaining)}
+        limitHint={scansRemaining < Infinity ? `${scansRemaining} scan${scansRemaining !== 1 ? "s" : ""} remaining` : undefined}
       />
     );
   }
@@ -186,30 +187,35 @@ export function ImageUpload({
   }
 
   const scanLimitReached = scansRemaining <= 0;
+  const queueFull = remaining <= 0;
 
   return (
     <>
       {/* Upload area */}
       <div
         onDragOver={(e) => {
-          if (scanLimitReached) return;
+          if (scanLimitReached || queueFull) return;
           e.preventDefault();
           setDragActive(true);
         }}
         onDragLeave={() => setDragActive(false)}
-        onDrop={(e) => { if (!scanLimitReached) handleDrop(e); }}
-        onClick={() => { if (scanLimitReached) { onScanLimitReached?.(); } else { fileInputRef.current?.click(); } }}
+        onDrop={(e) => { if (!scanLimitReached && !queueFull) handleDrop(e); }}
+        onClick={() => {
+          if (scanLimitReached) { onScanLimitReached?.(); }
+          else if (queueFull) { /* blocked — queue is full */ }
+          else { fileInputRef.current?.click(); }
+        }}
         className={cn(
           "flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed p-8 text-center transition-colors",
-          scanLimitReached
+          scanLimitReached || queueFull
             ? "cursor-not-allowed border-border bg-surface opacity-60"
             : "cursor-pointer",
-          !scanLimitReached && dragActive
+          !scanLimitReached && !queueFull && dragActive
             ? "border-primary bg-primary-bg"
-            : !scanLimitReached ? "border-border hover:border-primary/40 hover:bg-primary-bg/30" : "",
+            : !scanLimitReached && !queueFull ? "border-border hover:border-primary/40 hover:bg-primary-bg/30" : "",
         )}
       >
-        <div className={cn("flex h-12 w-12 items-center justify-center rounded-full", scanLimitReached ? "bg-border-light text-text-muted" : "bg-primary-bg text-primary")}>
+        <div className={cn("flex h-12 w-12 items-center justify-center rounded-full", scanLimitReached || queueFull ? "bg-border-light text-text-muted" : "bg-primary-bg text-primary")}>
           <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
             <circle cx="12" cy="13" r="4" />
@@ -217,14 +223,16 @@ export function ImageUpload({
         </div>
         <div>
           <p className="text-sm font-semibold text-text-primary">
-            {scanLimitReached ? "Daily scan limit reached" : "Upload a photo"}
+            {scanLimitReached ? "Daily scan limit reached" : queueFull ? "Problem queue is full" : "Upload a photo"}
           </p>
           <p className="mt-1 text-xs text-text-muted">
             {scanLimitReached
               ? "Upgrade to Pro for unlimited scans."
-              : scansRemaining < Infinity
-                ? `Drag and drop or click to browse. ${scansRemaining} scan${scansRemaining !== 1 ? "s" : ""} remaining today.`
-                : "Drag and drop or click to browse. Max 5MB."}
+              : queueFull
+                ? "You've reached your daily problem limit. Remove a queued problem or upgrade to Pro."
+                : scansRemaining < Infinity
+                  ? `Drag and drop or click to browse. ${scansRemaining} scan${scansRemaining !== 1 ? "s" : ""} remaining today.`
+                  : "Drag and drop or click to browse. Max 5MB."}
           </p>
         </div>
         <input

@@ -18,6 +18,8 @@ interface RectangleSelectorProps {
   onConfirm: (rectangles: Rectangle[]) => void;
   onCancel: () => void;
   maxRectangles?: number;
+  /** Hint text shown next to the rectangle count (e.g. "1 scan remaining") */
+  limitHint?: string;
 }
 
 const MIN_SIZE = 30;
@@ -36,6 +38,7 @@ export function RectangleSelector({
   onConfirm,
   onCancel,
   maxRectangles = 10,
+  limitHint,
 }: RectangleSelectorProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
@@ -233,6 +236,7 @@ export function RectangleSelector({
         </p>
         <span className="text-[10px] text-text-muted">
           {rectangles.length}/{maxRectangles}
+          {limitHint && ` · ${limitHint}`}
         </span>
       </div>
 
