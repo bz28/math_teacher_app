@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   ScrollView,
   Text,
@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { completePracticeBatchSession } from "../services/api";
 import { useSessionStore } from "../stores/session";
@@ -20,6 +21,7 @@ interface PracticeSummaryProps {
 
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
   const insets = useSafeAreaInsets();
+  const confettiRef = useRef<ConfettiOverlayRef>(null);
   const {
     practiceBatch,
     togglePracticeFlag,
@@ -38,6 +40,12 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
       correct,
     ).catch(() => {}); // Silent fail — history is non-critical
   }, [practiceBatch?.sessionId, practiceBatch?.results.length]);
+
+  // Confetti on perfect practice score
+  const allCorrect = practiceBatch?.results.every((r) => r.isCorrect) ?? false;
+  useEffect(() => {
+    if (allCorrect) confettiRef.current?.fire(true);
+  }, []);
 
   if (!practiceBatch) return null;
 
@@ -59,6 +67,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 
   return (
     <View style={styles.container}>
+      {allCorrect && <ConfettiOverlay ref={confettiRef} />}
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }} accessibilityRole="button" accessibilityLabel="Go back">
