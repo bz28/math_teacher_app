@@ -18,7 +18,9 @@ import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
-import { clearAuth, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { initRevenueCat } from "./src/services/revenuecat";
+import { useEntitlementStore } from "./src/stores/entitlements";
 import { useSessionStore } from "./src/stores/session";
 import { colors } from "./src/theme";
 
@@ -39,6 +41,7 @@ function AppRoot() {
   const [fromOnboarding, setFromOnboarding] = useState(false);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const resumeSession = useSessionStore((s) => s.resumeSession);
+  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
   const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
 
   useEffect(() => {
@@ -47,17 +50,22 @@ function AppRoot() {
       setFromOnboarding(false);
     });
 
-    // TODO: remove — temp force onboarding for testing
-    setScreen("onboarding"); return;
     SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
       if (!done) {
         setScreen("onboarding");
         return;
       }
       const restored = await loadStoredAuth();
+      if (restored) {
+        const userId = getUserId();
+        if (userId) {
+          await initRevenueCat(userId).catch(() => {});
+        }
+        fetchEntitlements().catch(() => {});
+      }
       setScreen(restored ? "home" : "auth");
     });
-  }, []);
+  }, [fetchEntitlements]);
 
   if (screen === null) return null;
 
@@ -79,7 +87,18 @@ function AppRoot() {
   if (screen === "auth") {
     return (
       <SafeAreaProvider>
-        <AuthScreen onAuth={() => setScreen("home")} defaultToRegister={fromOnboarding} />
+        <AuthScreen
+          onAuth={async () => {
+            setScreen("home");
+            // Init RevenueCat + entitlements in background after navigating
+            const userId = getUserId() ?? await fetchAndStoreUserId();
+            if (userId) {
+              initRevenueCat(userId).catch(() => {});
+            }
+            fetchEntitlements().catch(() => {});
+          }}
+          defaultToRegister={fromOnboarding}
+        />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );

@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { PaywallScreen } from "./PaywallScreen";
 import { getUserName } from "../services/api";
+import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface HomeScreenProps {
@@ -14,6 +17,8 @@ interface HomeScreenProps {
 export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
   const name = getUserName();
   const greeting = name ? `Hi, ${name}!` : "Hi there!";
+  const isPro = useEntitlementStore((s) => s.isPro);
+  const [paywallVisible, setPaywallVisible] = useState(false);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -99,6 +104,35 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
         </LinearGradient>
       </AnimatedPressable>
 
+      {/* Upgrade card — only for free users */}
+      {!isPro && (
+        <AnimatedPressable
+          style={[styles.upgradeCard, shadows.sm]}
+          onPress={() => setPaywallVisible(true)}
+          scaleDown={0.97}
+        >
+          <View style={styles.upgradeContent}>
+            <View style={styles.upgradeTextWrap}>
+              <View style={styles.upgradeHeaderRow}>
+                <Ionicons name="star" size={18} color={colors.warning} />
+                <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
+              </View>
+              <Text style={styles.upgradeDesc}>Unlimited sessions, mock tests & more</Text>
+            </View>
+            <View style={styles.upgradeCta}>
+              <Text style={styles.upgradeCtaText}>Try Free</Text>
+              <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+            </View>
+          </View>
+        </AnimatedPressable>
+      )}
+
+      <PaywallScreen
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onPurchaseComplete={() => setPaywallVisible(false)}
+        trigger="home_upgrade_card"
+      />
     </SafeAreaView>
   );
 }
@@ -197,4 +231,50 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  // Upgrade card
+  upgradeCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginTop: spacing.xl,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  upgradeContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  upgradeTextWrap: {
+    flex: 1,
+  },
+  upgradeHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  upgradeTitle: {
+    ...typography.bodyBold,
+    color: colors.text,
+  },
+  upgradeDesc: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  upgradeCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  upgradeCtaText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 13,
+  },
 });

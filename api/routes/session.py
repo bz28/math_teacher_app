@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.entitlements import Entitlement, check_entitlement, get_history_limit
 from api.core.practice import generate_practice_problems
 from api.core.session import (
-    RateLimitError,
     SessionError,
     create_session,
     get_owned_session,
@@ -17,9 +17,10 @@ from api.core.session import (
 )
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user
+from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
 from api.models.session import Session as SessionModel
 from api.models.session import SessionMode, SessionStatus
+from api.models.user import User
 from api.schemas.session import (
     CompleteMockTestRequest,
     CreateMockTestRequest,
@@ -71,17 +72,16 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def create(
     body: CreateSessionRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
+    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
     try:
         session = await create_session(
-            db, current_user.user_id, body.problem, body.mode, current_user.role,
+            db, user.id, body.problem, body.mode,
             subject=body.subject, image_base64=body.image_base64,
         )
-    except RateLimitError as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except RuntimeError as e:
@@ -98,7 +98,7 @@ async def history(
     subject: str = Query(...),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SessionHistoryResponse:
     """List past learn-mode sessions for a subject."""
@@ -108,10 +108,14 @@ async def history(
             detail=f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}",
         )
 
+    history_limit = get_history_limit(user)
+    if history_limit is not None:
+        limit = min(limit, history_limit)
+
     query = (
         select(SessionModel)
         .where(
-            SessionModel.user_id == current_user.user_id,
+            SessionModel.user_id == user.id,
             SessionModel.subject == subject,
             SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
         )
@@ -245,12 +249,13 @@ async def similar(
 @router.post("/mock-test", status_code=status.HTTP_201_CREATED)
 async def create_mock_test(
     body: CreateMockTestRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Record a mock test session for analytics (no LLM calls)."""
+    await check_entitlement(db, user, Entitlement.MOCK_TEST)
     session = SessionModel(
-        user_id=current_user.user_id,
+        user_id=user.id,
         problem=body.problem,
         problem_type="mock_test",
         mode=SessionMode.MOCK_TEST,

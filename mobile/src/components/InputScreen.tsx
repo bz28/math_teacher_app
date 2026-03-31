@@ -19,10 +19,12 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
+import { PaywallScreen } from "./PaywallScreen";
 import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useSessionStore } from "../stores/session";
+import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
@@ -44,6 +46,9 @@ export function InputScreen({
 }: Props) {
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
+  const canUseFeature = useEntitlementStore((s) => s.canUseFeature);
+  const imageScanGated = !canUseFeature("image_scan");
+  const [paywallVisible, setPaywallVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -308,8 +313,11 @@ export function InputScreen({
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
-              onPress={() => pickImage("camera")}
-              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              onPress={() => {
+                if (imageScanGated) { setPaywallVisible(true); return; }
+                pickImage("camera");
+              }}
+              disabled={!imageScanGated && (extracting || problemQueue.length >= MAX_PROBLEMS)}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -318,6 +326,12 @@ export function InputScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.captureCard}
               >
+                {imageScanGated && (
+                  <View style={styles.lockOverlay}>
+                    <Ionicons name="lock-closed" size={16} color={colors.white} />
+                    <Text style={styles.lockBadgeText}>PRO</Text>
+                  </View>
+                )}
                 <Ionicons name="camera" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Take a photo</Text>
               </LinearGradient>
@@ -326,8 +340,11 @@ export function InputScreen({
           <View style={styles.captureCardWrap}>
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
-              onPress={() => pickImage("gallery")}
-              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              onPress={() => {
+                if (imageScanGated) { setPaywallVisible(true); return; }
+                pickImage("gallery");
+              }}
+              disabled={!imageScanGated && (extracting || problemQueue.length >= MAX_PROBLEMS)}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -336,6 +353,12 @@ export function InputScreen({
                 end={{ x: 1, y: 1 }}
                 style={styles.captureCard}
               >
+                {imageScanGated && (
+                  <View style={styles.lockOverlay}>
+                    <Ionicons name="lock-closed" size={16} color={colors.white} />
+                    <Text style={styles.lockBadgeText}>PRO</Text>
+                  </View>
+                )}
                 <Ionicons name="images" size={26} color={colors.white} />
                 <Text style={styles.captureLabel}>Choose photo</Text>
               </LinearGradient>
@@ -501,6 +524,12 @@ export function InputScreen({
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
+      <PaywallScreen
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onPurchaseComplete={() => setPaywallVisible(false)}
+        trigger="input_image_scan"
+      />
     </>
   );
 }
@@ -644,6 +673,25 @@ const styles = StyleSheet.create({
   },
   captureCardDisabled: {
     opacity: 0.45,
+  },
+  lockOverlay: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    zIndex: 1,
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.white,
+    letterSpacing: 0.5,
   },
   captureLabel: {
     ...typography.bodyBold,

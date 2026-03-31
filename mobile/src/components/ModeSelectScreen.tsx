@@ -5,7 +5,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
+import { PaywallScreen } from "./PaywallScreen";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
+import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 export type Mode = "learn" | "practice" | "mock_test";
@@ -52,6 +54,12 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const isPro = useEntitlementStore((s) => s.isPro);
+  const canUseFeature = useEntitlementStore((s) => s.canUseFeature);
+  const canCreateSession = useEntitlementStore((s) => s.canCreateSession);
+  const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
+  const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -86,28 +94,57 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
 
         {/* Compact mode cards */}
         <View style={styles.modeList}>
-          {MODES.map((mode) => (
-            <AnimatedPressable
-              key={mode.id}
-              style={[styles.modeCard, shadows.md]}
-              onPress={() => onSelect(mode.id)}
-              scaleDown={0.97}
-            >
-              <LinearGradient
-                colors={mode.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.modeGradient}
+          {MODES.map((mode) => {
+            const isMockGated = mode.id === "mock_test" && !canUseFeature("mock_test");
+            const showSessionCount = !isPro && (mode.id === "learn");
+            const remaining = sessionsRemaining();
+
+            return (
+              <AnimatedPressable
+                key={mode.id}
+                style={[styles.modeCard, shadows.md]}
+                onPress={() => {
+                  if (isMockGated) {
+                    setPaywallVisible(true);
+                    return;
+                  }
+                  onSelect(mode.id);
+                }}
+                scaleDown={0.97}
               >
-                <Ionicons name={mode.icon} size={22} color={colors.white} />
-                <View style={styles.modeTextWrap}>
-                  <Text style={styles.modeLabel}>{mode.label}</Text>
-                  <Text style={styles.modeTagline}>{mode.tagline}</Text>
-                </View>
-                <Ionicons name="arrow-forward-circle" size={22} color="rgba(255,255,255,0.7)" />
-              </LinearGradient>
-            </AnimatedPressable>
-          ))}
+                <LinearGradient
+                  colors={mode.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.modeGradient}
+                >
+                  <Ionicons name={mode.icon} size={22} color={colors.white} />
+                  <View style={styles.modeTextWrap}>
+                    <View style={styles.modeLabelRow}>
+                      <Text style={styles.modeLabel}>{mode.label}</Text>
+                      {isMockGated && (
+                        <View style={styles.proBadge}>
+                          <Ionicons name="lock-closed" size={10} color={colors.white} />
+                          <Text style={styles.proBadgeText}>PRO</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.modeTagline}>{mode.tagline}</Text>
+                    {showSessionCount && (
+                      <Text style={styles.modeSessionCount}>
+                        {remaining} of {dailySessionsLimit} free sessions left today
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons
+                    name={isMockGated ? "lock-closed" : "arrow-forward-circle"}
+                    size={22}
+                    color="rgba(255,255,255,0.7)"
+                  />
+                </LinearGradient>
+              </AnimatedPressable>
+            );
+          })}
         </View>
 
         {/* History sections */}
@@ -168,6 +205,13 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
           </>
         )}
       </ScrollView>
+
+      <PaywallScreen
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onPurchaseComplete={() => setPaywallVisible(false)}
+        trigger="mode_select_gated"
+      />
     </SafeAreaView>
   );
 }
@@ -222,10 +266,36 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 17,
   },
+  modeLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  proBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  proBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.white,
+    letterSpacing: 0.5,
+  },
   modeTagline: {
     fontSize: 12,
     color: "rgba(255,255,255,0.8)",
     marginTop: 2,
+  },
+  modeSessionCount: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.65)",
+    marginTop: 3,
+    fontWeight: "500",
   },
 
   // History sections
