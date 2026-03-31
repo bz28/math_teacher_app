@@ -1,23 +1,44 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
 import { api, type UsersData } from "../lib/api";
 import StatCard from "../components/StatCard";
+import { Pagination, SearchInput } from "../components/Pagination";
 
 type SortKey = "total_cost" | "session_count" | "last_active" | "name";
+const PAGE_SIZE = 25;
 
 export default function Users() {
   const navigate = useNavigate();
   const [data, setData] = useState<UsersData | null>(null);
   const [hours, setHours] = useState("720");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
-  const reload = () => api.users({ hours, sort_by: sortBy }).then(setData);
+  const reload = () =>
+    api.users({
+      hours,
+      sort_by: sortBy,
+      limit: String(PAGE_SIZE),
+      offset: String(offset),
+      ...(search ? { search } : {}),
+    }).then(setData);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { reload(); }, [hours, sortBy]);
+  useEffect(() => { reload(); }, [hours, sortBy, search, offset]);
+
+  // Reset to first page when filters change
+  const handleSearchChange = (v: string) => { setSearch(v); setOffset(0); };
+  const handleSortChange = (v: SortKey) => { setSortBy(v); setOffset(0); };
+  const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const close = () => setOpenMenu(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openMenu]);
 
   if (!data) return <p>Loading...</p>;
 
@@ -64,8 +85,9 @@ export default function Users() {
     <div>
       <h1>Users</h1>
 
-      <div className="filters" style={{ display: "flex", gap: 12 }}>
-        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <SearchInput value={search} onChange={handleSearchChange} placeholder="Search by name or email..." />
+        <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
@@ -84,25 +106,15 @@ export default function Users() {
         />
       </div>
 
-      <div className="chart-row">
-        <div className="chart-card" style={{ flex: 1 }}>
-          <h3>Registrations / Day</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.registrations_by_day}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#6366f1" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       <div className="table-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ marginBottom: 0 }}>All Users</h3>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)} style={{ fontSize: 13 }}>
+          <h3 style={{ marginBottom: 0 }}>
+            {search ? `Results for "${search}"` : "All Users"}
+            <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>
+              ({data.filtered_count})
+            </span>
+          </h3>
+          <select value={sortBy} onChange={(e) => handleSortChange(e.target.value as SortKey)} style={{ fontSize: 13 }}>
             <option value="total_cost">Sort by Cost</option>
             <option value="session_count">Sort by Sessions</option>
             <option value="last_active">Sort by Last Active</option>
@@ -110,28 +122,48 @@ export default function Users() {
           </select>
         </div>
         <table>
+          <colgroup>
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "28%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "8%" }} />
+          </colgroup>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
+              <th>User</th>
               <th>Plan</th>
               <th>Today&apos;s Usage</th>
               <th>Sessions</th>
-              <th>Total Cost</th>
-              <th>Last Active</th>
-              <th>Actions</th>
+              <th>Cost</th>
+              <th>Joined / Active</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {data.users.map((u) => (
               <tr key={u.id}>
-                <td>{u.name || "-"}</td>
-                <td>{u.email}</td>
-                <td>
-                  <span className={`badge ${u.role === "admin" ? "badge-active" : "badge-completed"}`}>
-                    {u.role}
-                  </span>
+                <td style={{ overflow: "hidden" }}>
+                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {u.name || "-"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {u.email}
+                  </div>
+                  <div style={{ display: "flex", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
+                    <span
+                      className={`badge ${u.role === "admin" ? "badge-active" : "badge-completed"}`}
+                    >
+                      {u.role}
+                    </span>
+                    {u.grade_level > 0 && (
+                      <span className="badge" style={{ background: "#f0f9ff", color: "#0369a1" }}>
+                        {gradeLabel(u.grade_level)}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td>
                   <span
@@ -148,82 +180,97 @@ export default function Users() {
                   </span>
                 </td>
                 <td>
-                  <div style={{ display: "flex", gap: 8, fontSize: 11 }}>
-                    <UsagePill label="Problems" used={u.daily_usage.sessions} limit={u.daily_usage.sessions_limit} />
-                    <UsagePill label="Chats" used={u.daily_usage.chats} limit={u.daily_usage.chats_limit} />
-                    <UsagePill label="Scans" used={u.daily_usage.scans} limit={u.daily_usage.scans_limit} />
+                  <div style={{ display: "flex", gap: 6, fontSize: 11, flexWrap: "wrap" }}>
+                    <UsagePill label="P" used={u.daily_usage.sessions} limit={u.daily_usage.sessions_limit} title="Problems" />
+                    <UsagePill label="C" used={u.daily_usage.chats} limit={u.daily_usage.chats_limit} title="Chats" />
+                    <UsagePill label="S" used={u.daily_usage.scans} limit={u.daily_usage.scans_limit} title="Scans" />
                   </div>
                 </td>
                 <td>{u.session_count}</td>
                 <td style={{ fontWeight: u.total_cost > 0 ? 600 : 400 }}>
                   ${u.total_cost.toFixed(4)}
                 </td>
-                <td>{u.last_active ? new Date(u.last_active).toLocaleString() : "-"}</td>
                 <td>
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div style={{ fontSize: 12 }} title={new Date(u.registered).toLocaleString()}>
+                    <span style={{ color: "#94a3b8" }}>Joined </span>{formatRelativeDate(u.registered)}
+                  </div>
+                  <div style={{ fontSize: 12 }} title={u.last_active ? new Date(u.last_active).toLocaleString() : undefined}>
+                    <span style={{ color: "#94a3b8" }}>Active </span>{u.last_active ? formatRelativeDate(u.last_active) : "-"}
+                  </div>
+                </td>
+                <td>
+                  <div className="action-menu-wrapper">
                     <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/llm-calls?user=${u.id}`); }}
-                      style={{
-                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
-                        border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff", color: "#475569",
-                      }}
-                      title="View LLM calls for this user"
+                      className="action-toggle"
+                      onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === u.id ? null : u.id); }}
                     >
-                      View Calls
+                      ...
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleToggleSubscription(u.id, u.subscription_tier); }}
-                      style={{
-                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
-                        border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff",
-                        color: u.subscription_tier === "pro" ? "#f59e0b" : "#10b981",
-                      }}
-                      title={u.subscription_tier === "pro" ? "Downgrade subscription to Free" : "Upgrade subscription to Pro"}
-                    >
-                      {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleToggleRole(u.id, u.role); }}
-                      style={{
-                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
-                        border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff",
-                        color: u.role === "admin" ? "#f59e0b" : "#6366f1",
-                      }}
-                      title={u.role === "admin" ? "Change role to student" : "Change role to admin"}
-                    >
-                      {u.role === "admin" ? "Remove Admin" : "Make Admin"}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(u.id, u.email); }}
-                      style={{
-                        padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer",
-                        border: "1px solid #fecaca", borderRadius: 4, background: "#fef2f2", color: "#ef4444",
-                      }}
-                      title="Permanently delete this user"
-                    >
-                      Delete User
-                    </button>
+                    {openMenu === u.id && (
+                      <div className="action-dropdown" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${u.id}`); }}>
+                          View Calls
+                        </button>
+                        <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>
+                          {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
+                        </button>
+                        <button onClick={() => { setOpenMenu(null); handleToggleRole(u.id, u.role); }}>
+                          {u.role === "admin" ? "Remove Admin" : "Make Admin"}
+                        </button>
+                        <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}>
+                          Delete User
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </td>
               </tr>
             ))}
             {data.users.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
             )}
           </tbody>
         </table>
+        <Pagination
+          offset={offset}
+          limit={PAGE_SIZE}
+          total={data.filtered_count}
+          onChange={setOffset}
+        />
       </div>
     </div>
   );
 }
 
-function UsagePill({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+function gradeLabel(grade: number): string {
+  if (grade <= 2) return "K-2";
+  if (grade <= 5) return "3-5";
+  if (grade <= 8) return "6-8";
+  if (grade <= 12) return "9-12";
+  return "College";
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function UsagePill({ label, used, limit, title }: { label: string; used: number; limit: number | null; title: string }) {
   const isUnlimited = limit === null;
   const atLimit = !isUnlimited && used >= limit;
   return (
     <span
       style={{
-        padding: "2px 6px",
+        padding: "2px 5px",
         borderRadius: 4,
         fontWeight: 600,
         background: atLimit ? "#fef2f2" : isUnlimited ? "#f0fdf4" : "#f8fafc",
@@ -231,9 +278,9 @@ function UsagePill({ label, used, limit }: { label: string; used: number; limit:
         border: `1px solid ${atLimit ? "#fecaca" : isUnlimited ? "#bbf7d0" : "#e2e8f0"}`,
         whiteSpace: "nowrap" as const,
       }}
-      title={`${label}: ${used}${isUnlimited ? " (unlimited)" : ` / ${limit}`}`}
+      title={`${title}: ${used}${isUnlimited ? " (unlimited)" : ` / ${limit}`}`}
     >
-      {label}: {used}{isUnlimited ? " / ∞" : ` / ${limit}`}
+      {label}: {used}{isUnlimited ? "/\u221e" : `/${limit}`}
     </span>
   );
 }

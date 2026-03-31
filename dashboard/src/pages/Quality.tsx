@@ -5,6 +5,9 @@ import {
 } from "recharts";
 import { api, type QualityData } from "../lib/api";
 import StatCard from "../components/StatCard";
+import { Pagination } from "../components/Pagination";
+
+const PAGE_SIZE = 25;
 
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 4 ? "#10b981" : score >= 3 ? "#f59e0b" : "#ef4444";
@@ -28,13 +31,22 @@ export default function Quality() {
   const [hours, setHours] = useState("168");
   const [onlyFailed, setOnlyFailed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
 
   useEffect(() => {
     api
-      .quality({ hours, only_failed: onlyFailed ? "true" : "" })
+      .quality({
+        hours,
+        only_failed: onlyFailed ? "true" : "",
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+      })
       .then(setData)
       .catch((e) => console.error("Quality API error:", e));
-  }, [hours, onlyFailed]);
+  }, [hours, onlyFailed, offset]);
+
+  const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
+  const handleFailedToggle = (v: boolean) => { setOnlyFailed(v); setOffset(0); };
 
   if (!data) return <p>Loading...</p>;
 
@@ -52,7 +64,7 @@ export default function Quality() {
       <h1>Solution Quality</h1>
 
       <div className="filters">
-        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+        <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
@@ -61,7 +73,7 @@ export default function Quality() {
           <input
             type="checkbox"
             checked={onlyFailed}
-            onChange={(e) => setOnlyFailed(e.target.checked)}
+            onChange={(e) => handleFailedToggle(e.target.checked)}
           />
           Failed only
         </label>
@@ -94,8 +106,18 @@ export default function Quality() {
       </div>
 
       <div className="table-card">
-        <h3>Evaluations ({data.scores.length})</h3>
+        <h3>Evaluations ({data.total_count})</h3>
         <table>
+          <colgroup>
+            <col style={{ width: "4%" }} />
+            <col style={{ width: "32%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "18%" }} />
+          </colgroup>
           <thead>
             <tr>
               <th></th>
@@ -125,7 +147,7 @@ export default function Quality() {
                   <td><ScoreBadge score={s.clarity} /></td>
                   <td><ScoreBadge score={s.flow} /></td>
                   <td>{s.passed ? "PASS" : "FAIL"}</td>
-                  <td>{new Date(s.created_at).toLocaleString()}</td>
+                  <td title={new Date(s.created_at).toLocaleString()}>{formatRelativeDate(s.created_at)}</td>
                 </tr>
                 {expandedId === s.id && (
                   <tr key={`${s.id}-detail`}>
@@ -147,7 +169,27 @@ export default function Quality() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          offset={offset}
+          limit={PAGE_SIZE}
+          total={data.total_count}
+          onChange={setOffset}
+        />
       </div>
     </div>
   );
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
 }
