@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { requestCameraAccess, requestGalleryAccess } from "./usePermissions";
 import { extractProblemsFromImage } from "../services/api";
 import { cropImage, type CropRegion } from "../utils/cropImage";
+import { imageToBase64 } from "../utils/imageToBase64";
 
 export type ExtractionPhase = "idle" | "selecting" | "extracting" | "results";
 
@@ -12,16 +13,14 @@ export interface ExtractionState {
   extracting: boolean;
   extractionProgress: { done: number; total: number } | null;
   problems: string[] | null;
-  /** Cropped images parallel to problems array */
-  cropImages: (string | undefined)[];
   confidence: string;
   selected: boolean[];
   editingIndex: number | null;
   editingText: string;
   lastSource: "camera" | "gallery" | null;
-  /** Image URI for rectangle selection */
+  /** Image URI preserved for manual rectangle fallback */
   imageUri: string | null;
-  /** Image dimensions for coordinate scaling */
+  /** Image dimensions for rectangle selector */
   imageDimensions: { width: number; height: number } | null;
 }
 
@@ -30,7 +29,6 @@ const INITIAL_STATE: ExtractionState = {
   extracting: false,
   extractionProgress: null,
   problems: null,
-  cropImages: [],
   confidence: "high",
   selected: [],
   editingIndex: null,
@@ -48,6 +46,7 @@ export function useImageExtraction(
 ) {
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
 
+  /** Pick image and auto-extract all problems from it. */
   const pickImage = async (source: "camera" | "gallery") => {
     const granted = source === "camera"
       ? await requestCameraAccess()
@@ -55,7 +54,7 @@ export function useImageExtraction(
     if (!granted) return;
 
     const options: ImagePicker.ImagePickerOptions = {
-      base64: false, // Don't need base64 yet — just URI for rectangle selection
+      base64: false,
       quality: 0.7,
       allowsEditing: false,
     };
@@ -72,9 +71,12 @@ export function useImageExtraction(
       return;
     }
 
+    // Save URI/dimensions for manual fallback, then auto-extract
     setState((prev) => ({
       ...prev,
-      phase: "selecting",
+      phase: "extracting",
+      extracting: true,
+      extractionProgress: null,
       imageUri: asset.uri,
       imageDimensions: asset.width && asset.height
         ? { width: asset.width, height: asset.height }
@@ -82,8 +84,38 @@ export function useImageExtraction(
       lastSource: source,
     }));
     setError(null);
+
+    try {
+      const base64 = await imageToBase64(asset.uri);
+      const { problems, confidence } = await extractProblemsFromImage(base64, subject);
+
+      if (problems.length === 0) {
+        setError("No problems found. Try again or select areas manually.");
+        setState((prev) => ({ ...prev, phase: "idle", extracting: false }));
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        phase: "results",
+        extracting: false,
+        problems,
+        confidence,
+        selected: problems.map(() => true),
+        editingIndex: null,
+      }));
+    } catch (e) {
+      const msg = (e as Error).message || "";
+      if (msg.includes("Network") || msg.includes("fetch")) {
+        setError("Network error — check your connection and try again.");
+      } else {
+        setError(msg || "Failed to extract problems from image.");
+      }
+      setState((prev) => ({ ...prev, phase: "idle", extracting: false, extractionProgress: null }));
+    }
   };
 
+  /** Process rectangles drawn by user in manual selection mode. */
   const confirmRectangles = async (rectangles: CropRegion[]) => {
     if (!state.imageUri) return;
 
@@ -96,10 +128,8 @@ export function useImageExtraction(
 
     try {
       const allProblems: string[] = [];
-      const allCropImages: (string | undefined)[] = [];
       let worstConfidence = "high";
 
-      // Process in batches of 3
       for (let i = 0; i < rectangles.length; i += 3) {
         const batch = rectangles.slice(i, i + 3);
         const crops = await Promise.all(
@@ -109,13 +139,9 @@ export function useImageExtraction(
           crops.map((cropped) => extractProblemsFromImage(cropped, subject)),
         );
 
-        for (let j = 0; j < results.length; j++) {
-          const r = results[j];
+        for (const r of results) {
           if (r.status === "fulfilled") {
-            for (const p of r.value.problems) {
-              allProblems.push(p);
-              allCropImages.push(crops[j]);
-            }
+            allProblems.push(...r.value.problems);
             if (r.value.confidence === "low") worstConfidence = "low";
             else if (r.value.confidence === "medium" && worstConfidence !== "low")
               worstConfidence = "medium";
@@ -129,7 +155,7 @@ export function useImageExtraction(
 
       if (allProblems.length === 0) {
         setError("No problems found in the selected areas. Try drawing larger rectangles.");
-        setState(INITIAL_STATE);
+        setState((prev) => ({ ...prev, phase: "idle", extracting: false, extractionProgress: null }));
         return;
       }
 
@@ -139,31 +165,30 @@ export function useImageExtraction(
         extracting: false,
         extractionProgress: null,
         problems: allProblems,
-        cropImages: allCropImages,
         confidence: worstConfidence,
         selected: allProblems.map(() => true),
         editingIndex: null,
       }));
     } catch {
       setError("Failed to extract problems. Try again.");
-      setState(INITIAL_STATE);
+      setState((prev) => ({ ...prev, phase: "idle", extracting: false, extractionProgress: null }));
     }
   };
 
-  const cancelSelection = () => {
-    setState(INITIAL_STATE);
-  };
-
-  /** Re-enter rectangle selection from results (manual fallback). */
+  /** Enter manual rectangle selection (fallback from auto-detect results). */
   const startManualSelect = () => {
     setState((prev) => ({
       ...prev,
       phase: "selecting",
       problems: null,
-      cropImages: [],
       selected: [],
     }));
     setError(null);
+  };
+
+  /** Cancel rectangle selection and go back to idle. */
+  const cancelSelection = () => {
+    setState(INITIAL_STATE);
   };
 
   const dismiss = () => {
@@ -175,6 +200,8 @@ export function useImageExtraction(
       selected: [],
       editingIndex: null,
       editingText: "",
+      imageUri: null,
+      imageDimensions: null,
     }));
   };
 
@@ -227,7 +254,7 @@ export function useImageExtraction(
   const getSelectedWithImages = (): { text: string; image?: string }[] => {
     if (!state.problems) return [];
     return state.problems
-      .map((text, i) => ({ text, image: state.cropImages[i] }))
+      .map((text, i) => ({ text, image: undefined }))
       .filter((_, i) => state.selected[i]);
   };
 
