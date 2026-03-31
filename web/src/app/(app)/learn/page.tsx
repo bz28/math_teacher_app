@@ -69,7 +69,15 @@ function LearnPageContent() {
   function handleAddProblem() {
     const trimmed = input.trim();
     if (!trimmed) return;
-    if (problemQueue.length >= maxQueueSize) return;
+    if (!isPro && problemQueue.length >= maxQueueSize) {
+      setUpgradePrompt({
+        entitlement: "create_session",
+        message: remainingSessions <= 0
+          ? "You've used all 5 problems for today. Upgrade to Pro for unlimited access."
+          : `You've reached your queue limit — free accounts can use ${remainingSessions} more problem${remainingSessions !== 1 ? "s" : ""} today. Remove a problem or upgrade to Pro.`,
+      });
+      return;
+    }
     addToQueue(trimmed);
     setInput("");
   }
@@ -308,6 +316,10 @@ function LearnPageContent() {
             maxProblems={maxQueueSize}
             currentQueueLength={problemQueue.length}
             scansRemaining={remainingScans}
+            onScanLimitReached={() => setUpgradePrompt({
+              entitlement: "image_scan",
+              message: "You've used all 3 image scans for today. Upgrade to Pro for unlimited scans.",
+            })}
           />
         </Card>
 

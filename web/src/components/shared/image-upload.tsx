@@ -14,6 +14,8 @@ interface ImageUploadProps {
   currentQueueLength?: number;
   /** Remaining image scans for the day (from entitlements). Pass Infinity for pro users. */
   scansRemaining?: number;
+  /** Called when scan limit is reached and user tries to upload */
+  onScanLimitReached?: () => void;
   /** Called when the phase changes — parent can use this to adjust layout */
   onPhaseChange?: (phase: "upload" | "select" | "extracting") => void;
 }
@@ -24,6 +26,7 @@ export function ImageUpload({
   maxProblems = 10,
   currentQueueLength = 0,
   scansRemaining = Infinity,
+  onScanLimitReached,
   onPhaseChange,
 }: ImageUploadProps) {
   const [phase, _setPhase] = useState<"upload" | "select" | "extracting">("upload");
@@ -191,7 +194,7 @@ export function ImageUpload({
         }}
         onDragLeave={() => setDragActive(false)}
         onDrop={(e) => { if (!scanLimitReached) handleDrop(e); }}
-        onClick={() => { if (!scanLimitReached) fileInputRef.current?.click(); }}
+        onClick={() => { if (scanLimitReached) { onScanLimitReached?.(); } else { fileInputRef.current?.click(); } }}
         className={cn(
           "flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed p-8 text-center transition-colors",
           scanLimitReached
