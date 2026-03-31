@@ -3,7 +3,8 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { useSessionStore, type Subject } from "@/stores/session";
+import { useSessionStore, type Subject } from "@/stores/learn";
+import { useMockTestStore } from "@/stores/mock-test";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
@@ -37,9 +38,9 @@ function LearnPageContent() {
     removeFromQueue,
     startLearnQueue,
     startSession,
-    startMockTest,
     phase,
   } = useSessionStore();
+  const { startMockTest } = useMockTestStore();
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
@@ -96,7 +97,7 @@ function LearnPageContent() {
       } else {
         const generateCount = examType === "generate_similar" ? problems.length : 0;
         const timeLimit = untimed ? null : timeLimitMinutes;
-        await startMockTest(problems, generateCount, timeLimit, multipleChoice);
+        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, multipleChoice);
         router.push(`/mock-test?subject=${subject}`);
       }
     } catch (err) {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { stripe as stripeApi } from "@/lib/api";
+import { CheckIcon } from "@/components/ui/icons";
 
 const PRICE_MONTHLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "";
 const PRICE_YEARLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY ?? "";
@@ -109,7 +110,7 @@ export default function PricingPage() {
             <ul className="mt-6 space-y-3">
               {proFeatures.map((f) => (
                 <li key={f} className="flex items-center gap-2 text-sm text-text-secondary">
-                  <CheckMark /> {f}
+                  <CheckIcon className="inline h-4 w-4 shrink-0 text-success" /> {f}
                 </li>
               ))}
             </ul>
@@ -151,7 +152,7 @@ function ActiveSubscription() {
     <div className="mx-auto max-w-lg px-4 py-10 text-center">
       <div className="rounded-[--radius-xl] border border-success/30 bg-success/5 p-8">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-          <CheckMark size={32} />
+          <CheckIcon className="inline h-8 w-8 shrink-0 text-success" />
         </div>
         <h1 className="text-2xl font-extrabold text-text-primary">Pro Plan Active</h1>
         <p className="mt-2 text-text-secondary">
@@ -175,20 +176,3 @@ function ActiveSubscription() {
   );
 }
 
-function CheckMark({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      className="inline shrink-0 text-success"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}

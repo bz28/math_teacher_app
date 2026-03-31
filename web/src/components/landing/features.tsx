@@ -2,6 +2,7 @@
 
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import { ChatBubbleIcon } from "@/components/ui/icons";
 
 const features = [
   {
@@ -14,7 +15,7 @@ const features = [
     title: "Chat With Your Tutor",
     description:
       "Stuck on a step? Ask a question and get a personalized explanation without revealing future steps or answers.",
-    icon: ChatIcon,
+    icon: () => <ChatBubbleIcon className="h-6 w-6" />,
   },
   {
     title: "Work Diagnosis",
@@ -102,13 +103,6 @@ function StepsIcon() {
   );
 }
 
-function ChatIcon() {
-  return (
-    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-    </svg>
-  );
-}
 
 function DiagnosisIcon() {
   return (
