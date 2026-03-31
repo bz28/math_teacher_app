@@ -21,6 +21,10 @@ export interface User {
   name: string;
   grade_level: number;
   role: string;
+  subscription_tier: string;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  is_pro: boolean;
 }
 
 export interface StepDetail {
@@ -111,6 +115,19 @@ export class ApiError extends Error {
   ) {
     super((body?.detail as string) ?? `API error ${status}`);
     this.name = "ApiError";
+  }
+}
+
+export class EntitlementError extends ApiError {
+  public entitlement: string;
+  public isLimit: boolean;
+
+  constructor(status: number, body: Record<string, unknown>) {
+    super(status, body);
+    this.name = "EntitlementError";
+    this.entitlement = (body.entitlement as string) ?? "";
+    this.isLimit = (body.is_limit as boolean) ?? false;
+    this.message = (body.message as string) ?? "Feature requires Pro subscription";
   }
 }
 
@@ -216,6 +233,9 @@ async function apiFetch<T>(
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      if (res.status === 403 && body.error === "entitlement_required") {
+        throw new EntitlementError(res.status, body);
+      }
       throw new ApiError(res.status, body);
     }
 
@@ -407,6 +427,28 @@ export const work = {
       method: "POST",
       body: JSON.stringify(data),
       timeout: LLM_TIMEOUT,
+    });
+  },
+};
+
+// ── Stripe endpoints ──
+
+export const stripe = {
+  createCheckoutSession(priceId: string, successUrl: string, cancelUrl: string) {
+    return apiFetch<{ checkout_url: string }>("/stripe/checkout-session", {
+      method: "POST",
+      body: JSON.stringify({
+        price_id: priceId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      }),
+    });
+  },
+
+  createPortalSession(returnUrl: string) {
+    return apiFetch<{ portal_url: string }>("/stripe/portal-session", {
+      method: "POST",
+      body: JSON.stringify({ return_url: returnUrl }),
     });
   },
 };
