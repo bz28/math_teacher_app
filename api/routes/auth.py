@@ -9,6 +9,7 @@ from api.core.auth import (
     rotate_refresh_token,
     verify_password,
 )
+from api.core.notifications import notify_new_user_signup
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user
 from api.models.user import User
@@ -47,6 +48,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    await notify_new_user_signup(db, user)
 
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
