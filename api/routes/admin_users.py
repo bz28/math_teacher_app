@@ -4,7 +4,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from api.core.entitlements import today_start
 from pydantic import BaseModel
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +12,7 @@ from api.core.entitlements import (
     FREE_DAILY_CHAT_LIMIT,
     FREE_DAILY_IMAGE_SCAN_LIMIT,
     FREE_DAILY_SESSION_LIMIT,
+    today_start,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
