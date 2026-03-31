@@ -62,29 +62,30 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         const annualPkg = current?.annual ?? null;
         const monthlyPkg = current?.monthly ?? null;
 
+        const weeklyPkg = current?.weekly ?? monthlyPkg;
         setPlans([
           {
             id: "annual",
             label: "Annual",
-            badge: "Save 50%",
+            badge: "Best Value — Save 55%",
             trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
               ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
               : "7-day free trial",
             priceText: annualPkg
               ? `then ${annualPkg.product.priceString}/year`
-              : "then $59.99/year",
+              : "then $69.99/year",
             pkg: annualPkg,
           },
           {
-            id: "monthly",
-            label: "Monthly",
-            trialText: monthlyPkg?.product?.introPrice?.periodNumberOfUnits
-              ? `${monthlyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-              : "7-day free trial",
-            priceText: monthlyPkg
-              ? `then ${monthlyPkg.product.priceString}/month`
-              : "then $9.99/month",
-            pkg: monthlyPkg,
+            id: "weekly",
+            label: "Weekly",
+            trialText: weeklyPkg?.product?.introPrice?.periodNumberOfUnits
+              ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
+              : "3-day free trial",
+            priceText: weeklyPkg
+              ? `then ${weeklyPkg.product.priceString}/week`
+              : "then $2.99/week",
+            pkg: weeklyPkg,
           },
         ]);
       })
@@ -94,16 +95,16 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           {
             id: "annual",
             label: "Annual",
-            badge: "Save 50%",
+            badge: "Best Value — Save 55%",
             trialText: "7-day free trial",
-            priceText: "then $59.99/year",
+            priceText: "then $69.99/year",
             pkg: null,
           },
           {
-            id: "monthly",
-            label: "Monthly",
-            trialText: "7-day free trial",
-            priceText: "then $9.99/month",
+            id: "weekly",
+            label: "Weekly",
+            trialText: "3-day free trial",
+            priceText: "then $2.99/week",
             pkg: null,
           },
         ]);

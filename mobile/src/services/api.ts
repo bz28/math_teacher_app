@@ -317,6 +317,10 @@ export const register = (email: string, password: string, name: string, gradeLev
 export interface EntitlementLimits {
   daily_sessions_used: number;
   daily_sessions_limit: number;
+  daily_scans_used: number;
+  daily_scans_limit: number;
+  daily_chats_used: number;
+  daily_chats_limit: number;
   history_limit: number | null;
 }
 
