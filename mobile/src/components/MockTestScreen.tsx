@@ -13,13 +13,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
-import { requestCameraAccess } from "../hooks/usePermissions";
+import { captureWorkImage } from "../hooks/useCameraCapture";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface Props {
@@ -151,19 +150,8 @@ export function MockTestScreen({ onBack }: Props) {
   };
 
   const handleAttachWork = async () => {
-    if (!(await requestCameraAccess())) return;
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.7,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]?.base64) {
-      attachWorkImage(currentIndex, result.assets[0].base64);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
+    const base64 = await captureWorkImage();
+    if (base64) attachWorkImage(currentIndex, base64);
   };
 
   const hasWorkAttached = mockTest.workImages[currentIndex] != null;

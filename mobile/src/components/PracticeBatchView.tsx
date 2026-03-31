@@ -10,14 +10,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
-import { requestCameraAccess } from "../hooks/usePermissions";
+import { captureWorkImage } from "../hooks/useCameraCapture";
 import { colors, spacing, shadows } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
@@ -58,19 +57,8 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
   const currentProblem = problems[currentIndex];
 
   const handleAttachWork = async () => {
-    if (!(await requestCameraAccess())) return;
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.7,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]?.base64) {
-      setAttachedImage(result.assets[0].base64);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
+    const base64 = await captureWorkImage();
+    if (base64) setAttachedImage(base64);
   };
 
   const handlePracticeSubmit = async () => {
