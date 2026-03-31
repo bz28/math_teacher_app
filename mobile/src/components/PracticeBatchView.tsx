@@ -10,14 +10,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
-import { requestCameraAccess } from "../hooks/usePermissions";
+import { captureWorkImage } from "../hooks/useCameraCapture";
 import { colors, spacing, shadows } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
@@ -56,21 +55,11 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
   const { problems, currentIndex, totalCount } = practiceBatch;
   const currentProblem = problems[currentIndex];
+  if (!currentProblem) return null;
 
   const handleAttachWork = async () => {
-    if (!(await requestCameraAccess())) return;
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.7,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]?.base64) {
-      setAttachedImage(result.assets[0].base64);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
+    const base64 = await captureWorkImage();
+    if (base64) setAttachedImage(base64);
   };
 
   const handlePracticeSubmit = async () => {
@@ -162,15 +151,8 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
       >
         {/* Correct feedback */}
         {practiceBatch.currentFeedback === "correct" && (
-          <View style={{
-            backgroundColor: colors.successLight,
-            borderColor: colors.success,
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: spacing.md,
-            marginBottom: spacing.md,
-          }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.success }}>
+          <View style={[styles.feedback, styles.feedbackCorrect]}>
+            <Text style={[styles.feedbackTitle, styles.feedbackTitleCorrect]}>
               Correct!
             </Text>
           </View>
@@ -178,15 +160,8 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
         {/* Wrong feedback */}
         {practiceBatch.currentFeedback === "wrong" && (
-          <View style={{
-            backgroundColor: colors.errorLight,
-            borderColor: colors.error,
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: spacing.md,
-            marginBottom: spacing.md,
-          }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.error }}>
+          <View style={[styles.feedback, styles.feedbackWrong]}>
+            <Text style={[styles.feedbackTitle, styles.feedbackTitleWrong]}>
               Not quite, try again!
             </Text>
           </View>
@@ -223,19 +198,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
             {/* Attach work button */}
             <AnimatedPressable
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: spacing.sm,
-                alignSelf: "flex-start",
-                paddingVertical: spacing.sm,
-                paddingHorizontal: spacing.lg,
-                borderRadius: 20,
-                borderWidth: 1.5,
-                borderColor: attachedImage ? colors.success : colors.border,
-                backgroundColor: attachedImage ? colors.successLight : "transparent",
-                marginTop: spacing.md,
-              }}
+              style={[styles.attachWorkBtn, attachedImage && styles.attachWorkBtnActive]}
               onPress={handleAttachWork}
             >
               <Ionicons
@@ -243,11 +206,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
                 size={18}
                 color={attachedImage ? colors.success : colors.textSecondary}
               />
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "600",
-                color: attachedImage ? colors.success : colors.textSecondary,
-              }}>
+              <Text style={[styles.attachWorkText, attachedImage && styles.attachWorkTextActive]}>
                 {attachedImage ? "Work attached" : "Attach your work"}
               </Text>
             </AnimatedPressable>

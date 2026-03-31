@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,7 +8,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -17,6 +15,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
+import { ImagePreview } from "./ImagePreview";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
 import { RectangleSelector } from "./RectangleSelector";
@@ -218,55 +217,15 @@ export function InputScreen({
   // Image preview phase — choose extraction method
   if (extractionPhase === "preview" && imageUri) {
     return (
-      <View style={styles.previewContainer}>
-        <SafeAreaView style={styles.previewSafe}>
-          <View style={styles.previewHeader}>
-            <AnimatedPressable onPress={cancelPreview} style={styles.previewBackBtn} scaleDown={0.9}>
-              <Ionicons name="chevron-back" size={22} color={colors.white} />
-            </AnimatedPressable>
-            <Text style={styles.previewTitle}>Extract Problems</Text>
-            <View style={styles.previewBackBtn} />
-          </View>
-
-          <View style={styles.previewImageWrap}>
-            <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="contain" />
-          </View>
-
-          <View style={styles.previewActions}>
-            {extracting ? (
-              <View style={styles.previewLoadingCard}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.previewLoadingTitle}>Extracting problems...</Text>
-                <Text style={styles.previewLoadingSubtitle}>This usually takes a few seconds</Text>
-              </View>
-            ) : (
-              <>
-                {error && (
-                  <View style={styles.previewErrorCard}>
-                    <Ionicons name="alert-circle" size={18} color={colors.warningDark} />
-                    <Text style={styles.previewErrorText}>{error}</Text>
-                  </View>
-                )}
-                <GradientButton
-                  onPress={extractFullImage}
-                  label="Extract All Problems"
-                  style={styles.previewMainBtn}
-                />
-                {imageDimensions && (
-                  <AnimatedPressable
-                    onPress={startManualSelect}
-                    style={styles.previewSecondaryBtn}
-                    scaleDown={0.97}
-                  >
-                    <Ionicons name="crop-outline" size={18} color={colors.textSecondary} />
-                    <Text style={styles.previewSecondaryText}>Select areas manually</Text>
-                  </AnimatedPressable>
-                )}
-              </>
-            )}
-          </View>
-        </SafeAreaView>
-      </View>
+      <ImagePreview
+        imageUri={imageUri}
+        extracting={extracting}
+        error={error}
+        hasManualSelect={!!imageDimensions}
+        onExtractAll={extractFullImage}
+        onManualSelect={startManualSelect}
+        onBack={cancelPreview}
+      />
     );
   }
 
@@ -506,97 +465,6 @@ export function InputScreen({
 }
 
 const styles = StyleSheet.create({
-  // Preview screen
-  previewContainer: {
-    flex: 1,
-    backgroundColor: "#1A1A2E",
-  },
-  previewSafe: {
-    flex: 1,
-  },
-  previewHeader: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  previewBackBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
-  },
-  previewTitle: {
-    ...typography.bodyBold,
-    color: colors.white,
-    fontSize: 17,
-    flex: 1,
-    textAlign: "center" as const,
-  },
-  previewImageWrap: {
-    flex: 1,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
-    paddingHorizontal: spacing.md,
-  },
-  previewImage: {
-    width: "100%" as const,
-    height: "100%" as const,
-  },
-  previewActions: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    paddingTop: spacing.xl,
-    paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.xxxl,
-    ...shadows.lg,
-  },
-  previewMainBtn: {
-    borderRadius: radii.md,
-  },
-  previewSecondaryBtn: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    gap: spacing.xs,
-    paddingVertical: spacing.lg,
-  },
-  previewSecondaryText: {
-    ...typography.label,
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  previewLoadingCard: {
-    alignItems: "center" as const,
-    gap: spacing.md,
-    paddingVertical: spacing.xl,
-  },
-  previewLoadingTitle: {
-    ...typography.bodyBold,
-    color: colors.text,
-  },
-  previewLoadingSubtitle: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  previewErrorCard: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: spacing.sm,
-    backgroundColor: colors.warningBg,
-    padding: spacing.md,
-    borderRadius: radii.sm,
-    marginBottom: spacing.md,
-  },
-  previewErrorText: {
-    ...typography.caption,
-    color: colors.warningDark,
-    flex: 1,
-  },
-
-  // Main screen
   scrollContent: {
     paddingHorizontal: spacing.xxl + 4,
     paddingBottom: spacing.xl,
@@ -644,25 +512,6 @@ const styles = StyleSheet.create({
   },
   captureCardDisabled: {
     opacity: 0.45,
-  },
-  lockOverlay: {
-    position: "absolute",
-    top: spacing.sm,
-    right: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    zIndex: 1,
-  },
-  lockBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.white,
-    letterSpacing: 0.5,
   },
   captureLabel: {
     ...typography.bodyBold,

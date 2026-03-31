@@ -35,8 +35,8 @@ interface RectangleSelectorProps {
 const MIN_SIZE = 30;
 const HANDLE_RADIUS = 20;
 const HANDLE_SIZE = 14;
-const RECT_COLOR = "rgba(108, 92, 231, 0.18)";
-const RECT_BORDER = "rgba(108, 92, 231, 0.85)";
+const RECT_COLOR = colors.primaryOverlay;
+const RECT_BORDER = colors.primaryOverlayStrong;
 const TOAST_DURATION = 1800;
 
 type InteractionMode =
@@ -495,7 +495,7 @@ export function RectangleSelector({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1A1A2E",
+    backgroundColor: colors.backgroundDark,
   },
 
   // Header
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   headerBackBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   // Image area
   imageArea: {
     flex: 1,
-    backgroundColor: "#1A1A2E",
+    backgroundColor: colors.backgroundDark,
   },
   imageContainer: {
     position: "relative",
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   },
   dimOverlay: {
     position: "absolute",
-    backgroundColor: "rgba(26, 26, 46, 0.6)",
+    backgroundColor: colors.overlayDark,
   },
 
   // Rectangles

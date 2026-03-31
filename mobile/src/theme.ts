@@ -31,6 +31,7 @@ export const colors = {
 
   // Backgrounds
   background: "#FAFAFE",
+  backgroundDark: "#1A1A2E",
   card: "#F8F7FF",
   inputBg: "#F5F4FB",
 
@@ -41,6 +42,10 @@ export const colors = {
   // Misc
   white: "#FFFFFF",
   overlay: "rgba(108, 92, 231, 0.08)",
+  overlayDark: "rgba(26, 26, 46, 0.6)",
+  primaryOverlay: "rgba(108, 92, 231, 0.18)",
+  primaryOverlayStrong: "rgba(108, 92, 231, 0.85)",
+  neutral300: "#D1D3D9",
 } as const;
 
 // ── Spacing (4px grid) ──────────────────────────────────

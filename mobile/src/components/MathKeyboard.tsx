@@ -122,7 +122,7 @@ export function MathKeyboard({ onInsert, accessoryID }: MathKeyboardProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#D1D3D9",
+    backgroundColor: colors.neutral300,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },

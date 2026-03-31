@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -16,30 +15,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { useFadeInUp } from "../hooks/useFadeInUp";
 import { login, saveTokens } from "../services/api";
+import { errorMessage } from "../utils/errorMessage";
 import { colors, spacing, radii, typography, gradients } from "../theme";
 
 interface LoginFormProps {
   onAuth: () => void;
   onSwitchToRegister: () => void;
-}
-
-/** Fade-in + slide-up animation hook */
-function useFadeInUp(delay = 0, duration = 500) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
-      ]).start();
-    }, delay);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  return { opacity, transform: [{ translateY }] };
 }
 
 export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
@@ -63,7 +46,7 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAuth();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);

@@ -278,4 +278,31 @@ export const sessionScreenStyles = StyleSheet.create({
   },
   flagText: { color: colors.textMuted, fontWeight: "600", fontSize: 14 },
   flagTextActive: { color: colors.warningDark },
+
+  // Attach work button (PracticeBatchView, MockTestScreen)
+  attachWorkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    alignSelf: "flex-start",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.xl,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: "transparent",
+    marginTop: spacing.md,
+  },
+  attachWorkBtnActive: {
+    borderColor: colors.success,
+    backgroundColor: colors.successLight,
+  },
+  attachWorkText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textSecondary,
+  },
+  attachWorkTextActive: {
+    color: colors.success,
+  },
 });

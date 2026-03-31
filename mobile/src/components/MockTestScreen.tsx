@@ -13,13 +13,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
-import { requestCameraAccess } from "../hooks/usePermissions";
+import { captureWorkImage } from "../hooks/useCameraCapture";
+import { useMockTimer, formatTime } from "../hooks/useMockTimer";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface Props {
@@ -41,43 +41,20 @@ export function MockTestScreen({ onBack }: Props) {
 
   const [localAnswer, setLocalAnswer] = useState("");
 
-  // Timer state
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
-
-  // Initialize timer
-  useEffect(() => {
-    if (!mockTest || mockTest.timeLimitSeconds == null) return;
-    const elapsed = Math.floor((Date.now() - mockTest.startedAt) / 1000);
-    setRemainingSeconds(Math.max(0, mockTest.timeLimitSeconds - elapsed));
-  }, [mockTest?.startedAt, mockTest?.timeLimitSeconds]);
-
-  // Countdown timer
-  useEffect(() => {
-    if (remainingSeconds == null || remainingSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev == null || prev <= 1) {
-          clearInterval(interval);
-          return 0;
+  const { remainingSeconds, isTimeLow } = useMockTimer({
+    startedAt: mockTest?.startedAt ?? 0,
+    timeLimitSeconds: mockTest?.timeLimitSeconds ?? null,
+    onTimeUp: () => {
+      if (mockTest && !mockTest.results) {
+        if (localAnswer.trim()) {
+          saveMockTestAnswer(mockTest.currentIndex, localAnswer.trim());
         }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [remainingSeconds]);
-
-  // Auto-submit on time up
-  useEffect(() => {
-    if (remainingSeconds === 0 && mockTest && !mockTest.results) {
-      // Save current answer before submitting
-      if (localAnswer.trim()) {
-        saveMockTestAnswer(mockTest.currentIndex, localAnswer.trim());
+        Alert.alert("Time's up!", "Submitting your answers.", [
+          { text: "OK", onPress: () => submitMockTest() },
+        ]);
       }
-      Alert.alert("Time's up!", "Submitting your answers.", [
-        { text: "OK", onPress: () => submitMockTest() },
-      ]);
-    }
-  }, [remainingSeconds]);
+    },
+  });
 
   if (!mockTest) return null;
 
@@ -151,30 +128,11 @@ export function MockTestScreen({ onBack }: Props) {
   };
 
   const handleAttachWork = async () => {
-    if (!(await requestCameraAccess())) return;
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.7,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]?.base64) {
-      attachWorkImage(currentIndex, result.assets[0].base64);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
+    const base64 = await captureWorkImage();
+    if (base64) attachWorkImage(currentIndex, base64);
   };
 
   const hasWorkAttached = mockTest.workImages[currentIndex] != null;
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const isTimeLow = remainingSeconds != null && remainingSeconds <= 300 && remainingSeconds > 0;
 
   return (
     <KeyboardAvoidingView

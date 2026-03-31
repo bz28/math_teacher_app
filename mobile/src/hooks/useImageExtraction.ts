@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { requestCameraAccess, requestGalleryAccess } from "./usePermissions";
 import { extractProblemsFromImage } from "../services/api";
 import { cropImage, type CropRegion } from "../utils/cropImage";
+import { errorMessage } from "../utils/errorMessage";
 import { imageToBase64 } from "../utils/imageToBase64";
 
 export type ExtractionPhase = "idle" | "preview" | "selecting" | "extracting" | "results";
@@ -106,7 +107,7 @@ export function useImageExtraction(
         editingIndex: null,
       }));
     } catch (e) {
-      const msg = (e as Error).message || "";
+      const msg = errorMessage(e);
       if (msg.includes("Network") || msg.includes("fetch")) {
         setError("Network error — check your connection and try again.");
       } else {

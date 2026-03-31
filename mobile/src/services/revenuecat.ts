@@ -15,7 +15,7 @@ const REVENUECAT_ANDROID_KEY = "goog_XXXXXXXX"; // TODO: set real Android API ke
 export async function initRevenueCat(userId: string): Promise<void> {
   const apiKey = Platform.OS === "ios" ? REVENUECAT_IOS_KEY : REVENUECAT_ANDROID_KEY;
   if (apiKey.includes("XXXXXXXX") || !apiKey) {
-    console.warn("[RevenueCat] Skipping init — API key is a placeholder (dev mode)");
+    if (__DEV__) console.warn("[RevenueCat] Skipping init — API key is a placeholder");
     return;
   }
   Purchases.configure({ apiKey, appUserID: userId });
