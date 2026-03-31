@@ -49,8 +49,6 @@ function AppRoot() {
       setFromOnboarding(false);
     });
 
-    // TODO: remove — temp force onboarding for testing
-    setScreen("onboarding"); return;
     SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
       if (!done) {
         setScreen("onboarding");
