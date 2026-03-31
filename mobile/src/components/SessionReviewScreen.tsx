@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { abandonSession, getSession, type SessionData } from "../services/api";
+import { GradientButton } from "./GradientButton";
+import { getSession, respondToStep, type SessionData } from "../services/api";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface SessionReviewScreenProps {
   sessionId: string;
   onBack: () => void;
-  onPracticeSimilar: (problem: string) => void;
+  onPracticeSimilar: (problem: string) => void | Promise<void>;
   onResume: (sessionId: string) => void;
 }
 
@@ -31,6 +32,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [practiceLoading, setPracticeLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -135,59 +137,175 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
           })}
         </View>
 
+        {/* Chat — ask questions about this session */}
+        {isCompleted && (
+          <SessionChat sessionId={sessionId} />
+        )}
+
         {/* Action buttons */}
         {isActive ? (
-          <>
-            <AnimatedPressable
-              style={[styles.resumeButton, shadows.sm]}
-              onPress={() => onResume(sessionId)}
-              scaleDown={0.97}
-            >
-              <Ionicons name="play" size={18} color={colors.white} />
-              <Text style={styles.actionButtonText}>Resume Session</Text>
-            </AnimatedPressable>
-
-            <AnimatedPressable
-              style={styles.endSessionButton}
-              onPress={() => {
-                Alert.alert(
-                  "End Session",
-                  "End this session? You won't be able to resume it.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "End Session",
-                      style: "destructive",
-                      onPress: async () => {
-                        try {
-                          await abandonSession(sessionId);
-                          onBack();
-                        } catch {
-                          Alert.alert("Error", "Failed to end session. Try again.");
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <Text style={styles.endSessionText}>End Session</Text>
-            </AnimatedPressable>
-          </>
-        ) : (
           <AnimatedPressable
-            style={[styles.practiceButton, shadows.sm]}
-            onPress={() => onPracticeSimilar(session.problem)}
+            style={[styles.resumeButton, shadows.sm]}
+            onPress={() => onResume(sessionId)}
             scaleDown={0.97}
           >
-            <Ionicons name="refresh" size={18} color={colors.white} />
-            <Text style={styles.actionButtonText}>Practice Similar Problem</Text>
+            <Ionicons name="play" size={18} color={colors.white} />
+            <Text style={styles.actionButtonText}>Resume Session</Text>
+          </AnimatedPressable>
+        ) : (
+          <AnimatedPressable
+            style={[styles.practiceButton, shadows.sm, practiceLoading && { opacity: 0.7 }]}
+            onPress={async () => {
+              setPracticeLoading(true);
+              try {
+                await onPracticeSimilar(session.problem);
+              } finally {
+                setPracticeLoading(false);
+              }
+            }}
+            scaleDown={0.97}
+            disabled={practiceLoading}
+          >
+            {practiceLoading ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Ionicons name="refresh" size={18} color={colors.white} />
+            )}
+            <Text style={styles.actionButtonText}>
+              {practiceLoading ? "Generating..." : "Practice Similar Problem"}
+            </Text>
           </AnimatedPressable>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+function SessionChat({ sessionId }: { sessionId: string }) {
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+
+  const handleSend = async () => {
+    const q = input.trim();
+    if (!q || thinking) return;
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", text: q }]);
+    setThinking(true);
+    try {
+      const response = await respondToStep(sessionId, q, false);
+      setMessages((prev) => [...prev, { role: "assistant", text: response.feedback }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "Something went wrong. Try again." }]);
+    } finally {
+      setThinking(false);
+    }
+  };
+
+  return (
+    <View style={chatStyles.container}>
+      <Text style={chatStyles.title}>Have questions?</Text>
+
+      {messages.map((msg, i) => (
+        <View
+          key={i}
+          style={[
+            chatStyles.bubble,
+            msg.role === "user" ? chatStyles.userBubble : chatStyles.assistantBubble,
+          ]}
+        >
+          <Text style={[chatStyles.bubbleText, msg.role === "user" && chatStyles.userBubbleText]}>
+            {msg.text}
+          </Text>
+        </View>
+      ))}
+
+      {thinking && (
+        <View style={[chatStyles.bubble, chatStyles.assistantBubble]}>
+          <Text style={[chatStyles.bubbleText, { color: colors.textMuted }]}>Thinking...</Text>
+        </View>
+      )}
+
+      <View style={chatStyles.inputRow}>
+        <TextInput
+          style={chatStyles.input}
+          placeholder="Ask about this problem..."
+          placeholderTextColor={colors.textMuted}
+          value={input}
+          onChangeText={setInput}
+          onSubmitEditing={handleSend}
+          editable={!thinking}
+          returnKeyType="send"
+        />
+        <GradientButton
+          onPress={handleSend}
+          label="Ask"
+          loading={thinking}
+          disabled={!input.trim()}
+          style={chatStyles.sendButton}
+        />
+      </View>
+    </View>
+  );
+}
+
+const chatStyles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.background,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  bubble: {
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  userBubble: {
+    backgroundColor: colors.primaryBg,
+    marginLeft: spacing.xl,
+    alignSelf: "flex-end" as const,
+  },
+  assistantBubble: {
+    backgroundColor: colors.borderLight,
+    marginRight: spacing.xl,
+    alignSelf: "flex-start" as const,
+  },
+  bubbleText: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  userBubbleText: {
+    color: colors.primary,
+  },
+  inputRow: {
+    flexDirection: "row" as const,
+    gap: spacing.sm,
+    alignItems: "center" as const,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
+    color: colors.text,
+    backgroundColor: colors.white,
+  },
+  sendButton: {
+    paddingHorizontal: spacing.md,
+    minWidth: 60,
+  },
+});
 
 const progressStyles = StyleSheet.create({
   container: {

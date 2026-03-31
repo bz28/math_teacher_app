@@ -13,6 +13,7 @@ const REFRESH_TOKEN_KEY = "refresh_token";
 
 // Session types
 export interface StepDetail {
+  title?: string;
   description: string;
   final_answer?: string;
   choices?: string[];
@@ -233,8 +234,14 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 // Session API — LLM-backed endpoints use longer timeout
-export const createSession = (problem: string, mode: string = "learn", subject: string = "math") =>
-  apiPost<SessionData>("/session", { problem, mode, subject }, LLM_TIMEOUT_MS);
+export const createSession = (
+  problem: string, mode: string = "learn", subject: string = "math", imageBase64?: string,
+) =>
+  apiPost<SessionData>(
+    "/session",
+    { problem, mode, subject, ...(imageBase64 && { image_base64: imageBase64 }) },
+    LLM_TIMEOUT_MS,
+  );
 
 export const getSession = (id: string) =>
   apiGet<SessionData>(`/session/${id}`);
@@ -278,6 +285,15 @@ export const createMockTestSession = (problem: string) =>
 
 export const completeMockTestSession = (id: string, totalQuestions: number, correctCount: number) =>
   apiPost<{ status: string }>(`/session/mock-test/${id}/complete`, {
+    total_questions: totalQuestions,
+    correct_count: correctCount,
+  });
+
+export const createPracticeBatchSession = (problem: string) =>
+  apiPost<{ id: string }>("/session/practice-batch", { problem });
+
+export const completePracticeBatchSession = (id: string, totalQuestions: number, correctCount: number) =>
+  apiPost<{ status: string }>(`/session/practice-batch/${id}/complete`, {
     total_questions: totalQuestions,
     correct_count: correctCount,
   });

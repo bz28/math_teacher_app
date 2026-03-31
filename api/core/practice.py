@@ -48,7 +48,8 @@ async def generate_practice_problems(
     *,
     user_id: str | None = None,
     subject: str = Subject.MATH,
-) -> list[dict[str, str]]:
+    image_base64: str | None = None,
+) -> list[dict[str, object]]:
     """Generate the original + count similar problems with answers.
 
     When count=0, solves the original problem using step-by-step decomposition
@@ -59,8 +60,10 @@ async def generate_practice_problems(
     Returns list of {"question": ..., "answer": ...} dicts.
     """
     if count == 0:
-        decomposition = await decompose_problem(problem, user_id=user_id, subject=subject)
-        return [{"question": problem, "answer": decomposition.final_answer}]
+        decomposition = await decompose_problem(
+            problem, user_id=user_id, subject=subject, image_base64=image_base64,
+        )
+        return [{"question": problem, "answer": decomposition.final_answer, "distractors": decomposition.distractors}]
 
     # Generate question text only (no answers — they'd be unreliable)
     user_msg = f"{problem}\n\nGenerate {count} similar problems (do not include the originals)."
@@ -86,10 +89,10 @@ async def generate_practice_problems(
         raise RuntimeError("Failed to generate practice problems")
 
     # Step 2: Solve each generated problem via decompose_problem for accuracy
-    async def solve_one(q: str) -> dict[str, str] | None:
+    async def solve_one(q: str) -> dict[str, object] | None:
         try:
             decomp = await decompose_problem(q, user_id=user_id, subject=subject)
-            return {"question": q, "answer": decomp.final_answer}
+            return {"question": q, "answer": decomp.final_answer, "distractors": decomp.distractors}
         except RuntimeError:
             logger.warning("Failed to solve generated problem: %s", q[:80])
             return None

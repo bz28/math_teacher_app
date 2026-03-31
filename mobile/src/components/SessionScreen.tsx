@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -35,6 +36,16 @@ interface SessionScreenProps {
   onHome: () => void;
 }
 
+/** Render text with **bold** markdown into React Native Text elements. */
+function renderBold(text: string, style: object) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <Text key={i} style={[style, { fontWeight: "700" }]}>{part.slice(2, -2)}</Text>
+      : part,
+  );
+}
+
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -55,6 +66,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     learnQueue,
     switchToLearnMode,
     finishAsking,
+    problemImages,
     reset,
   } = useSessionStore();
 
@@ -174,6 +186,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         <View style={[styles.problemCard, shadows.sm]}>
           <Text style={styles.cardLabel}>Problem</Text>
           <Text style={styles.problemText}>{session.problem}</Text>
+          {problemImages[session.problem] && (
+            <Image
+              source={{ uri: `data:image/jpeg;base64,${problemImages[session.problem]}` }}
+              style={{ height: 120, marginTop: 8, borderRadius: 8 }}
+              resizeMode="contain"
+            />
+          )}
         </View>
         {isLearn && (
           <View style={styles.progressRow}>
@@ -201,7 +220,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {isLearn && completedSteps.length > 0 && (
           <View style={compactStyles.historyContainer}>
             {completedSteps.map((step, i) => (
-              <CompletedStepRow key={`step-${i}`} index={i} description={step.description} isLast={i === completedSteps.length - 1} />
+              <CompletedStepRow key={`step-${i}`} index={i} title={step.title} description={step.description} isLast={i === completedSteps.length - 1} />
             ))}
           </View>
         )}
@@ -209,8 +228,10 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {/* Learn mode: show current step (non-final) */}
         {isLearn && !isCompleted && !isFinalStep && currentStep && (
           <View style={[styles.stepDescCard, shadows.sm]}>
-            <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
-            <Text style={styles.stepDescText}>{currentStep.description}</Text>
+            <Text style={styles.stepDescLabel}>
+              Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
+            </Text>
+            <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
           </View>
         )}
 
@@ -218,8 +239,10 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {isLearn && !isCompleted && isFinalStep && currentStep && (
           <View>
             <View style={[styles.stepDescCard, shadows.sm]}>
-              <Text style={styles.stepDescLabel}>Step {session.current_step + 1}</Text>
-              <Text style={styles.stepDescText}>{currentStep.description}</Text>
+              <Text style={styles.stepDescLabel}>
+                Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
+              </Text>
+              <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
             </View>
             <Text style={styles.promptText}>
               What is the result?
@@ -458,7 +481,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   );
 }
 
-function CompletedStepRow({ index, description, isLast }: { index: number; description: string; isLast: boolean }) {
+function CompletedStepRow({ index, title, description, isLast }: { index: number; title?: string; description: string; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <TouchableOpacity
@@ -473,9 +496,11 @@ function CompletedStepRow({ index, description, isLast }: { index: number; descr
         {!isLast && <View style={compactStyles.historyLine} />}
       </View>
       <View style={compactStyles.historyTextWrap}>
-        <Text style={compactStyles.historyLabel}>Step {index + 1}</Text>
+        <Text style={compactStyles.historyLabel}>
+          Step {index + 1}{title ? ` — ${title}` : ""}
+        </Text>
         <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
-          {description}
+          {renderBold(description, compactStyles.historyText)}
         </Text>
       </View>
       <Ionicons

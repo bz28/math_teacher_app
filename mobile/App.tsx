@@ -42,6 +42,7 @@ function AppRoot() {
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const resumeSession = useSessionStore((s) => s.resumeSession);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
+  const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -175,10 +176,9 @@ function AppRoot() {
           <SessionReviewScreen
             sessionId={reviewSessionId}
             onBack={() => setScreen("mode-select")}
-            onPracticeSimilar={(problem) => {
-              setProblemQueue([problem]);
-              setMode("learn");
-              setScreen("input");
+            onPracticeSimilar={async (problem) => {
+              await startPracticeBatch(problem, 1);
+              setScreen("session");
             }}
             onResume={async (sessionId) => {
               await resumeSession(sessionId);

@@ -1,0 +1,275 @@
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { image as imageApi, type ImageExtractResponse } from "@/lib/api";
+import { Button, Modal } from "@/components/ui";
+import { cn } from "@/lib/utils";
+import { cropImage } from "@/lib/crop-image";
+import { RectangleSelector, type Rectangle } from "./rectangle-selector";
+
+interface ImageUploadProps {
+  subject: string;
+  onProblemsExtracted: (problems: { text: string; image?: string }[]) => void;
+  maxProblems?: number;
+  currentQueueLength?: number;
+  /** Called when the phase changes — parent can use this to adjust layout */
+  onPhaseChange?: (phase: "upload" | "select" | "extracting") => void;
+}
+
+export function ImageUpload({
+  subject,
+  onProblemsExtracted,
+  maxProblems = 10,
+  currentQueueLength = 0,
+  onPhaseChange,
+}: ImageUploadProps) {
+  const [phase, _setPhase] = useState<"upload" | "select" | "extracting">("upload");
+  const setPhase = useCallback((p: "upload" | "select" | "extracting") => {
+    _setPhase(p);
+    onPhaseChange?.(p);
+  }, [onPhaseChange]);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [extractProgress, setExtractProgress] = useState({ done: 0, total: 0 });
+  const [result, setResult] = useState<ImageExtractResponse | null>(null);
+  const [cropImages, setCropImages] = useState<(string | undefined)[]>([]);
+  const [selected, setSelected] = useState<boolean[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const remaining = maxProblems - currentQueueLength;
+
+  const processFile = useCallback(
+    (file: File) => {
+      setError(null);
+
+      if (!file.type.startsWith("image/")) {
+        setError("Please upload an image file.");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Image must be under 5MB.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(",")[1];
+        setImageBase64(base64);
+        setPhase("select");
+      };
+      reader.readAsDataURL(file);
+    },
+    [setPhase],
+  );
+
+  const handleExtractRectangles = useCallback(
+    async (rectangles: Rectangle[]) => {
+      if (!imageBase64) return;
+      setPhase("extracting");
+      setExtractProgress({ done: 0, total: rectangles.length });
+
+      const allProblems: string[] = [];
+      const allCropImages: (string | undefined)[] = [];
+      let worstConfidence: string = "high";
+
+      // Process in batches of 3
+      for (let i = 0; i < rectangles.length; i += 3) {
+        const batch = rectangles.slice(i, i + 3);
+        const crops = await Promise.all(
+          batch.map((rect) => cropImage(imageBase64, rect)),
+        );
+        const results = await Promise.allSettled(
+          crops.map((cropped) => imageApi.extract(cropped, subject)),
+        );
+
+        for (let j = 0; j < results.length; j++) {
+          const r = results[j];
+          if (r.status === "fulfilled") {
+            for (const p of r.value.problems) {
+              allProblems.push(p);
+              allCropImages.push(crops[j]);
+            }
+            if (r.value.confidence === "low") worstConfidence = "low";
+            else if (r.value.confidence === "medium" && worstConfidence !== "low")
+              worstConfidence = "medium";
+          }
+        }
+        setExtractProgress({ done: Math.min(i + 3, rectangles.length), total: rectangles.length });
+      }
+
+      if (allProblems.length === 0) {
+        setError("No problems found in the selected areas. Try drawing larger rectangles.");
+        setPhase("upload");
+        setImageBase64(null);
+        return;
+      }
+
+      setResult({ problems: allProblems, confidence: worstConfidence as "high" | "medium" | "low" });
+      setCropImages(allCropImages);
+      setSelected(new Array(allProblems.length).fill(true));
+      setPhase("upload");
+      setImageBase64(null);
+    },
+    [imageBase64, subject, setPhase],
+  );
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = "";
+  }
+
+  function handleConfirm() {
+    if (!result) return;
+    const items = result.problems
+      .map((text, i) => ({ text, image: cropImages[i] }))
+      .filter((_, i) => selected[i])
+      .slice(0, remaining);
+    onProblemsExtracted(items);
+    setResult(null);
+    setCropImages([]);
+    setSelected([]);
+  }
+
+  function toggleSelected(index: number) {
+    setSelected((prev) => prev.map((s, i) => (i === index ? !s : s)));
+  }
+
+  // Rectangle selection phase
+  if (phase === "select" && imageBase64) {
+    return (
+      <RectangleSelector
+        imageBase64={imageBase64}
+        onConfirm={handleExtractRectangles}
+        onCancel={() => {
+          setPhase("upload");
+          setImageBase64(null);
+        }}
+        maxRectangles={Math.min(10, remaining)}
+      />
+    );
+  }
+
+  // Extracting phase
+  if (phase === "extracting") {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed border-primary bg-primary-bg p-8 text-center">
+        <div className="h-1 w-32 overflow-hidden rounded-full bg-border-light">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${(extractProgress.done / extractProgress.total) * 100}%` }}
+          />
+        </div>
+        <p className="text-sm font-semibold text-primary">
+          Extracting problem {extractProgress.done} of {extractProgress.total}...
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Upload area */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={cn(
+          "flex cursor-pointer flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed p-8 text-center transition-colors",
+          dragActive
+            ? "border-primary bg-primary-bg"
+            : "border-border hover:border-primary/40 hover:bg-primary-bg/30",
+        )}
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-bg text-primary">
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-text-primary">Upload a photo</p>
+          <p className="mt-1 text-xs text-text-muted">
+            Drag and drop or click to browse. Max 5MB.
+          </p>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+
+      {error && (
+        <p className="mt-2 text-sm text-error">{error}</p>
+      )}
+
+      {/* Extraction results modal */}
+      <Modal open={!!result} onClose={() => setResult(null)}>
+        {result && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-text-primary">
+                Extracted Problems
+              </h2>
+              <p className="text-sm text-text-secondary">
+                {result.problems.length} problem{result.problems.length !== 1 && "s"} found
+                (confidence: {result.confidence})
+              </p>
+            </div>
+
+            <div className="max-h-64 space-y-2 overflow-y-auto">
+              {result.problems.map((problem, i) => (
+                <label
+                  key={i}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-[--radius-md] border p-3 transition-colors",
+                    selected[i]
+                      ? "border-primary bg-primary-bg/50"
+                      : "border-border-light",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected[i]}
+                    onChange={() => toggleSelected(i)}
+                    className="mt-0.5 h-4 w-4 accent-primary"
+                  />
+                  <span className="text-sm text-text-primary">{problem}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setResult(null)}>
+                Cancel
+              </Button>
+              <Button
+                gradient
+                onClick={handleConfirm}
+                disabled={!selected.some(Boolean)}
+              >
+                Add {selected.filter(Boolean).length} Problem
+                {selected.filter(Boolean).length !== 1 && "s"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </>
+  );
+}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -36,9 +36,21 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
     practiceBatch,
     submitPracticeAnswer,
     submitPracticeWork,
+    skipPracticeProblem,
     togglePracticeFlag,
     reset,
   } = useSessionStore();
+
+  // Haptic feedback on answer result
+  useEffect(() => {
+    if (!practiceBatch) return;
+    if (practiceBatch.currentFeedback === "correct") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else if (practiceBatch.currentFeedback === "wrong") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setInput("");
+    }
+  }, [practiceBatch?.currentFeedback, practiceBatch?.currentIndex]);
 
   if (!practiceBatch) return null;
 
@@ -148,86 +160,122 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.promptText}>Enter your final answer</Text>
-
-        {error && (
-          <View style={styles.errorWrap}>
-            <Ionicons name="alert-circle" size={16} color={colors.error} />
-            <Text style={styles.error}>{error}</Text>
+        {/* Correct feedback */}
+        {practiceBatch.currentFeedback === "correct" && (
+          <View style={{
+            backgroundColor: colors.successLight,
+            borderColor: colors.success,
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: spacing.md,
+            marginBottom: spacing.md,
+          }}>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.success }}>
+              Correct!
+            </Text>
           </View>
         )}
 
-        <View>
-          <Text style={styles.inputLabel}>Your answer</Text>
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Enter your answer..."
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="go"
-            onSubmitEditing={handlePracticeSubmit}
-            inputAccessoryViewID="math-session"
-          />
-        </View>
-
-        {/* Attach work button */}
-        <AnimatedPressable
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: spacing.sm,
-            alignSelf: "flex-start",
-            paddingVertical: spacing.sm,
-            paddingHorizontal: spacing.lg,
-            borderRadius: 20,
-            borderWidth: 1.5,
-            borderColor: attachedImage ? colors.success : colors.border,
-            backgroundColor: attachedImage ? colors.successLight : "transparent",
-            marginTop: spacing.md,
-          }}
-          onPress={handleAttachWork}
-        >
-          <Ionicons
-            name={attachedImage ? "checkmark-circle" : "camera-outline"}
-            size={18}
-            color={attachedImage ? colors.success : colors.textSecondary}
-          />
-          <Text style={{
-            fontSize: 14,
-            fontWeight: "600",
-            color: attachedImage ? colors.success : colors.textSecondary,
+        {/* Wrong feedback */}
+        {practiceBatch.currentFeedback === "wrong" && (
+          <View style={{
+            backgroundColor: colors.errorLight,
+            borderColor: colors.error,
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: spacing.md,
+            marginBottom: spacing.md,
           }}>
-            {attachedImage ? "Work attached" : "Attach your work"}
-          </Text>
-        </AnimatedPressable>
-
-        <View style={styles.buttons}>
-          <GradientButton
-            onPress={handlePracticeSubmit}
-            label="Answer"
-            loading={phase === "thinking"}
-            disabled={!input.trim()}
-            style={styles.submitButton}
-          />
-          <AnimatedPressable
-            style={[styles.button, styles.flagButton, practiceBatch.flags[currentIndex] && styles.flagButtonActive]}
-            onPress={() => togglePracticeFlag(currentIndex)}
-          >
-            <Ionicons
-              name={practiceBatch.flags[currentIndex] ? "flag" : "flag-outline"}
-              size={16}
-              color={practiceBatch.flags[currentIndex] ? colors.warningDark : colors.textMuted}
-              style={{ marginRight: spacing.xs }}
-            />
-            <Text style={[styles.flagText, practiceBatch.flags[currentIndex] && styles.flagTextActive]}>
-              {practiceBatch.flags[currentIndex] ? "Flagged" : "Flag"}
+            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.error }}>
+              Not quite, try again!
             </Text>
-          </AnimatedPressable>
-        </View>
+          </View>
+        )}
+
+        {practiceBatch.currentFeedback !== "correct" && (
+          <>
+            <Text style={styles.promptText}>Enter your final answer</Text>
+
+            {error && (
+              <View style={styles.errorWrap}>
+                <Ionicons name="alert-circle" size={16} color={colors.error} />
+                <Text style={styles.error}>{error}</Text>
+              </View>
+            )}
+
+            <View>
+              <Text style={styles.inputLabel}>Your answer</Text>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Enter your answer..."
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="go"
+                onSubmitEditing={handlePracticeSubmit}
+                editable={phase !== "thinking"}
+                inputAccessoryViewID="math-session"
+              />
+            </View>
+
+            {/* Attach work button */}
+            <AnimatedPressable
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: spacing.sm,
+                alignSelf: "flex-start",
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.lg,
+                borderRadius: 20,
+                borderWidth: 1.5,
+                borderColor: attachedImage ? colors.success : colors.border,
+                backgroundColor: attachedImage ? colors.successLight : "transparent",
+                marginTop: spacing.md,
+              }}
+              onPress={handleAttachWork}
+            >
+              <Ionicons
+                name={attachedImage ? "checkmark-circle" : "camera-outline"}
+                size={18}
+                color={attachedImage ? colors.success : colors.textSecondary}
+              />
+              <Text style={{
+                fontSize: 14,
+                fontWeight: "600",
+                color: attachedImage ? colors.success : colors.textSecondary,
+              }}>
+                {attachedImage ? "Work attached" : "Attach your work"}
+              </Text>
+            </AnimatedPressable>
+
+            <View style={styles.buttons}>
+              <GradientButton
+                onPress={handlePracticeSubmit}
+                label="Answer"
+                loading={phase === "thinking"}
+                disabled={!input.trim()}
+                style={styles.submitButton}
+              />
+              <AnimatedPressable
+                style={[styles.button, styles.flagButton]}
+                onPress={skipPracticeProblem}
+                disabled={phase === "thinking"}
+              >
+                <Ionicons
+                  name="play-skip-forward-outline"
+                  size={16}
+                  color={colors.textMuted}
+                  style={{ marginRight: spacing.xs }}
+                />
+                <Text style={styles.flagText}>Skip</Text>
+              </AnimatedPressable>
+            </View>
+          </>
+        )}
       </ScrollView>
       <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
     </KeyboardAvoidingView>

@@ -18,7 +18,6 @@ const SUBJECT_COLORS: Record<string, string> = {
 };
 
 function HealthBadge({ errorRate, latency }: { errorRate: number; latency: number }) {
-  const isHealthy = errorRate < 5 && latency < 5000;
   const isDegraded = errorRate >= 5 || latency >= 5000;
   const isDown = errorRate >= 20;
 

@@ -1,8 +1,8 @@
 import {
+  createPracticeBatchSession,
   createSession,
   generatePracticeProblems,
   getSession,
-  getSimilarProblem,
   respondToStep,
 } from "../services/api";
 import { initialState, type SessionPhase, type StoreGet, type StoreSet } from "./types";
@@ -10,10 +10,11 @@ import { initialState, type SessionPhase, type StoreGet, type StoreSet } from ".
 export function createLearnActions(set: StoreSet, get: StoreGet) {
   return {
     startSession: async (problem: string, mode = "learn") => {
-      const { subject } = get();
+      const { subject, problemImages } = get();
+      const image = problemImages[problem];
       set({ phase: "loading", error: null });
       try {
-        const session = await createSession(problem, mode, subject);
+        const session = await createSession(problem, mode, subject, image);
         set({ session, phase: "awaiting_input", lastResponse: null });
       } catch (e) {
         set({ phase: "error", error: (e as Error).message });
@@ -124,9 +125,10 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
 
       set({ ...initialState, subject, phase: "loading" });
       try {
-        const results = await Promise.all(
-          flaggedProblems.map((p) => generatePracticeProblems(p, 1, subject)),
-        );
+        const [results, sessionId] = await Promise.all([
+          Promise.all(flaggedProblems.map((p) => generatePracticeProblems(p, 1, subject))),
+          createPracticeBatchSession(flaggedProblems[0]).then((r) => r.id).catch(() => null),
+        ]);
         const practiceProblemsList = results.map((r) => r.problems[0]);
 
         set({
@@ -140,6 +142,9 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
             skippedProblems: [],
             pendingChecks: 0,
             workSubmissions: new Array(practiceProblemsList.length).fill(null),
+            firstAttemptCorrect: new Array(practiceProblemsList.length).fill(null),
+            currentFeedback: null,
+            sessionId,
           },
           phase: "awaiting_input",
         });
@@ -213,18 +218,5 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       set({ phase: "completed" });
     },
 
-    tryPracticeProblem: async () => {
-      const { session, subject } = get();
-      if (!session) return;
-
-      set({ ...initialState, subject, phase: "loading" });
-      try {
-        const { similar_problem: similarProblem } = await getSimilarProblem(session.id);
-        const newSession = await createSession(similarProblem, "practice", subject);
-        set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
-      } catch (e) {
-        set({ phase: "error", error: (e as Error).message });
-      }
-    },
-  };
+};
 }

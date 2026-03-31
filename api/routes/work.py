@@ -40,7 +40,7 @@ async def submit_work(
             detail="Failed to generate solution steps",
         )
 
-    step_descriptions = decomposition.steps
+    step_descriptions = [s["description"] for s in decomposition.steps]
     correct_answer = decomposition.final_answer
 
     # Step 2: Call Claude Vision to diagnose work against optimal steps

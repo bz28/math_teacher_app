@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+/* ── Design tokens (mirrors mobile/src/theme.ts) ── */
+:root {
+  /* Primary */
+  --color-primary: #6C5CE7;
+  --color-primary-light: #A29BFE;
+  --color-primary-bg: #F0EDFF;
+  --color-primary-dark: #5A4BD1;
+
+  /* Success */
+  --color-success: #00B894;
+  --color-success-light: #E8F8F5;
+  --color-success-border: #B2DFDB;
+
+  /* Error */
+  --color-error: #FF6B6B;
+  --color-error-light: #FFF0F0;
+  --color-error-border: #FFCDD2;
+
+  /* Warning */
+  --color-warning: #FDCB6E;
+  --color-warning-dark: #E17055;
+  --color-warning-bg: #FFF8E1;
+
+  /* Text */
+  --color-text: #2D3436;
+  --color-text-secondary: #636E72;
+  --color-text-muted: #B2BEC3;
+  --color-text-on-primary: #FFFFFF;
+
+  /* Backgrounds */
+  --color-bg: #FAFAFE;
+  --color-card: #F8F7FF;
+  --color-input-bg: #F5F4FB;
+
+  /* Borders */
+  --color-border: #E8E5F0;
+  --color-border-light: #F0EEF8;
+
+  /* Surface (white in light, dark in dark) */
+  --color-surface: #FFFFFF;
+
+  /* Overlay */
+  --color-overlay: rgba(108, 92, 231, 0.08);
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  --gradient-header: linear-gradient(135deg, #6C5CE7, #8B7CF7);
+  --gradient-success: linear-gradient(135deg, #00B894, #55EFC4);
+  --gradient-warning: linear-gradient(135deg, #E17055, #FDCB6E);
+  --gradient-card: linear-gradient(135deg, #F8F7FF, #F0EDFF);
+}
+
+/* ── Subject color overrides ── */
+[data-subject="chemistry"] {
+  --color-primary: #00B894;
+  --color-primary-light: #55EFC4;
+  --color-primary-bg: #E8F8F5;
+  --color-primary-dark: #00A381;
+  --gradient-primary: linear-gradient(135deg, #00B894, #55EFC4);
+  --gradient-header: linear-gradient(135deg, #00B894, #2ED8A3);
+  --color-overlay: rgba(0, 184, 148, 0.08);
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] {
+  --color-primary: #7C6CF7;
+  --color-primary-light: #B0A4FF;
+  --color-primary-bg: #1E1A3A;
+  --color-primary-dark: #9B8FFF;
+
+  --color-success: #2ED8A3;
+  --color-success-light: #0D2B22;
+  --color-success-border: #1A4D3A;
+
+  --color-error: #FF7B7B;
+  --color-error-light: #2B0F0F;
+  --color-error-border: #4D1A1A;
+
+  --color-warning: #FDCB6E;
+  --color-warning-dark: #F0965A;
+  --color-warning-bg: #2B2210;
+
+  --color-text: #EFEFEF;
+  --color-text-secondary: #C0C0D9;
+  --color-text-muted: #8A8AA4;
+  --color-text-on-primary: #FFFFFF;
+
+  --color-bg: #0D0C14;
+  --color-card: #16152A;
+  --color-input-bg: #1C1B30;
+  --color-surface: #1A1926;
+
+  --color-border: #2E2D42;
+  --color-border-light: #232238;
+
+  --color-overlay: rgba(0, 0, 0, 0.3);
+
+  --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
+}
+
+[data-theme="dark"][data-subject="chemistry"] {
+  --color-primary: #2ED8A3;
+  --color-primary-light: #55EFC4;
+  --color-primary-bg: #0D2B22;
+  --color-primary-dark: #55EFC4;
+  --gradient-primary: linear-gradient(135deg, #2ED8A3, #55EFC4);
+  --gradient-header: linear-gradient(135deg, #2ED8A3, #55EFC4);
+  --color-overlay: rgba(46, 216, 163, 0.08);
+}
+
+/* ── Tailwind theme extension ── */
+@theme inline {
+  --font-sans: var(--font-inter);
+
+  /* Colors */
+  --color-primary: var(--color-primary);
+  --color-primary-light: var(--color-primary-light);
+  --color-primary-bg: var(--color-primary-bg);
+  --color-primary-dark: var(--color-primary-dark);
+
+  --color-success: var(--color-success);
+  --color-success-light: var(--color-success-light);
+  --color-success-border: var(--color-success-border);
+
+  --color-error: var(--color-error);
+  --color-error-light: var(--color-error-light);
+  --color-error-border: var(--color-error-border);
+
+  --color-warning: var(--color-warning);
+  --color-warning-dark: var(--color-warning-dark);
+  --color-warning-bg: var(--color-warning-bg);
+
+  --color-text-primary: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-on-primary: var(--color-text-on-primary);
+
+  --color-bg: var(--color-bg);
+  --color-card: var(--color-card);
+  --color-input-bg: var(--color-input-bg);
+
+  --color-border: var(--color-border);
+  --color-border-light: var(--color-border-light);
+
+  --color-surface: var(--color-surface);
+
+  /* Shadows (purple-tinted, matching mobile) */
+  --shadow-sm: 0 2px 8px rgba(108, 92, 231, 0.06);
+  --shadow-md: 0 4px 12px rgba(108, 92, 231, 0.1);
+  --shadow-lg: 0 8px 24px rgba(108, 92, 231, 0.15);
+
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 100px;
+}
+
+/* ── Base styles ── */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── Smooth scrolling ── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Focus ring utility ── */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Selection color ── */
+::selection {
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary-dark);
+}
+
+/* ── Scrollbar styling ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ── Button ripple animation ── */
+@keyframes ripple {
+  from {
+    transform: scale(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-ripple {
+  animation: ripple 0.6s ease-out forwards;
+}

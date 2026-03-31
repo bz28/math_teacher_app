@@ -1,0 +1,92 @@
+"use client";
+
+import { create } from "zustand";
+import {
+  auth as authApi,
+  saveTokens,
+  clearTokens,
+  hasStoredTokens,
+  type User,
+  type ApiError,
+} from "@/lib/api";
+
+interface AuthState {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+
+  /** Try to restore session from stored tokens. */
+  loadUser: () => Promise<void>;
+
+  login: (email: string, password: string) => Promise<void>;
+
+  register: (data: {
+    email: string;
+    password: string;
+    name: string;
+    grade_level: number;
+  }) => Promise<void>;
+
+  logout: () => void;
+
+  clearError: () => void;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  loading: true,
+  error: null,
+
+  async loadUser() {
+    if (!hasStoredTokens()) {
+      set({ loading: false });
+      return;
+    }
+    try {
+      const user = await authApi.me();
+      set({ user, loading: false });
+    } catch {
+      clearTokens();
+      set({ user: null, loading: false });
+    }
+  },
+
+  async login(email, password) {
+    set({ loading: true, error: null });
+    try {
+      const tokens = await authApi.login(email, password);
+      saveTokens(tokens);
+      const user = await authApi.me();
+      set({ user, loading: false });
+    } catch (err) {
+      const message =
+        (err as ApiError)?.message ?? "Login failed. Please try again.";
+      set({ loading: false, error: message });
+      throw err;
+    }
+  },
+
+  async register(data) {
+    set({ loading: true, error: null });
+    try {
+      const tokens = await authApi.register(data);
+      saveTokens(tokens);
+      const user = await authApi.me();
+      set({ user, loading: false });
+    } catch (err) {
+      const message =
+        (err as ApiError)?.message ?? "Registration failed. Please try again.";
+      set({ loading: false, error: message });
+      throw err;
+    }
+  },
+
+  logout() {
+    clearTokens();
+    set({ user: null, loading: false, error: null });
+  },
+
+  clearError() {
+    set({ error: null });
+  },
+}));

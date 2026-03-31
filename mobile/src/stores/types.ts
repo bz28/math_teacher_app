@@ -39,6 +39,12 @@ export interface PracticeBatch {
   pendingChecks: number;
   /** Diagnosis results from submitted work photos, parallel to problems array */
   workSubmissions: (WorkDiagnosis | null)[];
+  /** Tracks first-attempt correctness per problem: null = not attempted, true/false = first attempt result */
+  firstAttemptCorrect: (boolean | null)[];
+  /** Inline feedback for the current problem after an answer check */
+  currentFeedback: 'correct' | 'wrong' | null;
+  /** Backend session ID for history tracking */
+  sessionId: string | null;
 }
 
 export interface LearnQueue {
@@ -93,6 +99,7 @@ export interface SessionState {
 
   // Problem input state (shared between App and InputScreen)
   problemQueue: string[];
+  problemImages: Record<string, string>;
   practiceCount: number;
 
   // Actions
@@ -106,6 +113,7 @@ export interface SessionState {
   startLearnQueue: (problems: string[]) => Promise<void>;
   submitAnswer: (answer: string) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
+  skipPracticeProblem: () => void;
   advanceStep: () => Promise<void>;
   askAboutStep: (question: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
@@ -116,7 +124,7 @@ export interface SessionState {
   switchToLearnMode: () => Promise<void>;
   continueAsking: () => void;
   finishAsking: () => void;
-  tryPracticeProblem: () => Promise<void>;
+
   startMockTest: (problems: string[], generateCount: number, timeLimitMinutes: number | null) => Promise<void>;
   saveMockTestAnswer: (index: number, answer: string) => void;
   navigateMockQuestion: (index: number) => void;
@@ -137,6 +145,7 @@ export const initialState = {
   learnQueue: null as LearnQueue | null,
   mockTest: null as MockTest | null,
   problemQueue: [] as string[],
+  problemImages: {} as Record<string, string>,
   practiceCount: 3,
 };
 
