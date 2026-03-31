@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
+import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
@@ -41,6 +42,9 @@ function LearnPageContent() {
     phase,
   } = useSessionStore();
   const { startMockTest } = useMockTestStore();
+  const { sessionsRemaining, scansRemaining, isPro } = useEntitlementStore();
+  const remainingSessions = sessionsRemaining();
+  const remainingScans = scansRemaining();
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
@@ -60,9 +64,12 @@ function LearnPageContent() {
     return () => { document.documentElement.removeAttribute("data-subject"); };
   }, [subject, setSubject, setProblemQueue]);
 
+  const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
+
   function handleAddProblem() {
     const trimmed = input.trim();
     if (!trimmed) return;
+    if (problemQueue.length >= maxQueueSize) return;
     addToQueue(trimmed);
     setInput("");
   }
@@ -80,6 +87,10 @@ function LearnPageContent() {
   async function handleStart() {
     if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
+    if (!isPro && remainingSessions <= 0) {
+      setUpgradePrompt({ entitlement: "create_session", message: "You've used all 5 problems for today. Upgrade to Pro for unlimited access." });
+      return;
+    }
     setStarting(true);
 
     const problems =
@@ -294,8 +305,9 @@ function LearnPageContent() {
             onProblemsExtracted={(problems) => {
               problems.forEach((p) => addToQueue(p.text, p.image));
             }}
-            maxProblems={10}
+            maxProblems={maxQueueSize}
             currentQueueLength={problemQueue.length}
+            scansRemaining={remainingScans}
           />
         </Card>
 
@@ -397,6 +409,11 @@ function LearnPageContent() {
               ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
               : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
           </Button>
+          {!isPro && remainingSessions < Infinity && (
+            <p className="text-center text-xs text-text-muted">
+              {remainingSessions} of 5 problems remaining today
+            </p>
+          )}
         </div>
       )}
       <UpgradePrompt

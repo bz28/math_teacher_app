@@ -106,6 +106,24 @@ export interface SessionHistoryResponse {
   has_more: boolean;
 }
 
+export interface EntitlementLimits {
+  daily_sessions_used: number;
+  daily_sessions_limit: number | null;
+  daily_scans_used: number;
+  daily_scans_limit: number | null;
+  daily_chats_used: number;
+  daily_chats_limit: number | null;
+}
+
+export interface EntitlementsResponse {
+  is_pro: boolean;
+  subscription_tier: string;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  limits: EntitlementLimits;
+  gated_features: string[];
+}
+
 // ── Error ──
 
 export class ApiError extends Error {
@@ -276,6 +294,10 @@ export const auth = {
 
   me() {
     return apiFetch<User>("/auth/me");
+  },
+
+  entitlements() {
+    return apiFetch<EntitlementsResponse>("/auth/entitlements");
   },
 };
 
