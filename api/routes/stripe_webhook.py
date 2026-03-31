@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 import stripe
 from fastapi import APIRouter, Depends, Header, Request
@@ -30,7 +31,7 @@ async def _find_user_by_stripe_id(db: AsyncSession, customer_id: str) -> User | 
     return result.scalar_one_or_none()
 
 
-async def _handle_checkout_completed(db: AsyncSession, session: dict) -> str:
+async def _handle_checkout_completed(db: AsyncSession, session: dict[str, Any]) -> str:
     user_id = session.get("metadata", {}).get("user_id")
     if not user_id:
         logger.warning("Checkout session missing user_id metadata")
@@ -51,7 +52,7 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict) -> str:
         stripe.api_key = settings.stripe_secret_key
         sub = stripe.Subscription.retrieve(sub_id)
         user.subscription_status = "trial" if sub.status == "trialing" else "active"
-        user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)
+        user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)  # type: ignore[attr-defined]
     else:
         user.subscription_status = "active"
 
@@ -60,7 +61,7 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict) -> str:
     return "ok"
 
 
-async def _handle_subscription_updated(db: AsyncSession, subscription: dict) -> str:
+async def _handle_subscription_updated(db: AsyncSession, subscription: dict[str, Any]) -> str:
     customer_id = subscription["customer"]
     user = await _find_user_by_stripe_id(db, customer_id)
     if user is None:
@@ -82,7 +83,7 @@ async def _handle_subscription_updated(db: AsyncSession, subscription: dict) -> 
     return "ok"
 
 
-async def _handle_subscription_deleted(db: AsyncSession, subscription: dict) -> str:
+async def _handle_subscription_deleted(db: AsyncSession, subscription: dict[str, Any]) -> str:
     customer_id = subscription["customer"]
     user = await _find_user_by_stripe_id(db, customer_id)
     if user is None:
@@ -98,7 +99,7 @@ async def _handle_subscription_deleted(db: AsyncSession, subscription: dict) -> 
     return "ok"
 
 
-async def _handle_invoice_payment_failed(db: AsyncSession, invoice: dict) -> str:
+async def _handle_invoice_payment_failed(db: AsyncSession, invoice: dict[str, Any]) -> str:
     customer_id = invoice["customer"]
     user = await _find_user_by_stripe_id(db, customer_id)
     if user is None:
@@ -110,7 +111,7 @@ async def _handle_invoice_payment_failed(db: AsyncSession, invoice: dict) -> str
     return "ok"
 
 
-async def _handle_invoice_paid(db: AsyncSession, invoice: dict) -> str:
+async def _handle_invoice_paid(db: AsyncSession, invoice: dict[str, Any]) -> str:
     customer_id = invoice["customer"]
     user = await _find_user_by_stripe_id(db, customer_id)
     if user is None:
@@ -123,7 +124,7 @@ async def _handle_invoice_paid(db: AsyncSession, invoice: dict) -> str:
     if sub_id:
         stripe.api_key = settings.stripe_secret_key
         sub = stripe.Subscription.retrieve(sub_id)
-        user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)
+        user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)  # type: ignore[attr-defined]
 
     await db.commit()
     logger.info("Invoice paid: user=%s renewed", user.id)
@@ -151,7 +152,7 @@ async def stripe_webhook(
     secret = settings.stripe_webhook_secret
     if secret and stripe_signature:
         try:
-            event = stripe.Webhook.construct_event(payload, stripe_signature, secret)
+            event = stripe.Webhook.construct_event(payload, stripe_signature, secret)  # type: ignore[no-untyped-call]
         except (stripe.SignatureVerificationError, ValueError) as e:
             logger.warning("Stripe webhook signature verification failed: %s", e)
             return {"status": "invalid_signature"}

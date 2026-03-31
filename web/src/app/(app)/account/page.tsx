@@ -15,7 +15,7 @@ export default function AccountPage() {
       const { portal_url } = await stripeApi.createPortalSession(
         `${window.location.origin}/account`,
       );
-      window.location.href = portal_url;
+      window.location.assign(portal_url);
     } catch {
       setPortalLoading(false);
     }

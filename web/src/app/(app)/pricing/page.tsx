@@ -58,7 +58,7 @@ export default function PricingPage() {
         `${window.location.origin}/pricing/success`,
         `${window.location.origin}/pricing`,
       );
-      window.location.href = checkout_url;
+      window.location.assign(checkout_url);
     } catch {
       setError("Something went wrong. Please try again.");
       setLoading(null);
@@ -141,7 +141,7 @@ function ActiveSubscription() {
       const { portal_url } = await stripeApi.createPortalSession(
         `${window.location.origin}/pricing`,
       );
-      window.location.href = portal_url;
+      window.location.assign(portal_url);
     } catch {
       setLoading(false);
     }

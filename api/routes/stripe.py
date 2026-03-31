@@ -50,7 +50,7 @@ async def create_checkout_session(
     customer_id = await _ensure_stripe_customer(db, user)
     stripe.api_key = settings.stripe_secret_key
 
-    session_params: dict = {
+    session_params: dict[str, object] = {
         "mode": "subscription",
         "customer": customer_id,
         "line_items": [{"price": body.price_id, "quantity": 1}],
