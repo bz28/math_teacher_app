@@ -209,33 +209,43 @@ export default function MockTestPage() {
           </button>
         </div>
 
-        {mockTest.multipleChoice && current.distractors && current.distractors.length > 0 ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(() => {
-              // Shuffle choices deterministically per question index
-              const choices = [current.answer, ...current.distractors];
-              const seed = mockTest.currentIndex;
-              const shuffled = [...choices].sort((a, b) => {
-                const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-                const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-                return ha - hb;
-              });
-              return shuffled.map((choice) => (
-                <button
-                  key={choice}
-                  onClick={() => saveMockTestAnswer(mockTest.currentIndex, choice)}
-                  className={cn(
-                    "rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-colors",
-                    currentAnswer === choice
-                      ? "border-primary bg-primary-bg text-primary"
-                      : "border-border-light bg-surface text-text-primary hover:border-primary/30",
-                  )}
-                >
-                  {choice}
-                </button>
-              ));
-            })()}
-          </div>
+        {mockTest.multipleChoice ? (
+          current.distractors && current.distractors.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(() => {
+                // Shuffle choices deterministically per question index
+                const choices = [current.answer, ...current.distractors];
+                const seed = mockTest.currentIndex;
+                const shuffled = [...choices].sort((a, b) => {
+                  const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
+                  const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
+                  return ha - hb;
+                });
+                return shuffled.map((choice) => (
+                  <button
+                    key={choice}
+                    onClick={() => saveMockTestAnswer(mockTest.currentIndex, choice)}
+                    className={cn(
+                      "rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-colors",
+                      currentAnswer === choice
+                        ? "border-primary bg-primary-bg text-primary"
+                        : "border-border-light bg-surface text-text-primary hover:border-primary/30",
+                    )}
+                  >
+                    {choice}
+                  </button>
+                ));
+              })()}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 py-8 text-text-muted">
+              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm font-medium">Loading choices…</span>
+            </div>
+          )
         ) : (
           <Input
             placeholder="Your answer..."

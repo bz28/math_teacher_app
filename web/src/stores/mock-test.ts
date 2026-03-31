@@ -95,7 +95,7 @@ const initialState = {
   error: null as string | null,
 };
 
-export const useMockTestStore = create<MockTestState>((set, get) => ({
+export const useMockTestStore = create<MockTestState>((set, get, store) => ({
   ...initialState,
 
   async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true) {
@@ -122,32 +122,34 @@ export const useMockTestStore = create<MockTestState>((set, get) => ({
           answer: "",
         }));
         const { id } = await sessionApi.createMockTest(problems[0], problems);
-        set({
-          mockTest: createMockTest(placeholders, id, timeLimitMinutes, multipleChoice),
-          phase: "mock_test_active",
+
+        // Set mockTest with placeholders first so .then() handlers can find it
+        const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
+        set({ mockTest: mt });
+
+        // Fire all API calls in parallel, update each question as it resolves
+        const promises = problems.map((p, i) => {
+          const image = imageMap.get(p);
+          return practiceApi.generate({
+            problem: p, count: 0, subject,
+            ...(image && { image_base64: image }),
+          }).then((res) => {
+            if (res.problems.length > 0) {
+              const { mockTest: current } = get();
+              if (!current) return;
+              const updated = [...current.questions];
+              updated[i] = res.problems[0];
+              set({ mockTest: { ...current, questions: updated } });
+            }
+          });
         });
 
-        // Resolve correct answers in background
-        Promise.allSettled(
-          problems.map((p) => {
-            const image = imageMap.get(p);
-            return practiceApi.generate({
-              problem: p, count: 0, subject,
-              ...(image && { image_base64: image }),
-            });
-          }),
-        ).then((results) => {
-          const { mockTest: mt } = get();
-          if (!mt) return;
-          const updated = [...mt.questions];
-          for (let i = 0; i < results.length; i++) {
-            const r = results[i];
-            if (r.status === "fulfilled" && r.value.problems.length > 0) {
-              updated[i] = r.value.problems[0];
-            }
-          }
-          set({ mockTest: { ...mt, questions: updated } });
-        });
+        // Wait for the first question before showing the exam
+        try { await promises[0]; } catch { /* first question failed, continue */ }
+        set({ phase: "mock_test_active" });
+
+        // Remaining questions continue resolving in background
+        Promise.allSettled(promises.slice(1)).catch(() => {});
       }
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
@@ -197,9 +199,27 @@ export const useMockTestStore = create<MockTestState>((set, get) => ({
     set({ phase: "loading" });
 
     try {
+      // Wait for all answers to be resolved before grading
+      const answersResolved = mockTest.questions.every((q) => q.answer !== "");
+      if (!answersResolved) {
+        await new Promise<void>((resolve) => {
+          const unsub = store.subscribe((state) => {
+            if (!state.mockTest) { unsub(); resolve(); return; }
+            if (state.mockTest.questions.every((q) => q.answer !== "")) {
+              unsub();
+              resolve();
+            }
+          });
+        });
+      }
+
+      // Re-read after potential wait
+      const mt = get().mockTest;
+      if (!mt) return;
+
       const results: MockTestResult[] = await Promise.all(
-        mockTest.questions.map(async (q, i) => {
-          const userAnswer = mockTest.answers[i] ?? null;
+        mt.questions.map(async (q, i) => {
+          const userAnswer = mt.answers[i] ?? null;
           if (!userAnswer) {
             return {
               question: q.question,
@@ -223,26 +243,26 @@ export const useMockTestStore = create<MockTestState>((set, get) => ({
         }),
       );
 
-      if (mockTest.sessionId) {
+      if (mt.sessionId) {
         const correctCount = results.filter((r) => r.isCorrect === true).length;
-        await sessionApi.completeMockTest(mockTest.sessionId, {
+        await sessionApi.completeMockTest(mt.sessionId, {
           total_questions: results.length,
           correct_count: correctCount,
         });
       }
 
-      const newFlags = [...mockTest.flags];
+      const newFlags = [...mt.flags];
       results.forEach((r, i) => {
         if (r.isCorrect !== true) newFlags[i] = true;
       });
 
-      const images = mockTest.workImages;
+      const images = mt.workImages;
       const pending = images
         .map((img, i) => (img ? { img, i } : null))
         .filter(Boolean) as { img: string; i: number }[];
 
       const updatedMockTest = {
-        ...mockTest,
+        ...mt,
         results,
         flags: newFlags,
         submittedAt: Date.now(),
@@ -257,7 +277,7 @@ export const useMockTestStore = create<MockTestState>((set, get) => ({
           const batch = pending.slice(b, b + 3);
           await Promise.allSettled(
             batch.map(async ({ img, i }) => {
-              const q = mockTest.questions[i];
+              const q = mt.questions[i];
               const r = results[i];
               const res = await workApi.submit({
                 image_base64: img,

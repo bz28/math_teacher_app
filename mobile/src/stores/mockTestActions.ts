@@ -77,24 +77,28 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           workSubmissions: new Array(questions.length).fill(null),
           multipleChoice,
         },
-        phase: "mock_test_active",
+        phase: "loading",
       });
 
-      // Resolve correct answers in background
-      Promise.allSettled(
-        problems.map((p) => generatePracticeProblems(p, 0, subject)),
-      ).then((outcomes) => {
-        const { mockTest: mt } = get();
-        if (!mt) return;
-        const updated = [...mt.questions];
-        for (let i = 0; i < outcomes.length; i++) {
-          const outcome = outcomes[i];
-          if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
-            updated[i] = { question: problems[i], answer: outcome.value.problems[0].answer };
+      // Fire all API calls in parallel, update each question as it resolves
+      const promises = problems.map((p, i) =>
+        generatePracticeProblems(p, 0, subject).then((res) => {
+          if (res.problems[0]) {
+            const { mockTest: mt } = get();
+            if (!mt) return;
+            const updated = [...mt.questions];
+            updated[i] = res.problems[0];
+            set({ mockTest: { ...mt, questions: updated } });
           }
-        }
-        set({ mockTest: { ...mt, questions: updated } });
-      });
+        }),
+      );
+
+      // Wait for the first question before showing the exam
+      try { await promises[0]; } catch { /* first question failed, continue */ }
+      set({ phase: "mock_test_active" });
+
+      // Remaining questions continue resolving in background
+      Promise.allSettled(promises.slice(1)).catch(() => {});
 
       // Fire-and-forget: track session for analytics
       const allQuestions = questions.map((q) => q.question);
