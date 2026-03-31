@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell,
 } from "recharts";
 import { api, type OverviewData } from "../lib/api";
 import StatCard from "../components/StatCard";
@@ -97,6 +96,7 @@ export default function Overview() {
         <StatCard label="Sessions" value={data.total_sessions} />
         <StatCard label="Total Cost" value={`$${data.total_cost.toFixed(2)}`} />
         <StatCard label="Active Users" value={data.active_users} />
+        <StatCard label="New Users" value={data.new_users} />
         <StatCard label="Avg Latency" value={latencyStr} />
         <StatCard
           label="Error Rate"
@@ -137,83 +137,63 @@ export default function Overview() {
         </div>
       </div>
 
-      <div className="chart-row">
-        <div className="chart-card">
-          <h3>Mode Usage</h3>
-          <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-            {["learn", "practice", "mock_test"].map((mode) => (
-              <div key={mode} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: MODE_COLORS[mode] }} />
-                <span style={{ fontSize: 13, color: "#475569" }}>
-                  {mode === "mock_test" ? "Mock Test" : mode.charAt(0).toUpperCase() + mode.slice(1)}: {modeMap[mode] ?? 0}
-                </span>
-              </div>
-            ))}
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.by_mode}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="mode" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {data.by_mode.map((entry, i) => (
-                  <Cell key={i} fill={MODE_COLORS[entry.mode] ?? "#6366f1"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      <div style={{
+        display: "flex", gap: 24, marginBottom: 24, padding: "16px 20px",
+        background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0",
+        flexWrap: "wrap", alignItems: "center",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>By Mode</h3>
+          {["learn", "practice", "mock_test"].map((mode) => (
+            <div key={mode} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 3, background: MODE_COLORS[mode] }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>
+                {mode === "mock_test" ? "Mock Test" : mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </span>
+              <span style={{ fontSize: 13, color: "#94a3b8" }}>{modeMap[mode] ?? 0}</span>
+            </div>
+          ))}
         </div>
-
-        <div className="chart-card">
-          <h3>Subject Usage</h3>
-          <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-            {data.by_subject.map((s) => (
-              <div key={s.subject} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: SUBJECT_COLORS[s.subject] ?? "#94a3b8" }} />
-                <span style={{ fontSize: 13, color: "#475569" }}>
-                  {s.subject.charAt(0).toUpperCase() + s.subject.slice(1)}: {s.count}
-                </span>
-              </div>
-            ))}
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.by_subject}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="subject" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {data.by_subject.map((entry, i) => (
-                  <Cell key={i} fill={SUBJECT_COLORS[entry.subject] ?? "#94a3b8"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div style={{ width: 1, height: 24, background: "#e2e8f0" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>By Subject</h3>
+          {data.by_subject.map((s) => (
+            <div key={s.subject} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 3, background: SUBJECT_COLORS[s.subject] ?? "#94a3b8" }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>
+                {s.subject.charAt(0).toUpperCase() + s.subject.slice(1)}
+              </span>
+              <span style={{ fontSize: 13, color: "#94a3b8" }}>{s.count}</span>
+            </div>
+          ))}
         </div>
-
-        {data.top_spenders.length > 0 && (
-          <div className="chart-card">
-            <h3>Top Spenders</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.top_spenders.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.name}</td>
-                    <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
+
+      {data.top_spenders.length > 0 && (
+        <div className="table-card">
+          <h3>Top Spenders</h3>
+          <table>
+            <colgroup>
+              <col style={{ width: "70%" }} />
+              <col style={{ width: "30%" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.top_spenders.map((s, i) => (
+                <tr key={i}>
+                  <td>{s.name}</td>
+                  <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

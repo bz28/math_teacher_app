@@ -31,6 +31,9 @@ def _time_range(hours: int) -> datetime:
 async def users(
     hours: int = Query(default=720, ge=1, le=2160),
     sort_by: str = Query(default="total_cost", pattern=r"^(total_cost|session_count|last_active|name)$"),
+    limit: int = Query(default=25, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=100),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -139,8 +142,20 @@ async def users(
         "name": User.name.asc(),
     }
 
-    # All users with cost + session data
-    all_users = (await db.execute(
+    # Search filter
+    search_filters = []
+    if search:
+        term = f"%{search}%"
+        search_filters.append(User.name.ilike(term) | User.email.ilike(term))
+
+    # Count of users matching search (for pagination)
+    count_query = select(func.count()).select_from(User)
+    if search_filters:
+        count_query = count_query.where(*search_filters)
+    filtered_count = (await db.execute(count_query)).scalar() or 0
+
+    # All users with cost + session data (paginated)
+    users_query = (
         select(
             User.id,
             User.email,
@@ -163,13 +178,22 @@ async def users(
         .outerjoin(daily_sessions, daily_sessions.c.user_id == User.id)
         .outerjoin(daily_chats, daily_chats.c.user_id == User.id)
         .outerjoin(daily_scans, daily_scans.c.user_id == User.id)
+    )
+    if search_filters:
+        users_query = users_query.where(*search_filters)
+    users_query = (
+        users_query
         .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]))
-    )).all()
+        .limit(limit)
+        .offset(offset)
+    )
+    all_users = (await db.execute(users_query)).all()
 
     return {
         "total_users": total_users,
         "active_7d": active_7d,
         "total_spend": round(total_spend, 4),
+        "filtered_count": filtered_count,
         "registrations_by_day": [
             {"day": str(r.day), "count": r.count}
             for r in registrations_by_day
@@ -286,5 +310,22 @@ async def delete_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
 
     await db.delete(user)
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/users/{user_id}/reset-daily-limit")
+async def reset_daily_limit(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Reset a user's daily usage limits by shifting the counting window to now."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.daily_limit_reset_at = datetime.now(UTC)
     await db.commit()
     return {"status": "ok"}
