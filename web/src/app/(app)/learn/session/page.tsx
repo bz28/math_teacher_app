@@ -8,8 +8,10 @@ import { usePracticeStore } from "@/stores/practice";
 import { Button, Card, Badge, useToast, TypingIndicator } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
-import { CheckIcon, ChatBubbleIcon, FlagIcon } from "@/components/ui/icons";
+import { CheckIcon } from "@/components/ui/icons";
 import { cn, renderBold } from "@/lib/utils";
+import { LearnSummary } from "./_components/learn-summary";
+import { LearnCompleted } from "./_components/learn-completed";
 
 export default function LearnSessionPage() {
   const router = useRouter();
@@ -94,60 +96,14 @@ export default function LearnSessionPage() {
 
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {
-    const flaggedCount = learnQueue.flags.filter(Boolean).length;
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-extrabold text-text-primary">Learning Complete</h1>
-        </motion.div>
-
-        <Card variant="elevated" className="text-center">
-          <p className="text-sm text-text-muted">Problems Reviewed</p>
-          <p className="text-4xl font-extrabold text-primary">{learnQueue.problems.length}</p>
-        </Card>
-
-        <div className="space-y-2">
-          {learnQueue.problems.map((problem, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-[--radius-md] border border-success-border bg-success-light px-4 py-3">
-              <CheckIcon className="h-5 w-5 flex-shrink-0 text-success" />
-              <p className="flex-1 text-sm font-medium text-text-primary">{problem}</p>
-              <button
-                onClick={() => toggleLearnFlag(i)}
-                className={cn(
-                  "rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors",
-                  learnQueue.flags[i]
-                    ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
-                    : "border-border text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
-                )}
-              >
-                {learnQueue.flags[i] ? "Flagged" : "Flag"}
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-col gap-2">
-          {flaggedCount > 0 && (
-            <Button
-              gradient
-              onClick={async () => {
-                const flagged = learnQueue!.problems.filter((_, i) => learnQueue!.flags[i]);
-                await practiceFlaggedProblems(flagged, subject);
-                router.push("/practice");
-              }}
-              className="w-full"
-            >
-              Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
-            </Button>
-          )}
-          <Button variant="secondary" onClick={() => { reset(); router.push("/learn"); }} className="w-full">
-            New Problem
-          </Button>
-          <Button variant="secondary" onClick={() => { reset(); router.push("/home"); }} className="w-full">
-            Return Home
-          </Button>
-        </div>
-      </div>
+      <LearnSummary
+        learnQueue={learnQueue}
+        subject={subject}
+        onToggleFlag={toggleLearnFlag}
+        onPracticeFlagged={(flagged) => practiceFlaggedProblems(flagged, subject)}
+        onReset={reset}
+      />
     );
   }
 
@@ -314,103 +270,16 @@ export default function LearnSessionPage() {
 
       {/* ── Completed state ── */}
       {isCompleted && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <Card variant="elevated" className="space-y-4 text-center">
-            {/* Checkmark */}
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-              <CheckIcon className="h-8 w-8 text-success" />
-            </div>
-
-            <h2 className="text-xl font-extrabold text-text-primary">
-              Problem Solved!
-            </h2>
-
-            <div className="flex flex-col gap-2 pt-2">
-              {/* Learn queue completion */}
-              {learnQueue ? (
-                <>
-                  <button
-                    onClick={continueAsking}
-                    className="flex w-full items-center justify-center gap-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-dark transition-colors hover:bg-warning-dark/10"
-                  >
-                    <ChatBubbleIcon className="h-4 w-4" />
-                    I still have questions
-                  </button>
-
-                  <button
-                    onClick={() => toggleLearnFlag(learnQueue.currentIndex)}
-                    className={cn(
-                      "flex w-full items-center justify-center gap-2 rounded-[--radius-md] border px-4 py-3 text-sm font-semibold transition-colors",
-                      learnQueue.flags[learnQueue.currentIndex]
-                        ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
-                        : "border-border bg-surface text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
-                    )}
-                  >
-                    <FlagIcon className="h-4 w-4" filled={learnQueue.flags[learnQueue.currentIndex]} />
-                    {learnQueue.flags[learnQueue.currentIndex] ? "Flagged" : "Flag for Practice"}
-                  </button>
-
-                  <Button
-                    variant="secondary"
-                    onClick={advanceLearnQueue}
-                    className="w-full"
-                  >
-                    {learnQueue.currentIndex < learnQueue.problems.length - 1
-                      ? "Next Problem"
-                      : "View Results"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {/* Single session completion */}
-                  <Button
-                    gradient
-                    onClick={async () => {
-                      await startPracticeBatch(session.problem, 1, subject);
-                      router.push("/practice");
-                    }}
-                    className="w-full"
-                  >
-                    Try a practice problem
-                  </Button>
-
-                  <button
-                    onClick={continueAsking}
-                    className="flex w-full items-center justify-center gap-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-dark transition-colors hover:bg-warning-dark/10"
-                  >
-                    <ChatBubbleIcon className="h-4 w-4" />
-                    I still have questions
-                  </button>
-
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      reset();
-                      router.push("/learn");
-                    }}
-                    className="w-full"
-                  >
-                    Learn New Problem
-                  </Button>
-
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      reset();
-                      router.push("/home");
-                    }}
-                    className="w-full"
-                  >
-                    Return Home
-                  </Button>
-                </>
-              )}
-            </div>
-          </Card>
-        </motion.div>
+        <LearnCompleted
+          session={session}
+          learnQueue={learnQueue}
+          subject={subject}
+          onContinueAsking={continueAsking}
+          onToggleFlag={toggleLearnFlag}
+          onAdvanceQueue={advanceLearnQueue}
+          onStartPractice={startPracticeBatch}
+          onReset={reset}
+        />
       )}
 
       {/* ── "Continue asking" state (completed but user wants to ask more) ── */}
