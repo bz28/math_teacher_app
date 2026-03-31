@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
-import * as Sentry from "@sentry/react-native";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
@@ -23,11 +22,6 @@ import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
 import { useSessionStore } from "./src/stores/session";
 import { colors } from "./src/theme";
-
-Sentry.init({
-  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? "",
-  enabled: !__DEV__,
-});
 
 const ONBOARDING_KEY = "onboarding_completed";
 
@@ -238,13 +232,13 @@ function AppRoot() {
   );
 }
 
-export default Sentry.wrap(function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <AppRoot />
     </ErrorBoundary>
   );
-});
+}
 
 const styles = StyleSheet.create({
   container: {

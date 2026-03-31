@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
-    "@sentry/react-native": "~7.2.0",
     "babel-preset-expo": "~54.0.10",
     "expo": "^54.0.0",
     "expo-haptics": "~15.0.8",
