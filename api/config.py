@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # Request size limit (bytes) - 10MB
     max_request_size: int = 10 * 1024 * 1024
 
+    # Email (Resend)
+    resend_api_key: str = ""
+    admin_alert_email: str = ""
+    email_from_address: str = "Math Tutor <alerts@mathtutor.app>"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
