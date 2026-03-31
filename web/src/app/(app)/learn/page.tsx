@@ -42,7 +42,7 @@ function LearnPageContent() {
     phase,
   } = useSessionStore();
   const { startMockTest } = useMockTestStore();
-  const { sessionsRemaining, scansRemaining, isPro } = useEntitlementStore();
+  const { sessionsRemaining, scansRemaining, isPro, fetchEntitlements } = useEntitlementStore();
   const remainingSessions = sessionsRemaining();
   const remainingScans = scansRemaining();
 
@@ -57,12 +57,12 @@ function LearnPageContent() {
 
   useEffect(() => {
     setSubject(subject);
-    // Set subject color theme
     document.documentElement.setAttribute("data-subject", subject);
-    // Clear stale state when entering the input page
     setProblemQueue([]);
+    // Refresh quota counts so remaining is accurate
+    fetchEntitlements();
     return () => { document.documentElement.removeAttribute("data-subject"); };
-  }, [subject, setSubject, setProblemQueue]);
+  }, [subject, setSubject, setProblemQueue, fetchEntitlements]);
 
   const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
 
