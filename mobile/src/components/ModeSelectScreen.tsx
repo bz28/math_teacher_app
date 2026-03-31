@@ -123,7 +123,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
                     )}
                   </View>
                   <Ionicons
-                    name={isMockGated ? "lock-closed" : "arrow-forward-circle"}
+                    name="arrow-forward-circle"
                     size={22}
                     color="rgba(255,255,255,0.7)"
                   />
