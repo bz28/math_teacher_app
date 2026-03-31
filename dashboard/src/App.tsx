@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
 import Quality from "./pages/Quality";
+import Notifications from "./pages/Notifications";
 import Users from "./pages/Users";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/llm-calls" element={<LLMCalls />} />
           <Route path="/quality" element={<Quality />} />
           <Route path="/users" element={<Users />} />
+          <Route path="/notifications" element={<Notifications />} />
         </Route>
       </Routes>
     </BrowserRouter>

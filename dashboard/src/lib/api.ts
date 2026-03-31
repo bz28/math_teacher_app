@@ -65,6 +65,9 @@ export const api = {
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
+  notificationPrefs: () => request<NotificationPrefsData>("/admin/notifications"),
+  updateNotificationPref: (eventType: string, enabled: boolean) =>
+    mutate<NotificationPrefsData>("/admin/notifications", "PUT", { event_type: eventType, enabled }),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -168,6 +171,16 @@ export interface QualityData {
     created_at: string;
   }[];
   total_count: number;
+}
+
+export interface NotificationPrefItem {
+  event_type: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface NotificationPrefsData {
+  preferences: NotificationPrefItem[];
 }
 
 export interface UsersData {

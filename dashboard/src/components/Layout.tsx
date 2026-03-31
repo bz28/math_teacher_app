@@ -6,6 +6,7 @@ const NAV = [
   { to: "/llm-calls", label: "LLM Calls", icon: "🤖" },
   { to: "/users", label: "Users", icon: "👥" },
   { to: "/quality", label: "Quality", icon: "✅" },
+  { to: "/notifications", label: "Notifications", icon: "🔔" },
 ];
 
 export default function Layout() {
