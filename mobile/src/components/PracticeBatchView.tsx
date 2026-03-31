@@ -150,15 +150,8 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
       >
         {/* Correct feedback */}
         {practiceBatch.currentFeedback === "correct" && (
-          <View style={{
-            backgroundColor: colors.successLight,
-            borderColor: colors.success,
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: spacing.md,
-            marginBottom: spacing.md,
-          }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.success }}>
+          <View style={[styles.feedback, styles.feedbackCorrect]}>
+            <Text style={[styles.feedbackTitle, styles.feedbackTitleCorrect]}>
               Correct!
             </Text>
           </View>
@@ -166,15 +159,8 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
         {/* Wrong feedback */}
         {practiceBatch.currentFeedback === "wrong" && (
-          <View style={{
-            backgroundColor: colors.errorLight,
-            borderColor: colors.error,
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: spacing.md,
-            marginBottom: spacing.md,
-          }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: colors.error }}>
+          <View style={[styles.feedback, styles.feedbackWrong]}>
+            <Text style={[styles.feedbackTitle, styles.feedbackTitleWrong]}>
               Not quite, try again!
             </Text>
           </View>
