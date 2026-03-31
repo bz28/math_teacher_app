@@ -160,6 +160,7 @@ async def history(
             SessionModel.user_id == user.id,
             SessionModel.subject == subject,
             SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
+            SessionModel.total_steps > 0,  # Exclude analytics-only records
         )
         .order_by(SessionModel.created_at.desc())
         .offset(offset)
