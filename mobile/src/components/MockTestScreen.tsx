@@ -19,14 +19,12 @@ import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
+import { useMockTimer, formatTime } from "../hooks/useMockTimer";
 import { colors, spacing, radii, typography, shadows } from "../theme";
 
 interface Props {
   onBack: () => void;
 }
-
-/** 5 minutes — threshold at which the timer turns red */
-const LOW_TIME_THRESHOLD_SECONDS = 300;
 
 export function MockTestScreen({ onBack }: Props) {
   const insets = useSafeAreaInsets();
@@ -43,43 +41,20 @@ export function MockTestScreen({ onBack }: Props) {
 
   const [localAnswer, setLocalAnswer] = useState("");
 
-  // Timer state
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
-
-  // Initialize timer
-  useEffect(() => {
-    if (!mockTest || mockTest.timeLimitSeconds == null) return;
-    const elapsed = Math.floor((Date.now() - mockTest.startedAt) / 1000);
-    setRemainingSeconds(Math.max(0, mockTest.timeLimitSeconds - elapsed));
-  }, [mockTest?.startedAt, mockTest?.timeLimitSeconds]);
-
-  // Countdown timer
-  useEffect(() => {
-    if (remainingSeconds == null || remainingSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev == null || prev <= 1) {
-          clearInterval(interval);
-          return 0;
+  const { remainingSeconds, isTimeLow } = useMockTimer({
+    startedAt: mockTest?.startedAt ?? 0,
+    timeLimitSeconds: mockTest?.timeLimitSeconds ?? null,
+    onTimeUp: () => {
+      if (mockTest && !mockTest.results) {
+        if (localAnswer.trim()) {
+          saveMockTestAnswer(mockTest.currentIndex, localAnswer.trim());
         }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [remainingSeconds]);
-
-  // Auto-submit on time up
-  useEffect(() => {
-    if (remainingSeconds === 0 && mockTest && !mockTest.results) {
-      // Save current answer before submitting
-      if (localAnswer.trim()) {
-        saveMockTestAnswer(mockTest.currentIndex, localAnswer.trim());
+        Alert.alert("Time's up!", "Submitting your answers.", [
+          { text: "OK", onPress: () => submitMockTest() },
+        ]);
       }
-      Alert.alert("Time's up!", "Submitting your answers.", [
-        { text: "OK", onPress: () => submitMockTest() },
-      ]);
-    }
-  }, [remainingSeconds]);
+    },
+  });
 
   if (!mockTest) return null;
 
@@ -158,14 +133,6 @@ export function MockTestScreen({ onBack }: Props) {
   };
 
   const hasWorkAttached = mockTest.workImages[currentIndex] != null;
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const isTimeLow = remainingSeconds != null && remainingSeconds <= LOW_TIME_THRESHOLD_SECONDS && remainingSeconds > 0;
 
   return (
     <KeyboardAvoidingView
