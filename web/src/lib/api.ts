@@ -507,28 +507,6 @@ export const promo = {
   },
 };
 
-// ── Stripe endpoints ──
-
-export const stripe = {
-  createCheckoutSession(priceId: string, successUrl: string, cancelUrl: string) {
-    return apiFetch<{ checkout_url: string }>("/stripe/checkout-session", {
-      method: "POST",
-      body: JSON.stringify({
-        price_id: priceId,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-      }),
-    });
-  },
-
-  createPortalSession(returnUrl: string) {
-    return apiFetch<{ portal_url: string }>("/stripe/portal-session", {
-      method: "POST",
-      body: JSON.stringify({ return_url: returnUrl }),
-    });
-  },
-};
-
 // ── Student endpoints ──
 
 export const student = {
