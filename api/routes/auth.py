@@ -18,6 +18,7 @@ from api.core.entitlements import (
     get_daily_decomp_count,
     get_daily_llm_call_count,
     is_pro,
+    usage_cutoff,
 )
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
@@ -117,9 +118,10 @@ async def entitlements(
 ) -> EntitlementsResponse:
     """Return the current user's entitlement state."""
     user_is_pro = is_pro(user)
-    problems_used = await get_daily_decomp_count(db, user.id)
-    scans_used = await get_daily_llm_call_count(db, user.id, "image_extract")
-    chats_used = await get_daily_chat_count(db, user.id)
+    cutoff = usage_cutoff(user)
+    problems_used = await get_daily_decomp_count(db, user.id, cutoff)
+    scans_used = await get_daily_llm_call_count(db, user.id, "image_extract", cutoff)
+    chats_used = await get_daily_chat_count(db, user.id, cutoff)
 
     gated_features = []
     if not user_is_pro:

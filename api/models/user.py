@@ -33,6 +33,11 @@ class User(Base):
         String(255), nullable=True, unique=True, index=True
     )
 
+    # Daily limit reset (admin override — shifts the "start of day" for usage counting)
+    daily_limit_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Brute force protection
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

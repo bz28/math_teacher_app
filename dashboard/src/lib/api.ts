@@ -61,12 +61,12 @@ export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
-  sessions: (params?: Record<string, string>) => request<SessionsData>("/admin/sessions", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
+  resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -84,6 +84,7 @@ export const api = {
 export interface OverviewData {
   total_sessions: number;
   active_users: number;
+  new_users: number;
   total_cost: number;
   total_calls: number;
   failed_calls: number;
@@ -140,13 +141,6 @@ export interface LLMCallsData {
   users: { id: string; email: string }[];
 }
 
-export interface SessionsData {
-  total_count: number;
-  by_mode: { mode: string; count: number }[];
-  sessions_by_day: { day: string; count: number }[];
-  users: { id: string; email: string }[];
-}
-
 export interface QualityData {
   summary: {
     total: number;
@@ -176,6 +170,7 @@ export interface UsersData {
   total_users: number;
   active_7d: number;
   total_spend: number;
+  filtered_count: number;
   registrations_by_day: { day: string; count: number }[];
   users: {
     id: string;
