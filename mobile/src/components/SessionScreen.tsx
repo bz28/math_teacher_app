@@ -30,8 +30,10 @@ import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { PaywallScreen } from "./PaywallScreen";
+import { UpgradePrompt } from "./UpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
@@ -75,10 +77,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     reset,
   } = useSessionStore();
 
-  const [chatPaywallVisible, setChatPaywallVisible] = useState(false);
   const isPro = useEntitlementStore((s) => s.isPro);
   const chatsRemaining = useEntitlementStore((s) => s.chatsRemaining);
+  const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
+  const { show: showUpgrade, promptProps, paywallVisible: chatPaywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
   const isBatchMode = !!practiceBatch;
   const isLearnQueue = !!learnQueue;
@@ -167,7 +170,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const handleAsk = async () => {
     if (!input.trim()) return;
     if (!isPro && chatsRemaining() <= 0) {
-      setChatPaywallVisible(true);
+      showUpgrade("chat_message", "Chat Limit Reached", `You've used all ${dailyChatsLimit} chat messages for today. Upgrade to Pro for unlimited chat.`);
       return;
     }
     const text = input.trim();
@@ -508,11 +511,12 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       </ScrollView>
       <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
       {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
+      <UpgradePrompt {...promptProps} />
       <PaywallScreen
         visible={chatPaywallVisible}
-        onClose={() => setChatPaywallVisible(false)}
-        onPurchaseComplete={() => { setChatPaywallVisible(false); fetchEntitlements(); }}
-        trigger="chat_message"
+        onClose={closePaywall}
+        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
+        trigger={paywallTrigger}
       />
     </KeyboardAvoidingView>
   );

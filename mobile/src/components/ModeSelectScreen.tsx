@@ -6,8 +6,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
 import { PaywallScreen } from "./PaywallScreen";
+import { UpgradePrompt } from "./UpgradePrompt";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
+import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 export type Mode = "learn" | "practice" | "mock_test";
@@ -54,11 +56,11 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
   const [history, setHistory] = useState<SessionHistoryItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [paywallVisible, setPaywallVisible] = useState(false);
   const isPro = useEntitlementStore((s) => s.isPro);
   const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
+  const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -102,7 +104,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
                 style={[styles.modeCard, shadows.md]}
                 onPress={() => {
                   if (!isPro && sessionsRemaining() <= 0) {
-                    setPaywallVisible(true);
+                    showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
                     return;
                   }
                   onSelect(mode.id);
@@ -197,11 +199,12 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
         )}
       </ScrollView>
 
+      <UpgradePrompt {...promptProps} />
       <PaywallScreen
         visible={paywallVisible}
-        onClose={() => setPaywallVisible(false)}
-        onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
-        trigger="create_session"
+        onClose={closePaywall}
+        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
+        trigger={paywallTrigger}
       />
     </SafeAreaView>
   );
