@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     log_level: str = "INFO"
-    cors_origins: list[str] = ["http://localhost:8081", "http://localhost:3000"]
+    cors_origins: list[str] = [
+        "http://localhost:8081",
+        "http://localhost:3000",
+        "https://veradicai.com",
+        "https://www.veradicai.com",
+        "https://math-teacher-app-eight.vercel.app",
+    ]
 
     # LLM Models
     llm_model_sonnet: str = "claude-sonnet-4-20250514"
