@@ -317,11 +317,11 @@ export const register = (email: string, password: string, name: string, gradeLev
 // Entitlements
 export interface EntitlementLimits {
   daily_sessions_used: number;
-  daily_sessions_limit: number;
+  daily_sessions_limit: number | null;
   daily_scans_used: number;
-  daily_scans_limit: number;
+  daily_scans_limit: number | null;
   daily_chats_used: number;
-  daily_chats_limit: number;
+  daily_chats_limit: number | null;
   history_limit: number | null;
 }
 

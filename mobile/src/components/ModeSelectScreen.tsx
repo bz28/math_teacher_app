@@ -95,7 +95,6 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
         <View style={styles.modeList}>
           {MODES.map((mode) => {
             const showSessionCount = !isPro;
-            const remaining = sessionsRemaining();
 
             return (
               <AnimatedPressable

@@ -116,6 +116,7 @@ export function InputScreen({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     dismissExtraction();
+    fetchEntitlements();
   };
 
   const {

@@ -18,7 +18,6 @@ interface AccountScreenProps {
 export function AccountScreen({ onBack, onLogout }: AccountScreenProps) {
   const name = getUserName();
   const isPro = useEntitlementStore((s) => s.isPro);
-  const tier = useEntitlementStore((s) => s.tier);
   const status = useEntitlementStore((s) => s.status);
   const expiresAt = useEntitlementStore((s) => s.expiresAt);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
