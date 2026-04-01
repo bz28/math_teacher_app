@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
+import { AccountScreen } from "./src/components/AccountScreen";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
@@ -25,7 +26,7 @@ import { colors } from "./src/theme";
 
 const ONBOARDING_KEY = "onboarding_completed";
 
-type Screen = "auth" | "onboarding" | "home" | "mode-select" | "input" | "session" | "session-review" | "history-list";
+type Screen = "auth" | "onboarding" | "home" | "account" | "mode-select" | "input" | "session" | "session-review" | "history-list";
 
 function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
@@ -119,6 +120,23 @@ function AppRoot() {
                 },
               },
             ]);
+          }}
+          onAccount={() => setScreen("account")}
+        />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (screen === "account") {
+    return (
+      <SafeAreaProvider>
+        <AccountScreen
+          onBack={() => setScreen("home")}
+          onLogout={async () => {
+            await clearAuth();
+            setFromOnboarding(false);
+            setScreen("auth");
           }}
         />
         <StatusBar style="auto" />
