@@ -3,9 +3,6 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, field_validator
 
-# Sentinel to distinguish "field not provided" from "explicitly set to null"
-_UNSET = object()
-
 
 class RedeemPromoRequest(BaseModel):
     code: str
@@ -56,8 +53,7 @@ class CreatePromoCodeRequest(BaseModel):
 class UpdatePromoCodeRequest(BaseModel):
     is_active: bool | None = None
     max_redemptions: int | None = None
-    # Use _UNSET default so we can distinguish "not sent" from "explicitly null"
-    expires_at: datetime | None | object = _UNSET
+    expires_at: datetime | None = None
 
 
 class PromoCodeResponse(BaseModel):
