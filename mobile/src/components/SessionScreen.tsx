@@ -29,7 +29,9 @@ import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
+import { PaywallScreen } from "./PaywallScreen";
 import { useSessionStore } from "../stores/session";
+import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 import { sessionScreenStyles as styles } from "./sessionScreenStyles";
 
@@ -72,6 +74,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     problemImages,
     reset,
   } = useSessionStore();
+
+  const [chatPaywallVisible, setChatPaywallVisible] = useState(false);
+  const isPro = useEntitlementStore((s) => s.isPro);
+  const chatsRemaining = useEntitlementStore((s) => s.chatsRemaining);
+  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   const isBatchMode = !!practiceBatch;
   const isLearnQueue = !!learnQueue;
@@ -159,10 +166,15 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 
   const handleAsk = async () => {
     if (!input.trim()) return;
+    if (!isPro && chatsRemaining() <= 0) {
+      setChatPaywallVisible(true);
+      return;
+    }
     const text = input.trim();
     setLastQuestion(text);
     setInput("");
     await askAboutStep(text);
+    fetchEntitlements();
   };
 
   const handleInsert = (value: string) => {
@@ -372,7 +384,12 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {!isCompleted && session.status === "completed" && isLearn && (
           <>
             <View>
+              <View style={styles.inputLabelRow}>
               <Text style={styles.inputLabel}>Ask a question about the problem</Text>
+              {!isPro && chatsRemaining() < Infinity && (
+                <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
+              )}
+            </View>
               <TextInput
                 ref={inputRef}
                 style={styles.input}
@@ -414,7 +431,12 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             {isLearn && !isFinalStep && (
               <>
                 <View>
-                  <Text style={styles.inputLabel}>Have a question about this step?</Text>
+                  <View style={styles.inputLabelRow}>
+                    <Text style={styles.inputLabel}>Have a question about this step?</Text>
+                    {!isPro && chatsRemaining() < Infinity && (
+                      <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
+                    )}
+                  </View>
                   <TextInput
                     ref={inputRef}
                     style={styles.input}
@@ -486,6 +508,12 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       </ScrollView>
       <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
       {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
+      <PaywallScreen
+        visible={chatPaywallVisible}
+        onClose={() => setChatPaywallVisible(false)}
+        onPurchaseComplete={() => { setChatPaywallVisible(false); fetchEntitlements(); }}
+        trigger="chat_message"
+      />
     </KeyboardAvoidingView>
   );
 }
