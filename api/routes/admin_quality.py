@@ -1,6 +1,5 @@
 """Admin quality score endpoints."""
 
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -11,12 +10,9 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.quality_score import QualityScore
 from api.models.session import Session
+from api.routes.admin_helpers import time_range
 
 router = APIRouter()
-
-
-def _time_range(hours: int) -> datetime:
-    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 @router.get("/quality")
@@ -28,7 +24,7 @@ async def quality_scores(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _time_range(hours)
+    since = time_range(hours)
 
     base_filters = [QualityScore.created_at >= since]
     if only_failed:

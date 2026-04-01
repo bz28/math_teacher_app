@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, getUserRole } from "../lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -13,31 +13,27 @@ export default function Login() {
     setError("");
     try {
       await api.login(email, password);
-      navigate("/");
+      const role = getUserRole();
+      if (role === "student") {
+        setError("Students should use the mobile app.");
+        return;
+      }
+      navigate(role === "teacher" ? "/courses" : "/");
     } catch {
-      setError("Invalid credentials or not an admin.");
+      setError("Invalid credentials.");
     }
   }
 
   return (
     <div className="login-page">
       <form onSubmit={handleSubmit} className="login-form">
-        <h1>Admin Login</h1>
+        <h1>Veradic AI</h1>
+        <p style={{ textAlign: "center", color: "#64748b", marginBottom: 20, marginTop: -16 }}>
+          Admin & Teacher Portal
+        </p>
         {error && <p className="error">{error}</p>}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button type="submit">Login</button>
       </form>
     </div>

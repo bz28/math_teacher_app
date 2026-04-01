@@ -1,6 +1,5 @@
 """Admin overview dashboard endpoint."""
 
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -12,29 +11,25 @@ from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.session import Session
 from api.models.user import User
+from api.routes.admin_helpers import time_range
 
 router = APIRouter()
-
-
-def _time_range(hours: int) -> datetime:
-    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 @router.get("/overview")
 async def overview(
     hours: int = Query(default=24, ge=1, le=87600),
-    grade: str | None = Query(default=None),
+    grade: int | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _time_range(hours)
+    since = time_range(hours)
 
     # Build session filters (optionally scoped to grade)
     session_filters = [Session.created_at >= since]
     llm_filters = [LLMCall.created_at >= since]
-    if grade:
-        grade_val = int(grade)
-        grade_users = select(User.id).where(User.grade_level == grade_val).scalar_subquery()
+    if grade is not None:
+        grade_users = select(User.id).where(User.grade_level == grade).scalar_subquery()
         session_filters.append(Session.user_id.in_(grade_users))
         llm_filters.append(LLMCall.user_id.in_(grade_users))
 

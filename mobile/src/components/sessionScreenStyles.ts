@@ -214,7 +214,9 @@ export const sessionScreenStyles = StyleSheet.create({
     borderColor: colors.primary,
   },
   outlineButtonText: { color: colors.primary, ...typography.button },
-  inputLabel: { ...typography.label, color: colors.textSecondary, marginBottom: spacing.sm },
+  inputLabelRow: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const, marginBottom: spacing.sm },
+  inputLabel: { ...typography.label, color: colors.textSecondary },
+  chatCountText: { ...typography.caption, color: colors.textMuted },
   input: {
     width: "100%",
     borderWidth: 1.5,

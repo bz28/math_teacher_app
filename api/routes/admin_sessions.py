@@ -1,6 +1,5 @@
 """Admin sessions analytics endpoint."""
 
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -11,12 +10,9 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.session import Session
 from api.models.user import User
+from api.routes.admin_helpers import time_range
 
 router = APIRouter()
-
-
-def _time_range(hours: int) -> datetime:
-    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 @router.get("/sessions")
@@ -26,7 +22,7 @@ async def sessions(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _time_range(hours)
+    since = time_range(hours)
     base_filters = [Session.created_at >= since]
     if user_id:
         base_filters.append(Session.user_id == user_id)

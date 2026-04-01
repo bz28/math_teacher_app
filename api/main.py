@@ -19,9 +19,11 @@ from api.routes.auth import router as auth_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
 from api.routes.practice import router as practice_router
+from api.routes.promo import router as promo_router
 from api.routes.session import router as session_router
 from api.routes.stripe import router as stripe_router
 from api.routes.stripe_webhook import router as stripe_webhook_router
+from api.routes.teacher import router as teacher_router
 from api.routes.webhook import router as webhook_router
 from api.routes.work import router as work_router
 
@@ -110,3 +112,5 @@ app.include_router(admin_router, prefix="/v1")
 app.include_router(webhook_router, prefix="/v1")
 app.include_router(stripe_router, prefix="/v1")
 app.include_router(stripe_webhook_router, prefix="/v1")
+app.include_router(promo_router, prefix="/v1")
+app.include_router(teacher_router, prefix="/v1")

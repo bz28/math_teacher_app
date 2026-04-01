@@ -32,9 +32,9 @@ def _cache_get(problem: str) -> "Decomposition | None":
 
 def _cache_set(problem: str, decomp: "Decomposition") -> None:
     """Cache a decomposition result."""
-    # Evict oldest entries if cache is full
+    # Evict oldest entry if cache is full (dict is insertion-ordered in Python 3.7+)
     if len(_cache) >= DECOMPOSITION_CACHE_MAX_SIZE:
-        oldest_key = min(_cache, key=lambda k: _cache[k][0])
+        oldest_key = next(iter(_cache))
         del _cache[oldest_key]
     _cache[problem] = (time.monotonic(), decomp)
 

@@ -62,6 +62,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         name=body.name,
         password_hash=hash_password(body.password),
         grade_level=body.grade_level,
+        role=body.role,
     )
     db.add(user)
     await db.commit()

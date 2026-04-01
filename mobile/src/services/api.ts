@@ -1,11 +1,12 @@
 import * as SecureStore from "expo-secure-store";
 
 const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
+const DEV_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "8000";
 const isNgrok = DEV_HOST.endsWith(".ngrok-free.dev");
 const API_BASE = __DEV__
   ? isNgrok
     ? `https://${DEV_HOST}/v1`
-    : `http://${DEV_HOST}:8000/v1`
+    : `http://${DEV_HOST}:${DEV_PORT}/v1`
   : "https://math-teacher-api.up.railway.app/v1";
 
 const ACCESS_TOKEN_KEY = "access_token";
@@ -274,9 +275,6 @@ export const respondToStep = (
     request_advance: requestAdvance,
   });
 
-export const getSimilarProblem = (sessionId: string) =>
-  apiPost<{ similar_problem: string }>(`/session/${sessionId}/similar`, {});
-
 // Session history
 export interface SessionHistoryItem {
   id: string;
@@ -294,9 +292,6 @@ export interface SessionHistoryResponse {
 
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
-
-export const abandonSession = (sessionId: string) =>
-  apiPost<{ status: string }>(`/session/${sessionId}/abandon`, {});
 
 export const createMockTestSession = (problem: string, allProblems?: string[]) =>
   apiPost<{ id: string }>("/session/mock-test", { problem, all_problems: allProblems ?? [] });
@@ -334,11 +329,11 @@ export const register = (email: string, password: string, name: string, gradeLev
 // Entitlements
 export interface EntitlementLimits {
   daily_sessions_used: number;
-  daily_sessions_limit: number;
+  daily_sessions_limit: number | null;
   daily_scans_used: number;
-  daily_scans_limit: number;
+  daily_scans_limit: number | null;
   daily_chats_used: number;
-  daily_chats_limit: number;
+  daily_chats_limit: number | null;
   history_limit: number | null;
 }
 
@@ -353,6 +348,10 @@ export interface EntitlementsData {
 
 export const getEntitlements = () =>
   apiGet<EntitlementsData>("/auth/entitlements");
+
+// Promo API
+export const redeemPromoCode = (code: string) =>
+  apiPost<{ status: string; message: string; expires_at: string | null }>("/promo/redeem", { code });
 
 // Practice API
 export interface PracticeProblem {

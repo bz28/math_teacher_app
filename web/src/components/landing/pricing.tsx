@@ -116,7 +116,7 @@ export function Pricing() {
               </div>
               {plan.perMonth && (
                 <p className="mt-1 text-sm font-medium text-success">
-                  {plan.perMonth} — Save 50%
+                  {plan.perMonth} — Save 55%
                 </p>
               )}
               {plan.trial && (

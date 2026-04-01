@@ -41,6 +41,10 @@ find_open_port() {
 
 API_PORT=$(find_open_port 8000)
 DASH_PORT=$(find_open_port 5173)
+EXPO_PORT=$(find_open_port 8081)
+
+# Local IP so mobile (physical device) can reach the backend
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 
 # ── Step 1: Symlink .env files ───────────────────────────────────────────────
 
@@ -59,6 +63,12 @@ fi
 mkdir -p "$WORKTREE/dashboard"
 echo "VITE_API_URL=http://localhost:${API_PORT}/v1" > "$WORKTREE/dashboard/.env"
 echo "   ✓ dashboard/.env (API port: $API_PORT)"
+
+# Mobile .env (needs local IP so physical device can reach backend)
+mkdir -p "$WORKTREE/mobile"
+echo "EXPO_PUBLIC_API_HOST=${LOCAL_IP}" > "$WORKTREE/mobile/.env"
+echo "EXPO_PUBLIC_API_PORT=${API_PORT}" >> "$WORKTREE/mobile/.env"
+echo "   ✓ mobile/.env (host: $LOCAL_IP, port: $API_PORT)"
 
 # ── Step 2: Symlink .venv ────────────────────────────────────────────────────
 
@@ -107,6 +117,12 @@ echo "🚀 Starting servers..."
   npx vite --port "$DASH_PORT" &
 )
 
+# Start mobile (Expo)
+(
+  cd "$WORKTREE/mobile"
+  npx expo start --port "$EXPO_PORT" &
+)
+
 # Wait a moment for servers to start
 sleep 3
 
@@ -117,7 +133,9 @@ echo ""
 echo "  Backend API:      http://localhost:${API_PORT}"
 echo "  API Docs:         http://localhost:${API_PORT}/docs"
 echo "  Admin Dashboard:  http://localhost:${DASH_PORT}"
+echo "  Mobile (Expo):    exp://${LOCAL_IP}:${EXPO_PORT}"
 echo ""
+echo "  Mobile → API:     http://${LOCAL_IP}:${API_PORT}/v1"
 echo "  Branch: $BRANCH"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

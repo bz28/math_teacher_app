@@ -12,9 +12,10 @@ import { colors, spacing, radii, typography, shadows, gradients } from "../theme
 interface HomeScreenProps {
   onSelect: (subject: string) => void;
   onLogout: () => void;
+  onAccount?: () => void;
 }
 
-export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
+export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
   const name = getUserName();
   const greeting = name ? `Hi, ${name}!` : "Hi there!";
   const isPro = useEntitlementStore((s) => s.isPro);
@@ -32,9 +33,9 @@ export function HomeScreen({ onSelect, onLogout }: HomeScreenProps) {
         </View>
         <AnimatedPressable
           style={styles.profileButton}
-          onPress={onLogout}
+          onPress={onAccount ?? onLogout}
           accessibilityRole="button"
-          accessibilityLabel="Log out"
+          accessibilityLabel="Account"
         >
           <Ionicons name="person-circle-outline" size={28} color={colors.textMuted} />
         </AnimatedPressable>

@@ -5,8 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-
-logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +21,8 @@ from api.models.llm_call import LLMCall
 from api.models.session import Session
 from api.models.user import User
 from api.routes.admin_helpers import time_range
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -243,8 +243,9 @@ async def update_user_role(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    if body.role not in ("student", "admin"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role must be 'student' or 'admin'")
+    valid_roles = ("student", "teacher", "admin")
+    if body.role not in valid_roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
