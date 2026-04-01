@@ -1,11 +1,12 @@
 import * as SecureStore from "expo-secure-store";
 
 const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
+const DEV_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "8000";
 const isNgrok = DEV_HOST.endsWith(".ngrok-free.dev");
 const API_BASE = __DEV__
   ? isNgrok
     ? `https://${DEV_HOST}/v1`
-    : `http://${DEV_HOST}:8000/v1`
+    : `http://${DEV_HOST}:${DEV_PORT}/v1`
   : "https://math-teacher-api.up.railway.app/v1";
 
 const ACCESS_TOKEN_KEY = "access_token";
