@@ -21,13 +21,14 @@ from api.schemas.stripe import (
 router = APIRouter(prefix="/stripe", tags=["stripe"])
 logger = logging.getLogger(__name__)
 
+stripe.api_key = settings.stripe_secret_key
+
 
 async def _ensure_stripe_customer(db: AsyncSession, user: User) -> str:
     """Return existing Stripe customer ID, or create one and persist it."""
     if user.stripe_customer_id:
         return user.stripe_customer_id
 
-    stripe.api_key = settings.stripe_secret_key
     customer = stripe.Customer.create(
         email=user.email,
         metadata={"user_id": str(user.id)},
@@ -49,7 +50,6 @@ async def create_checkout_session(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid price ID")
 
     customer_id = await _ensure_stripe_customer(db, user)
-    stripe.api_key = settings.stripe_secret_key
 
     session_params: dict[str, Any] = {
         "mode": "subscription",
@@ -83,7 +83,6 @@ async def create_portal_session(
             detail="No Stripe subscription found",
         )
 
-    stripe.api_key = settings.stripe_secret_key
     portal_session = stripe.billing_portal.Session.create(
         customer=user.stripe_customer_id,
         return_url=body.return_url,

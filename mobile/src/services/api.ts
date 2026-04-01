@@ -257,9 +257,6 @@ export const respondToStep = (
     request_advance: requestAdvance,
   });
 
-export const getSimilarProblem = (sessionId: string) =>
-  apiPost<{ similar_problem: string }>(`/session/${sessionId}/similar`, {});
-
 // Session history
 export interface SessionHistoryItem {
   id: string;
@@ -277,9 +274,6 @@ export interface SessionHistoryResponse {
 
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
-
-export const abandonSession = (sessionId: string) =>
-  apiPost<{ status: string }>(`/session/${sessionId}/abandon`, {});
 
 export const createMockTestSession = (problem: string, allProblems?: string[]) =>
   apiPost<{ id: string }>("/session/mock-test", { problem, all_problems: allProblems ?? [] });

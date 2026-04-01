@@ -1,6 +1,6 @@
 """Admin user management endpoints."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -19,12 +19,9 @@ from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.session import Session
 from api.models.user import User
+from api.routes.admin_helpers import time_range
 
 router = APIRouter()
-
-
-def _time_range(hours: int) -> datetime:
-    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 @router.get("/users")
@@ -37,7 +34,7 @@ async def users(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _time_range(hours)
+    since = time_range(hours)
 
     # Total users
     total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
@@ -45,7 +42,7 @@ async def users(
     # Active users (7d)
     active_7d = (await db.execute(
         select(func.count(func.distinct(Session.user_id)))
-        .where(Session.created_at >= _time_range(168))
+        .where(Session.created_at >= time_range(168))
     )).scalar() or 0
 
     # Total spend (all users, in period)

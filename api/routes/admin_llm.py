@@ -1,6 +1,5 @@
 """Admin LLM call analytics endpoint."""
 
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -11,12 +10,9 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.user import User
+from api.routes.admin_helpers import time_range
 
 router = APIRouter()
-
-
-def _time_range(hours: int) -> datetime:
-    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 @router.get("/llm-calls")
@@ -29,7 +25,7 @@ async def llm_calls(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = _time_range(hours)
+    since = time_range(hours)
 
     # Build base filter conditions
     base_filters = [LLMCall.created_at >= since]

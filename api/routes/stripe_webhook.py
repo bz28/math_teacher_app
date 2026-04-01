@@ -16,6 +16,8 @@ from api.models.user import User
 router = APIRouter(tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
+stripe.api_key = settings.stripe_secret_key
+
 _STATUS_MAP: dict[str, str] = {
     "active": "active",
     "trialing": "trial",
@@ -49,7 +51,6 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict[str, Any]) 
 
     sub_id = session.get("subscription")
     if sub_id:
-        stripe.api_key = settings.stripe_secret_key
         sub = stripe.Subscription.retrieve(sub_id)
         user.subscription_status = "trial" if sub.status == "trialing" else "active"
         user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)  # type: ignore[attr-defined]
@@ -122,7 +123,6 @@ async def _handle_invoice_paid(db: AsyncSession, invoice: dict[str, Any]) -> str
 
     sub_id = invoice.get("subscription")
     if sub_id:
-        stripe.api_key = settings.stripe_secret_key
         sub = stripe.Subscription.retrieve(sub_id)
         user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)  # type: ignore[attr-defined]
 

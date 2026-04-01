@@ -1,5 +1,7 @@
 """Image extraction endpoints: extract problems from photos."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +11,8 @@ from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.models.user import User
 from api.schemas.image import ImageExtractRequest, ImageExtractResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/image", tags=["image"])
 
@@ -32,8 +36,9 @@ async def extract(
             detail=str(e),
         )
     except RuntimeError:
+        logger.exception("Image extraction failed")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to extract problems from image",
         )
 

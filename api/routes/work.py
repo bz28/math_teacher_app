@@ -35,6 +35,7 @@ async def submit_work(
             body.problem_text, user_id=user_id_str, subject=body.subject,
         )
     except RuntimeError:
+        logger.exception("Decomposition failed for work submission")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate solution steps",
@@ -61,6 +62,7 @@ async def submit_work(
             detail=str(e),
         )
     except RuntimeError:
+        logger.exception("Work diagnosis failed")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to diagnose work",
