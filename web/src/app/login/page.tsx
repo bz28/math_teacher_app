@@ -25,7 +25,8 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       await login(email, password);
-      router.replace("/home");
+      const user = useAuthStore.getState().user;
+      router.replace(user?.role === "teacher" ? "/teacher" : "/home");
     } catch {
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);

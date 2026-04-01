@@ -1,3 +1,6 @@
+from datetime import UTC, datetime
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,11 +24,17 @@ from api.core.entitlements import (
     get_daily_decomp_count,
     get_daily_llm_call_count,
     is_pro,
+    is_school_enrolled,
     usage_cutoff,
 )
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
+from api.models.course import Course
+from api.models.school import School
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
+from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 from api.schemas.auth import (
     CheckEmailRequest,
@@ -49,6 +58,30 @@ async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db
     return {"available": True}
 
 
+@router.get("/invite/{token}")
+async def validate_invite(token: str, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Validate a teacher invite token and return pre-fill data for the registration form."""
+    invite = (await db.execute(
+        select(TeacherInvite).where(TeacherInvite.token == token, TeacherInvite.status == "pending")
+    )).scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid or expired invite")
+    if invite.expires_at < datetime.now(UTC):
+        invite.status = "expired"
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Invite has expired")
+
+    school = (await db.execute(select(School).where(School.id == invite.school_id))).scalar_one_or_none()
+    if not school or not school.is_active:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="School is no longer active")
+
+    return {
+        "email": invite.email,
+        "school_name": school.name,
+        "school_id": str(school.id),
+    }
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
 async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
@@ -56,12 +89,44 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
+    # Handle teacher invite flow
+    school_id = None
+    role = body.role
+    if body.invite_token:
+        invite = (await db.execute(
+            select(TeacherInvite).where(TeacherInvite.token == body.invite_token, TeacherInvite.status == "pending")
+        )).scalar_one_or_none()
+        if not invite:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired invite")
+        if invite.expires_at < datetime.now(UTC):
+            invite.status = "expired"
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite has expired")
+        if invite.email.lower() != body.email.lower():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email does not match invite")
+
+        school = (await db.execute(select(School).where(School.id == invite.school_id))).scalar_one_or_none()
+        if not school or not school.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="School is no longer active")
+
+        school_id = school.id
+        role = "teacher"
+        invite.status = "accepted"
+
+    elif role == "teacher":
+        # Teachers can only register via invite
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teacher registration requires a school invite",
+        )
+
     user = User(
         email=body.email,
         name=body.name,
         password_hash=hash_password(body.password),
         grade_level=body.grade_level,
-        role=body.role,
+        role=role,
+        school_id=school_id,
     )
     db.add(user)
     await db.commit()
@@ -114,12 +179,19 @@ async def me(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
+    school_name = None
+    if user.school_id:
+        school = (await db.execute(select(School.name).where(School.id == user.school_id))).scalar_one_or_none()
+        school_name = school
+
     return UserResponse(
         id=user.id,
         email=user.email,
         name=user.name,
         grade_level=user.grade_level,
         role=user.role,
+        school_id=user.school_id,
+        school_name=school_name,
         subscription_tier=user.subscription_tier,
         subscription_status=user.subscription_status,
         subscription_expires_at=user.subscription_expires_at,
@@ -133,7 +205,7 @@ async def entitlements(
     db: AsyncSession = Depends(get_db),
 ) -> EntitlementsResponse:
     """Return the current user's entitlement state."""
-    user_is_pro = is_pro(user)
+    user_is_pro = is_pro(user) or await is_school_enrolled(db, user.id)
     cutoff = usage_cutoff(user)
     problems_used = await get_daily_decomp_count(db, user.id, cutoff)
     scans_used = await get_daily_llm_call_count(db, user.id, "image_extract", cutoff)
@@ -158,3 +230,46 @@ async def entitlements(
         ),
         gated_features=gated_features,
     )
+
+
+@router.get("/enrolled-courses")
+async def enrolled_courses(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Return courses the current user is enrolled in via section enrollments."""
+    rows = (await db.execute(
+        select(
+            Course.id,
+            Course.name,
+            Course.subject,
+            Course.grade_level,
+            Section.id.label("section_id"),
+            Section.name.label("section_name"),
+            User.name.label("teacher_name"),
+        )
+        .join(Section, Section.course_id == Course.id)
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .join(User, User.id == Course.teacher_id)
+        .join(School, School.id == User.school_id)
+        .where(
+            SectionEnrollment.student_id == user.id,
+            School.is_active.is_(True),
+        )
+        .order_by(Course.name)
+    )).all()
+
+    return {
+        "courses": [
+            {
+                "id": str(r.id),
+                "name": r.name,
+                "subject": r.subject,
+                "grade_level": r.grade_level,
+                "section_id": str(r.section_id),
+                "section_name": r.section_name,
+                "teacher_name": r.teacher_name,
+            }
+            for r in rows
+        ]
+    }

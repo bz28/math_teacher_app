@@ -50,6 +50,7 @@ interface SessionState {
   lastResponse: StepResponse | null;
   error: string | null;
   subject: Subject;
+  sectionId: string | null;
 
   // Step chat
   chatHistory: Record<number, ChatMessage[]>;
@@ -64,6 +65,7 @@ interface SessionState {
 
   // Actions
   setSubject: (subject: Subject) => void;
+  setSectionId: (sectionId: string | null) => void;
   setProblemQueue: (queue: { text: string; image?: string }[]) => void;
   addToQueue: (problem: string, image?: string) => void;
   removeFromQueue: (index: number) => void;
@@ -101,6 +103,7 @@ const initialState = {
   lastResponse: null,
   error: null,
   subject: "math" as Subject,
+  sectionId: null as string | null,
   chatHistory: {},
   learnQueue: null,
   problemQueue: [],
@@ -111,6 +114,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   setSubject(subject) {
     set({ subject });
+  },
+
+  setSectionId(sectionId) {
+    set({ sectionId });
   },
 
   setProblemQueue(queue) {
@@ -132,7 +139,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ── Learn session ──
 
   async startSession(problem, image) {
-    const { subject } = get();
+    const { subject, sectionId } = get();
     set({ phase: "loading", error: null });
     try {
       const session = await sessionApi.create({
@@ -140,6 +147,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         mode: "learn",
         subject,
         ...(image && { image_base64: image }),
+        ...(sectionId && { section_id: sectionId }),
       });
       set({ session, sessionImage: image ?? null, phase: "awaiting_input", chatHistory: {} });
     } catch (err) {

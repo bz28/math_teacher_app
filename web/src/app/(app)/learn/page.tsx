@@ -31,9 +31,11 @@ function LearnPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const subject = (searchParams.get("subject") ?? "math") as Subject;
+  const sectionId = searchParams.get("section");
 
   const {
     setSubject,
+    setSectionId,
     problemQueue,
     setProblemQueue,
     addToQueue,
@@ -58,12 +60,13 @@ function LearnPageContent() {
 
   useEffect(() => {
     setSubject(subject);
+    setSectionId(sectionId);
     document.documentElement.setAttribute("data-subject", subject);
     setProblemQueue([]);
     // Refresh quota counts so remaining is accurate
     fetchEntitlements();
     return () => { document.documentElement.removeAttribute("data-subject"); };
-  }, [subject, setSubject, setProblemQueue, fetchEntitlements]);
+  }, [subject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
 
   const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
 

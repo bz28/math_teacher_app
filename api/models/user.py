@@ -19,6 +19,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # School affiliation (teachers only — students connect via section enrollments)
+    school_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("schools.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
     # Subscription
     subscription_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
     subscription_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none")

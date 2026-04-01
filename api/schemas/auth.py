@@ -8,8 +8,9 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
-    grade_level: int
+    grade_level: int = 12
     role: str = "student"
+    invite_token: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -58,6 +59,8 @@ class UserResponse(BaseModel):
     name: str
     grade_level: int
     role: str
+    school_id: uuid.UUID | None = None
+    school_name: str | None = None
     subscription_tier: str = "free"
     subscription_status: str = "none"
     subscription_expires_at: datetime | None = None
