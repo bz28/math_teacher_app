@@ -351,6 +351,7 @@ export const session = {
     mode: "learn" | "practice";
     subject: string;
     image_base64?: string;
+    section_id?: string;
   }) {
     return apiFetch<SessionResponse>("/session", {
       method: "POST",
@@ -524,6 +525,17 @@ export const stripe = {
     return apiFetch<{ portal_url: string }>("/stripe/portal-session", {
       method: "POST",
       body: JSON.stringify({ return_url: returnUrl }),
+    });
+  },
+};
+
+// ── Student endpoints ──
+
+export const student = {
+  joinSection(joinCode: string) {
+    return apiFetch<{ status: string; section_id: string }>("/teacher/join", {
+      method: "POST",
+      body: JSON.stringify({ join_code: joinCode }),
     });
   },
 };

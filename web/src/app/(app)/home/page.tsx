@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import Link from "next/link";
 import { Card } from "@/components/ui";
-import { auth, type EnrolledCourse } from "@/lib/api";
+import { auth, student, type EnrolledCourse } from "@/lib/api";
 
 const genericSubjects = [
   {
@@ -35,18 +35,38 @@ export default function HomePage() {
   const router = useRouter();
   const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
+  const [joinCode, setJoinCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
 
   useEffect(() => {
     document.documentElement.removeAttribute("data-subject");
   }, []);
 
-  useEffect(() => {
+  const loadEnrolledCourses = () => {
     auth
       .enrolledCourses()
       .then((d) => setEnrolledCourses(d.courses))
       .catch(() => {})
       .finally(() => setLoadingCourses(false));
-  }, []);
+  };
+
+  useEffect(() => { loadEnrolledCourses(); }, []);
+
+  async function handleJoinSection(e: React.FormEvent) {
+    e.preventDefault();
+    setJoining(true);
+    setJoinError("");
+    try {
+      await student.joinSection(joinCode.trim());
+      setJoinCode("");
+      loadEnrolledCourses();
+    } catch (err) {
+      setJoinError((err as Error).message || "Invalid code");
+    } finally {
+      setJoining(false);
+    }
+  }
 
   const isSchoolStudent = enrolledCourses.length > 0;
 
@@ -60,6 +80,26 @@ export default function HomePage() {
         <p className="mt-1 text-text-secondary">
           {isSchoolStudent ? "Here are your classes" : "Ready to learn something new?"}
         </p>
+
+        {/* Join class code */}
+        <form onSubmit={handleJoinSection} className="mt-4 flex items-center gap-2">
+          <input
+            type="text"
+            value={joinCode}
+            onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(""); }}
+            placeholder="Enter class code"
+            maxLength={6}
+            className="w-36 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm font-mono font-semibold tracking-widest text-text-primary outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-text-muted focus:border-primary"
+          />
+          <button
+            type="submit"
+            disabled={joinCode.trim().length < 4 || joining}
+            className="rounded-[--radius-sm] bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+          >
+            {joining ? "Joining..." : "Join"}
+          </button>
+          {joinError && <span className="text-xs text-red-500">{joinError}</span>}
+        </form>
       </motion.div>
 
       {/* School student — enrolled courses */}

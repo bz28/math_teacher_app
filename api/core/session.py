@@ -37,6 +37,7 @@ async def create_session(
     mode: str = SessionMode.LEARN,
     subject: str = Subject.MATH,
     image_base64: str | None = None,
+    section_id: uuid.UUID | None = None,
 ) -> Session:
     """Create a new tutoring session for a problem."""
     problem = problem.strip()
@@ -114,6 +115,7 @@ async def create_session(
         status=SessionStatus.ACTIVE,
         mode=mode,
         subject=subject,
+        section_id=section_id,
         exchanges=[],
     )
     db.add(session)

@@ -127,6 +127,7 @@ async def create(
         session = await create_session(
             db, user.id, body.problem, body.mode,
             subject=body.subject, image_base64=body.image_base64,
+            section_id=body.section_id,
         )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

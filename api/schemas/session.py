@@ -11,6 +11,7 @@ class CreateSessionRequest(BaseModel):
     mode: str = Field("learn", pattern=r"^(learn|practice)$")
     subject: str = Field("math")
     image_base64: str | None = Field(None, max_length=7_000_000)
+    section_id: uuid.UUID | None = Field(None)
 
     @field_validator("subject")
     @classmethod
