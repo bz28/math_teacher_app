@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, field_validator
 
