@@ -7,47 +7,48 @@ import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { contact } from "@/lib/api";
 
-const FEATURES = [
+const PAIN_POINTS = [
+  "Re-explaining the same concept to 30 different students",
+  "Grading stacks of homework by hand every night",
+  "Not knowing which students are silently falling behind",
+  "Creating practice problems and tests from scratch",
+];
+
+const OUTCOMES = [
   {
-    title: "Manage Courses & Rosters",
-    description: "Create courses, organize class sections, and invite students with shareable join codes.",
-    icon: BookOpenIcon,
+    title: "Every student gets a personal tutor",
+    description: "AI breaks problems into steps and walks each student through at their own pace. No one gets left behind, no one gets bored.",
+    icon: TutorIcon,
   },
   {
-    title: "Track Student Progress",
-    description: "See which students are struggling and on what topics. AI-powered analytics show you what matters.",
-    icon: ChartIcon,
-  },
-  {
-    title: "AI-Graded Homework",
-    description: "Students photograph their work, AI grades it step-by-step. You review and override where needed.",
-    icon: CheckBadgeIcon,
+    title: "You see who's struggling — and on what",
+    description: "Student sessions are tracked to your class. You'll know exactly where to focus your time when you walk in Monday morning.",
+    icon: InsightIcon,
     comingSoon: true,
   },
   {
-    title: "Generate Tests Instantly",
-    description: "Pick a topic and difficulty. AI creates tests with answer keys and variants to prevent cheating.",
-    icon: DocumentIcon,
+    title: "Homework grades itself",
+    description: "Students photograph their work, AI grades it step-by-step. You review, override where needed, and move on.",
+    icon: GradeIcon,
+    comingSoon: true,
+  },
+  {
+    title: "Tests generated in seconds",
+    description: "Pick a topic, set the difficulty. AI creates a test with answer key and variants so no two students get the same version.",
+    icon: TestIcon,
     comingSoon: true,
   },
 ];
 
 const STEPS = [
-  { step: "1", title: "We set up your school", description: "We create your school account and invite your teachers." },
-  { step: "2", title: "Teachers create courses", description: "Set up courses, organize class sections, and upload materials." },
-  { step: "3", title: "Students join with a code", description: "Share a 6-character join code. Students enter it and they're in." },
-  { step: "4", title: "AI does the heavy lifting", description: "Students get personalized step-by-step tutoring. You see the data." },
+  { step: "1", title: "We set up your school", description: "Tell us about your school. We create your account, invite your teachers, and handle the setup." },
+  { step: "2", title: "Create courses and sections", description: "Organize your classes — Algebra I Period 3, Chemistry Block A. Just like your schedule." },
+  { step: "3", title: "Students join with a code", description: "Share a 6-character code. Students type it in and they're enrolled. No emails, no paperwork." },
+  { step: "4", title: "AI tutors, you teach", description: "Students get step-by-step help on demand. You see the data and focus on what the AI can't do — inspire." },
 ];
 
 export default function TeachersPage() {
-  const [form, setForm] = useState({
-    school_name: "",
-    contact_name: "",
-    contact_email: "",
-    role: "teacher",
-    approx_students: "",
-    message: "",
-  });
+  const [form, setForm] = useState({ school_name: "", contact_name: "", contact_email: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -59,13 +60,10 @@ export default function TeachersPage() {
         school_name: form.school_name.trim(),
         contact_name: form.contact_name.trim(),
         contact_email: form.contact_email.trim(),
-        role: form.role,
-        approx_students: form.approx_students ? parseInt(form.approx_students) : undefined,
-        message: form.message.trim() || undefined,
+        role: "teacher",
       });
       setSubmitted(true);
     } catch {
-      // Fallback — still show success since we don't want to block the user
       setSubmitted(true);
     } finally {
       setSubmitting(false);
@@ -131,31 +129,76 @@ export default function TeachersPage() {
                 <ArrowDown />
               </a>
               <a
-                href="#features"
+                href="#outcomes"
                 className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] border border-border bg-surface px-8 text-base font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
               >
-                See Features
+                See How It Helps
               </a>
             </motion.div>
           </div>
         </section>
 
-        {/* Features */}
-        <section id="features" className="bg-bg-secondary px-6 py-20">
+        {/* The Problem */}
+        <section className="bg-bg-secondary px-6 py-20">
+          <div className="mx-auto max-w-3xl text-center">
+            <motion.h2
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl"
+            >
+              You became a teacher to teach.
+              <br />
+              <span className="text-text-muted">Not to repeat yourself all day.</span>
+            </motion.h2>
+
+            <div className="mt-10 space-y-3 text-left">
+              {PAIN_POINTS.map((point, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.08 }}
+                  className="flex items-center gap-3 rounded-[--radius-lg] border border-border-light bg-surface px-5 py-3.5"
+                >
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-500/10">
+                    <svg className="h-3.5 w-3.5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-text-primary">{point}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-8 text-lg font-semibold text-primary"
+            >
+              What if AI handled the repetitive parts?
+            </motion.p>
+          </div>
+        </section>
+
+        {/* Outcomes */}
+        <section id="outcomes" className="px-6 py-20">
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-                Everything You Need
+                What Teachers Get
               </h2>
               <p className="mt-3 text-text-secondary">
-                Tools built for how teachers actually work.
+                Less busywork. More impact.
               </p>
             </div>
 
             <div className="mt-14 grid gap-6 md:grid-cols-2">
-              {FEATURES.map((f, i) => (
+              {OUTCOMES.map((o, i) => (
                 <motion.div
-                  key={f.title}
+                  key={o.title}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -164,19 +207,19 @@ export default function TeachersPage() {
                 >
                   <div className="flex items-start gap-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
-                      <f.icon />
+                      <o.icon />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-bold text-text-primary">{f.title}</h3>
-                        {f.comingSoon && (
+                        <h3 className="text-lg font-bold text-text-primary">{o.title}</h3>
+                        {o.comingSoon && (
                           <span className="rounded-[--radius-pill] bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
                             Coming Soon
                           </span>
                         )}
                       </div>
                       <p className="mt-1 text-sm leading-relaxed text-text-secondary">
-                        {f.description}
+                        {o.description}
                       </p>
                     </div>
                   </div>
@@ -187,11 +230,11 @@ export default function TeachersPage() {
         </section>
 
         {/* How it works */}
-        <section className="px-6 py-20">
+        <section className="bg-bg-secondary px-6 py-20">
           <div className="mx-auto max-w-4xl">
             <div className="text-center">
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-                How It Works
+                Getting Started Is Simple
               </h2>
             </div>
 
@@ -219,14 +262,14 @@ export default function TeachersPage() {
         </section>
 
         {/* Contact form */}
-        <section id="contact" className="bg-bg-secondary px-6 py-20">
-          <div className="mx-auto max-w-2xl">
+        <section id="contact" className="px-6 py-20">
+          <div className="mx-auto max-w-lg">
             <div className="text-center">
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
                 Bring Veradic AI to Your School
               </h2>
               <p className="mt-3 text-text-secondary">
-                Tell us about your school and we&rsquo;ll reach out to set everything up.
+                Tell us where you teach. We&rsquo;ll handle the rest.
               </p>
             </div>
 
@@ -243,7 +286,7 @@ export default function TeachersPage() {
                 </div>
                 <h3 className="text-xl font-bold text-text-primary">Thank you!</h3>
                 <p className="mt-2 text-text-secondary">
-                  We&rsquo;ve received your request and will be in touch soon to schedule a demo.
+                  We&rsquo;ll be in touch within 24 hours to schedule a demo.
                 </p>
               </motion.div>
             ) : (
@@ -252,78 +295,47 @@ export default function TeachersPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 onSubmit={handleSubmit}
-                className="mt-10 space-y-5 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm"
+                className="mt-10 space-y-4 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm"
               >
-                <div className="grid gap-5 md:grid-cols-2">
-                  <FormField label="School Name" required>
-                    <input
-                      type="text"
-                      value={form.school_name}
-                      onChange={(e) => setForm({ ...form, school_name: e.target.value })}
-                      placeholder="Lincoln High School"
-                      required
-                      className="w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
-                    />
-                  </FormField>
-                  <FormField label="Your Name" required>
-                    <input
-                      type="text"
-                      value={form.contact_name}
-                      onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
-                      placeholder="Jane Smith"
-                      required
-                      className="w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
-                    />
-                  </FormField>
-                </div>
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  <FormField label="Email" required>
-                    <input
-                      type="email"
-                      value={form.contact_email}
-                      onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
-                      placeholder="jsmith@school.edu"
-                      required
-                      className="w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
-                    />
-                  </FormField>
-                  <FormField label="Your Role">
-                    <select
-                      value={form.role}
-                      onChange={(e) => setForm({ ...form, role: e.target.value })}
-                      className="w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors focus:border-primary"
-                    >
-                      <option value="teacher">Teacher</option>
-                      <option value="department_head">Department Head</option>
-                      <option value="admin">School Administrator</option>
-                      <option value="it_director">IT Director</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </FormField>
-                </div>
-
-                <FormField label="Approximate Number of Students">
+                <div>
+                  <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                    Your Name<span className="ml-0.5 text-red-400">*</span>
+                  </label>
                   <input
-                    type="number"
-                    value={form.approx_students}
-                    onChange={(e) => setForm({ ...form, approx_students: e.target.value })}
-                    placeholder="e.g. 200"
-                    min="1"
-                    className="w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                    type="text"
+                    value={form.contact_name}
+                    onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+                    placeholder="Jane Smith"
+                    required
+                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
                   />
-                </FormField>
-
-                <FormField label="Message (optional)">
-                  <textarea
-                    value={form.message}
-                    onChange={(e) => setForm({ ...form, message: e.target.value })}
-                    placeholder="Tell us about your school, what subjects you teach, or any questions you have..."
-                    rows={3}
-                    className="w-full resize-vertical rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                </div>
+                <div>
+                  <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                    Work Email<span className="ml-0.5 text-red-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={form.contact_email}
+                    onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                    placeholder="jsmith@school.edu"
+                    required
+                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
                   />
-                </FormField>
-
+                </div>
+                <div>
+                  <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                    School Name<span className="ml-0.5 text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.school_name}
+                    onChange={(e) => setForm({ ...form, school_name: e.target.value })}
+                    placeholder="Lincoln High School"
+                    required
+                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={submitting}
@@ -331,6 +343,9 @@ export default function TeachersPage() {
                 >
                   {submitting ? "Sending..." : "Request a Demo"}
                 </button>
+                <p className="text-center text-xs text-text-muted">
+                  No commitment. We&rsquo;ll reach out to schedule a quick call.
+                </p>
               </motion.form>
             )}
           </div>
@@ -338,17 +353,6 @@ export default function TeachersPage() {
       </main>
       <Footer />
     </>
-  );
-}
-
-function FormField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      {children}
-    </div>
   );
 }
 
@@ -360,33 +364,37 @@ function ArrowDown() {
   );
 }
 
-function BookOpenIcon() {
+function TutorIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 00-3-3.87" />
+      <path d="M16 3.13a4 4 0 010 7.75" />
     </svg>
   );
 }
 
-function ChartIcon() {
+function InsightIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 20V10M12 20V4M6 20v-6" />
+      <circle cx="11" cy="11" r="8" />
+      <path d="M21 21l-4.35-4.35" />
+      <path d="M11 8v6M8 11h6" />
     </svg>
   );
 }
 
-function CheckBadgeIcon() {
+function GradeIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 12l2 2 4-4" />
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
     </svg>
   );
 }
 
-function DocumentIcon() {
+function TestIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
