@@ -3,17 +3,14 @@
 import { useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { stripe as stripeApi, promo as promoApi } from "@/lib/api";
+import { promo as promoApi } from "@/lib/api";
+import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
 
-const PRICE_WEEKLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_WEEKLY ?? "";
-const PRICE_YEARLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY ?? "";
-
-const plans = [
+const plans: { id: PlanType; name: string; price: string; period: string; perMonth: string | null; badge: string | null; trial: string; cta: string }[] = [
   {
     id: "weekly",
     name: "Weekly",
-    priceId: PRICE_WEEKLY,
     price: "$2.99",
     period: "/week",
     perMonth: null,
@@ -22,9 +19,8 @@ const plans = [
     cta: "Start Free Trial",
   },
   {
-    id: "yearly",
+    id: "annual",
     name: "Yearly",
-    priceId: PRICE_YEARLY,
     price: "$69.99",
     period: "/year",
     perMonth: "$1.35/week",
@@ -51,18 +47,19 @@ export default function PricingPage() {
     return <ActiveSubscription />;
   }
 
-  async function handleCheckout(plan: (typeof plans)[number]) {
+  async function handlePurchase(plan: (typeof plans)[number]) {
+    if (!user) return;
     setLoading(plan.id);
     setError(null);
     try {
-      const { checkout_url } = await stripeApi.createCheckoutSession(
-        plan.priceId,
-        `${window.location.origin}/pricing/success`,
-        `${window.location.origin}/pricing`,
-      );
-      window.location.assign(checkout_url);
+      const purchased = await purchasePlan(plan.id, user.id, user.email);
+      if (purchased) {
+        await useEntitlementStore.getState().fetchEntitlements();
+        await useAuthStore.getState().loadUser();
+      }
     } catch {
       setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(null);
     }
   }
@@ -116,7 +113,7 @@ export default function PricingPage() {
               ))}
             </ul>
             <button
-              onClick={() => handleCheckout(plan)}
+              onClick={() => handlePurchase(plan)}
               disabled={loading !== null}
               className={`mt-6 w-full rounded-[--radius-pill] py-3 text-sm font-bold transition-colors disabled:opacity-50 ${
                 plan.badge
@@ -124,7 +121,7 @@ export default function PricingPage() {
                   : "border border-primary text-primary hover:bg-primary-bg"
               }`}
             >
-              {loading === plan.id ? "Redirecting..." : plan.cta}
+              {loading === plan.id ? "Loading..." : plan.cta}
             </button>
           </div>
         ))}
@@ -216,13 +213,16 @@ function ActiveSubscription() {
   const [loading, setLoading] = useState(false);
 
   async function openPortal() {
+    if (!user) return;
     setLoading(true);
     try {
-      const { portal_url } = await stripeApi.createPortalSession(
-        `${window.location.origin}/pricing`,
-      );
-      window.location.assign(portal_url);
+      const url = await getManagementUrl(user.id);
+      if (url) {
+        window.location.assign(url);
+      }
     } catch {
+      // Silently fail — button re-enables
+    } finally {
       setLoading(false);
     }
   }
@@ -238,7 +238,7 @@ function ActiveSubscription() {
           Status: <span className="font-medium capitalize">{user?.subscription_status}</span>
           {user?.subscription_expires_at && (
             <>
-              {" "}· Renews{" "}
+              {" "}&middot; Renews{" "}
               {new Date(user.subscription_expires_at).toLocaleDateString()}
             </>
           )}
@@ -254,4 +254,3 @@ function ActiveSubscription() {
     </div>
   );
 }
-

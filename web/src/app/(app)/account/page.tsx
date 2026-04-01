@@ -3,20 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
-import { stripe as stripeApi } from "@/lib/api";
+import { getManagementUrl } from "@/services/revenuecat";
 
 export default function AccountPage() {
   const user = useAuthStore((s) => s.user);
   const [portalLoading, setPortalLoading] = useState(false);
 
   async function openPortal() {
+    if (!user) return;
     setPortalLoading(true);
     try {
-      const { portal_url } = await stripeApi.createPortalSession(
-        `${window.location.origin}/account`,
-      );
-      window.location.assign(portal_url);
+      const url = await getManagementUrl(user.id);
+      if (url) {
+        window.location.assign(url);
+      }
     } catch {
+      // Silently fail — button re-enables
+    } finally {
       setPortalLoading(false);
     }
   }
