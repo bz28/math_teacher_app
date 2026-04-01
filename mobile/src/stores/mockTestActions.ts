@@ -165,6 +165,18 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           if (!userAnswer) {
             return { question: q.question, userAnswer: null, correctAnswer: q.answer, isCorrect: null };
           }
+
+          // MC mode: student selected an exact option, no API call needed
+          if (mt.multipleChoice) {
+            return { question: q.question, userAnswer, correctAnswer: q.answer, isCorrect: userAnswer.trim() === q.answer.trim() };
+          }
+
+          // Free response: try exact match first to skip API call
+          if (userAnswer.trim() === q.answer.trim()) {
+            return { question: q.question, userAnswer, correctAnswer: q.answer, isCorrect: true };
+          }
+
+          // Fall back to API for semantic equivalence check
           try {
             const { is_correct } = await checkPracticeAnswer(q.question, q.answer, userAnswer, get().subject);
             return { question: q.question, userAnswer, correctAnswer: q.answer, isCorrect: is_correct };
