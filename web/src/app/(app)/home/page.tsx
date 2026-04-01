@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import Link from "next/link";
 import { Card } from "@/components/ui";
+import { auth, type EnrolledCourse } from "@/lib/api";
 
-const subjects = [
+const genericSubjects = [
   {
     id: "math",
     name: "Mathematics",
@@ -24,89 +25,141 @@ const subjects = [
   },
 ];
 
+const SUBJECT_GRADIENTS: Record<string, string> = {
+  math: "from-primary to-primary-light",
+  chemistry: "from-[#00B894] to-[#55EFC4]",
+};
+
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
+  const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(true);
 
-  // Clean up subject color theme
   useEffect(() => {
     document.documentElement.removeAttribute("data-subject");
   }, []);
 
+  useEffect(() => {
+    auth
+      .enrolledCourses()
+      .then((d) => setEnrolledCourses(d.courses))
+      .catch(() => {})
+      .finally(() => setLoadingCourses(false));
+  }, []);
+
+  const isSchoolStudent = enrolledCourses.length > 0;
+
   return (
     <div className="space-y-10">
       {/* Greeting */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
           Hi, {user?.name?.split(" ")[0]}!
         </h1>
         <p className="mt-1 text-text-secondary">
-          Ready to learn something new?
+          {isSchoolStudent ? "Here are your classes" : "Ready to learn something new?"}
         </p>
       </motion.div>
 
-      {/* Subject cards */}
-      <div className="grid gap-6 sm:grid-cols-2">
-        {subjects.map((subject, i) => (
-          <motion.div
-            key={subject.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 * i }}
-          >
-            <Card
-              variant="interactive"
-              className="relative overflow-hidden"
-              onClick={() =>
-                router.push(`/learn?subject=${subject.id}`)
-              }
-            >
-              {/* Gradient accent */}
-              <div
-                className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${subject.gradient}`}
-              />
-
-              <div className="flex items-start gap-4 pt-2">
-                {/* Icon */}
-                <div
-                  className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${subject.gradient} text-white shadow-sm`}
+      {/* School student — enrolled courses */}
+      {isSchoolStudent && (
+        <div className="grid gap-6 sm:grid-cols-2">
+          {enrolledCourses.map((course, i) => {
+            const gradient = SUBJECT_GRADIENTS[course.subject] || SUBJECT_GRADIENTS.math;
+            return (
+              <motion.div
+                key={`${course.id}-${course.section_id}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * i }}
+              >
+                <Card
+                  variant="interactive"
+                  className="relative overflow-hidden"
+                  onClick={() => router.push(`/learn?subject=${course.subject}&section=${course.section_id}`)}
                 >
-                  {subject.id === "math" ? (
-                    <MathIcon />
-                  ) : (
-                    <ChemIcon />
-                  )}
-                </div>
+                  <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${gradient}`} />
+                  <div className="flex items-start gap-4 pt-2">
+                    <div
+                      className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${gradient} text-white shadow-sm`}
+                    >
+                      {course.subject === "chemistry" ? <ChemIcon /> : <MathIcon />}
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-text-primary">{course.name}</h2>
+                      <p className="mt-0.5 text-sm text-text-secondary">
+                        {course.teacher_name} · {course.section_name}
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        {["Learn", "Practice", "Mock Test"].map((mode) => (
+                          <span
+                            key={mode}
+                            className="rounded-[--radius-pill] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary"
+                          >
+                            {mode}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
-                <div>
-                  <h2 className="text-lg font-bold text-text-primary">
-                    {subject.name}
-                  </h2>
-                  <p className="mt-0.5 text-sm text-text-secondary">
-                    {subject.description}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    {subject.modes.map((mode) => (
-                      <span
-                        key={mode}
-                        className="rounded-[--radius-pill] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary"
-                      >
-                        {mode}
-                      </span>
-                    ))}
+      {/* Regular student — generic subjects */}
+      {!isSchoolStudent && !loadingCourses && (
+        <div className="grid gap-6 sm:grid-cols-2">
+          {genericSubjects.map((subject, i) => (
+            <motion.div
+              key={subject.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 * i }}
+            >
+              <Card
+                variant="interactive"
+                className="relative overflow-hidden"
+                onClick={() => router.push(`/learn?subject=${subject.id}`)}
+              >
+                <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${subject.gradient}`} />
+                <div className="flex items-start gap-4 pt-2">
+                  <div
+                    className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${subject.gradient} text-white shadow-sm`}
+                  >
+                    {subject.id === "math" ? <MathIcon /> : <ChemIcon />}
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-text-primary">{subject.name}</h2>
+                    <p className="mt-0.5 text-sm text-text-secondary">{subject.description}</p>
+                    <div className="mt-3 flex gap-2">
+                      {subject.modes.map((mode) => (
+                        <span
+                          key={mode}
+                          className="rounded-[--radius-pill] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary"
+                        >
+                          {mode}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
-      {/* Upgrade CTA for free users */}
-      {user && !user.is_pro && (
+      {/* Loading state */}
+      {loadingCourses && (
+        <div className="py-8 text-center text-text-muted">Loading...</div>
+      )}
+
+      {/* Upgrade CTA for free regular students only */}
+      {user && !user.is_pro && !isSchoolStudent && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

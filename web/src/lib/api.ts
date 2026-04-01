@@ -35,6 +35,16 @@ export interface InviteData {
   school_id: string;
 }
 
+export interface EnrolledCourse {
+  id: string;
+  name: string;
+  subject: string;
+  grade_level: number | null;
+  section_id: string;
+  section_name: string;
+  teacher_name: string;
+}
+
 export interface StepDetail {
   title?: string;
   description: string;
@@ -326,6 +336,10 @@ export const auth = {
 
   entitlements() {
     return apiFetch<EntitlementsResponse>("/auth/entitlements");
+  },
+
+  enrolledCourses() {
+    return apiFetch<{ courses: EnrolledCourse[] }>("/auth/enrolled-courses");
   },
 };
 

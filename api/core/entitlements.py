@@ -50,6 +50,29 @@ def is_pro(user: object) -> bool:
     return False
 
 
+async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Check if a student is enrolled in any section of an active school."""
+    from api.models.course import Course
+    from api.models.school import School
+    from api.models.section import Section
+    from api.models.section_enrollment import SectionEnrollment
+    from api.models.user import User
+
+    result = await db.execute(
+        select(func.count())
+        .select_from(SectionEnrollment)
+        .join(Section, Section.id == SectionEnrollment.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .join(User, User.id == Course.teacher_id)
+        .join(School, School.id == User.school_id)
+        .where(
+            SectionEnrollment.student_id == user_id,
+            School.is_active.is_(True),
+        )
+    )
+    return (result.scalar() or 0) > 0
+
+
 def today_start() -> datetime:
     return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -128,6 +151,11 @@ async def check_entitlement(
         return
 
     user_id = getattr(user, "id")
+
+    # School students get pro-level access
+    if await is_school_enrolled(db, user_id):
+        return
+
     cutoff = usage_cutoff(user)
 
     if entitlement == Entitlement.CREATE_SESSION:

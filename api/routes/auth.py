@@ -23,12 +23,16 @@ from api.core.entitlements import (
     get_daily_decomp_count,
     get_daily_llm_call_count,
     is_pro,
+    is_school_enrolled,
     usage_cutoff,
 )
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
+from api.models.course import Course
 from api.models.school import School
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 from api.schemas.auth import (
@@ -200,7 +204,7 @@ async def entitlements(
     db: AsyncSession = Depends(get_db),
 ) -> EntitlementsResponse:
     """Return the current user's entitlement state."""
-    user_is_pro = is_pro(user)
+    user_is_pro = is_pro(user) or await is_school_enrolled(db, user.id)
     cutoff = usage_cutoff(user)
     problems_used = await get_daily_decomp_count(db, user.id, cutoff)
     scans_used = await get_daily_llm_call_count(db, user.id, "image_extract", cutoff)
@@ -225,3 +229,46 @@ async def entitlements(
         ),
         gated_features=gated_features,
     )
+
+
+@router.get("/enrolled-courses")
+async def enrolled_courses(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return courses the current user is enrolled in via section enrollments."""
+    rows = (await db.execute(
+        select(
+            Course.id,
+            Course.name,
+            Course.subject,
+            Course.grade_level,
+            Section.id.label("section_id"),
+            Section.name.label("section_name"),
+            User.name.label("teacher_name"),
+        )
+        .join(Section, Section.course_id == Course.id)
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .join(User, User.id == Course.teacher_id)
+        .join(School, School.id == User.school_id)
+        .where(
+            SectionEnrollment.student_id == user.id,
+            School.is_active.is_(True),
+        )
+        .order_by(Course.name)
+    )).all()
+
+    return {
+        "courses": [
+            {
+                "id": str(r.id),
+                "name": r.name,
+                "subject": r.subject,
+                "grade_level": r.grade_level,
+                "section_id": str(r.section_id),
+                "section_name": r.section_name,
+                "teacher_name": r.teacher_name,
+            }
+            for r in rows
+        ]
+    }
