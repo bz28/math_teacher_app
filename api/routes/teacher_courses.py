@@ -117,11 +117,16 @@ async def update_course(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
-    if body.name is not None: course.name = body.name.strip()
-    if body.subject is not None: course.subject = body.subject
-    if body.grade_level is not None: course.grade_level = body.grade_level
-    if body.description is not None: course.description = body.description
-    if body.status is not None: course.status = body.status
+    if body.name is not None:
+        course.name = body.name.strip()
+    if body.subject is not None:
+        course.subject = body.subject
+    if body.grade_level is not None:
+        course.grade_level = body.grade_level
+    if body.description is not None:
+        course.description = body.description
+    if body.status is not None:
+        course.status = body.status
     await db.commit()
     return {"status": "ok"}
 

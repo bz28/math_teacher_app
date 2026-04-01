@@ -9,7 +9,17 @@ from api.config import settings
 from api.database import Base
 
 # Import all models here so Alembic can detect them
-from api.models import course, llm_call, promo, quality_score, section, section_enrollment, session, user, work_submission  # noqa: F401
+from api.models import (  # noqa: F401
+    course,
+    llm_call,
+    promo,
+    quality_score,
+    section,
+    section_enrollment,
+    session,
+    user,
+    work_submission,
+)
 
 config = context.config
 if config.config_file_name is not None:
