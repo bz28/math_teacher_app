@@ -316,12 +316,24 @@ async def call_claude_vision(
             raise ValueError("Unexpected response type from Claude")
         resp_text = first_block.text
 
+        # Build a text summary of the input for logging (images replaced with placeholder)
+        input_parts: list[str] = []
+        for block in user_content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    input_parts.append(str(block["text"]))
+                elif block.get("type") == "image":
+                    input_parts.append("[image]")
+            else:
+                input_parts.append(str(block))
+        input_summary = "\n".join(input_parts) if input_parts else None
+
         await _log_and_persist(
             use_model, mode,
             response.usage.input_tokens, response.usage.output_tokens,
             latency_ms, session_id=session_id, user_id=user_id,
             success=True, retry_count=0,
-            output_text=resp_text,
+            input_text=input_summary, output_text=resp_text,
         )
         _circuit.record_success()
 
