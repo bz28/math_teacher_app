@@ -18,10 +18,12 @@ import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
+import { PaywallScreen } from "./PaywallScreen";
 import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useSessionStore } from "../stores/session";
+import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
@@ -51,6 +53,15 @@ export function InputScreen({
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(true);
   const [mockMultipleChoice, setMockMultipleChoice] = useState(true);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const [paywallTrigger, setPaywallTrigger] = useState<string | undefined>();
+  const [quotaConfirm, setQuotaConfirm] = useState(false);
+
+  const isPro = useEntitlementStore((s) => s.isPro);
+  const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
+  const scansRemaining = useEntitlementStore((s) => s.scansRemaining);
+  const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
+  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   const {
     extracting,
@@ -80,7 +91,11 @@ export function InputScreen({
     finishEdit,
     getSelectedProblems,
     getSelectedWithImages,
-  } = useImageExtraction(problemQueue.length, MAX_PROBLEMS, setError, subject);
+  } = useImageExtraction(
+    problemQueue.length, MAX_PROBLEMS, setError, subject,
+    isPro ? undefined : scansRemaining,
+    () => { setPaywallTrigger("image_scan"); setPaywallVisible(true); },
+  );
 
   const {
     problemImages,
@@ -156,6 +171,20 @@ export function InputScreen({
     const allProblems = collectProblems();
     if (allProblems.length === 0) return;
     setError(null);
+
+    // Enforce session limit for free users
+    if (!isPro && sessionsRemaining() <= 0) {
+      setPaywallTrigger("create_session");
+      setPaywallVisible(true);
+      return;
+    }
+
+    // Quota confirmation for multi-problem sessions
+    if (!isPro && allProblems.length > 1 && !quotaConfirm) {
+      setQuotaConfirm(true);
+      return;
+    }
+    setQuotaConfirm(false);
 
     // Mock test mode — start exam directly
     if (mode === "mock_test") {
@@ -419,14 +448,43 @@ export function InputScreen({
           />
         )}
 
-        <GradientButton
-          onPress={handleGo}
-          label={goButtonLabel}
-          loading={isLoading}
-          disabled={hasNoProblems}
-          gradient={modeGradient}
-          style={styles.goButton}
-        />
+        {quotaConfirm ? (
+          <View style={styles.quotaConfirmCard}>
+            <Text style={styles.quotaConfirmText}>
+              This will use {collectProblems().length} of your {sessionsRemaining()} remaining problems today.
+            </Text>
+            <View style={styles.quotaConfirmButtons}>
+              <GradientButton
+                onPress={handleGo}
+                label="Continue"
+                loading={isLoading}
+                gradient={modeGradient}
+                style={styles.quotaConfirmButton}
+              />
+              <TouchableOpacity
+                style={styles.quotaConfirmCancel}
+                onPress={() => setQuotaConfirm(false)}
+              >
+                <Text style={styles.quotaConfirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <GradientButton
+            onPress={handleGo}
+            label={goButtonLabel}
+            loading={isLoading}
+            disabled={hasNoProblems}
+            gradient={modeGradient}
+            style={styles.goButton}
+          />
+        )}
+
+        {!isPro && !quotaConfirm && sessionsRemaining() < Infinity && (
+          <Text style={styles.quotaFooter}>
+            {sessionsRemaining()} of {dailySessionsLimit} problems remaining today
+          </Text>
+        )}
 
         {displayError && (
           <View style={styles.errorWrap}>
@@ -458,6 +516,13 @@ export function InputScreen({
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
+      />
+
+      <PaywallScreen
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
+        trigger={paywallTrigger}
       />
 
     </>
@@ -676,6 +741,51 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     width: "100%",
     alignItems: "center",
+  },
+  quotaConfirmCard: {
+    borderWidth: 1,
+    borderColor: colors.warningDark,
+    backgroundColor: colors.warningBg,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+    gap: spacing.md,
+  },
+  quotaConfirmText: {
+    ...typography.body,
+    color: colors.warningDark,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  quotaConfirmButtons: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  quotaConfirmButton: {
+    flex: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: "center",
+  },
+  quotaConfirmCancel: {
+    flex: 1,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quotaConfirmCancelText: {
+    ...typography.bodyBold,
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  quotaFooter: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.sm,
   },
   errorWrap: {
     flexDirection: "row",
