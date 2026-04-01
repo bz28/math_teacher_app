@@ -16,6 +16,9 @@ export function Footer() {
 
         {/* Links */}
         <div className="flex gap-6 text-sm text-text-muted">
+          <Link href="/teachers" className="hover:text-primary transition-colors">
+            For Teachers
+          </Link>
           <Link href="/login" className="hover:text-primary transition-colors">
             Sign In
           </Link>

@@ -42,6 +42,12 @@ export function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <ThemeToggle />
           <Link
+            href="/teachers"
+            className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+          >
+            For Teachers
+          </Link>
+          <Link
             href="/login"
             className="text-sm font-semibold text-text-secondary transition-colors hover:text-primary"
           >
@@ -92,6 +98,13 @@ export function Navbar() {
                   {link.label}
                 </a>
               ))}
+              <Link
+                href="/teachers"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+              >
+                For Teachers
+              </Link>
               <hr className="my-2 border-border-light" />
               <Link
                 href="/login"

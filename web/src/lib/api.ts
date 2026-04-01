@@ -513,3 +513,21 @@ export const stripe = {
     });
   },
 };
+
+// ── Contact endpoints ──
+
+export const contact = {
+  submitLead(data: {
+    school_name: string;
+    contact_name: string;
+    contact_email: string;
+    role: string;
+    approx_students?: number;
+    message?: string;
+  }) {
+    return apiFetch<{ status: string; message: string }>("/contact/lead", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+};
