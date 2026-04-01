@@ -21,10 +21,18 @@ export interface User {
   name: string;
   grade_level: number;
   role: string;
+  school_id: string | null;
+  school_name: string | null;
   subscription_tier: string;
   subscription_status: string;
   subscription_expires_at: string | null;
   is_pro: boolean;
+}
+
+export interface InviteData {
+  email: string;
+  school_name: string;
+  school_id: string;
 }
 
 export interface StepDetail {
@@ -288,11 +296,16 @@ export const auth = {
     });
   },
 
+  validateInvite(token: string) {
+    return apiFetch<InviteData>(`/auth/invite/${token}`);
+  },
+
   register(data: {
     email: string;
     password: string;
     name: string;
     grade_level: number;
+    invite_token?: string;
   }) {
     return apiFetch<TokenPair>("/auth/register", {
       method: "POST",
