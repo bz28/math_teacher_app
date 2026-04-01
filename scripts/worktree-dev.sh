@@ -98,7 +98,7 @@ echo "🚀 Starting servers..."
 (
   cd "$WORKTREE"
   source .venv/bin/activate
-  PYTHONPATH="$WORKTREE:$PYTHONPATH" uvicorn api.main:app --reload --port "$API_PORT" &
+  PYTHONPATH="$WORKTREE:${PYTHONPATH:-}" uvicorn api.main:app --reload --port "$API_PORT" &
 )
 
 # Start dashboard
