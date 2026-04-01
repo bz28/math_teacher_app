@@ -63,6 +63,8 @@ export function InputScreen({
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
+  const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
+
   const {
     extracting,
     extractionProgress,
@@ -92,7 +94,7 @@ export function InputScreen({
     getSelectedProblems,
     getSelectedWithImages,
   } = useImageExtraction(
-    problemQueue.length, MAX_PROBLEMS, setError, subject,
+    problemQueue.length, maxQueueSize, setError, subject,
     isPro ? undefined : scansRemaining,
     isPro ? undefined : () => { setPaywallTrigger("image_scan"); setPaywallVisible(true); },
   );
@@ -103,7 +105,7 @@ export function InputScreen({
 
   const handleConfirmExtraction = () => {
     const items = getSelectedWithImages();
-    const remaining = MAX_PROBLEMS - problemQueue.length;
+    const remaining = maxQueueSize - problemQueue.length;
     const toAdd = items.slice(0, remaining);
     if (toAdd.length > 0) {
       const newQueue = [...problemQueue, ...toAdd.map((p) => p.text)];
@@ -141,7 +143,13 @@ export function InputScreen({
 
   const handleAddToQueue = () => {
     const text = input.trim();
-    if (!text || problemQueue.length >= MAX_PROBLEMS) return;
+    if (!text) return;
+    if (!isPro && problemQueue.length >= maxQueueSize) {
+      setPaywallTrigger("create_session");
+      setPaywallVisible(true);
+      return;
+    }
+    if (problemQueue.length >= MAX_PROBLEMS) return;
     setProblemQueue([...problemQueue, text]);
     setInput("");
     setError(null);
@@ -267,7 +275,7 @@ export function InputScreen({
         imageDimensions={imageDimensions}
         onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
         onCancel={cancelSelection}
-        maxRectangles={Math.min(10, MAX_PROBLEMS - problemQueue.length)}
+        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length)}
       />
     );
   }
@@ -298,7 +306,7 @@ export function InputScreen({
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
               onPress={() => pickImage("camera")}
-              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              disabled={extracting || problemQueue.length >= maxQueueSize}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -316,7 +324,7 @@ export function InputScreen({
             <AnimatedPressable
               style={[extracting && styles.captureCardDisabled]}
               onPress={() => pickImage("gallery")}
-              disabled={extracting || problemQueue.length >= MAX_PROBLEMS}
+              disabled={extracting || problemQueue.length >= maxQueueSize}
               scaleDown={0.96}
             >
               <LinearGradient
@@ -369,7 +377,7 @@ export function InputScreen({
             onSubmitEditing={handleAddToQueue}
             inputAccessoryViewID="math-input"
           />
-          {input.trim() && problemQueue.length < MAX_PROBLEMS ? (
+          {input.trim() && problemQueue.length < maxQueueSize ? (
             <TouchableOpacity style={styles.addToQueueBtn} onPress={handleAddToQueue} activeOpacity={0.6}>
               <Ionicons name="add-circle" size={18} color={modeColor} />
               <Text style={[styles.addToQueueText, { color: modeColor }]}>Add to queue</Text>
@@ -407,7 +415,7 @@ export function InputScreen({
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            {problemQueue.length < MAX_PROBLEMS ? (
+            {problemQueue.length < maxQueueSize ? (
               <View style={styles.queueAddMore}>
                 <TouchableOpacity
                   style={styles.queueAddMoreBtn}
@@ -428,7 +436,11 @@ export function InputScreen({
                 </TouchableOpacity>
               </View>
             ) : (
-              <Text style={styles.queueMaxHint}>Maximum {MAX_PROBLEMS} problems</Text>
+              <Text style={styles.queueMaxHint}>
+                {!isPro && sessionsRemaining() <= MAX_PROBLEMS
+                  ? `${sessionsRemaining()} problems remaining today`
+                  : `Maximum ${MAX_PROBLEMS} problems`}
+              </Text>
             )}
           </View>
         )}
@@ -508,7 +520,7 @@ export function InputScreen({
         canAddMore={canAddMore}
         editingIndex={editingIndex}
         editingText={editingText}
-        maxProblems={MAX_PROBLEMS}
+        maxProblems={maxQueueSize}
         onToggle={toggleSelected}
         onStartEdit={startEdit}
         onEditText={setEditingText}
