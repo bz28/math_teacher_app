@@ -134,8 +134,9 @@ async def decompose_problem(
     will be personalized to reference the student's specific mistakes.
     """
     cache_key = f"{subject}:{problem}"
-    # Return cached result for non-personalized, non-image calls
-    if not work_diagnosis and not image_base64:
+    # Return cached result for non-personalized calls (image or not — the
+    # decomposition depends on the problem text, not the image itself).
+    if not work_diagnosis:
         cached = _cache_get(cache_key)
         if cached is not None:
             logger.info("Decomposition cache hit for %s", problem)
