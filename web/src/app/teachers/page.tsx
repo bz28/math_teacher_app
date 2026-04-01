@@ -8,10 +8,10 @@ import { Footer } from "@/components/landing/footer";
 import { contact } from "@/lib/api";
 
 const PAIN_POINTS = [
-  "Re-explaining the same concept to 30 different students",
-  "Grading stacks of homework by hand every night",
-  "Not knowing which students are silently falling behind",
-  "Creating practice problems and tests from scratch",
+  "Wishing you could give every student 1-on-1 time, but there's only one of you",
+  "Wondering if your class actually got last week's lesson — or just nodded along",
+  "Spending Sunday nights building problem sets instead of recharging",
+  "Staring at a pile of papers that won't grade themselves",
 ];
 
 const OUTCOMES = [
@@ -149,7 +149,7 @@ export default function TeachersPage() {
             >
               You became a teacher to teach.
               <br />
-              <span className="text-text-muted">Not to repeat yourself all day.</span>
+              <span className="text-text-muted">Not to drown in paperwork.</span>
             </motion.h2>
 
             <div className="mt-10 space-y-3 text-left">
