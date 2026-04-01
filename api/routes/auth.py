@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -58,7 +59,7 @@ async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db
 
 
 @router.get("/invite/{token}")
-async def validate_invite(token: str, db: AsyncSession = Depends(get_db)) -> dict:
+async def validate_invite(token: str, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     """Validate a teacher invite token and return pre-fill data for the registration form."""
     invite = (await db.execute(
         select(TeacherInvite).where(TeacherInvite.token == token, TeacherInvite.status == "pending")
@@ -235,7 +236,7 @@ async def entitlements(
 async def enrolled_courses(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Return courses the current user is enrolled in via section enrollments."""
     rows = (await db.execute(
         select(
