@@ -11,6 +11,7 @@ from api.middleware.auth import CurrentUser, get_current_user_full, require_admi
 from api.models.promo import PromoCode, PromoRedemption
 from api.models.user import User
 from api.schemas.promo import (
+    _UNSET,
     CreatePromoCodeRequest,
     PromoCodeResponse,
     PromoRedemptionResponse,
@@ -202,8 +203,8 @@ async def update_promo_code(
         promo.is_active = body.is_active
     if body.max_redemptions is not None:
         promo.max_redemptions = body.max_redemptions
-    if body.expires_at is not None:
-        promo.expires_at = body.expires_at
+    if body.expires_at is not _UNSET:
+        promo.expires_at = body.expires_at  # type: ignore[assignment]
 
     await db.commit()
     await db.refresh(promo)

@@ -1,7 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timezone
 
 from pydantic import BaseModel, field_validator
+
+# Sentinel to distinguish "field not provided" from "explicitly set to null"
+_UNSET = object()
 
 
 class RedeemPromoRequest(BaseModel):
@@ -41,11 +44,20 @@ class CreatePromoCodeRequest(BaseModel):
             raise ValueError("Max redemptions must be at least 1")
         return v
 
+    @field_validator("expires_at")
+    @classmethod
+    def ensure_utc(cls, v: datetime | None) -> datetime | None:
+        """Treat naive datetimes as UTC."""
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
+
 
 class UpdatePromoCodeRequest(BaseModel):
     is_active: bool | None = None
     max_redemptions: int | None = None
-    expires_at: datetime | None = None
+    # Use _UNSET default so we can distinguish "not sent" from "explicitly null"
+    expires_at: datetime | None | object = _UNSET
 
 
 class PromoCodeResponse(BaseModel):

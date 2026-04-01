@@ -147,7 +147,7 @@ export default function PromoCodes() {
                 style={inputStyle}
               />
             </FormField>
-            <FormField label="Code Expiry (optional)">
+            <FormField label="Code Expiry — UTC (optional)">
               <input
                 type="datetime-local"
                 value={expiresAt}
