@@ -337,6 +337,10 @@ export interface EntitlementsData {
 export const getEntitlements = () =>
   apiGet<EntitlementsData>("/auth/entitlements");
 
+// Promo API
+export const redeemPromoCode = (code: string) =>
+  apiPost<{ status: string; message: string; expires_at: string | null }>("/promo/redeem", { code });
+
 // Practice API
 export interface PracticeProblem {
   question: string;

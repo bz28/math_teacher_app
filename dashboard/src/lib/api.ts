@@ -67,6 +67,11 @@ export const api = {
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
+  // Promo codes
+  promoCodes: (params?: Record<string, string>) => request<PromoCodeData[]>("/promo/codes", params),
+  createPromoCode: (body: CreatePromoCodeBody) => mutate<PromoCodeData>("/promo/codes", "POST", body),
+  updatePromoCode: (codeId: string, body: UpdatePromoCodeBody) => mutate<PromoCodeData>(`/promo/codes/${codeId}`, "PATCH", body),
+  promoRedemptions: (codeId: string) => request<PromoRedemptionData[]>(`/promo/codes/${codeId}/redemptions`),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -164,6 +169,37 @@ export interface QualityData {
     created_at: string;
   }[];
   total_count: number;
+}
+
+export interface PromoCodeData {
+  id: string;
+  code: string;
+  duration_days: number;
+  max_redemptions: number;
+  times_redeemed: number;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CreatePromoCodeBody {
+  code: string;
+  duration_days: number;
+  max_redemptions: number;
+  expires_at?: string | null;
+}
+
+export interface UpdatePromoCodeBody {
+  is_active?: boolean;
+  max_redemptions?: number;
+  expires_at?: string | null;
+}
+
+export interface PromoRedemptionData {
+  user_id: string;
+  user_email: string;
+  redeemed_at: string;
+  expires_at: string | null;
 }
 
 export interface UsersData {
