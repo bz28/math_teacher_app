@@ -135,18 +135,37 @@ export default function TeacherDashboard() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="mt-8 rounded-[--radius-xl] border border-dashed border-border bg-surface p-12 text-center"
+          className="mt-8 rounded-[--radius-xl] border border-border-light bg-surface p-8"
         >
-          <p className="text-lg font-semibold text-text-primary">No courses yet</p>
+          <h2 className="text-lg font-bold text-text-primary">
+            Welcome! Let&rsquo;s get you set up.
+          </h2>
           <p className="mt-1 text-sm text-text-muted">
-            Create your first course to get started.
+            Follow these steps to start using Veradic AI with your students.
           </p>
-          <Link
-            href="/teacher/courses"
-            className="mt-4 inline-flex items-center gap-2 rounded-[--radius-pill] bg-gradient-to-r from-primary to-primary-light px-6 py-2.5 text-sm font-bold text-white shadow-md transition-shadow hover:shadow-lg"
-          >
-            Create Course
-          </Link>
+          <div className="mt-6 space-y-4">
+            <OnboardingStep
+              number="1"
+              title="Create your first course"
+              description="Give it a name and pick a subject — like 'Algebra I' or 'AP Chemistry'."
+              action={<Link href="/teacher/courses" className="text-sm font-semibold text-primary hover:text-primary-dark">Create Course &rarr;</Link>}
+              completed={false}
+            />
+            <OnboardingStep
+              number="2"
+              title="Add a class section"
+              description="Sections represent your class periods — Period 1, Block A, etc."
+              completed={false}
+              dimmed
+            />
+            <OnboardingStep
+              number="3"
+              title="Share the join code with students"
+              description="Students enter a 6-character code and they're in. No emails, no paperwork."
+              completed={false}
+              dimmed
+            />
+          </div>
         </motion.div>
       )}
     </div>
@@ -158,6 +177,43 @@ function StatCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4 text-center">
       <div className="text-2xl font-extrabold text-text-primary">{value}</div>
       <div className="mt-0.5 text-xs font-medium text-text-muted">{label}</div>
+    </div>
+  );
+}
+
+function OnboardingStep({
+  number,
+  title,
+  description,
+  action,
+  completed,
+  dimmed,
+}: {
+  number: string;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+  completed: boolean;
+  dimmed?: boolean;
+}) {
+  return (
+    <div className={`flex gap-4 ${dimmed ? "opacity-40" : ""}`}>
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+        completed
+          ? "bg-green-100 text-green-600 dark:bg-green-500/10"
+          : "bg-primary-bg text-primary"
+      }`}>
+        {completed ? (
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        ) : number}
+      </div>
+      <div className="flex-1">
+        <div className="text-sm font-semibold text-text-primary">{title}</div>
+        <div className="mt-0.5 text-xs text-text-muted">{description}</div>
+        {action && <div className="mt-2">{action}</div>}
+      </div>
     </div>
   );
 }

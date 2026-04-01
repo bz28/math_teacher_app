@@ -16,7 +16,6 @@ dependencies = [
     "anthropic>=0.42.0",
     "httpx>=0.28.0",
     "email-validator>=2.2.0",
-    "stripe>=11.0.0",
     "slowapi>=0.1.9",
 ]
 

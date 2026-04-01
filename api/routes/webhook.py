@@ -107,7 +107,7 @@ async def revenuecat_webhook(
     # Update provider info
     store = event.get("store")
     if store:
-        provider_map = {"APP_STORE": "apple", "PLAY_STORE": "google"}
+        provider_map = {"APP_STORE": "apple", "PLAY_STORE": "google", "STRIPE": "stripe"}
         user.subscription_provider = provider_map.get(store, store.lower())
 
     # Update RevenueCat customer ID

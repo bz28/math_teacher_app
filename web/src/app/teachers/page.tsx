@@ -184,8 +184,11 @@ export default function TeachersPage() {
         </section>
 
         {/* Outcomes */}
-        <section id="outcomes" className="px-6 py-20">
-          <div className="mx-auto max-w-5xl">
+        <section id="outcomes" className="relative px-6 py-20">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute left-1/2 top-0 h-[300px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/5 to-transparent blur-3xl" />
+          </div>
+          <div className="relative mx-auto max-w-5xl">
             <div className="text-center">
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
                 What Teachers Get
@@ -263,7 +266,7 @@ export default function TeachersPage() {
 
         {/* Contact form */}
         <section id="contact" className="px-6 py-20">
-          <div className="mx-auto max-w-lg">
+          <div className="mx-auto max-w-5xl">
             <div className="text-center">
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
                 Bring Veradic AI to Your School
@@ -277,7 +280,7 @@ export default function TeachersPage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="mt-10 rounded-[--radius-xl] border border-green-200 bg-green-50 p-8 text-center dark:border-green-500/20 dark:bg-green-500/5"
+                className="mx-auto mt-10 max-w-lg rounded-[--radius-xl] border border-green-200 bg-green-50 p-8 text-center dark:border-green-500/20 dark:bg-green-500/5"
               >
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
                   <svg className="h-7 w-7 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -290,63 +293,100 @@ export default function TeachersPage() {
                 </p>
               </motion.div>
             ) : (
-              <motion.form
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                onSubmit={handleSubmit}
-                className="mt-10 space-y-4 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm"
-              >
-                <div>
-                  <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-                    Your Name<span className="ml-0.5 text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={form.contact_name}
-                    onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
-                    placeholder="Jane Smith"
-                    required
-                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-                    Work Email<span className="ml-0.5 text-red-400">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={form.contact_email}
-                    onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
-                    placeholder="jsmith@school.edu"
-                    required
-                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-                    School Name<span className="ml-0.5 text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={form.school_name}
-                    onChange={(e) => setForm({ ...form, school_name: e.target.value })}
-                    placeholder="Lincoln High School"
-                    required
-                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full rounded-[--radius-md] bg-gradient-to-r from-primary to-primary-light py-3 text-base font-bold text-white shadow-md transition-all hover:shadow-lg disabled:opacity-60"
+              <div className="mt-10 grid gap-10 md:grid-cols-2 md:items-start">
+                {/* Left: what happens next */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  className="space-y-6"
                 >
-                  {submitting ? "Sending..." : "Request a Demo"}
-                </button>
-                <p className="text-center text-xs text-text-muted">
-                  No commitment. We&rsquo;ll reach out to schedule a quick call.
-                </p>
-              </motion.form>
+                  <h3 className="text-lg font-bold text-text-primary">What happens next?</h3>
+                  {[
+                    { num: "1", title: "We reach out within 24 hours", desc: "A quick email to say hello and find a time that works." },
+                    { num: "2", title: "15-minute demo call", desc: "We walk you through the platform and answer your questions. No pressure." },
+                    { num: "3", title: "Your school goes live", desc: "We set up your school, invite your teachers, and you're ready to go." },
+                  ].map((step, i) => (
+                    <motion.div
+                      key={step.num}
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.1 }}
+                      className="flex gap-3"
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
+                        {step.num}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-text-primary">{step.title}</div>
+                        <div className="mt-0.5 text-xs text-text-muted">{step.desc}</div>
+                      </div>
+                    </motion.div>
+                  ))}
+                  <div className="rounded-[--radius-lg] bg-primary-bg/50 px-4 py-3">
+                    <p className="text-xs leading-relaxed text-text-secondary">
+                      No commitment required. No credit card. We just want to show you what&rsquo;s possible.
+                    </p>
+                  </div>
+                </motion.div>
+
+                {/* Right: form */}
+                <motion.form
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  onSubmit={handleSubmit}
+                  className="space-y-4 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm"
+                >
+                  <div>
+                    <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                      Your Name<span className="ml-0.5 text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.contact_name}
+                      onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+                      placeholder="Jane Smith"
+                      required
+                      className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                      Work Email<span className="ml-0.5 text-red-400">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={form.contact_email}
+                      onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                      placeholder="jsmith@school.edu"
+                      required
+                      className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                      School Name<span className="ml-0.5 text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.school_name}
+                      onChange={(e) => setForm({ ...form, school_name: e.target.value })}
+                      placeholder="Lincoln High School"
+                      required
+                      className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full rounded-[--radius-md] bg-gradient-to-r from-primary to-primary-light py-3 text-base font-bold text-white shadow-md transition-all hover:shadow-lg disabled:opacity-60"
+                  >
+                    {submitting ? "Sending..." : "Request a Demo"}
+                  </button>
+                </motion.form>
+              </div>
             )}
           </div>
         </section>

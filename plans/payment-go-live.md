@@ -79,15 +79,14 @@
 - [ ] Submit app for App Store review with subscription products
 - [ ] After approval, verify a real purchase works end-to-end
 
-## 9. Stripe (Web) — Separate Checklist
+## 9. Stripe (Web via RevenueCat)
 
-See `plans/stripe-setup.md` for the full Stripe setup guide. Summary:
+Stripe is managed through RevenueCat. See `plans/stripe-setup.md` for details.
 
-- [ ] Create Stripe products + prices
-- [ ] Configure Customer Portal
-- [ ] Add webhook endpoint
-- [ ] Set env vars on Railway + Vercel
-- [ ] Test with Stripe test cards
+- [ ] Verify Stripe accounts are connected in RC dashboard
+- [ ] Copy SDK API keys for weekly + annual RC Stripe apps
+- [ ] Set Vercel env vars: `NEXT_PUBLIC_RC_WEEKLY_KEY`, `NEXT_PUBLIC_RC_ANNUAL_KEY`
+- [ ] Test web purchase flow with Stripe test cards
 
 ## Code Changes Required
 
@@ -95,6 +94,7 @@ See `plans/stripe-setup.md` for the full Stripe setup guide. Summary:
 |------|---------------|------|
 | `mobile/src/services/revenuecat.ts` | Replace `REVENUECAT_IOS_KEY` with real key | After RevenueCat project created |
 | `mobile/src/services/revenuecat.ts` | Replace `REVENUECAT_ANDROID_KEY` placeholder | When launching Android |
+| Vercel env vars | Set `NEXT_PUBLIC_RC_WEEKLY_KEY` + `NEXT_PUBLIC_RC_ANNUAL_KEY` | After RC Stripe apps created |
 | Railway env vars | Set `REVENUECAT_WEBHOOK_SECRET` | After webhook configured |
 | Railway env vars | Set `BYPASS_SUBSCRIPTION=false` | When going live |
 
