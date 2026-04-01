@@ -6,6 +6,7 @@ import {
   type SessionResponse,
   type StepResponse,
 } from "@/lib/api";
+import { pollForState } from "@/lib/poll";
 
 // ── Types ──
 
@@ -92,30 +93,6 @@ interface SessionState {
 
 
 
-
-function pollForState<T>(
-  accessor: () => T | undefined | null,
-  timeoutMs: number,
-  intervalMs = 500,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(null), timeoutMs);
-    const check = () => {
-      const value = accessor();
-      if (value) {
-        clearTimeout(timeout);
-        resolve(value);
-        return true;
-      }
-      return false;
-    };
-    if (!check()) {
-      const interval = setInterval(() => {
-        if (check()) clearInterval(interval);
-      }, intervalMs);
-    }
-  });
-}
 
 const initialState = {
   session: null,

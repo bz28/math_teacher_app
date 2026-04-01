@@ -9,6 +9,7 @@ import {
   type PracticeCheckResponse,
   type DiagnosisResult,
 } from "@/lib/api";
+import { pollForState } from "@/lib/poll";
 import type { Subject } from "@/stores/learn";
 
 // ── Types ──
@@ -64,30 +65,6 @@ function createPracticeBatch(
     skippedProblems: [],
     ...overrides,
   };
-}
-
-function pollForState<T>(
-  accessor: () => T | undefined | null,
-  timeoutMs: number,
-  intervalMs = 500,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(null), timeoutMs);
-    const check = () => {
-      const value = accessor();
-      if (value) {
-        clearTimeout(timeout);
-        resolve(value);
-        return true;
-      }
-      return false;
-    };
-    if (!check()) {
-      const interval = setInterval(() => {
-        if (check()) clearInterval(interval);
-      }, intervalMs);
-    }
-  });
 }
 
 // ── Store ──
