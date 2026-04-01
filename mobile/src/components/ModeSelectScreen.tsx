@@ -101,7 +101,13 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
               <AnimatedPressable
                 key={mode.id}
                 style={[styles.modeCard, shadows.md]}
-                onPress={() => onSelect(mode.id)}
+                onPress={() => {
+                  if (!isPro && sessionsRemaining() <= 0) {
+                    setPaywallVisible(true);
+                    return;
+                  }
+                  onSelect(mode.id);
+                }}
                 scaleDown={0.97}
               >
                 <LinearGradient
@@ -196,7 +202,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
         visible={paywallVisible}
         onClose={() => setPaywallVisible(false)}
         onPurchaseComplete={() => setPaywallVisible(false)}
-        trigger="mode_select_gated"
+        trigger="create_session"
       />
     </SafeAreaView>
   );
