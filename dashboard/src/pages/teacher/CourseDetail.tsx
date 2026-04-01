@@ -59,11 +59,9 @@ function SectionsTab({ courseId }: { courseId: string }) {
   const [addError, setAddError] = useState("");
   const [joinCode, setJoinCode] = useState<string | null>(null);
 
-  useEffect(() => { load(); }, [courseId]);
+  const load = () => api.teacherSections(courseId).then(d => setSections(d.sections));
 
-  async function load() {
-    setSections((await api.teacherSections(courseId)).sections);
-  }
+  useEffect(() => { load(); }, [courseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate() {
     if (!newName.trim()) return;
@@ -202,11 +200,9 @@ function DocumentsTab({ courseId }: { courseId: string }) {
   const [docs, setDocs] = useState<TeacherDocumentsData["documents"]>([]);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => { load(); }, [courseId]);
+  const load = () => api.teacherDocuments(courseId).then(d => setDocs(d.documents));
 
-  async function load() {
-    setDocs((await api.teacherDocuments(courseId)).documents);
-  }
+  useEffect(() => { load(); }, [courseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

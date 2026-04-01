@@ -12,12 +12,11 @@ export default function CourseList() {
   const [subject, setSubject] = useState("math");
   const navigate = useNavigate();
 
-  useEffect(() => { load(); }, []);
+  const load = () => api.teacherCourses()
+    .then(d => setCourses(d.courses))
+    .finally(() => setLoading(false));
 
-  async function load() {
-    try { setCourses((await api.teacherCourses()).courses); }
-    finally { setLoading(false); }
-  }
+  useEffect(() => { load(); }, []);
 
   async function handleCreate() {
     if (!name.trim()) return;
