@@ -19,9 +19,11 @@ import { ImagePreview } from "./ImagePreview";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
 import { PaywallScreen } from "./PaywallScreen";
+import { UpgradePrompt } from "./UpgradePrompt";
 import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
+import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
@@ -53,14 +55,14 @@ export function InputScreen({
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(true);
   const [mockMultipleChoice, setMockMultipleChoice] = useState(true);
-  const [paywallVisible, setPaywallVisible] = useState(false);
-  const [paywallTrigger, setPaywallTrigger] = useState<string | undefined>();
   const [quotaConfirm, setQuotaConfirm] = useState(false);
+  const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
   const isPro = useEntitlementStore((s) => s.isPro);
   const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
   const scansRemaining = useEntitlementStore((s) => s.scansRemaining);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
+  const dailyScansLimit = useEntitlementStore((s) => s.dailyScansLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
@@ -96,7 +98,7 @@ export function InputScreen({
   } = useImageExtraction(
     problemQueue.length, maxQueueSize, setError, subject,
     isPro ? undefined : scansRemaining,
-    isPro ? undefined : () => { setPaywallTrigger("image_scan"); setPaywallVisible(true); },
+    isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
   );
 
   const {
@@ -145,8 +147,11 @@ export function InputScreen({
     const text = input.trim();
     if (!text) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      setPaywallTrigger("create_session");
-      setPaywallVisible(true);
+      const remaining = sessionsRemaining();
+      const msg = problemQueue.length > 0
+        ? `Your queue is full — you have ${remaining} problem${remaining !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
+        : `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`;
+      showUpgrade("create_session", "Queue Full", msg);
       return;
     }
     if (problemQueue.length >= MAX_PROBLEMS) return;
@@ -183,8 +188,7 @@ export function InputScreen({
 
     // Enforce session limit for free users
     if (!isPro && sessionsRemaining() <= 0) {
-      setPaywallTrigger("create_session");
-      setPaywallVisible(true);
+      showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
       return;
     }
 
@@ -463,10 +467,20 @@ export function InputScreen({
 
         {quotaConfirm ? (
           <View style={styles.quotaConfirmCard}>
+            <View style={styles.quotaConfirmHeader}>
+              <Ionicons name="alert-circle" size={20} color={colors.warningDark} />
+              <Text style={styles.quotaConfirmTitle}>Confirm Usage</Text>
+            </View>
             <Text style={styles.quotaConfirmText}>
-              This will use {collectProblems().length} of your {sessionsRemaining()} remaining problems today.
+              This will use <Text style={styles.quotaConfirmBold}>{collectProblems().length}</Text> of your <Text style={styles.quotaConfirmBold}>{sessionsRemaining()}</Text> remaining problems today.
             </Text>
             <View style={styles.quotaConfirmButtons}>
+              <TouchableOpacity
+                style={styles.quotaConfirmCancel}
+                onPress={() => setQuotaConfirm(false)}
+              >
+                <Text style={styles.quotaConfirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
               <GradientButton
                 onPress={handleGo}
                 label="Continue"
@@ -474,12 +488,6 @@ export function InputScreen({
                 gradient={modeGradient}
                 style={styles.quotaConfirmButton}
               />
-              <TouchableOpacity
-                style={styles.quotaConfirmCancel}
-                onPress={() => setQuotaConfirm(false)}
-              >
-                <Text style={styles.quotaConfirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
             </View>
           </View>
         ) : (
@@ -493,11 +501,21 @@ export function InputScreen({
           />
         )}
 
-        {!isPro && !quotaConfirm && sessionsRemaining() < Infinity && (
-          <Text style={styles.quotaFooter}>
-            {sessionsRemaining()} of {dailySessionsLimit} problems remaining today
-          </Text>
-        )}
+        {!isPro && !quotaConfirm && sessionsRemaining() < Infinity && (() => {
+          const remaining = sessionsRemaining();
+          const limit = dailySessionsLimit as number;
+          const pct = limit > 0 ? (limit - remaining) / limit : 0;
+          return (
+            <View style={styles.quotaFooterRow}>
+              <View style={styles.quotaBar}>
+                <View style={[styles.quotaBarFill, { width: `${Math.min(pct * 100, 100)}%` }, pct >= 1 && styles.quotaBarFillDanger, pct >= 0.8 && pct < 1 && styles.quotaBarFillWarning]} />
+              </View>
+              <Text style={styles.quotaFooterText}>
+                {remaining} of {limit} remaining today
+              </Text>
+            </View>
+          );
+        })()}
 
         {displayError && (
           <View style={styles.errorWrap}>
@@ -531,10 +549,11 @@ export function InputScreen({
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
+      <UpgradePrompt {...promptProps} />
       <PaywallScreen
         visible={paywallVisible}
-        onClose={() => setPaywallVisible(false)}
-        onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
+        onClose={closePaywall}
+        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
         trigger={paywallTrigger}
       />
 
@@ -756,23 +775,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   quotaConfirmCard: {
-    borderWidth: 1,
-    borderColor: colors.warningDark,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warningDark,
     backgroundColor: colors.warningBg,
     borderRadius: radii.md,
     padding: spacing.lg,
     marginTop: spacing.md,
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  quotaConfirmHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  quotaConfirmTitle: {
+    ...typography.bodyBold,
+    color: colors.warningDark,
+    fontSize: 14,
   },
   quotaConfirmText: {
     ...typography.body,
-    color: colors.warningDark,
-    fontWeight: "600",
+    color: colors.text,
     fontSize: 14,
+    lineHeight: 20,
+  },
+  quotaConfirmBold: {
+    fontWeight: "700",
+    color: colors.warningDark,
   },
   quotaConfirmButtons: {
     flexDirection: "row",
     gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   quotaConfirmButton: {
     flex: 1,
@@ -794,11 +829,34 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
   },
-  quotaFooter: {
+  quotaFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  quotaBar: {
+    flex: 1,
+    height: 4,
+    backgroundColor: colors.borderLight,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  quotaBarFill: {
+    height: "100%",
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  quotaBarFillWarning: {
+    backgroundColor: colors.warningDark,
+  },
+  quotaBarFillDanger: {
+    backgroundColor: colors.error,
+  },
+  quotaFooterText: {
     ...typography.caption,
     color: colors.textMuted,
-    textAlign: "center",
-    marginTop: spacing.sm,
   },
   errorWrap: {
     flexDirection: "row",
