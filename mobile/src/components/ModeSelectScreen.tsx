@@ -123,7 +123,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
                     <Text style={styles.modeTagline}>{mode.tagline}</Text>
                     {showSessionCount && (
                       <Text style={styles.modeSessionCount}>
-                        {remaining} of {dailySessionsLimit} free sessions left today
+                        {sessionsRemaining()} of {dailySessionsLimit} free sessions left today
                       </Text>
                     )}
                   </View>
