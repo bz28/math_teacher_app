@@ -1,18 +1,17 @@
 """add revoked_at to refresh_tokens
 
-Revision ID: i9d0e1f2g3h4
-Revises: h8c9d0e1f2g3
+Revision ID: k1000002
+Revises: j1000001
 Create Date: 2026-04-01 12:00:00.000000
 
 """
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
-
-revision: str = "i9d0e1f2g3h4"
-down_revision: str | None = "h8c9d0e1f2g3"
+revision: str = "k1000002"
+down_revision: str | None = "j1000001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
