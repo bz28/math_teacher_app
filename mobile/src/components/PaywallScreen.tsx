@@ -4,6 +4,7 @@ import {
   Alert,
   Linking,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -34,6 +35,7 @@ interface PlanOption {
   badge?: string;
   trialText: string;
   priceText: string;
+  perWeek?: string;
   pkg: PurchasesPackage | null;
 }
 
@@ -89,56 +91,19 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         const current = offerings.current;
         const annualPkg = current?.annual ?? null;
         const monthlyPkg = current?.monthly ?? null;
-
         const weeklyPkg = current?.weekly ?? monthlyPkg;
-        setPlans([
-          {
-            id: "annual",
-            label: "Annual",
-            badge: "Best Value — Save 55%",
-            trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
-              ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-              : "7-day free trial",
-            priceText: annualPkg
-              ? `then ${annualPkg.product.priceString}/year`
-              : "then $69.99/year",
-            pkg: annualPkg,
-          },
-          {
-            id: "weekly",
-            label: "Weekly",
-            trialText: weeklyPkg?.product?.introPrice?.periodNumberOfUnits
-              ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-              : "3-day free trial",
-            priceText: weeklyPkg
-              ? `then ${weeklyPkg.product.priceString}/week`
-              : "then $2.99/week",
-            pkg: weeklyPkg,
-          },
-        ]);
+        setPlans(buildPlans(annualPkg, weeklyPkg));
       })
       .catch(() => {
-        // Use hardcoded fallback
-        setPlans([
-          {
-            id: "annual",
-            label: "Annual",
-            badge: "Best Value — Save 55%",
-            trialText: "7-day free trial",
-            priceText: "then $69.99/year",
-            pkg: null,
-          },
-          {
-            id: "weekly",
-            label: "Weekly",
-            trialText: "3-day free trial",
-            priceText: "then $2.99/week",
-            pkg: null,
-          },
-        ]);
+        setPlans(buildPlans(null, null));
       })
       .finally(() => setLoadingOfferings(false));
   }, [visible]);
+
+  const selectedPlanOption = plans.find((p) => p.id === selectedPlan);
+  const ctaLabel = selectedPlanOption?.trialText
+    ? "Start Free Trial"
+    : "Subscribe";
 
   const handleSubscribe = async () => {
     const plan = plans.find((p) => p.id === selectedPlan);
@@ -151,7 +116,6 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
     try {
       const result = await purchasePackage(plan.pkg);
       if (result === null) {
-        // User cancelled — just dismiss loading
         setPurchasing(false);
         return;
       }
@@ -198,7 +162,12 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.container}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Close button */}
         <TouchableOpacity style={styles.closeButton} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="close" size={24} color={colors.textMuted} />
@@ -218,7 +187,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         <View style={styles.featureList}>
           {FEATURES.map((feature) => (
             <View key={feature} style={styles.featureRow}>
-              <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
               <Text style={styles.featureText}>{feature}</Text>
             </View>
           ))}
@@ -231,32 +200,42 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           <View style={styles.planList}>
             {plans.map((plan) => {
               const isSelected = selectedPlan === plan.id;
+              const isRecommended = plan.id === "annual";
               return (
                 <AnimatedPressable
                   key={plan.id}
                   style={[
                     styles.planCard,
-                    shadows.sm,
+                    isRecommended && styles.planCardRecommended,
                     isSelected && styles.planCardSelected,
                   ]}
                   onPress={() => setSelectedPlan(plan.id)}
                   scaleDown={0.98}
                 >
+                  {plan.badge && (
+                    <View style={styles.planBadge}>
+                      <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                    </View>
+                  )}
                   <View style={styles.planHeader}>
                     <View style={styles.planLabelRow}>
                       <View style={[styles.radio, isSelected && styles.radioSelected]}>
                         {isSelected && <View style={styles.radioInner} />}
                       </View>
-                      <Text style={[styles.planLabel, isSelected && styles.planLabelSelected]}>{plan.label}</Text>
-                    </View>
-                    {plan.badge && (
-                      <View style={styles.planBadge}>
-                        <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                      <View>
+                        <Text style={[styles.planLabel, isSelected && styles.planLabelSelected]}>{plan.label}</Text>
+                        {plan.perWeek && (
+                          <Text style={styles.planPerWeek}>{plan.perWeek}</Text>
+                        )}
                       </View>
-                    )}
+                    </View>
+                    <View style={styles.planPriceCol}>
+                      <Text style={[styles.planPriceMain, isSelected && styles.planPriceSelected]}>{plan.priceText}</Text>
+                      {plan.trialText && (
+                        <Text style={styles.planTrialText}>{plan.trialText}</Text>
+                      )}
+                    </View>
                   </View>
-                  <Text style={styles.planTrial}>{plan.trialText}</Text>
-                  <Text style={styles.planPrice}>{plan.priceText}</Text>
                 </AnimatedPressable>
               );
             })}
@@ -268,7 +247,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           onPress={handleSubscribe}
           disabled={purchasing || loadingOfferings}
           scaleDown={0.97}
-          style={{ width: "100%" }}
+          style={styles.subscribeWrap}
         >
           <LinearGradient
             colors={gradients.primary}
@@ -279,21 +258,25 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
             {purchasing ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={styles.subscribeButtonText}>Subscribe</Text>
+              <Text style={styles.subscribeButtonText}>{ctaLabel}</Text>
             )}
           </LinearGradient>
         </AnimatedPressable>
 
-        {/* Restore */}
-        <TouchableOpacity onPress={handleRestore} disabled={purchasing} style={styles.restoreButton}>
-          <Text style={styles.restoreText}>Restore purchases</Text>
-        </TouchableOpacity>
+        {/* Secondary actions */}
+        <View style={styles.secondaryActions}>
+          <TouchableOpacity onPress={handleRestore} disabled={purchasing} style={styles.secondaryButton}>
+            <Text style={styles.secondaryText}>Restore purchases</Text>
+          </TouchableOpacity>
 
-        {/* Promo code */}
-        <TouchableOpacity onPress={() => setPromoExpanded(!promoExpanded)}>
-          <Text style={styles.promoToggle}>Have a promo code?</Text>
-        </TouchableOpacity>
+          <Text style={styles.secondaryDot}>{" \u00B7 "}</Text>
 
+          <TouchableOpacity onPress={() => setPromoExpanded(!promoExpanded)} style={styles.secondaryButton}>
+            <Text style={styles.secondaryText}>Promo code</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Promo code input */}
         {promoExpanded && (
           <View style={styles.promoRow}>
             <TextInput
@@ -329,17 +312,53 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
             <Text style={styles.legalText}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </Modal>
   );
 }
 
+// ── Helpers ──
+
+function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPackage | null): PlanOption[] {
+  return [
+    {
+      id: "annual",
+      label: "Annual",
+      badge: "Best Value — Save 55%",
+      trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
+        ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
+        : "7-day free trial",
+      priceText: annualPkg
+        ? `${annualPkg.product.priceString}/year`
+        : "$69.99/year",
+      perWeek: "$1.35/week",
+      pkg: annualPkg,
+    },
+    {
+      id: "weekly",
+      label: "Weekly",
+      trialText: weeklyPkg?.product?.introPrice?.periodNumberOfUnits
+        ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
+        : "3-day free trial",
+      priceText: weeklyPkg
+        ? `${weeklyPkg.product.priceString}/week`
+        : "$2.99/week",
+      pkg: weeklyPkg,
+    },
+  ];
+}
+
+// ── Styles ──
+
 const styles = StyleSheet.create({
-  container: {
+  scrollView: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
     paddingHorizontal: spacing.xxl + 4,
     paddingTop: spacing.xxxl + 16,
+    paddingBottom: spacing.xxxl,
     alignItems: "center",
   },
   closeButton: {
@@ -356,31 +375,33 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   titleNoSubtitle: {
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: "center",
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
     paddingHorizontal: spacing.md,
+    lineHeight: 22,
   },
 
   // Features
   featureList: {
     alignSelf: "stretch",
-    gap: spacing.md,
-    marginBottom: spacing.xxl,
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
   featureRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   featureText: {
     ...typography.body,
     color: colors.text,
     flex: 1,
+    fontSize: 15,
   },
 
   // Plans
@@ -390,7 +411,7 @@ const styles = StyleSheet.create({
   planList: {
     alignSelf: "stretch",
     gap: spacing.md,
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
   },
   planCard: {
     backgroundColor: colors.white,
@@ -400,6 +421,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xl,
   },
+  planCardRecommended: {
+    borderColor: colors.primary,
+    ...shadows.sm,
+  },
   planCardSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.primaryBg,
@@ -408,7 +433,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: spacing.xs,
   },
   planLabelRow: {
     flexDirection: "row",
@@ -440,11 +464,19 @@ const styles = StyleSheet.create({
   planLabelSelected: {
     color: colors.primary,
   },
+  planPerWeek: {
+    ...typography.caption,
+    color: colors.success,
+    fontWeight: "600",
+    marginTop: 1,
+  },
   planBadge: {
+    alignSelf: "flex-start",
     backgroundColor: colors.success,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
+    marginBottom: spacing.sm,
   },
   planBadgeText: {
     ...typography.caption,
@@ -452,19 +484,28 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 11,
   },
-  planTrial: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginLeft: 28,
+  planPriceCol: {
+    alignItems: "flex-end",
   },
-  planPrice: {
+  planPriceMain: {
+    ...typography.bodyBold,
+    color: colors.text,
+    fontSize: 15,
+  },
+  planPriceSelected: {
+    color: colors.primary,
+  },
+  planTrialText: {
     ...typography.caption,
-    color: colors.textMuted,
-    marginLeft: 28,
+    color: colors.primary,
+    fontWeight: "600",
     marginTop: 2,
   },
 
   // Subscribe button
+  subscribeWrap: {
+    alignSelf: "stretch",
+  },
   subscribeButton: {
     borderRadius: radii.md,
     paddingVertical: spacing.lg,
@@ -479,24 +520,27 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
 
-  // Restore
-  restoreButton: {
+  // Secondary actions (restore + promo toggle)
+  secondaryActions: {
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
   },
-  restoreText: {
+  secondaryButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  secondaryText: {
     ...typography.bodyBold,
-    color: colors.primary,
-    fontSize: 14,
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  secondaryDot: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 
   // Promo code
-  promoToggle: {
-    ...typography.bodyBold,
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: spacing.sm,
-  },
   promoRow: {
     flexDirection: "row",
     alignSelf: "stretch",
