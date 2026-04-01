@@ -12,6 +12,16 @@ export function getToken() {
   return _token;
 }
 
+export function getUserRole(): string | null {
+  if (!_token) return null;
+  try {
+    const payload = JSON.parse(atob(_token.split(".")[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${API_BASE}${path}`);
   if (params) {
@@ -72,6 +82,34 @@ export const api = {
   createPromoCode: (body: CreatePromoCodeBody) => mutate<PromoCodeData>("/promo/codes", "POST", body),
   updatePromoCode: (codeId: string, body: UpdatePromoCodeBody) => mutate<PromoCodeData>(`/promo/codes/${codeId}`, "PATCH", body),
   promoRedemptions: (codeId: string) => request<PromoRedemptionData[]>(`/promo/codes/${codeId}/redemptions`),
+  // Teacher
+  teacherCourses: () => request<TeacherCoursesData>("/teacher/courses"),
+  teacherCourse: (id: string) => request<TeacherCourseData>(`/teacher/courses/${id}`),
+  teacherCreateCourse: (body: { name: string; subject?: string; grade_level?: number }) =>
+    mutate<{ id: string }>("/teacher/courses", "POST", body),
+  teacherUpdateCourse: (id: string, body: Record<string, unknown>) =>
+    mutate<{ status: string }>(`/teacher/courses/${id}`, "PATCH", body),
+  teacherDeleteCourse: (id: string) => mutate<{ status: string }>(`/teacher/courses/${id}`, "DELETE"),
+  teacherSections: (courseId: string) => request<TeacherSectionsData>(`/teacher/courses/${courseId}/sections`),
+  teacherSection: (courseId: string, sectionId: string) =>
+    request<TeacherSectionDetailData>(`/teacher/courses/${courseId}/sections/${sectionId}`),
+  teacherCreateSection: (courseId: string, name: string) =>
+    mutate<{ id: string }>(`/teacher/courses/${courseId}/sections`, "POST", { name }),
+  teacherDeleteSection: (courseId: string, sectionId: string) =>
+    mutate<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}`, "DELETE"),
+  teacherAddStudent: (courseId: string, sectionId: string, email: string) =>
+    mutate<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}/students`, "POST", { email }),
+  teacherRemoveStudent: (courseId: string, sectionId: string, studentId: string) =>
+    mutate<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}`, "DELETE"),
+  teacherGenerateJoinCode: (courseId: string, sectionId: string) =>
+    mutate<{ join_code: string }>(`/teacher/courses/${courseId}/sections/${sectionId}/join-code`, "POST"),
+  teacherDocuments: (courseId: string) => request<TeacherDocumentsData>(`/teacher/courses/${courseId}/documents`),
+  teacherDocument: (courseId: string, docId: string) =>
+    request<TeacherDocumentDetailData>(`/teacher/courses/${courseId}/documents/${docId}`),
+  teacherUploadDocument: (courseId: string, body: { image_base64: string; filename: string }) =>
+    mutate<{ id: string }>(`/teacher/courses/${courseId}/documents`, "POST", body),
+  teacherDeleteDocument: (courseId: string, docId: string) =>
+    mutate<{ status: string }>(`/teacher/courses/${courseId}/documents/${docId}`, "DELETE"),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -231,4 +269,42 @@ export interface UsersData {
       scans_limit: number | null;
     };
   }[];
+}
+
+// Teacher types
+export interface TeacherCoursesData {
+  courses: {
+    id: string; name: string; subject: string; grade_level: number | null;
+    status: string; section_count: number; doc_count: number; created_at: string;
+  }[];
+}
+
+export interface TeacherCourseData {
+  id: string; name: string; subject: string; grade_level: number | null;
+  description: string | null; status: string; created_at: string;
+}
+
+export interface TeacherSectionsData {
+  sections: {
+    id: string; name: string; student_count: number;
+    join_code: string | null; join_code_expires_at: string | null;
+  }[];
+}
+
+export interface TeacherSectionDetailData {
+  id: string; name: string;
+  join_code: string | null; join_code_expires_at: string | null;
+  students: { id: string; name: string; email: string }[];
+}
+
+export interface TeacherDocumentsData {
+  documents: {
+    id: string; filename: string; file_type: string;
+    file_size: number; created_at: string;
+  }[];
+}
+
+export interface TeacherDocumentDetailData {
+  id: string; filename: string; file_type: string;
+  file_size: number; image_data: string | null; created_at: string;
 }

@@ -9,6 +9,7 @@ class RegisterRequest(BaseModel):
     password: str
     name: str
     grade_level: int
+    role: str = "student"
 
     @field_validator("password")
     @classmethod
@@ -22,6 +23,13 @@ class RegisterRequest(BaseModel):
     def validate_grade_level(cls, v: int) -> int:
         if not 1 <= v <= 16:
             raise ValueError("Grade level must be between 1 and 16")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ("student", "teacher"):
+            raise ValueError("Role must be 'student' or 'teacher'")
         return v
 
 

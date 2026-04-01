@@ -76,3 +76,12 @@ async def require_admin(
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
+
+
+async def require_teacher(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    """Dependency that enforces teacher (or admin) role."""
+    if current_user.role not in ("teacher", "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher access required")
+    return current_user
