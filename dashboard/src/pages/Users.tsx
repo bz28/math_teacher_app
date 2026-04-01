@@ -45,8 +45,7 @@ export default function Users() {
 
   const topSpender = data.users.length > 0 ? data.users[0] : null;
 
-  const handleToggleRole = async (userId: string, currentRole: string) => {
-    const newRole = currentRole === "admin" ? "student" : "admin";
+  const handleChangeRole = async (userId: string, newRole: string) => {
     if (!confirm(`Change this user's role to "${newRole}"?`)) return;
     try {
       await api.updateUserRole(userId, newRole);
@@ -165,7 +164,7 @@ export default function Users() {
                   </div>
                   <div style={{ display: "flex", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
                     <span
-                      className={`badge ${u.role === "admin" ? "badge-active" : "badge-completed"}`}
+                      className={`badge ${u.role === "admin" ? "badge-active" : u.role === "teacher" ? "badge-warning" : "badge-completed"}`}
                     >
                       {u.role}
                     </span>
@@ -225,9 +224,11 @@ export default function Users() {
                         <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>
                           {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
                         </button>
-                        <button onClick={() => { setOpenMenu(null); handleToggleRole(u.id, u.role); }}>
-                          {u.role === "admin" ? "Remove Admin" : "Make Admin"}
-                        </button>
+                        {(["student", "teacher", "admin"] as const).filter((r) => r !== u.role).map((r) => (
+                          <button key={r} onClick={() => { setOpenMenu(null); handleChangeRole(u.id, r); }}>
+                            Make {r.charAt(0).toUpperCase() + r.slice(1)}
+                          </button>
+                        ))}
                         {u.subscription_tier !== "pro" && (
                           <button onClick={() => { setOpenMenu(null); handleResetLimit(u.id); }}>
                             Reset Daily Limits
