@@ -7,7 +7,7 @@ import { promo as promoApi } from "@/lib/api";
 import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
 
-const plans: { id: PlanType; name: string; price: string; period: string; perMonth: string | null; badge: string | null; trial: string; cta: string }[] = [
+const plans: { id: PlanType; name: string; price: string; period: string; perMonth: string | null; badge: string | null; trial: string | null; cta: string }[] = [
   {
     id: "weekly",
     name: "Weekly",
@@ -15,8 +15,8 @@ const plans: { id: PlanType; name: string; price: string; period: string; perMon
     period: "/week",
     perMonth: null,
     badge: null,
-    trial: "3-day free trial",
-    cta: "Start Free Trial",
+    trial: null,
+    cta: "Subscribe",
   },
   {
     id: "annual",
@@ -25,7 +25,7 @@ const plans: { id: PlanType; name: string; price: string; period: string; perMon
     period: "/year",
     perMonth: "$1.35/week",
     badge: "Best Value — Save 55%",
-    trial: "7-day free trial",
+    trial: "3-day free trial",
     cta: "Start Free Trial",
   },
 ];
@@ -77,11 +77,21 @@ export default function PricingPage() {
         </div>
       )}
 
+      {/* Pro features — shared across all plans */}
+      <ul className="mt-8 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+        {proFeatures.map((f) => (
+          <li key={f} className="flex items-center gap-2 text-sm text-text-secondary">
+            <CheckIcon className="inline h-4 w-4 shrink-0 text-success" /> {f}
+          </li>
+        ))}
+      </ul>
+
+      {/* Plan cards */}
       <div className="mt-8 grid gap-6 sm:grid-cols-2">
         {plans.map((plan) => (
           <div
             key={plan.id}
-            className={`relative rounded-[--radius-xl] border p-6 ${
+            className={`relative flex flex-col rounded-[--radius-xl] border p-6 ${
               plan.badge
                 ? "border-primary shadow-lg shadow-primary/5"
                 : "border-border-light"
@@ -98,24 +108,17 @@ export default function PricingPage() {
               <span className="text-sm text-text-secondary">{plan.period}</span>
             </div>
             {plan.perMonth && (
-              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth} — Save 55%</p>
+              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth}</p>
             )}
             {plan.trial && (
               <p className="mt-2 inline-block rounded-[--radius-sm] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary">
                 {plan.trial}
               </p>
             )}
-            <ul className="mt-6 space-y-3">
-              {proFeatures.map((f) => (
-                <li key={f} className="flex items-center gap-2 text-sm text-text-secondary">
-                  <CheckIcon className="inline h-4 w-4 shrink-0 text-success" /> {f}
-                </li>
-              ))}
-            </ul>
             <button
               onClick={() => handlePurchase(plan)}
               disabled={loading !== null}
-              className={`mt-6 w-full rounded-[--radius-pill] py-3 text-sm font-bold transition-colors disabled:opacity-50 ${
+              className={`mt-auto pt-6 w-full rounded-[--radius-pill] py-3 text-sm font-bold transition-colors disabled:opacity-50 ${
                 plan.badge
                   ? "bg-primary text-white hover:bg-primary-dark"
                   : "border border-primary text-primary hover:bg-primary-bg"
