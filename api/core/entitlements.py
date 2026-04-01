@@ -51,16 +51,29 @@ def is_pro(user: object) -> bool:
 
 
 async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
-    """Check if a student is enrolled in any section of an active school."""
+    """Check if a student is enrolled in any section of an active school.
+
+    Short-circuits: if the user has no enrollments at all (most users),
+    we skip the expensive 5-table join entirely.
+    """
     from api.models.course import Course
     from api.models.school import School
     from api.models.section import Section
     from api.models.section_enrollment import SectionEnrollment
     from api.models.user import User
 
+    # Fast path: check if user has ANY enrollment (single-table, indexed)
+    has_any = (await db.execute(
+        select(SectionEnrollment.id)
+        .where(SectionEnrollment.student_id == user_id)
+        .limit(1)
+    )).scalar_one_or_none()
+    if has_any is None:
+        return False
+
+    # Slow path: verify at least one enrollment is in an active school
     result = await db.execute(
-        select(func.count())
-        .select_from(SectionEnrollment)
+        select(SectionEnrollment.id)
         .join(Section, Section.id == SectionEnrollment.section_id)
         .join(Course, Course.id == Section.course_id)
         .join(User, User.id == Course.teacher_id)
@@ -69,8 +82,9 @@ async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
             SectionEnrollment.student_id == user_id,
             School.is_active.is_(True),
         )
+        .limit(1)
     )
-    return (result.scalar() or 0) > 0
+    return result.scalar_one_or_none() is not None
 
 
 def today_start() -> datetime:

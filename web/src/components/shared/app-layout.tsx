@@ -256,7 +256,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
         {/* Mobile bottom tab bar for teachers */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-surface/95 backdrop-blur-md md:hidden">
           <div className="flex h-16 items-stretch">
-            {teacherNavItems.slice(0, 4).map((item) => {
+            {teacherNavItems.map((item) => {
               const active = item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
@@ -270,7 +270,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   <item.icon active={active} />
-                  <span className="text-[10px] font-semibold">{item.label}</span>
+                  <span className="text-[9px] font-semibold">{item.label}</span>
                 </Link>
               );
             })}

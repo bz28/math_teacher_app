@@ -254,8 +254,8 @@ async def invite_teacher(
 
     invite_url = f"https://veradicai.com/register?invite={token}"
     logger.info(
-        "AUDIT: admin=%s invited teacher email=%s to school=%s (%s). Invite URL: %s",
-        current_user.user_id, body.email, school_id, school.name, invite_url,
+        "AUDIT: admin=%s invited teacher email=%s to school=%s (%s), invite_id=%s",
+        current_user.user_id, body.email, school_id, school.name, invite.id,
     )
 
     # TODO: Send invite email via Resend/SendGrid when email service is configured
