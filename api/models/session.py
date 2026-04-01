@@ -47,6 +47,12 @@ class Session(Base):
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default=SessionMode.LEARN)
     subject: Mapped[str] = mapped_column(String(30), nullable=False, server_default="math")
 
+    # School context — tags session to a class section for teacher analytics
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sections.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
     # Conversation history (JSON array of {role, content, timestamp})
     exchanges: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
 
