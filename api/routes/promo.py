@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -22,6 +22,19 @@ from api.schemas.promo import (
 router = APIRouter(prefix="/promo", tags=["promo"])
 
 
+def _code_response(c: PromoCode) -> PromoCodeResponse:
+    return PromoCodeResponse(
+        id=c.id,
+        code=c.code,
+        duration_days=c.duration_days,
+        max_redemptions=c.max_redemptions,
+        times_redeemed=c.times_redeemed,
+        expires_at=c.expires_at,
+        is_active=c.is_active,
+        created_at=c.created_at,
+    )
+
+
 # ── User endpoint ──────────────────────────────────────────────────────────
 
 
@@ -34,9 +47,22 @@ async def redeem_promo_code(
     """Redeem a promo code to receive Pro access."""
     normalized = body.code.strip().upper()
 
-    # Look up the code
+    # Block if user already has an active paid subscription
+    if (
+        user.subscription_tier == "pro"
+        and user.subscription_status in ("active", "trial")
+        and user.subscription_provider in ("stripe", "revenuecat", "apple", "google")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You already have an active paid subscription",
+        )
+
+    # Look up the code with row-level lock to prevent race conditions
     result = await db.execute(
-        select(PromoCode).where(PromoCode.code == normalized, PromoCode.is_active.is_(True))
+        select(PromoCode)
+        .where(PromoCode.code == normalized, PromoCode.is_active.is_(True))
+        .with_for_update()
     )
     promo = result.scalar_one_or_none()
     if promo is None:
@@ -66,7 +92,6 @@ async def redeem_promo_code(
     # Calculate subscription expiry
     now = datetime.now(UTC)
     if promo.duration_days == 0:
-        # Lifetime
         sub_expires_at = None
     else:
         # Stack on existing promo expiry if applicable
@@ -98,8 +123,12 @@ async def redeem_promo_code(
     )
     db.add(redemption)
 
-    # Increment redemption count
-    promo.times_redeemed += 1
+    # Atomic increment to prevent race conditions
+    await db.execute(
+        update(PromoCode)
+        .where(PromoCode.id == promo.id)
+        .values(times_redeemed=PromoCode.times_redeemed + 1)
+    )
 
     await db.commit()
 
@@ -138,16 +167,7 @@ async def create_promo_code(
     await db.commit()
     await db.refresh(promo)
 
-    return PromoCodeResponse(
-        id=promo.id,
-        code=promo.code,
-        duration_days=promo.duration_days,
-        max_redemptions=promo.max_redemptions,
-        times_redeemed=promo.times_redeemed,
-        expires_at=promo.expires_at,
-        is_active=promo.is_active,
-        created_at=promo.created_at,
-    )
+    return _code_response(promo)
 
 
 @router.get("/codes", response_model=list[PromoCodeResponse])
@@ -162,21 +182,7 @@ async def list_promo_codes(
         query = query.where(PromoCode.is_active.is_(True))
 
     result = await db.execute(query)
-    codes = result.scalars().all()
-
-    return [
-        PromoCodeResponse(
-            id=c.id,
-            code=c.code,
-            duration_days=c.duration_days,
-            max_redemptions=c.max_redemptions,
-            times_redeemed=c.times_redeemed,
-            expires_at=c.expires_at,
-            is_active=c.is_active,
-            created_at=c.created_at,
-        )
-        for c in codes
-    ]
+    return [_code_response(c) for c in result.scalars().all()]
 
 
 @router.patch("/codes/{code_id}", response_model=PromoCodeResponse)
@@ -202,16 +208,7 @@ async def update_promo_code(
     await db.commit()
     await db.refresh(promo)
 
-    return PromoCodeResponse(
-        id=promo.id,
-        code=promo.code,
-        duration_days=promo.duration_days,
-        max_redemptions=promo.max_redemptions,
-        times_redeemed=promo.times_redeemed,
-        expires_at=promo.expires_at,
-        is_active=promo.is_active,
-        created_at=promo.created_at,
-    )
+    return _code_response(promo)
 
 
 @router.get("/codes/{code_id}/redemptions", response_model=list[PromoRedemptionResponse])
@@ -227,7 +224,6 @@ async def list_redemptions(
         .where(PromoRedemption.promo_code_id == code_id)
         .order_by(PromoRedemption.redeemed_at.desc())
     )
-    rows = result.all()
 
     return [
         PromoRedemptionResponse(
@@ -236,5 +232,5 @@ async def list_redemptions(
             redeemed_at=redemption.redeemed_at,
             expires_at=redemption.expires_at,
         )
-        for redemption, email in rows
+        for redemption, email in result.all()
     ]
