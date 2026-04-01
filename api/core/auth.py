@@ -66,19 +66,57 @@ async def rotate_refresh_token(db: AsyncSession, raw_token: str) -> tuple[str, s
     if old_rt is None:
         return None
 
-    # Reuse detection: if already revoked, invalidate entire family
+    # Reuse detection: if already revoked, check grace period before invalidating family.
+    # A revoked token reused within the grace window is likely a client retry after a
+    # dropped response — not an attacker replaying a stolen token.
     if old_rt.is_revoked:
-        await db.execute(
-            update(RefreshToken).where(RefreshToken.family_id == old_rt.family_id).values(is_revoked=True)
+        now = datetime.now(UTC)
+        grace_period = timedelta(seconds=settings.jwt_refresh_grace_period_seconds)
+        within_grace = old_rt.revoked_at is not None and (now - old_rt.revoked_at) < grace_period
+        if not within_grace:
+            # Outside grace period — true reuse attack, invalidate entire family
+            await db.execute(
+                update(RefreshToken)
+                .where(RefreshToken.family_id == old_rt.family_id)
+                .values(is_revoked=True, revoked_at=now)
+            )
+            await db.commit()
+            return None
+
+        # Within grace period — find the replacement token and re-issue from it
+        replacement = await db.execute(
+            select(RefreshToken)
+            .where(
+                RefreshToken.family_id == old_rt.family_id,
+                RefreshToken.is_revoked.is_(False),
+            )
+            .order_by(RefreshToken.created_at.desc())
+            .limit(1)
         )
-        await db.commit()
-        return None
+        active_rt = replacement.scalar_one_or_none()
+        if active_rt is None:
+            return None
+
+        # Revoke the replacement and issue fresh tokens (continue normal rotation)
+        active_rt.is_revoked = True
+        active_rt.revoked_at = now
+        await db.flush()
+
+        user_result = await db.execute(select(User).where(User.id == active_rt.user_id))
+        user = user_result.scalar_one_or_none()
+        if user is None or not user.is_active:
+            return None
+
+        access_token = create_access_token(str(user.id), user.role)
+        new_refresh = await create_refresh_token(db, user.id, family_id=active_rt.family_id)
+        return access_token, new_refresh, user.id
 
     if old_rt.expires_at < datetime.now(UTC):
         return None
 
     # Revoke old token
     old_rt.is_revoked = True
+    old_rt.revoked_at = datetime.now(UTC)
     await db.flush()
 
     # Get user for access token — also reject deactivated users

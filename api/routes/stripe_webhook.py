@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.database import get_db
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 
 router = APIRouter(tags=["webhooks"])
@@ -141,6 +142,7 @@ _EVENT_DISPATCH = {
 
 
 @router.post("/webhooks/stripe", status_code=200)
+@limiter.limit("30/minute")
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -150,25 +152,28 @@ async def stripe_webhook(
     payload = await request.body()
 
     secret = settings.stripe_webhook_secret
-    if secret and stripe_signature:
+    if secret:
+        if not stripe_signature:
+            logger.warning("Missing stripe-signature header")
+            return {"status": "ok"}
         try:
             event = stripe.Webhook.construct_event(payload, stripe_signature, secret)  # type: ignore[no-untyped-call]
         except (stripe.SignatureVerificationError, ValueError) as e:
             logger.warning("Stripe webhook signature verification failed: %s", e)
-            return {"status": "invalid_signature"}
-    elif secret:
-        logger.warning("Missing stripe-signature header")
-        return {"status": "missing_signature"}
-    else:
+            return {"status": "ok"}
+    elif settings.app_env == "development":
         import json
         event = json.loads(payload)
+    else:
+        logger.error("Stripe webhook secret not configured in production")
+        return {"status": "ok"}
 
     event_type = event.get("type", "")
     logger.info("Received Stripe event: type=%s", event_type)
 
     handler = _EVENT_DISPATCH.get(event_type)
     if handler is None:
-        return {"status": "ignored"}
+        return {"status": "ok"}
 
-    result = await handler(db, event)
-    return {"status": result}
+    await handler(db, event)
+    return {"status": "ok"}

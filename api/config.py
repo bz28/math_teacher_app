@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
+    jwt_refresh_grace_period_seconds: int = 30
 
     # Claude API
     claude_api_key: str

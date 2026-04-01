@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.auth import (
+    check_lockout,
     create_access_token,
     create_refresh_token,
     hash_password,
+    record_failed_login,
+    reset_failed_logins,
     rotate_refresh_token,
     verify_password,
 )
@@ -22,6 +25,7 @@ from api.core.entitlements import (
 )
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 from api.schemas.auth import (
     CheckEmailRequest,
@@ -46,7 +50,8 @@ async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("3/minute")
+async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -68,7 +73,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("5/minute")
+async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
@@ -78,8 +84,17 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
 
+    if check_lockout(user):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account temporarily locked. Try again later.",
+        )
+
     if not verify_password(body.password, user.password_hash):
+        await record_failed_login(db, user)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    await reset_failed_logins(db, user)
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)

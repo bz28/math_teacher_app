@@ -6,6 +6,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-key")
 # CLAUDE_API_KEY: not set here — reads from .env locally, from env vars in CI
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SENTRY_DSN", "")
+os.environ.setdefault("JWT_REFRESH_GRACE_PERIOD_SECONDS", "0")
 
 from collections.abc import AsyncIterator
 

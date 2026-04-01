@@ -5,10 +5,13 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import delete, or_, text
 
 from api.config import settings
 from api.core.entitlements import EntitlementError
+from api.middleware.rate_limit import limiter
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
@@ -57,6 +60,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             traces_sample_rate=1.0 if settings.app_env == "development" else 0.2,
         )
 
+    if settings.bypass_subscription and settings.app_env != "development":
+        raise RuntimeError("BYPASS_SUBSCRIPTION=true is not allowed outside development")
+
     from api.database import get_engine
 
     engine = get_engine()
@@ -75,6 +81,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 configure_middleware(app)
 

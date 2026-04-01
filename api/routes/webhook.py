@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.database import get_db
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 
 router = APIRouter(tags=["webhooks"])
@@ -30,14 +31,17 @@ def _verify_webhook_secret(authorization: str | None) -> None:
     """Verify the Authorization header matches our webhook secret."""
     secret = settings.revenuecat_webhook_secret
     if not secret:
-        logger.debug("Webhook secret not configured, skipping verification (dev mode)")
-        return
+        if settings.app_env == "development":
+            logger.debug("Webhook secret not configured, skipping verification (dev mode)")
+            return
+        raise ValueError("Webhook secret not configured")
     if authorization != f"Bearer {secret}":
         logger.warning("Webhook authorization failed")
         raise ValueError("Invalid webhook authorization")
 
 
 @router.post("/webhooks/revenuecat", status_code=200)
+@limiter.limit("30/minute")
 async def revenuecat_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -50,8 +54,7 @@ async def revenuecat_webhook(
     try:
         _verify_webhook_secret(authorization)
     except ValueError:
-        # Still return 200 — logging the attempt is enough
-        return {"status": "unauthorized"}
+        return {"status": "ok"}
 
     body = await request.json()
     event = body.get("event", {})
@@ -66,18 +69,18 @@ async def revenuecat_webhook(
 
     if event_type not in _EVENT_HANDLERS:
         logger.info("Ignoring unhandled event type: %s", event_type)
-        return {"status": "ignored"}
+        return {"status": "ok"}
 
     if not app_user_id:
         logger.warning("Event missing app_user_id: %s", event_type)
-        return {"status": "ignored"}
+        return {"status": "ok"}
 
     # Look up user
     result = await db.execute(select(User).where(User.id == app_user_id))
     user = result.scalar_one_or_none()
     if user is None:
         logger.warning("User not found for webhook: user_id=%s", app_user_id)
-        return {"status": "user_not_found"}
+        return {"status": "ok"}
 
     # Apply event updates
     handler = _EVENT_HANDLERS[event_type]

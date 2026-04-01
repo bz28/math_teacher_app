@@ -181,6 +181,8 @@ export function hasStoredTokens(): boolean {
 // ── Refresh deduplication ──
 
 let refreshPromise: Promise<boolean> | null = null;
+/** Whether the last refresh failure was a definitive auth rejection (401) vs transient error */
+let lastRefreshWasAuthRejection = false;
 
 async function refreshAccessToken(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
@@ -194,11 +196,20 @@ async function refreshAccessToken(): Promise<boolean> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: rt }),
       });
-      if (!res.ok) return false;
+      if (res.status === 401) {
+        lastRefreshWasAuthRejection = true;
+        return false;
+      }
+      if (!res.ok) {
+        lastRefreshWasAuthRejection = false;
+        return false;
+      }
+      lastRefreshWasAuthRejection = false;
       const data: TokenPair = await res.json();
       saveTokens(data);
       return true;
     } catch {
+      lastRefreshWasAuthRejection = false;
       return false;
     } finally {
       refreshPromise = null;
@@ -243,7 +254,11 @@ async function apiFetch<T>(
           clearTimeout(timer);
           return apiFetch(path, options);
         }
-        clearTokens();
+        // Only clear tokens on definitive 401 from refresh endpoint.
+        // Network errors / 5xx leave tokens intact so a later retry can succeed.
+        if (lastRefreshWasAuthRejection) {
+          clearTokens();
+        }
       }
       const body = await res.json().catch(() => ({}));
       throw new ApiError(401, body);

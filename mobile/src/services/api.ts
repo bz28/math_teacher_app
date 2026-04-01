@@ -52,6 +52,8 @@ let _refreshPromise: Promise<boolean> | null = null;
 let _onSessionExpired: (() => void) | null = null;
 let _userName: string | null = null;
 let _userId: string | null = null;
+/** Whether the last refresh failure was a definitive auth rejection (401) vs transient error */
+let _lastRefreshWasAuthRejection = false;
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -129,9 +131,12 @@ export async function loadStoredAuth(): Promise<boolean> {
       return true;
     }
     if (resp.status === 401) return await _tryRefresh();
+    // Server error (5xx) — trust cached tokens rather than logging user out
+    if (resp.status >= 500) return true;
     return false;
   } catch {
-    return false;
+    // Network error / timeout — trust cached tokens rather than logging user out
+    return true;
   }
 }
 
@@ -167,7 +172,17 @@ async function _doRefresh(): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: _refreshToken }),
     });
-    if (!resp.ok) return false;
+    if (resp.status === 401) {
+      // Definitive rejection — token is revoked or invalid
+      _lastRefreshWasAuthRejection = true;
+      return false;
+    }
+    if (!resp.ok) {
+      // Server error — don't treat as auth failure, token may still be valid
+      _lastRefreshWasAuthRejection = false;
+      return false;
+    }
+    _lastRefreshWasAuthRejection = false;
     const data = await resp.json();
     await saveTokens(data.access_token, data.refresh_token);
     return true;
@@ -175,6 +190,7 @@ async function _doRefresh(): Promise<boolean> {
     return false;
   }
 }
+
 
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -204,7 +220,9 @@ async function _fetchWithRefresh(url: string, init: RequestInit, timeoutMs = DEF
       // Retry with new token
       const newInit = { ...init, headers: authHeaders() };
       resp = await fetchWithTimeout(url, newInit, timeoutMs);
-    } else {
+    } else if (_lastRefreshWasAuthRejection) {
+      // Only clear auth on definitive 401 from refresh endpoint.
+      // Network errors / 5xx leave tokens intact so a later retry can succeed.
       await clearAuth();
       _onSessionExpired?.();
     }
