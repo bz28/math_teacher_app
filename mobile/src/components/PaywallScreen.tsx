@@ -36,10 +36,31 @@ interface PlanOption {
 }
 
 const FEATURES = [
-  "Unlimited problems per day",
-  "Work photo diagnosis",
-  "Priority support",
+  "Unlimited sessions per day",
+  "Mock exams with timer",
+  "Work photo diagnosis (AI grading)",
+  "Unlimited image scanning",
+  "Full session history",
 ];
+
+const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
+  create_session: {
+    title: "Daily Problem Limit Reached",
+    subtitle: "Free accounts are limited to 5 problems per day. Upgrade to Pro for unlimited access.",
+  },
+  image_scan: {
+    title: "Daily Scan Limit Reached",
+    subtitle: "Free accounts are limited to 3 image scans per day. Upgrade to Pro for unlimited scans.",
+  },
+  chat_message: {
+    title: "Daily Chat Limit Reached",
+    subtitle: "Free accounts are limited to 20 chat messages per day. Upgrade to Pro for unlimited chat.",
+  },
+  work_diagnosis: {
+    title: "Work Diagnosis is Pro Only",
+    subtitle: "Upload your handwritten work and get AI-powered step-by-step grading.",
+  },
+};
 
 const TERMS_URL = "https://veradic.ai/terms";
 const PRIVACY_URL = "https://veradic.ai/privacy";
@@ -163,7 +184,14 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         </TouchableOpacity>
 
         {/* Title */}
-        <Text style={styles.title}>Unlock Veradic AI Pro</Text>
+        {trigger && TRIGGER_MESSAGES[trigger] ? (
+          <>
+            <Text style={styles.title}>{TRIGGER_MESSAGES[trigger].title}</Text>
+            <Text style={styles.subtitle}>{TRIGGER_MESSAGES[trigger].subtitle}</Text>
+          </>
+        ) : (
+          <Text style={[styles.title, styles.titleNoSubtitle]}>Unlock Veradic AI Pro</Text>
+        )}
 
         {/* Features */}
         <View style={styles.featureList}>
@@ -274,7 +302,17 @@ const styles = StyleSheet.create({
     ...typography.title,
     color: colors.text,
     textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  titleNoSubtitle: {
     marginBottom: spacing.xxl,
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.md,
   },
 
   // Features
