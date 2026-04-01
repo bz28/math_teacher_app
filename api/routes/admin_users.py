@@ -1,6 +1,5 @@
 """Admin user management endpoints."""
 
-import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -21,8 +20,6 @@ from api.models.llm_call import LLMCall
 from api.models.session import Session
 from api.models.user import User
 from api.routes.admin_helpers import time_range
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -256,10 +253,8 @@ async def update_user_role(
     if str(user.id) == str(current_user.user_id) and body.role != "admin":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove your own admin role")
 
-    old_role = user.role
     user.role = body.role
     await db.commit()
-    logger.info("AUDIT: admin=%s changed role of user=%s from '%s' to '%s'", current_user.user_id, user_id, old_role, body.role)
     return {"status": "ok", "role": body.role}
 
 
@@ -289,13 +284,11 @@ async def update_user_subscription(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    old_tier, old_status = user.subscription_tier, user.subscription_status
     user.subscription_tier = body.tier
     user.subscription_status = body.status
     if body.tier == "pro" and body.status == "active":
         user.subscription_provider = user.subscription_provider or "admin"
     await db.commit()
-    logger.info("AUDIT: admin=%s changed subscription of user=%s from tier='%s'/status='%s' to tier='%s'/status='%s'", current_user.user_id, user_id, old_tier, old_status, body.tier, body.status)
     return {"status": "ok", "tier": body.tier, "subscription_status": body.status}
 
 
@@ -314,7 +307,6 @@ async def delete_user(
     if str(user.id) == str(current_user.user_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
 
-    logger.info("AUDIT: admin=%s deleted user=%s (email=%s)", current_user.user_id, user_id, user.email)
     await db.delete(user)
     await db.commit()
     return {"status": "ok"}
@@ -334,5 +326,4 @@ async def reset_daily_limit(
 
     user.daily_limit_reset_at = datetime.now(UTC)
     await db.commit()
-    logger.info("AUDIT: admin=%s reset daily limits for user=%s", current_user.user_id, user_id)
     return {"status": "ok"}
