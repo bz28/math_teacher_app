@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -18,6 +18,14 @@ const GRADE_OPTIONS = [
 ];
 
 export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterPageContent />
+    </Suspense>
+  );
+}
+
+function RegisterPageContent() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
