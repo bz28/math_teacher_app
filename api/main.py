@@ -59,6 +59,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             traces_sample_rate=1.0 if settings.app_env == "development" else 0.2,
         )
 
+    if settings.bypass_subscription and settings.app_env != "development":
+        raise RuntimeError("BYPASS_SUBSCRIPTION=true is not allowed outside development")
+
     from api.database import get_engine
 
     engine = get_engine()
