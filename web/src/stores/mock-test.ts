@@ -228,6 +228,28 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
               isCorrect: null,
             };
           }
+
+          // MC mode: student selected an exact option, no API call needed
+          if (mt.multipleChoice) {
+            return {
+              question: q.question,
+              userAnswer,
+              correctAnswer: q.answer,
+              isCorrect: userAnswer.trim() === q.answer.trim(),
+            };
+          }
+
+          // Free response: try exact match first to skip API call
+          if (userAnswer.trim() === q.answer.trim()) {
+            return {
+              question: q.question,
+              userAnswer,
+              correctAnswer: q.answer,
+              isCorrect: true,
+            };
+          }
+
+          // Fall back to API for semantic equivalence check
           const { is_correct } = await practiceApi.check({
             question: q.question,
             correct_answer: q.answer,

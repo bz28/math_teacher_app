@@ -128,9 +128,17 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
 
       try {
         const correctAnswer = await getCorrectAnswer();
-        const { is_correct } = await checkPracticeAnswer(
-          current.question, correctAnswer, answer, subject,
-        );
+
+        // Skip API call if exact match (avoids unnecessary LLM equivalence check)
+        let is_correct: boolean;
+        if (answer.trim() === correctAnswer.trim()) {
+          is_correct = true;
+        } else {
+          const resp = await checkPracticeAnswer(
+            current.question, correctAnswer, answer, subject,
+          );
+          is_correct = resp.is_correct;
+        }
 
         const batch = get().practiceBatch;
         if (!batch) return;

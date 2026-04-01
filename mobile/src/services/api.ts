@@ -273,7 +273,7 @@ export const respondToStep = (
   apiPost<StepResponse>(`/session/${id}/respond`, {
     student_response: studentResponse,
     request_advance: requestAdvance,
-  });
+  }, LLM_TIMEOUT_MS);
 
 // Session history
 export interface SessionHistoryItem {
@@ -369,7 +369,7 @@ export const checkPracticeAnswer = (question: string, correctAnswer: string, use
     correct_answer: correctAnswer,
     user_answer: userAnswer,
     subject,
-  });
+  }, LLM_TIMEOUT_MS);
 
 // Image API — vision calls can be slow
 export const extractProblemsFromImage = (imageBase64: string, subject: string = "math") =>
