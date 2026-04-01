@@ -6,8 +6,8 @@ import {
   saveTokens,
   clearTokens,
   hasStoredTokens,
+  ApiError,
   type User,
-  type ApiError,
 } from "@/lib/api";
 
 interface AuthState {
@@ -45,8 +45,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await authApi.me();
       set({ user, loading: false });
-    } catch {
-      clearTokens();
+    } catch (err) {
+      // Only clear tokens on definitive auth rejection (401).
+      // Network errors and server errors leave tokens intact so the
+      // user isn't logged out by a transient failure.
+      const isAuthError = err instanceof ApiError && err.status === 401;
+      if (isAuthError) {
+        clearTokens();
+      }
       set({ user: null, loading: false });
     }
   },
