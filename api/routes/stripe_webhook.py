@@ -16,6 +16,8 @@ from api.models.user import User
 router = APIRouter(tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
+stripe.api_key = settings.stripe_secret_key
+
 _STATUS_MAP: dict[str, str] = {
     "active": "active",
     "trialing": "trial",
@@ -49,7 +51,6 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict[str, Any]) 
 
     sub_id = session.get("subscription")
     if sub_id:
-        stripe.api_key = settings.stripe_secret_key
         sub = stripe.Subscription.retrieve(sub_id)
         user.subscription_status = "trial" if sub.status == "trialing" else "active"
         user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)  # type: ignore[attr-defined]
@@ -122,7 +123,6 @@ async def _handle_invoice_paid(db: AsyncSession, invoice: dict[str, Any]) -> str
 
     sub_id = invoice.get("subscription")
     if sub_id:
-        stripe.api_key = settings.stripe_secret_key
         sub = stripe.Subscription.retrieve(sub_id)
         user.subscription_expires_at = datetime.fromtimestamp(sub.current_period_end, tz=UTC)  # type: ignore[attr-defined]
 
@@ -150,25 +150,28 @@ async def stripe_webhook(
     payload = await request.body()
 
     secret = settings.stripe_webhook_secret
-    if secret and stripe_signature:
+    if secret:
+        if not stripe_signature:
+            logger.warning("Missing stripe-signature header")
+            return {"status": "ok"}
         try:
             event = stripe.Webhook.construct_event(payload, stripe_signature, secret)  # type: ignore[no-untyped-call]
         except (stripe.SignatureVerificationError, ValueError) as e:
             logger.warning("Stripe webhook signature verification failed: %s", e)
-            return {"status": "invalid_signature"}
-    elif secret:
-        logger.warning("Missing stripe-signature header")
-        return {"status": "missing_signature"}
-    else:
+            return {"status": "ok"}
+    elif settings.app_env == "development":
         import json
         event = json.loads(payload)
+    else:
+        logger.error("Stripe webhook secret not configured in production")
+        return {"status": "ok"}
 
     event_type = event.get("type", "")
     logger.info("Received Stripe event: type=%s", event_type)
 
     handler = _EVENT_DISPATCH.get(event_type)
     if handler is None:
-        return {"status": "ignored"}
+        return {"status": "ok"}
 
-    result = await handler(db, event)
-    return {"status": result}
+    await handler(db, event)
+    return {"status": "ok"}
