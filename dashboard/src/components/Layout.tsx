@@ -8,6 +8,7 @@ const NAV = [
   { to: "/quality", label: "Quality", icon: "✅" },
   { to: "/promo-codes", label: "Promo Codes", icon: "🎟️" },
   { to: "/schools", label: "Schools", icon: "🏫" },
+  { to: "/leads", label: "Leads", icon: "📩" },
 ];
 
 export default function Layout() {

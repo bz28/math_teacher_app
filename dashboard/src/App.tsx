@@ -7,6 +7,7 @@ import LLMCalls from "./pages/LLMCalls";
 import Quality from "./pages/Quality";
 import Users from "./pages/Users";
 import PromoCodes from "./pages/PromoCodes";
+import Leads from "./pages/Leads";
 import Schools from "./pages/Schools";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/users" element={<Users />} />
           <Route path="/promo-codes" element={<PromoCodes />} />
           <Route path="/schools" element={<Schools />} />
+          <Route path="/leads" element={<Leads />} />
         </Route>
       </Routes>
     </BrowserRouter>

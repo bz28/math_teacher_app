@@ -15,6 +15,7 @@ from api.middleware.rate_limit import limiter
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
+from api.routes.contact import router as contact_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
 from api.routes.practice import router as practice_router
@@ -112,4 +113,5 @@ app.include_router(webhook_router, prefix="/v1")
 app.include_router(stripe_router, prefix="/v1")
 app.include_router(stripe_webhook_router, prefix="/v1")
 app.include_router(promo_router, prefix="/v1")
+app.include_router(contact_router, prefix="/v1")
 app.include_router(teacher_router, prefix="/v1")

@@ -77,6 +77,10 @@ export const api = {
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
+  // Leads
+  leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
+  updateLeadStatus: (leadId: string, status: string) =>
+    mutate<{ status: string }>(`/admin/leads/${leadId}`, "PATCH", { status }),
   // Schools
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
@@ -219,6 +223,19 @@ export interface PromoRedemptionData {
   user_email: string;
   redeemed_at: string;
   expires_at: string | null;
+}
+
+// Lead types
+export interface ContactLeadData {
+  id: string;
+  school_name: string;
+  contact_name: string;
+  contact_email: string;
+  role: string;
+  approx_students: number | null;
+  message: string | null;
+  status: string;
+  created_at: string;
 }
 
 // School types
