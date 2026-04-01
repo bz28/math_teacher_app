@@ -56,9 +56,6 @@ async def create_refresh_token(db: AsyncSession, user_id: uuid.UUID, family_id: 
     return raw_token
 
 
-REFRESH_GRACE_PERIOD = timedelta(seconds=30)
-
-
 async def rotate_refresh_token(db: AsyncSession, raw_token: str) -> tuple[str, str, uuid.UUID] | None:
     """Rotate a refresh token. Returns (new_access_token, new_refresh_token, user_id) or None."""
     token_hash = _hash_refresh_token(raw_token)
@@ -74,7 +71,8 @@ async def rotate_refresh_token(db: AsyncSession, raw_token: str) -> tuple[str, s
     # dropped response — not an attacker replaying a stolen token.
     if old_rt.is_revoked:
         now = datetime.now(UTC)
-        within_grace = old_rt.revoked_at is not None and (now - old_rt.revoked_at) < REFRESH_GRACE_PERIOD
+        grace_period = timedelta(seconds=settings.jwt_refresh_grace_period_seconds)
+        within_grace = old_rt.revoked_at is not None and (now - old_rt.revoked_at) < grace_period
         if not within_grace:
             # Outside grace period — true reuse attack, invalidate entire family
             await db.execute(
