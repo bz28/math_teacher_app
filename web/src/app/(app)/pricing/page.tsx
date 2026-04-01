@@ -7,35 +7,46 @@ import { promo as promoApi } from "@/lib/api";
 import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
 
-const plans: { id: PlanType; name: string; price: string; period: string; perMonth: string | null; badge: string | null; trial: string; cta: string }[] = [
+const plans: {
+  id: PlanType;
+  name: string;
+  price: string;
+  period: string;
+  perWeek: string | null;
+  badge: string | null;
+  trial: string | null;
+  cta: string;
+  recommended: boolean;
+}[] = [
   {
     id: "weekly",
     name: "Weekly",
     price: "$2.99",
     period: "/week",
-    perMonth: null,
+    perWeek: null,
     badge: null,
-    trial: "3-day free trial",
-    cta: "Start Free Trial",
+    trial: null,
+    cta: "Subscribe",
+    recommended: false,
   },
   {
     id: "annual",
     name: "Yearly",
     price: "$69.99",
     period: "/year",
-    perMonth: "$1.35/week",
-    badge: "Best Value — Save 55%",
-    trial: "7-day free trial",
+    perWeek: "$1.35/week",
+    badge: "Most Popular",
+    trial: "3-day free trial",
     cta: "Start Free Trial",
+    recommended: true,
   },
 ];
 
-const proFeatures = [
-  "Unlimited sessions",
-  "Mock exams with timer",
-  "Work diagnosis (AI grading)",
-  "Unlimited image scanning",
-  "Full session history",
+const comparisons = [
+  { feature: "Problem sessions", free: "5 per day", pro: "Unlimited" },
+  { feature: "Chat messages", free: "20 per day", pro: "Unlimited" },
+  { feature: "Image scanning", free: "3 per day", pro: "Unlimited" },
+  { feature: "Work diagnosis", free: "—", pro: "Full AI grading" },
 ];
 
 export default function PricingPage() {
@@ -66,65 +77,110 @@ export default function PricingPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <h1 className="text-2xl font-extrabold text-text-primary">Upgrade to Pro</h1>
-      <p className="mt-2 text-text-secondary">
-        Unlock unlimited sessions, mock exams, and more.
-      </p>
+      {/* Header */}
+      <div className="text-center">
+        <h1 className="text-3xl font-extrabold text-text-primary">
+          Unlock your full potential
+        </h1>
+        <p className="mt-3 text-lg text-text-secondary">
+          No daily limits. No locked features. Just learn.
+        </p>
+      </div>
 
       {error && (
-        <div className="mt-4 rounded-[--radius-md] bg-error/10 px-4 py-3 text-sm text-error">
+        <div className="mt-6 rounded-[--radius-md] bg-error/10 px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
-      <div className="mt-8 grid gap-6 sm:grid-cols-2">
+      {/* Plan cards */}
+      <div className="mt-10 grid gap-6 sm:grid-cols-2">
         {plans.map((plan) => (
           <div
             key={plan.id}
-            className={`relative rounded-[--radius-xl] border p-6 ${
-              plan.badge
-                ? "border-primary shadow-lg shadow-primary/5"
-                : "border-border-light"
-            } bg-surface`}
+            className={`relative flex flex-col rounded-[--radius-xl] border-2 p-6 ${
+              plan.recommended
+                ? "border-primary bg-surface shadow-xl shadow-primary/10"
+                : "border-border-light bg-surface"
+            }`}
           >
             {plan.badge && (
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-xs font-bold text-white">
+              <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-5 py-1.5 text-xs font-bold text-white shadow-md">
                 {plan.badge}
               </span>
             )}
-            <h3 className="text-lg font-bold text-text-primary">{plan.name}</h3>
-            <div className="mt-3 flex items-baseline gap-1">
-              <span className="text-4xl font-extrabold text-text-primary">{plan.price}</span>
-              <span className="text-sm text-text-secondary">{plan.period}</span>
+
+            <h3 className="text-base font-bold text-text-secondary">{plan.name}</h3>
+
+            <div className="mt-2 flex items-baseline gap-1">
+              <span className="text-5xl font-extrabold tracking-tight text-text-primary">{plan.price}</span>
+              <span className="text-base text-text-muted">{plan.period}</span>
             </div>
-            {plan.perMonth && (
-              <p className="mt-1 text-sm font-medium text-success">{plan.perMonth} — Save 55%</p>
-            )}
-            {plan.trial && (
-              <p className="mt-2 inline-block rounded-[--radius-sm] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary">
-                {plan.trial}
+
+            {plan.perWeek && (
+              <p className="mt-1.5 text-sm font-semibold text-success">
+                That&apos;s just {plan.perWeek} — save 55%
               </p>
             )}
-            <ul className="mt-6 space-y-3">
-              {proFeatures.map((f) => (
-                <li key={f} className="flex items-center gap-2 text-sm text-text-secondary">
-                  <CheckIcon className="inline h-4 w-4 shrink-0 text-success" /> {f}
-                </li>
-              ))}
-            </ul>
+
+            {plan.trial ? (
+              <div className="mt-4 rounded-[--radius-md] bg-primary-bg px-4 py-2.5">
+                <p className="text-sm font-bold text-primary">
+                  Try free for 3 days
+                </p>
+                <p className="mt-0.5 text-xs text-primary/70">
+                  You won&apos;t be charged today
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-text-muted">Cancel anytime, no commitment</p>
+            )}
+
             <button
               onClick={() => handlePurchase(plan)}
               disabled={loading !== null}
-              className={`mt-6 w-full rounded-[--radius-pill] py-3 text-sm font-bold transition-colors disabled:opacity-50 ${
-                plan.badge
-                  ? "bg-primary text-white hover:bg-primary-dark"
-                  : "border border-primary text-primary hover:bg-primary-bg"
+              className={`mt-auto pt-6 w-full rounded-[--radius-pill] py-3.5 text-sm font-bold transition-all disabled:opacity-50 ${
+                plan.recommended
+                  ? "bg-primary text-white shadow-md shadow-primary/25 hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/30"
+                  : "border-2 border-border-light text-text-primary hover:border-primary hover:text-primary"
               }`}
             >
               {loading === plan.id ? "Loading..." : plan.cta}
             </button>
           </div>
         ))}
+      </div>
+
+      {/* Free vs Pro comparison */}
+      <div className="mt-12">
+        <h2 className="text-center text-sm font-bold uppercase tracking-wide text-text-muted">
+          Free vs Pro
+        </h2>
+        <div className="mt-4 overflow-hidden rounded-[--radius-xl] border border-border-light">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border-light bg-surface">
+                <th className="px-5 py-3 text-left font-semibold text-text-secondary">Feature</th>
+                <th className="px-5 py-3 text-center font-semibold text-text-secondary">Free</th>
+                <th className="px-5 py-3 text-center font-semibold text-primary">Pro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisons.map((row, i) => (
+                <tr key={row.feature} className={i < comparisons.length - 1 ? "border-b border-border-light" : ""}>
+                  <td className="px-5 py-3.5 font-medium text-text-primary">{row.feature}</td>
+                  <td className="px-5 py-3.5 text-center text-text-muted">{row.free}</td>
+                  <td className="px-5 py-3.5 text-center font-semibold text-text-primary">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CheckIcon className="h-3.5 w-3.5 text-success" />
+                      {row.pro}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <PromoCodeSection />
@@ -161,7 +217,7 @@ function PromoCodeSection() {
 
   if (success) {
     return (
-      <div className="mt-8 rounded-[--radius-xl] border border-success/30 bg-success/5 p-6 text-center">
+      <div className="mt-10 rounded-[--radius-xl] border border-success/30 bg-success/5 p-6 text-center">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
           <CheckIcon className="inline h-6 w-6 shrink-0 text-success" />
         </div>
@@ -172,7 +228,7 @@ function PromoCodeSection() {
   }
 
   return (
-    <div className="mt-8 text-center">
+    <div className="mt-10 text-center">
       {!expanded ? (
         <button
           onClick={() => setExpanded(true)}

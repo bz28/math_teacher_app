@@ -328,7 +328,7 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
       badge: "Best Value — Save 55%",
       trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
         ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-        : "7-day free trial",
+        : "3-day free trial",
       priceText: annualPkg
         ? `${annualPkg.product.priceString}/year`
         : "$69.99/year",
@@ -340,7 +340,7 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
       label: "Weekly",
       trialText: weeklyPkg?.product?.introPrice?.periodNumberOfUnits
         ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-        : "3-day free trial",
+        : "",
       priceText: weeklyPkg
         ? `${weeklyPkg.product.priceString}/week`
         : "$2.99/week",
