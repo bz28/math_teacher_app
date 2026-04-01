@@ -21,7 +21,11 @@ export default function Leads() {
     api.leads().then((d) => setLeads(d.leads)).finally(() => setLoading(false));
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    api.leads().then((d) => { if (!cancelled) { setLeads(d.leads); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleStatusChange = async (leadId: string, newStatus: string) => {
     try {

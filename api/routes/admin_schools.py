@@ -2,21 +2,20 @@
 
 import logging
 import secrets
-import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
-from api.models.school import School
-from api.models.section_enrollment import SectionEnrollment
-from api.models.section import Section
 from api.models.course import Course
+from api.models.school import School
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 
@@ -183,7 +182,12 @@ async def get_school(
             for t in teachers
         ],
         "pending_invites": [
-            {"id": str(i.id), "email": i.email, "expires_at": i.expires_at.isoformat(), "created_at": i.created_at.isoformat()}
+            {
+                "id": str(i.id),
+                "email": i.email,
+                "expires_at": i.expires_at.isoformat(),
+                "created_at": i.created_at.isoformat(),
+            }
             for i in invites
         ],
     }

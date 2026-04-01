@@ -1,8 +1,8 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from datetime import UTC, datetime
 
 from api.core.auth import (
     check_lockout,

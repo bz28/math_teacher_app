@@ -32,16 +32,7 @@ export default function CourseDetailPage() {
 
   const [copiedCode, setCopiedCode] = useState(false);
 
-  useEffect(() => {
-    loadCourse();
-  }, [id]);
-
-  useEffect(() => {
-    if (tab === "sections") loadSections();
-    if (tab === "documents") loadDocuments();
-  }, [tab, id]);
-
-  async function loadCourse() {
+  const loadCourse = async () => {
     setLoading(true);
     try {
       const c = await teacher.course(id);
@@ -50,21 +41,30 @@ export default function CourseDetailPage() {
       setEditSubject(c.subject);
     } catch { /* ignore */ }
     setLoading(false);
-  }
+  };
 
-  async function loadSections() {
+  const loadSections = async () => {
     try {
       const d = await teacher.sections(id);
       setSections(d.sections);
     } catch { /* ignore */ }
-  }
+  };
 
-  async function loadDocuments() {
+  const loadDocuments = async () => {
     try {
       const d = await teacher.documents(id);
       setDocuments(d.documents);
     } catch { /* ignore */ }
-  }
+  };
+
+  useEffect(() => {
+    loadCourse();
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (tab === "sections") loadSections();
+    if (tab === "documents") loadDocuments();
+  }, [tab, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreateSection(e: FormEvent) {
     e.preventDefault();
