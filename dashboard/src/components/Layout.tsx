@@ -7,6 +7,7 @@ const NAV = [
   { to: "/users", label: "Users", icon: "👥" },
   { to: "/quality", label: "Quality", icon: "✅" },
   { to: "/promo-codes", label: "Promo Codes", icon: "🎟️" },
+  { to: "/schools", label: "Schools", icon: "🏫" },
 ];
 
 export default function Layout() {

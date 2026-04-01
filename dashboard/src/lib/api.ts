@@ -77,6 +77,15 @@ export const api = {
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
+  // Schools
+  schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
+  school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
+  createSchool: (body: CreateSchoolBody) => mutate<{ id: string; status: string }>("/admin/schools", "POST", body),
+  updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
+  inviteTeacher: (schoolId: string, email: string) =>
+    mutate<{ status: string; invite_url: string }>(`/admin/schools/${schoolId}/invite`, "POST", { email }),
+  cancelInvite: (schoolId: string, inviteId: string) =>
+    mutate<{ status: string }>(`/admin/schools/${schoolId}/invites/${inviteId}`, "DELETE"),
   // Promo codes
   promoCodes: (params?: Record<string, string>) => request<PromoCodeData[]>("/promo/codes", params),
   createPromoCode: (body: CreatePromoCodeBody) => mutate<PromoCodeData>("/promo/codes", "POST", body),
@@ -210,6 +219,53 @@ export interface PromoRedemptionData {
   user_email: string;
   redeemed_at: string;
   expires_at: string | null;
+}
+
+// School types
+export interface SchoolListItem {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  contact_name: string;
+  contact_email: string;
+  is_active: boolean;
+  teacher_count: number;
+  student_count: number;
+  created_at: string;
+}
+
+export interface SchoolDetail {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  contact_name: string;
+  contact_email: string;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  teachers: { id: string; name: string; email: string; joined_at: string }[];
+  pending_invites: { id: string; email: string; expires_at: string; created_at: string }[];
+}
+
+export interface CreateSchoolBody {
+  name: string;
+  contact_name: string;
+  contact_email: string;
+  city?: string;
+  state?: string;
+  notes?: string;
+}
+
+export interface UpdateSchoolBody {
+  name?: string;
+  city?: string;
+  state?: string;
+  contact_name?: string;
+  contact_email?: string;
+  is_active?: boolean;
+  notes?: string;
 }
 
 export interface UsersData {

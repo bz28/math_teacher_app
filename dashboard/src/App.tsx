@@ -7,6 +7,7 @@ import LLMCalls from "./pages/LLMCalls";
 import Quality from "./pages/Quality";
 import Users from "./pages/Users";
 import PromoCodes from "./pages/PromoCodes";
+import Schools from "./pages/Schools";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />;
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/quality" element={<Quality />} />
           <Route path="/users" element={<Users />} />
           <Route path="/promo-codes" element={<PromoCodes />} />
+          <Route path="/schools" element={<Schools />} />
         </Route>
       </Routes>
     </BrowserRouter>
