@@ -6,6 +6,8 @@ from typing import Any
 
 import stripe
 from fastapi import APIRouter, Depends, Header, Request
+
+from api.middleware.rate_limit import limiter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -141,6 +143,7 @@ _EVENT_DISPATCH = {
 
 
 @router.post("/webhooks/stripe", status_code=200)
+@limiter.limit("30/minute")
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
