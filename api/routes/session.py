@@ -119,6 +119,19 @@ async def create(
     db: AsyncSession = Depends(get_db),
 ) -> SessionResponse:
     """Start a new tutoring session for a problem."""
+    # Validate section_id: student must be enrolled in the claimed section
+    section_id = body.section_id
+    if section_id:
+        from api.models.section_enrollment import SectionEnrollment
+        enrolled = (await db.execute(
+            select(SectionEnrollment.id).where(
+                SectionEnrollment.section_id == section_id,
+                SectionEnrollment.student_id == user.id,
+            ).limit(1)
+        )).scalar_one_or_none()
+        if not enrolled:
+            section_id = None  # Silently drop invalid section_id
+
     # Skip quota check if user already has a session for this problem today
     # (e.g. learning a problem they already saw in a mock test)
     if not await _has_session_for_problem_today(db, user.id, body.problem):
@@ -127,7 +140,7 @@ async def create(
         session = await create_session(
             db, user.id, body.problem, body.mode,
             subject=body.subject, image_base64=body.image_base64,
-            section_id=body.section_id,
+            section_id=section_id,
         )
     except SessionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
