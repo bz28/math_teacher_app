@@ -2,8 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.middleware.rate_limit import limiter
-
 from api.core.auth import (
     check_lockout,
     create_access_token,
@@ -27,6 +25,7 @@ from api.core.entitlements import (
 )
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 from api.schemas.auth import (
     CheckEmailRequest,
@@ -86,7 +85,10 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
 
     if check_lockout(user):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Account temporarily locked. Try again later.")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account temporarily locked. Try again later.",
+        )
 
     if not verify_password(body.password, user.password_hash):
         await record_failed_login(db, user)

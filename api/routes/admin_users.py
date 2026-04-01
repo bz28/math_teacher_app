@@ -259,7 +259,10 @@ async def update_user_role(
     old_role = user.role
     user.role = body.role
     await db.commit()
-    logger.info("AUDIT: admin=%s changed role of user=%s from '%s' to '%s'", current_user.user_id, user_id, old_role, body.role)
+    logger.info(
+        "AUDIT: admin=%s changed role of user=%s from '%s' to '%s'",
+        current_user.user_id, user_id, old_role, body.role,
+    )
     return {"status": "ok", "role": body.role}
 
 
@@ -295,7 +298,10 @@ async def update_user_subscription(
     if body.tier == "pro" and body.status == "active":
         user.subscription_provider = user.subscription_provider or "admin"
     await db.commit()
-    logger.info("AUDIT: admin=%s changed subscription of user=%s from tier='%s'/status='%s' to tier='%s'/status='%s'", current_user.user_id, user_id, old_tier, old_status, body.tier, body.status)
+    logger.info(
+        "AUDIT: admin=%s changed subscription of user=%s from tier='%s'/status='%s' to tier='%s'/status='%s'",
+        current_user.user_id, user_id, old_tier, old_status, body.tier, body.status,
+    )
     return {"status": "ok", "tier": body.tier, "subscription_status": body.status}
 
 

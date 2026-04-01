@@ -6,13 +6,12 @@ from typing import Any
 
 import stripe
 from fastapi import APIRouter, Depends, Header, Request
-
-from api.middleware.rate_limit import limiter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.database import get_db
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 
 router = APIRouter(tags=["webhooks"])

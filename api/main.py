@@ -5,10 +5,9 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, or_, text
-
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import delete, or_, text
 
 from api.config import settings
 from api.core.entitlements import EntitlementError
