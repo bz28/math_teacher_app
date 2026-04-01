@@ -370,6 +370,11 @@ td:has(.action-menu-wrapper) {
   color: #92400e;
 }
 
+.badge-warning {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
 /* Filters */
 .filters {
   margin-bottom: 20px;
