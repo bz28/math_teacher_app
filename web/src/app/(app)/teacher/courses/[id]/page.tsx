@@ -58,13 +58,25 @@ export default function CourseDetailPage() {
   };
 
   useEffect(() => {
-    loadCourse();
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    teacher.course(id).then((c) => {
+      if (cancelled) return;
+      setCourse(c);
+      setEditName(c.name);
+      setEditSubject(c.subject);
+      setLoading(false);
+    }).catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
 
   useEffect(() => {
-    if (tab === "sections") loadSections();
-    if (tab === "documents") loadDocuments();
-  }, [tab, id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (tab === "sections") {
+      teacher.sections(id).then((d) => setSections(d.sections)).catch(() => {});
+    }
+    if (tab === "documents") {
+      teacher.documents(id).then((d) => setDocuments(d.documents)).catch(() => {});
+    }
+  }, [tab, id]);
 
   async function handleCreateSection(e: FormEvent) {
     e.preventDefault();
