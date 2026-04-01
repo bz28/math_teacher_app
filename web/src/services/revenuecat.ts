@@ -25,7 +25,7 @@ function configureForPlan(plan: PlanType, userId: string): Purchases {
   if (!apiKey) {
     throw new Error(`RevenueCat ${plan} API key is not configured`);
   }
-  return Purchases.configure(apiKey, userId);
+  return Purchases.configure({ apiKey, appUserId: userId });
 }
 
 /**
@@ -70,7 +70,7 @@ export async function getManagementUrl(userId: string): Promise<string | null> {
     if (!apiKey) continue;
 
     try {
-      const rc = Purchases.configure(apiKey, userId);
+      const rc = Purchases.configure({ apiKey, appUserId: userId });
       const info = await rc.getCustomerInfo();
       if (info.managementURL) {
         return info.managementURL;
