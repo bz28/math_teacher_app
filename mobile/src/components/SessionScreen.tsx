@@ -385,11 +385,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <>
             <View>
               <View style={styles.inputLabelRow}>
-              <Text style={styles.inputLabel}>Ask a question about the problem</Text>
-              {!isPro && chatsRemaining() < Infinity && (
-                <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
-              )}
-            </View>
+                <Text style={styles.inputLabel}>Ask a question about the problem</Text>
+                {!isPro && chatsRemaining() < Infinity && (
+                  <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
+                )}
+              </View>
               <TextInput
                 ref={inputRef}
                 style={styles.input}

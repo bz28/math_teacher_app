@@ -94,7 +94,7 @@ export function InputScreen({
   } = useImageExtraction(
     problemQueue.length, MAX_PROBLEMS, setError, subject,
     isPro ? undefined : scansRemaining,
-    () => { setPaywallTrigger("image_scan"); setPaywallVisible(true); },
+    isPro ? undefined : () => { setPaywallTrigger("image_scan"); setPaywallVisible(true); },
   );
 
   const {

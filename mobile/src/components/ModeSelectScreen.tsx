@@ -56,9 +56,9 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
   const [loading, setLoading] = useState(true);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const isPro = useEntitlementStore((s) => s.isPro);
-  const canCreateSession = useEntitlementStore((s) => s.canCreateSession);
   const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
+  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -200,7 +200,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
       <PaywallScreen
         visible={paywallVisible}
         onClose={() => setPaywallVisible(false)}
-        onPurchaseComplete={() => setPaywallVisible(false)}
+        onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
         trigger="create_session"
       />
     </SafeAreaView>
