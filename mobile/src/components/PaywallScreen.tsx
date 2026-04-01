@@ -243,25 +243,26 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         )}
 
         {/* Subscribe button */}
-        <AnimatedPressable
-          onPress={handleSubscribe}
-          disabled={purchasing || loadingOfferings}
-          scaleDown={0.97}
-          style={styles.subscribeWrap}
-        >
-          <LinearGradient
-            colors={gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.subscribeButton, (purchasing || loadingOfferings) && styles.subscribeButtonDisabled]}
+        <View style={styles.subscribeWrap}>
+          <AnimatedPressable
+            onPress={handleSubscribe}
+            disabled={purchasing || loadingOfferings}
+            scaleDown={0.97}
           >
-            {purchasing ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Text style={styles.subscribeButtonText}>{ctaLabel}</Text>
-            )}
-          </LinearGradient>
-        </AnimatedPressable>
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.subscribeButton, (purchasing || loadingOfferings) && styles.subscribeButtonDisabled]}
+            >
+              {purchasing ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.subscribeButtonText}>{ctaLabel}</Text>
+              )}
+            </LinearGradient>
+          </AnimatedPressable>
+        </View>
 
         {/* Secondary actions */}
         <View style={styles.secondaryActions}>
