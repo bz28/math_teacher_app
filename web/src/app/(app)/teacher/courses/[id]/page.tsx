@@ -30,32 +30,7 @@ export default function CourseDetailPage() {
   const [editName, setEditName] = useState("");
   const [editSubject, setEditSubject] = useState("");
 
-  const [copiedCode, setCopiedCode] = useState(false);
-
-  const loadCourse = async () => {
-    setLoading(true);
-    try {
-      const c = await teacher.course(id);
-      setCourse(c);
-      setEditName(c.name);
-      setEditSubject(c.subject);
-    } catch { /* ignore */ }
-    setLoading(false);
-  };
-
-  const loadSections = async () => {
-    try {
-      const d = await teacher.sections(id);
-      setSections(d.sections);
-    } catch { /* ignore */ }
-  };
-
-  const loadDocuments = async () => {
-    try {
-      const d = await teacher.documents(id);
-      setDocuments(d.documents);
-    } catch { /* ignore */ }
-  };
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,12 +53,20 @@ export default function CourseDetailPage() {
     }
   }, [tab, id]);
 
+  function reloadSections() {
+    teacher.sections(id).then((d) => setSections(d.sections)).catch(() => {});
+  }
+
+  function reloadDocuments() {
+    teacher.documents(id).then((d) => setDocuments(d.documents)).catch(() => {});
+  }
+
   async function handleCreateSection(e: FormEvent) {
     e.preventDefault();
     try {
       await teacher.createSection(id, newSectionName.trim());
       setNewSectionName("");
-      loadSections();
+      reloadSections();
       toast.success("Section created");
     } catch (err) { toast.error((err as Error).message); }
   }
@@ -99,7 +82,7 @@ export default function CourseDetailPage() {
     try {
       const res = await teacher.generateJoinCode(id, sectionId);
       toast.success(`Join code: ${res.join_code}`);
-      loadSections();
+      reloadSections();
       if (sectionDetail?.id === sectionId) handleViewSection(sectionId);
     } catch (err) { toast.error((err as Error).message); }
   }
@@ -127,7 +110,7 @@ export default function CourseDetailPage() {
     if (!confirm("Delete this section? All students will be unenrolled.")) return;
     try {
       await teacher.deleteSection(id, sectionId);
-      loadSections();
+      reloadSections();
       if (sectionDetail?.id === sectionId) setSectionDetail(null);
       toast.success("Section deleted");
     } catch (err) { toast.error((err as Error).message); }
@@ -137,7 +120,8 @@ export default function CourseDetailPage() {
     e.preventDefault();
     try {
       await teacher.updateCourse(id, { name: editName.trim(), subject: editSubject });
-      loadCourse();
+      const c = await teacher.course(id);
+      setCourse(c);
       toast.success("Course updated");
     } catch (err) { toast.error((err as Error).message); }
   }
@@ -154,14 +138,14 @@ export default function CourseDetailPage() {
     if (!confirm("Delete this document?")) return;
     try {
       await teacher.deleteDocument(id, docId);
-      loadDocuments();
+      reloadDocuments();
     } catch (err) { toast.error((err as Error).message); }
   }
 
   function copyJoinCode(code: string) {
     navigator.clipboard.writeText(code);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 1500);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 1500);
   }
 
   if (loading) return <div className="py-12 text-center text-text-muted">Loading...</div>;
@@ -243,7 +227,7 @@ export default function CourseDetailPage() {
                           onClick={() => copyJoinCode(s.join_code!)}
                           className="rounded-[--radius-sm] border border-border px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary-bg"
                         >
-                          {copiedCode ? "Copied!" : "Copy Code"}
+                          {copiedCode === s.join_code ? "Copied!" : "Copy Code"}
                         </button>
                       ) : (
                         <button

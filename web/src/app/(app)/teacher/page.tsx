@@ -31,16 +31,18 @@ export default function TeacherDashboard() {
       </motion.div>
 
       {/* Stats */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="mt-8 grid grid-cols-3 gap-4"
-      >
-        <StatCard label="Courses" value={courses.length} />
-        <StatCard label="Sections" value={totalSections} />
-        <StatCard label="Documents" value={totalDocs} />
-      </motion.div>
+      {!loading && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mt-8 grid grid-cols-3 gap-4"
+        >
+          <StatCard label="Courses" value={courses.length} />
+          <StatCard label="Sections" value={totalSections} />
+          <StatCard label="Documents" value={totalDocs} />
+        </motion.div>
+      )}
 
       {/* Quick actions */}
       <motion.div
@@ -94,7 +96,14 @@ export default function TeacherDashboard() {
           transition={{ delay: 0.3 }}
           className="mt-8"
         >
-          <h2 className="text-lg font-bold text-text-primary">Your Courses</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-text-primary">Your Courses</h2>
+            {courses.length > 5 && (
+              <Link href="/teacher/courses" className="text-sm font-semibold text-primary hover:text-primary-dark">
+                View all ({courses.length})
+              </Link>
+            )}
+          </div>
           <div className="mt-3 space-y-2">
             {courses.slice(0, 5).map((course) => (
               <Link

@@ -12,7 +12,6 @@ export default function CourseListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("math");
-  const [gradeLevel, setGradeLevel] = useState("");
   const [creating, setCreating] = useState(false);
   const toast = useToast();
 
@@ -21,20 +20,17 @@ export default function CourseListPage() {
     teacher.courses().then((d) => setCourses(d.courses)).finally(() => setLoading(false));
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    teacher.courses().then((d) => setCourses(d.courses)).finally(() => setLoading(false));
+  }, []);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setCreating(true);
     try {
-      await teacher.createCourse({
-        name: name.trim(),
-        subject,
-        grade_level: gradeLevel ? parseInt(gradeLevel) : undefined,
-      });
+      await teacher.createCourse({ name: name.trim(), subject });
       setName("");
       setSubject("math");
-      setGradeLevel("");
       setShowCreate(false);
       reload();
       toast.success("Course created");

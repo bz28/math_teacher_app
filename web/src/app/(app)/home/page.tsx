@@ -81,8 +81,8 @@ export default function HomePage() {
           {isSchoolStudent ? "Here are your classes" : "Ready to learn something new?"}
         </p>
 
-        {/* Join class code */}
-        <form onSubmit={handleJoinSection} className="mt-4 flex items-center gap-2">
+        {/* Join class code — students only */}
+        {user?.role !== "teacher" && <form onSubmit={handleJoinSection} className="mt-4 flex items-center gap-2">
           <input
             type="text"
             value={joinCode}
@@ -99,7 +99,7 @@ export default function HomePage() {
             {joining ? "Joining..." : "Join"}
           </button>
           {joinError && <span className="text-xs text-red-500">{joinError}</span>}
-        </form>
+        </form>}
       </motion.div>
 
       {/* School student — enrolled courses */}
