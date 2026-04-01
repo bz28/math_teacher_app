@@ -505,10 +505,12 @@ const styles = StyleSheet.create({
   // Subscribe button
   subscribeWrap: {
     alignSelf: "stretch",
+    ...shadows.md,
+    borderRadius: radii.xl,
   },
   subscribeButton: {
-    borderRadius: radii.md,
-    paddingVertical: spacing.lg,
+    borderRadius: radii.xl,
+    paddingVertical: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -518,6 +520,8 @@ const styles = StyleSheet.create({
   subscribeButtonText: {
     ...typography.button,
     color: colors.white,
+    fontSize: 17,
+    letterSpacing: 0.3,
   },
 
   // Secondary actions (restore + promo toggle)
