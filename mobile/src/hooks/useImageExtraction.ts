@@ -42,11 +42,19 @@ export function useImageExtraction(
   maxProblems: number,
   setError: (msg: string | null) => void,
   subject: string = "math",
+  scansRemaining?: () => number,
+  onScanLimitReached?: () => void,
 ) {
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
 
   /** Pick image → show preview with Extract All / Select Areas options. */
   const pickImage = async (source: "camera" | "gallery") => {
+    // Check scan limit before allowing image capture
+    if (scansRemaining && onScanLimitReached && scansRemaining() <= 0) {
+      onScanLimitReached();
+      return;
+    }
+
     const granted = source === "camera"
       ? await requestCameraAccess()
       : await requestGalleryAccess();
