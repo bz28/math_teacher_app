@@ -31,6 +31,8 @@ export const metadata: Metadata = {
     "exam prep",
     "AI education",
     "Veradic AI",
+    "Veradic",
+    "veradicai",
   ],
   authors: [{ name: "Veradic AI" }],
   creator: "Veradic AI",
@@ -78,6 +80,59 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "Veradic AI",
+              alternateName: ["Veradic", "VeradicAI"],
+              applicationCategory: "EducationalApplication",
+              operatingSystem: "Web, iOS, Android",
+              url: "https://veradicai.com",
+              description:
+                "Veradic AI is an AI-powered tutoring platform that breaks any math or science problem into guided steps you actually understand.",
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "USD",
+                description: "Free tier available",
+              },
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: "5",
+                ratingCount: "1",
+              },
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "Veradic AI",
+              alternateName: "Veradic",
+              url: "https://veradicai.com",
+              logo: "https://veradicai.com/icon.svg",
+              sameAs: ["https://twitter.com/veradicai"],
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "Veradic AI",
+              alternateName: "Veradic",
+              url: "https://veradicai.com",
+            }),
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
