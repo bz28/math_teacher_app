@@ -46,8 +46,12 @@ async def submit_contact_form(
 
     # Fire-and-forget admin notification
     if settings.admin_alert_emails:
-        students_line = f"<li><strong>Est. students:</strong> {body.approx_students}</li>" if body.approx_students else ""
-        message_line = f"<li><strong>Message:</strong> {body.message}</li>" if body.message else ""
+        students_line = (
+            f"<li><strong>Est. students:</strong> {body.approx_students}</li>" if body.approx_students else ""
+        )
+        message_line = (
+            f"<li><strong>Message:</strong> {body.message}</li>" if body.message else ""
+        )
         asyncio.create_task(send_email(
             to=settings.admin_alert_emails,
             subject=f"New school lead: {body.school_name}",
