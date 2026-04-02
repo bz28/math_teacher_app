@@ -258,6 +258,8 @@ async def update_user_role(
 
     old_role = user.role
     user.role = body.role
+    user.updated_by_id = current_user.user_id
+    user.updated_by_name = current_user.name
     await db.commit()
     logger.info(
         "AUDIT: admin=%s changed role of user=%s from '%s' to '%s'",
@@ -297,6 +299,8 @@ async def update_user_subscription(
     user.subscription_status = body.status
     if body.tier == "pro" and body.status == "active":
         user.subscription_provider = user.subscription_provider or "admin"
+    user.updated_by_id = current_user.user_id
+    user.updated_by_name = current_user.name
     await db.commit()
     logger.info(
         "AUDIT: admin=%s changed subscription of user=%s from tier='%s'/status='%s' to tier='%s'/status='%s'",
@@ -339,6 +343,8 @@ async def reset_daily_limit(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     user.daily_limit_reset_at = datetime.now(UTC)
+    user.updated_by_id = current_user.user_id
+    user.updated_by_name = current_user.name
     await db.commit()
     logger.info("AUDIT: admin=%s reset daily limits for user=%s", current_user.user_id, user_id)
     return {"status": "ok"}

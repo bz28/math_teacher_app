@@ -205,6 +205,8 @@ export interface PromoCodeData {
   expires_at: string | null;
   is_active: boolean;
   created_at: string;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 export interface CreatePromoCodeBody {
@@ -238,6 +240,8 @@ export interface ContactLeadData {
   message: string | null;
   status: string;
   created_at: string;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 // School types
@@ -252,6 +256,8 @@ export interface SchoolListItem {
   teacher_count: number;
   student_count: number;
   created_at: string;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 export interface SchoolDetail {

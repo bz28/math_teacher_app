@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -44,6 +44,8 @@ async def list_leads(
                 "message": lead.message,
                 "status": lead.status,
                 "created_at": lead.created_at.isoformat(),
+                "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,
+                "updated_by": lead.updated_by_name,
             }
             for lead in rows
         ]
@@ -68,6 +70,9 @@ async def update_lead_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
     lead.status = body.status
+    lead.updated_at = func.now()
+    lead.updated_by_id = current_user.user_id
+    lead.updated_by_name = current_user.name
     await db.commit()
     logger.info("AUDIT: admin=%s updated lead=%s status to '%s'", current_user.user_id, lead_id, body.status)
     return {"status": "ok"}

@@ -65,6 +65,8 @@ class PromoCodeResponse(BaseModel):
     expires_at: datetime | None
     is_active: bool
     created_at: datetime
+    updated_at: datetime | None = None
+    updated_by: str | None = None
 
 
 class PromoRedemptionResponse(BaseModel):

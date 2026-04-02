@@ -118,6 +118,8 @@ async def list_schools(
                 "teacher_count": tc,
                 "student_count": sc,
                 "created_at": s.created_at.isoformat(),
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+                "updated_by": s.updated_by_name,
             }
             for s, tc, sc in rows
         ]
@@ -137,6 +139,8 @@ async def create_school(
         contact_name=body.contact_name,
         contact_email=body.contact_email,
         notes=body.notes,
+        updated_by_id=current_user.user_id,
+        updated_by_name=current_user.name,
     )
     db.add(school)
     await db.commit()
@@ -208,6 +212,8 @@ async def update_school(
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(school, field, value)
+    school.updated_by_id = current_user.user_id
+    school.updated_by_name = current_user.name
     await db.commit()
     logger.info("AUDIT: admin=%s updated school=%s", current_user.user_id, school_id)
     return {"status": "ok"}

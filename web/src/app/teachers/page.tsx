@@ -48,7 +48,7 @@ const STEPS = [
 ];
 
 export default function TeachersPage() {
-  const [form, setForm] = useState({ school_name: "", contact_name: "", contact_email: "" });
+  const [form, setForm] = useState({ school_name: "", contact_name: "", contact_email: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -61,6 +61,7 @@ export default function TeachersPage() {
         contact_name: form.contact_name.trim(),
         contact_email: form.contact_email.trim(),
         role: "teacher",
+        message: form.message.trim() || undefined,
       });
       setSubmitted(true);
     } catch {
@@ -376,6 +377,18 @@ export default function TeachersPage() {
                       placeholder="Lincoln High School"
                       required
                       className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
+                      Anything else we should know?
+                    </label>
+                    <textarea
+                      value={form.message}
+                      onChange={(e) => setForm({ ...form, message: e.target.value })}
+                      placeholder="e.g. how many students, what subjects, timeline..."
+                      rows={3}
+                      className="mt-1 w-full resize-vertical rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary"
                     />
                   </div>
                   <button

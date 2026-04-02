@@ -121,12 +121,12 @@ export default function Leads() {
         <div className="table-scroll">
         <table>
           <colgroup>
+            <col style={{ width: "16%" }} />
             <col style={{ width: "18%" }} />
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "10%" }} />
             <col style={{ width: "8%" }} />
             <col style={{ width: "20%" }} />
             <col style={{ width: "12%" }} />
+            <col style={{ width: "14%" }} />
             <col style={{ width: "12%" }} />
           </colgroup>
           <thead>
@@ -134,9 +134,9 @@ export default function Leads() {
               <th>School</th>
               <th>Contact</th>
               <th>Role</th>
-              <th>Students</th>
               <th>Message</th>
               <th>Status</th>
+              <th>Updated</th>
               <th>Received</th>
             </tr>
           </thead>
@@ -149,7 +149,6 @@ export default function Leads() {
                   <div style={{ fontSize: 11, color: "#64748b" }}>{lead.contact_email}</div>
                 </td>
                 <td style={{ fontSize: 13, textTransform: "capitalize" }}>{lead.role}</td>
-                <td style={{ fontSize: 13 }}>{lead.approx_students ?? "—"}</td>
                 <td>
                   {lead.message ? (
                     <div style={{ fontSize: 12, color: "#475569", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={lead.message}>
@@ -178,6 +177,16 @@ export default function Leads() {
                       <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                     ))}
                   </select>
+                </td>
+                <td>
+                  {lead.updated_by ? (
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{lead.updated_by}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8" }}>{lead.updated_at ? formatRelativeDate(lead.updated_at) : ""}</div>
+                    </div>
+                  ) : (
+                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                  )}
                 </td>
                 <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(lead.created_at)}</td>
               </tr>
