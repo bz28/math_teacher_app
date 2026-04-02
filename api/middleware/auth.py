@@ -18,9 +18,10 @@ security = HTTPBearer()
 
 
 class CurrentUser:
-    def __init__(self, user_id: uuid.UUID, role: str):
+    def __init__(self, user_id: uuid.UUID, role: str, name: str = ""):
         self.user_id = user_id
         self.role = role
+        self.name = name
 
 
 async def get_current_user(
@@ -36,14 +37,14 @@ async def get_current_user(
     # Verify user is still active on every request
     from api.models.user import User
 
-    result = await db.execute(select(User.is_active).where(User.id == user_id))
-    is_active = result.scalar_one_or_none()
-    if is_active is None:
+    result = await db.execute(select(User.is_active, User.name, User.email).where(User.id == user_id))
+    row = result.one_or_none()
+    if row is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    if not is_active:
+    if not row.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
 
-    return CurrentUser(user_id=user_id, role=str(payload["role"]))
+    return CurrentUser(user_id=user_id, role=str(payload["role"]), name=row.name or row.email)
 
 
 async def get_current_user_full(
