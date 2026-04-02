@@ -88,6 +88,8 @@ export const api = {
   updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
   inviteTeacher: (schoolId: string, email: string) =>
     mutate<{ status: string; invite_url: string }>(`/admin/schools/${schoolId}/invite`, "POST", { email }),
+  deleteSchool: (id: string) =>
+    mutate<{ status: string; teachers_unlinked: number; invites_deleted: number }>(`/admin/schools/${id}`, "DELETE"),
   cancelInvite: (schoolId: string, inviteId: string) =>
     mutate<{ status: string }>(`/admin/schools/${schoolId}/invites/${inviteId}`, "DELETE"),
   // Promo codes
