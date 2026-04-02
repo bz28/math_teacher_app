@@ -150,8 +150,9 @@ export default function LoginPage() {
 
       {/* Forgot password overlay */}
       {showForgot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6" onClick={() => setShowForgot(false)}>
           <motion.div
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-lg"

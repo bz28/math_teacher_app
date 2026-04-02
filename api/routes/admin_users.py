@@ -234,6 +234,58 @@ async def users(
     }
 
 
+class InviteAdminRequest(BaseModel):
+    email: EmailStr
+    name: str
+
+
+@router.post("/users/invite")
+async def invite_admin(
+    body: InviteAdminRequest,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Create a new admin user and send them an email to set their password."""
+    existing = (await db.execute(select(User).where(User.email == body.email.lower()))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists")
+
+    # Generate password reset token
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+    user = User(
+        email=body.email.lower(),
+        name=body.name.strip(),
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        grade_level=0,
+        role="admin",
+        password_reset_token_hash=token_hash,
+        password_reset_expires=datetime.now(UTC) + timedelta(hours=INVITE_TOKEN_EXPIRY_HOURS),
+    )
+    db.add(user)
+    await db.commit()
+
+    set_password_url = f"https://veradicai.com/set-password?token={raw_token}"
+    logger.info("AUDIT: admin=%s invited new admin email=%s", current_user.user_id, body.email)
+
+    asyncio.create_task(send_email(
+        to=[body.email.lower()],
+        subject="You've been invited to Veradic AI Admin",
+        html=(
+            f"<h2>Welcome to Veradic AI!</h2>"
+            f"<p><strong>{current_user.name}</strong> has invited you as an admin.</p>"
+            f"<p>Click the link below to set your password and log in:</p>"
+            f'<p><a href="{set_password_url}" style="display:inline-block;padding:12px 24px;'
+            f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
+            f'font-weight:600;">Set Your Password</a></p>'
+            f"<p style=\"color:#64748b;font-size:13px;\">This link expires in {INVITE_TOKEN_EXPIRY_HOURS} hours.</p>"
+        ),
+    ))
+
+    return {"status": "ok"}
+
+
 class UpdateRoleRequest(BaseModel):
     role: str
 
@@ -354,56 +406,4 @@ async def reset_daily_limit(
     user.updated_by_name = current_user.name
     await db.commit()
     logger.info("AUDIT: admin=%s reset daily limits for user=%s", current_user.user_id, user_id)
-    return {"status": "ok"}
-
-
-class InviteAdminRequest(BaseModel):
-    email: EmailStr
-    name: str
-
-
-@router.post("/users/invite")
-async def invite_admin(
-    body: InviteAdminRequest,
-    current_user: CurrentUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-    """Create a new admin user and send them an email to set their password."""
-    existing = (await db.execute(select(User).where(User.email == body.email.lower()))).scalar_one_or_none()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists")
-
-    # Generate password reset token
-    raw_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-
-    user = User(
-        email=body.email.lower(),
-        name=body.name.strip(),
-        password_hash=hash_password(secrets.token_urlsafe(32)),
-        grade_level=0,
-        role="admin",
-        password_reset_token_hash=token_hash,
-        password_reset_expires=datetime.now(UTC) + timedelta(hours=INVITE_TOKEN_EXPIRY_HOURS),
-    )
-    db.add(user)
-    await db.commit()
-
-    set_password_url = f"https://veradicai.com/set-password?token={raw_token}"
-    logger.info("AUDIT: admin=%s invited new admin email=%s", current_user.user_id, body.email)
-
-    asyncio.create_task(send_email(
-        to=[body.email.lower()],
-        subject="You've been invited to Veradic AI Admin",
-        html=(
-            f"<h2>Welcome to Veradic AI!</h2>"
-            f"<p><strong>{current_user.name}</strong> has invited you as an admin.</p>"
-            f"<p>Click the link below to set your password and log in:</p>"
-            f'<p><a href="{set_password_url}" style="display:inline-block;padding:12px 24px;'
-            f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
-            f'font-weight:600;">Set Your Password</a></p>'
-            f"<p style=\"color:#64748b;font-size:13px;\">This link expires in {INVITE_TOKEN_EXPIRY_HOURS} hours.</p>"
-        ),
-    ))
-
     return {"status": "ok"}

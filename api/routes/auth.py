@@ -333,7 +333,9 @@ async def forgot_password(
 
 
 @router.post("/set-password")
+@limiter.limit("5/minute")
 async def set_password(
+    request: Request,
     body: SetPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
