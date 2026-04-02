@@ -53,6 +53,16 @@
 }
 
 /* ── Subject color overrides ── */
+[data-subject="physics"] {
+  --color-primary: #0984E3;
+  --color-primary-light: #74B9FF;
+  --color-primary-bg: #E8F4FD;
+  --color-primary-dark: #0773C5;
+  --gradient-primary: linear-gradient(135deg, #0984E3, #74B9FF);
+  --gradient-header: linear-gradient(135deg, #0984E3, #4BA3ED);
+  --color-overlay: rgba(9, 132, 227, 0.08);
+}
+
 [data-subject="chemistry"] {
   --color-primary: #00B894;
   --color-primary-light: #55EFC4;
@@ -98,6 +108,16 @@
   --color-overlay: rgba(0, 0, 0, 0.3);
 
   --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
+}
+
+[data-theme="dark"][data-subject="physics"] {
+  --color-primary: #74B9FF;
+  --color-primary-light: #A3D1FF;
+  --color-primary-bg: #0D1F2B;
+  --color-primary-dark: #A3D1FF;
+  --gradient-primary: linear-gradient(135deg, #74B9FF, #A3D1FF);
+  --gradient-header: linear-gradient(135deg, #74B9FF, #A3D1FF);
+  --color-overlay: rgba(116, 185, 255, 0.08);
 }
 
 [data-theme="dark"][data-subject="chemistry"] {
