@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
+import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
 import StatCard from "../components/StatCard";
 
 export default function Schools() {
@@ -12,6 +13,7 @@ export default function Schools() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", contact_name: "", contact_email: "", city: "", state: "", notes: "" });
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Detail modal
   const [detail, setDetail] = useState<SchoolDetail | null>(null);
@@ -63,6 +65,7 @@ export default function Schools() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setCreateError(null);
     try {
       await api.createSchool({
         name: createForm.name.trim(),
@@ -76,7 +79,7 @@ export default function Schools() {
       setShowCreate(false);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      setCreateError((e as Error).message);
     } finally {
       setCreating(false);
     }
@@ -222,8 +225,13 @@ export default function Schools() {
         <div className="table-card" style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h3 style={{ marginBottom: 0 }}>Add New School</h3>
-            <button onClick={() => setShowCreate(false)} style={btnGhost}>Cancel</button>
+            <button onClick={() => { setShowCreate(false); setCreateError(null); }} style={btnGhost}>Cancel</button>
           </div>
+          {createError && (
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fef2f2", borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626" }}>
+              {createError}
+            </div>
+          )}
           <form onSubmit={handleCreate} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <FormField label="School Name">
               <input
@@ -608,59 +616,6 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
     </div>
   );
 }
-
-/* ── Shared styles ──────────────────────────────────────────────── */
-
-const inputStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 6,
-  border: "1px solid #e2e8f0",
-  fontSize: 14,
-  width: "100%",
-  outline: "none",
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 24px",
-  background: "#6366f1",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontSize: 14,
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: "6px 14px",
-  background: "none",
-  color: "#64748b",
-  border: "1px solid #e2e8f0",
-  borderRadius: 6,
-  cursor: "pointer",
-  fontSize: 13,
-};
-
-const btnSmall: React.CSSProperties = {
-  padding: "4px 10px",
-  fontSize: 12,
-  borderRadius: 4,
-  border: "1px solid #e2e8f0",
-  background: "#fff",
-  cursor: "pointer",
-  fontWeight: 600,
-  color: "#6366f1",
-};
-
-const overlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.4)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 50,
-};
 
 const modalCard: React.CSSProperties = {
   maxWidth: 720,

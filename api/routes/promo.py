@@ -1,5 +1,6 @@
 """Promo code redemption and admin CRUD routes."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,6 +19,8 @@ from api.schemas.promo import (
     RedeemPromoResponse,
     UpdatePromoCodeRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/promo", tags=["promo"])
 
@@ -170,6 +173,7 @@ async def create_promo_code(
     db.add(promo)
     await db.commit()
     await db.refresh(promo)
+    logger.info("AUDIT: admin=%s created promo code=%s (%s)", current_user.user_id, promo.id, promo.code)
 
     return _code_response(promo)
 
@@ -214,6 +218,7 @@ async def update_promo_code(
     promo.updated_by_name = current_user.name
     await db.commit()
     await db.refresh(promo)
+    logger.info("AUDIT: admin=%s updated promo code=%s (%s)", current_user.user_id, code_id, promo.code)
 
     return _code_response(promo)
 

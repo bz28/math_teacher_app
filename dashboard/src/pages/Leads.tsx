@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type ContactLeadData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
+import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
 import StatCard from "../components/StatCard";
 
 const STATUS_OPTIONS = ["new", "contacted", "converted", "declined"] as const;
@@ -23,6 +24,7 @@ export default function Leads() {
   const [sendInvite, setSendInvite] = useState(true);
   const [converting, setConverting] = useState(false);
   const [convertResult, setConvertResult] = useState<{ invite_url?: string } | null>(null);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   // Copied feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export default function Leads() {
       });
       setSendInvite(true);
       setConvertResult(null);
+      setConvertError(null);
       return;
     }
     try {
@@ -67,6 +70,7 @@ export default function Leads() {
     e.preventDefault();
     if (!convertLead) return;
     setConverting(true);
+    setConvertError(null);
     try {
       // 1. Create school
       const school = await api.createSchool({
@@ -89,7 +93,7 @@ export default function Leads() {
       setConvertResult({ invite_url });
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      setConvertError((e as Error).message);
     } finally {
       setConverting(false);
     }
@@ -307,8 +311,13 @@ export default function Leads() {
                       Create a school and optionally invite the contact as the first teacher.
                     </div>
                   </div>
-                  <button onClick={() => setConvertLead(null)} style={btnGhost}>Cancel</button>
+                  <button onClick={() => { setConvertLead(null); setConvertError(null); }} style={btnGhost}>Cancel</button>
                 </div>
+                {convertError && (
+                  <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fef2f2", borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626" }}>
+                    {convertError}
+                  </div>
+                )}
                 <form onSubmit={handleConvert} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <FormField label="School Name">
                     <input
@@ -385,57 +394,6 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 6,
-  border: "1px solid #e2e8f0",
-  fontSize: 14,
-  width: "100%",
-  outline: "none",
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 24px",
-  background: "#6366f1",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontSize: 14,
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: "6px 14px",
-  background: "none",
-  color: "#64748b",
-  border: "1px solid #e2e8f0",
-  borderRadius: 6,
-  cursor: "pointer",
-  fontSize: 13,
-};
-
-const btnSmall: React.CSSProperties = {
-  padding: "4px 10px",
-  fontSize: 12,
-  borderRadius: 4,
-  border: "1px solid #e2e8f0",
-  background: "#fff",
-  cursor: "pointer",
-  fontWeight: 600,
-  color: "#6366f1",
-};
-
-const overlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.4)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 50,
-};
 
 const modalCard: React.CSSProperties = {
   maxWidth: 560,
