@@ -24,10 +24,10 @@ const plans = [
   },
   {
     name: "Yearly",
-    price: "$69.99",
+    price: "$79.99",
     period: "/year",
-    perMonth: "$1.35/week",
-    badge: "Best Value — Save 55%",
+    perMonth: "$1.54/week",
+    badge: "Best Value — Save 49%",
     trial: "7-day free trial",
     cta: "Start Free Trial",
     features: [
@@ -116,7 +116,7 @@ export function Pricing() {
               </div>
               {plan.perMonth && (
                 <p className="mt-1 text-sm font-medium text-success">
-                  {plan.perMonth} — Save 55%
+                  {plan.perMonth} — Save 49%
                 </p>
               )}
               {plan.trial && (

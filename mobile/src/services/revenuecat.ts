@@ -22,7 +22,7 @@ export async function initRevenueCat(userId: string): Promise<void> {
 }
 
 /**
- * Fetch available subscription offerings (monthly + annual packages).
+ * Fetch available subscription offerings (weekly + annual packages).
  */
 export async function getOfferings(): Promise<PurchasesOfferings> {
   return Purchases.getOfferings();
