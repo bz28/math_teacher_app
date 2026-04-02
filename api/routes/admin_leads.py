@@ -1,6 +1,7 @@
 """Admin contact lead management endpoints."""
 
 import logging
+import uuid as _uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -73,7 +74,7 @@ async def update_lead_status(
 
     lead.status = body.status
     if body.school_id:
-        lead.school_id = body.school_id
+        lead.school_id = _uuid.UUID(body.school_id)
     lead.updated_at = func.now()
     lead.updated_by_id = current_user.user_id
     lead.updated_by_name = current_user.name
