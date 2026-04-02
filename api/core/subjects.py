@@ -7,6 +7,7 @@ class Subject(StrEnum):
     MATH = "math"
     CHEMISTRY = "chemistry"
     PHYSICS = "physics"
+    CS = "cs"
 
 
 VALID_SUBJECTS = frozenset(s.value for s in Subject)
@@ -69,6 +70,23 @@ SUBJECT_CONFIG: dict[str, dict[str, object]] = {
         "function_names": {
             "sin", "cos", "tan", "log", "ln", "sqrt", "abs",
         },
+    },
+    Subject.CS: {
+        "professor_role": (
+            "worldclass computer science professor with expertise in data structures, "
+            "algorithms, system design, and writing clean optimal code, able to break down "
+            "complex CS problems into easy to understand, coherent steps, making even the most "
+            "advanced concepts trivial to understand to a beginner"
+        ),
+        "tutor_role": "computer science tutor",
+        "domain": "computer science",
+        "problems_noun": "computer science problems",
+        "equivalence_adjective": "LOGICALLY",
+        "equivalence_examples": (
+            '- "O(n)" does NOT match "O(n log n)" — complexity must be exact\n'
+            "- Partial answers or answers missing complexity/units are WRONG"
+        ),
+        "function_names": set(),
     },
 }
 
