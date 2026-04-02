@@ -132,6 +132,16 @@ async def create_school(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    # Prevent duplicate schools by contact email
+    existing = (await db.execute(
+        select(School).where(School.contact_email == body.contact_email.lower())
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A school with this contact email already exists: {existing.name}",
+        )
+
     school = School(
         name=body.name,
         city=body.city,
