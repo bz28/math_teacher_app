@@ -44,13 +44,22 @@ class Settings(BaseSettings):
     # Request size limit (bytes) - 10MB
     max_request_size: int = 10 * 1024 * 1024
 
+    # Email (Resend)
+    resend_api_key: str = ""
+    email_from_address: str = "Veradic AI <support@veradicai.com>"
+    admin_alert_emails: list[str] = [
+        "ben@veradicai.com",
+        "nathaniel@veradicai.com",
+        "support@veradicai.com",
+    ]
+
     # Subscriptions
     revenuecat_webhook_secret: str = ""
     bypass_subscription: bool = False
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "admin_alert_emails", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
+    def parse_string_list(cls, v: str | list[str]) -> list[str]:
         if isinstance(v, str):
             return [str(item) for item in json.loads(v)]
         return v
