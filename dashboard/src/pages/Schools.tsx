@@ -13,6 +13,7 @@ export default function Schools() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", contact_name: "", contact_email: "", city: "", state: "", notes: "" });
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Detail modal
   const [detail, setDetail] = useState<SchoolDetail | null>(null);
@@ -64,6 +65,7 @@ export default function Schools() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setCreateError(null);
     try {
       await api.createSchool({
         name: createForm.name.trim(),
@@ -77,7 +79,7 @@ export default function Schools() {
       setShowCreate(false);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      setCreateError((e as Error).message);
     } finally {
       setCreating(false);
     }
@@ -223,8 +225,13 @@ export default function Schools() {
         <div className="table-card" style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h3 style={{ marginBottom: 0 }}>Add New School</h3>
-            <button onClick={() => setShowCreate(false)} style={btnGhost}>Cancel</button>
+            <button onClick={() => { setShowCreate(false); setCreateError(null); }} style={btnGhost}>Cancel</button>
           </div>
+          {createError && (
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fef2f2", borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626" }}>
+              {createError}
+            </div>
+          )}
           <form onSubmit={handleCreate} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <FormField label="School Name">
               <input

@@ -24,6 +24,7 @@ export default function Leads() {
   const [sendInvite, setSendInvite] = useState(true);
   const [converting, setConverting] = useState(false);
   const [convertResult, setConvertResult] = useState<{ invite_url?: string } | null>(null);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   // Copied feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export default function Leads() {
       });
       setSendInvite(true);
       setConvertResult(null);
+      setConvertError(null);
       return;
     }
     try {
@@ -68,6 +70,7 @@ export default function Leads() {
     e.preventDefault();
     if (!convertLead) return;
     setConverting(true);
+    setConvertError(null);
     try {
       // 1. Create school
       const school = await api.createSchool({
@@ -90,7 +93,7 @@ export default function Leads() {
       setConvertResult({ invite_url });
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      setConvertError((e as Error).message);
     } finally {
       setConverting(false);
     }
@@ -308,8 +311,13 @@ export default function Leads() {
                       Create a school and optionally invite the contact as the first teacher.
                     </div>
                   </div>
-                  <button onClick={() => setConvertLead(null)} style={btnGhost}>Cancel</button>
+                  <button onClick={() => { setConvertLead(null); setConvertError(null); }} style={btnGhost}>Cancel</button>
                 </div>
+                {convertError && (
+                  <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fef2f2", borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626" }}>
+                    {convertError}
+                  </div>
+                )}
                 <form onSubmit={handleConvert} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <FormField label="School Name">
                     <input
