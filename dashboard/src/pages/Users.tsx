@@ -47,6 +47,7 @@ export default function Users() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   if (!data) return <p>Loading...</p>;
 
@@ -102,6 +103,7 @@ export default function Users() {
     e.preventDefault();
     setInviting(true);
     setInviteSuccess(null);
+    setInviteError(null);
     try {
       await api.inviteAdmin(inviteEmail.trim(), inviteName.trim());
       setInviteSuccess(inviteEmail.trim());
@@ -110,7 +112,7 @@ export default function Users() {
       setShowInvite(false);
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      setInviteError((err as Error).message);
     } finally {
       setInviting(false);
     }
@@ -138,15 +140,24 @@ export default function Users() {
 
       {showInvite && (
         <div className="table-card" style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <h3 style={{ marginBottom: 0 }}>Invite New Admin</h3>
-            <button onClick={() => setShowInvite(false)} className="btn-secondary">Cancel</button>
+            <button onClick={() => { setShowInvite(false); setInviteError(null); }} className="btn-secondary">Cancel</button>
           </div>
-          <form onSubmit={handleInviteAdmin} style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b", letterSpacing: 0.5 }}>
-                Name
-              </label>
+          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
+            They'll receive an email with a link to set their password.
+          </p>
+          {inviteError && (
+            <div style={{
+              marginBottom: 12, padding: "8px 12px", background: "#fef2f2",
+              borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626",
+            }}>
+              {inviteError}
+            </div>
+          )}
+          <form onSubmit={handleInviteAdmin} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label className="field-label">Name</label>
               <input
                 type="text"
                 value={inviteName}
@@ -154,13 +165,10 @@ export default function Users() {
                 placeholder="Jane Smith"
                 required
                 className="input"
-                style={{ marginTop: 4 }}
               />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b", letterSpacing: 0.5 }}>
-                Email
-              </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label className="field-label">Email</label>
               <input
                 type="email"
                 value={inviteEmail}
@@ -168,12 +176,13 @@ export default function Users() {
                 placeholder="jane@veradicai.com"
                 required
                 className="input"
-                style={{ marginTop: 4 }}
               />
             </div>
-            <button type="submit" disabled={inviting} className="btn-primary" style={{ whiteSpace: "nowrap" }}>
-              {inviting ? "Sending..." : "Send Invite"}
-            </button>
+            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+              <button type="submit" disabled={inviting} className="btn-primary">
+                {inviting ? "Sending..." : "Send Invite"}
+              </button>
+            </div>
           </form>
         </div>
       )}
