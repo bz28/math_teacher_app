@@ -19,7 +19,7 @@ export type SessionPhase =
   | "learn_summary"
   | "error";
 
-export type Subject = "math" | "chemistry";
+export type Subject = "math" | "chemistry" | "physics";
 
 export interface ChatMessage {
   role: "user" | "assistant";
