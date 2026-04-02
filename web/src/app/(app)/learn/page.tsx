@@ -17,6 +17,7 @@ import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT } from "@/lib/constants
 const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string; bg: string }> = {
   math: { name: "Mathematics", icon: "📐", color: "text-primary", bg: "bg-primary-bg" },
   chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00B894]", bg: "bg-[#00B894]/10" },
+  physics: { name: "Physics", icon: "🚀", color: "text-[#0984E3]", bg: "bg-[#0984E3]/10" },
 };
 
 export default function LearnPage() {

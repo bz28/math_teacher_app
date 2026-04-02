@@ -350,6 +350,7 @@ export default function CourseDetailPage() {
                     className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-primary"
                   >
                     <option value="math">Math</option>
+                    <option value="physics">Physics</option>
                     <option value="chemistry">Chemistry</option>
                   </select>
                 </div>

@@ -6,6 +6,7 @@ from enum import StrEnum
 class Subject(StrEnum):
     MATH = "math"
     CHEMISTRY = "chemistry"
+    PHYSICS = "physics"
 
 
 VALID_SUBJECTS = frozenset(s.value for s in Subject)
@@ -50,6 +51,24 @@ SUBJECT_CONFIG: dict[str, dict[str, object]] = {
             "- Partial answers or answers missing units/coefficients are WRONG"
         ),
         "function_names": set(),
+    },
+    Subject.PHYSICS: {
+        "professor_role": (
+            "worldclass physics professor with expertise in breaking down "
+            "physics problems into easy to understand, coherent steps, making even the most "
+            "complex problems trivial to understand to an elementary student"
+        ),
+        "tutor_role": "physics tutor",
+        "domain": "physics",
+        "problems_noun": "physics problems",
+        "equivalence_adjective": "PHYSICALLY",
+        "equivalence_examples": (
+            '- "10 m/s" does NOT match "10" — units are required\n'
+            "- Partial answers or answers missing units/direction are WRONG"
+        ),
+        "function_names": {
+            "sin", "cos", "tan", "log", "ln", "sqrt", "abs",
+        },
     },
 }
 
