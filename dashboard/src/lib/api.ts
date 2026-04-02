@@ -77,6 +77,7 @@ export const api = {
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
+  inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
   // Leads
   leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
   updateLeadStatus: (leadId: string, status: string) =>
