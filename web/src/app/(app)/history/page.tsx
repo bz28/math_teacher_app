@@ -68,7 +68,7 @@ export default function HistoryPage() {
 
       {/* Subject tabs */}
       <div className="flex gap-2">
-        {(["math", "physics", "chemistry"] as const).map((sub) => (
+        {(["math", "physics", "cs", "chemistry"] as const).map((sub) => (
           <button
             key={sub}
             onClick={() => handleSubjectChange(sub)}
@@ -79,7 +79,7 @@ export default function HistoryPage() {
                 : "bg-primary-bg text-primary hover:bg-primary/10",
             )}
           >
-            {sub === "math" ? "Mathematics" : sub === "physics" ? "Physics" : "Chemistry"}
+            {sub === "math" ? "Mathematics" : sub === "physics" ? "Physics" : sub === "cs" ? "Computer Science" : "Chemistry"}
           </button>
         ))}
       </div>

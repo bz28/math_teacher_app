@@ -18,6 +18,7 @@ const SUBJECT_CONFIG: Record<string, { name: string; icon: string; color: string
   math: { name: "Mathematics", icon: "📐", color: "text-primary", bg: "bg-primary-bg" },
   chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00B894]", bg: "bg-[#00B894]/10" },
   physics: { name: "Physics", icon: "🚀", color: "text-[#0984E3]", bg: "bg-[#0984E3]/10" },
+  cs: { name: "Computer Science", icon: "💻", color: "text-[#E17055]", bg: "bg-[#E17055]/10" },
 };
 
 export default function LearnPage() {

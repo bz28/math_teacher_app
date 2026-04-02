@@ -63,6 +63,16 @@
   --color-overlay: rgba(9, 132, 227, 0.08);
 }
 
+[data-subject="cs"] {
+  --color-primary: #E17055;
+  --color-primary-light: #FDCB6E;
+  --color-primary-bg: #FDF0EC;
+  --color-primary-dark: #C0392B;
+  --gradient-primary: linear-gradient(135deg, #E17055, #FDCB6E);
+  --gradient-header: linear-gradient(135deg, #E17055, #F0965A);
+  --color-overlay: rgba(225, 112, 85, 0.08);
+}
+
 [data-subject="chemistry"] {
   --color-primary: #00B894;
   --color-primary-light: #55EFC4;
@@ -118,6 +128,16 @@
   --gradient-primary: linear-gradient(135deg, #74B9FF, #A3D1FF);
   --gradient-header: linear-gradient(135deg, #74B9FF, #A3D1FF);
   --color-overlay: rgba(116, 185, 255, 0.08);
+}
+
+[data-theme="dark"][data-subject="cs"] {
+  --color-primary: #FDCB6E;
+  --color-primary-light: #FDE8A0;
+  --color-primary-bg: #2B2210;
+  --color-primary-dark: #FDE8A0;
+  --gradient-primary: linear-gradient(135deg, #FDCB6E, #FDE8A0);
+  --gradient-header: linear-gradient(135deg, #FDCB6E, #FDE8A0);
+  --color-overlay: rgba(253, 203, 110, 0.08);
 }
 
 [data-theme="dark"][data-subject="chemistry"] {

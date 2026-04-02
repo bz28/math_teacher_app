@@ -24,6 +24,13 @@ const genericSubjects = [
     modes: ["Learn", "Mock Test"],
   },
   {
+    id: "cs",
+    name: "Computer Science",
+    description: "Data structures, algorithms, system design, and more",
+    gradient: "from-[#E17055] to-[#FDCB6E]",
+    modes: ["Learn", "Mock Test"],
+  },
+  {
     id: "chemistry",
     name: "Chemistry",
     description: "Reactions, balancing equations, stoichiometry, and more",
@@ -36,6 +43,7 @@ const SUBJECT_GRADIENTS: Record<string, string> = {
   math: "from-primary to-primary-light",
   chemistry: "from-[#00B894] to-[#55EFC4]",
   physics: "from-[#0984E3] to-[#74B9FF]",
+  cs: "from-[#E17055] to-[#FDCB6E]",
 };
 
 export default function HomePage() {
@@ -132,7 +140,7 @@ export default function HomePage() {
                     <div
                       className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${gradient} text-white shadow-sm`}
                     >
-                      {course.subject === "physics" ? <PhysicsIcon /> : course.subject === "chemistry" ? <ChemIcon /> : <MathIcon />}
+                      {course.subject === "physics" ? <PhysicsIcon /> : course.subject === "chemistry" ? <ChemIcon /> : course.subject === "cs" ? <CSIcon /> : <MathIcon />}
                     </div>
                     <div>
                       <h2 className="text-lg font-bold text-text-primary">{course.name}</h2>
@@ -160,7 +168,7 @@ export default function HomePage() {
 
       {/* Regular student — generic subjects */}
       {!isSchoolStudent && !loadingCourses && (
-        <div className="grid gap-6 sm:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {genericSubjects.map((subject, i) => (
             <motion.div
               key={subject.id}
@@ -178,7 +186,7 @@ export default function HomePage() {
                   <div
                     className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${subject.gradient} text-white shadow-sm`}
                   >
-                    {subject.id === "math" ? <MathIcon /> : subject.id === "physics" ? <PhysicsIcon /> : <ChemIcon />}
+                    {subject.id === "math" ? <MathIcon /> : subject.id === "physics" ? <PhysicsIcon /> : subject.id === "cs" ? <CSIcon /> : <ChemIcon />}
                   </div>
                   <div>
                     <h2 className="text-lg font-bold text-text-primary">{subject.name}</h2>
@@ -258,6 +266,15 @@ function PhysicsIcon() {
       <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
       <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
       <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    </svg>
+  );
+}
+
+function CSIcon() {
+  return (
+    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
     </svg>
   );
 }

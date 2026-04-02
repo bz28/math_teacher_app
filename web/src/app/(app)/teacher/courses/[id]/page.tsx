@@ -351,6 +351,7 @@ export default function CourseDetailPage() {
                   >
                     <option value="math">Math</option>
                     <option value="physics">Physics</option>
+                    <option value="cs">Computer Science</option>
                     <option value="chemistry">Chemistry</option>
                   </select>
                 </div>
