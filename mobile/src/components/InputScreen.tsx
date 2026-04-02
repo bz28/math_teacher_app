@@ -279,7 +279,7 @@ export function InputScreen({
         imageDimensions={imageDimensions}
         onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
         onCancel={cancelSelection}
-        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length)}
+        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length, scansRemaining())}
       />
     );
   }

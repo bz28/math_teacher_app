@@ -32,7 +32,6 @@ type PlanId = "annual" | "weekly";
 interface PlanOption {
   id: PlanId;
   label: string;
-  badge?: string;
   trialText: string;
   priceText: string;
   perWeek?: string;
@@ -40,29 +39,29 @@ interface PlanOption {
 }
 
 const FEATURES = [
-  "Unlimited sessions per day",
-  "Mock exams with timer",
-  "Work photo diagnosis (AI grading)",
+  "Unlimited problem sessions",
+  "Unlimited chat messages",
   "Unlimited image scanning",
+  "AI-powered work diagnosis",
   "Full session history",
 ];
 
 const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
   create_session: {
-    title: "Daily Problem Limit Reached",
-    subtitle: "Free accounts are limited to 5 problems per day. Upgrade to Pro for unlimited access.",
+    title: "You've hit today's limit",
+    subtitle: "Upgrade for unlimited problem sessions",
   },
   image_scan: {
-    title: "Daily Scan Limit Reached",
-    subtitle: "Free accounts are limited to 3 image scans per day. Upgrade to Pro for unlimited scans.",
+    title: "You've hit today's limit",
+    subtitle: "Upgrade for unlimited image scans",
   },
   chat_message: {
-    title: "Daily Chat Limit Reached",
-    subtitle: "Free accounts are limited to 20 chat messages per day. Upgrade to Pro for unlimited chat.",
+    title: "You've hit today's limit",
+    subtitle: "Upgrade for unlimited chat messages",
   },
   work_diagnosis: {
-    title: "Work Diagnosis is Pro Only",
-    subtitle: "Upload your handwritten work and get AI-powered step-by-step grading.",
+    title: "Pro Feature",
+    subtitle: "Get AI-powered grading on your work",
   },
 };
 
@@ -102,8 +101,11 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 
   const selectedPlanOption = plans.find((p) => p.id === selectedPlan);
   const ctaLabel = selectedPlanOption?.trialText
-    ? "Start Free Trial"
-    : "Subscribe";
+    ? "Try 3 Days Free"
+    : "Subscribe Now";
+  const ctaSublabel = selectedPlanOption?.trialText
+    ? `then ${selectedPlanOption.priceText}`
+    : selectedPlanOption?.priceText ?? "";
 
   const handleSubscribe = async () => {
     const plan = plans.find((p) => p.id === selectedPlan);
@@ -168,23 +170,37 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        {/* Close button */}
-        <TouchableOpacity style={styles.closeButton} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={24} color={colors.textMuted} />
-        </TouchableOpacity>
+        {/* Hero header */}
+        <LinearGradient
+          colors={gradients.primary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          <TouchableOpacity style={styles.closeButton} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
 
-        {/* Title */}
-        {trigger && TRIGGER_MESSAGES[trigger] ? (
-          <>
-            <Text style={styles.title}>{TRIGGER_MESSAGES[trigger].title}</Text>
-            <Text style={styles.subtitle}>{TRIGGER_MESSAGES[trigger].subtitle}</Text>
-          </>
-        ) : (
-          <Text style={[styles.title, styles.titleNoSubtitle]}>Unlock Veradic AI Pro</Text>
-        )}
+          <View style={styles.iconCircle}>
+            <Ionicons name="diamond" size={32} color={colors.primary} />
+          </View>
+
+          {trigger && TRIGGER_MESSAGES[trigger] ? (
+            <>
+              <Text style={styles.heroTitle}>{TRIGGER_MESSAGES[trigger].title}</Text>
+              <Text style={styles.heroSubtitle}>{TRIGGER_MESSAGES[trigger].subtitle}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.heroTitle}>Unlock Veradic AI Pro</Text>
+              <Text style={styles.heroSubtitle}>No limits. No restrictions. Just learn.</Text>
+            </>
+          )}
+        </LinearGradient>
 
         {/* Features */}
-        <View style={styles.featureList}>
+        <View style={styles.featureSection}>
+          <Text style={styles.featureSectionTitle}>Everything in Pro</Text>
           {FEATURES.map((feature) => (
             <View key={feature} style={styles.featureRow}>
               <Ionicons name="checkmark-circle" size={20} color={colors.success} />
@@ -193,48 +209,49 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           ))}
         </View>
 
-        {/* Plan options */}
+        {/* Plan selector */}
         {loadingOfferings ? (
           <ActivityIndicator size="large" color={colors.primary} style={styles.offeringsLoader} />
         ) : (
           <View style={styles.planList}>
             {plans.map((plan) => {
               const isSelected = selectedPlan === plan.id;
-              const isRecommended = plan.id === "annual";
+              const isAnnual = plan.id === "annual";
               return (
                 <AnimatedPressable
                   key={plan.id}
-                  style={[
-                    styles.planCard,
-                    isRecommended && styles.planCardRecommended,
-                    isSelected && styles.planCardSelected,
-                  ]}
+                  style={[styles.planCard, isSelected && styles.planCardSelected]}
                   onPress={() => setSelectedPlan(plan.id)}
                   scaleDown={0.98}
                 >
-                  {plan.badge && (
-                    <View style={styles.planBadge}>
-                      <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                  {isAnnual && (
+                    <View style={styles.saveBadge}>
+                      <Text style={styles.saveBadgeText}>BEST VALUE</Text>
                     </View>
                   )}
-                  <View style={styles.planHeader}>
-                    <View style={styles.planLabelRow}>
-                      <View style={[styles.radio, isSelected && styles.radioSelected]}>
-                        {isSelected && <View style={styles.radioInner} />}
-                      </View>
-                      <View>
+                  <View style={styles.planLeft}>
+                    <View style={[styles.radio, isSelected && styles.radioSelected]}>
+                      {isSelected && <View style={styles.radioInner} />}
+                    </View>
+                    <View>
+                      <View style={styles.planLabelRow}>
                         <Text style={[styles.planLabel, isSelected && styles.planLabelSelected]}>{plan.label}</Text>
-                        {plan.perWeek && (
-                          <Text style={styles.planPerWeek}>{plan.perWeek}</Text>
+                        {isAnnual && (
+                          <View style={styles.saveInline}>
+                            <Text style={styles.saveInlineText}>Save 55%</Text>
+                          </View>
                         )}
                       </View>
+                      {plan.trialText ? (
+                        <Text style={[styles.planSub, isSelected && styles.planSubSelected]}>{plan.trialText}</Text>
+                      ) : null}
                     </View>
-                    <View style={styles.planPriceCol}>
-                      <Text style={[styles.planPriceMain, isSelected && styles.planPriceSelected]}>{plan.priceText}</Text>
-                      {plan.trialText && (
-                        <Text style={styles.planTrialText}>{plan.trialText}</Text>
-                      )}
-                    </View>
+                  </View>
+                  <View style={styles.planRight}>
+                    <Text style={[styles.planPrice, isSelected && styles.planPriceSelected]}>{plan.priceText}</Text>
+                    {plan.perWeek && (
+                      <Text style={[styles.planPerWeek, isSelected && styles.planPerWeekSelected]}>{plan.perWeek}</Text>
+                    )}
                   </View>
                 </AnimatedPressable>
               );
@@ -242,8 +259,8 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           </View>
         )}
 
-        {/* Subscribe button */}
-        <View style={styles.subscribeWrap}>
+        {/* CTA */}
+        <View style={styles.ctaWrap}>
           <AnimatedPressable
             onPress={handleSubscribe}
             disabled={purchasing || loadingOfferings}
@@ -253,25 +270,30 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
               colors={gradients.primary}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[styles.subscribeButton, (purchasing || loadingOfferings) && styles.subscribeButtonDisabled]}
+              style={[styles.ctaButton, (purchasing || loadingOfferings) && styles.ctaButtonDisabled]}
             >
               {purchasing ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={styles.subscribeButtonText}>{ctaLabel}</Text>
+                <>
+                  <Text style={styles.ctaButtonText}>{ctaLabel}</Text>
+                  {ctaSublabel ? <Text style={styles.ctaSublabel}>{ctaSublabel}</Text> : null}
+                </>
               )}
             </LinearGradient>
           </AnimatedPressable>
         </View>
+
+        {selectedPlanOption?.trialText && (
+          <Text style={styles.noChargeNote}>You won't be charged today</Text>
+        )}
 
         {/* Secondary actions */}
         <View style={styles.secondaryActions}>
           <TouchableOpacity onPress={handleRestore} disabled={purchasing} style={styles.secondaryButton}>
             <Text style={styles.secondaryText}>Restore purchases</Text>
           </TouchableOpacity>
-
-          <Text style={styles.secondaryDot}>{" \u00B7 "}</Text>
-
+          <Text style={styles.secondaryDot}>{" · "}</Text>
           <TouchableOpacity onPress={() => setPromoExpanded(!promoExpanded)} style={styles.secondaryButton}>
             <Text style={styles.secondaryText}>Promo code</Text>
           </TouchableOpacity>
@@ -303,12 +325,12 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           </View>
         )}
 
-        {/* Legal links */}
+        {/* Legal */}
         <View style={styles.legalRow}>
           <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
             <Text style={styles.legalText}>Terms of Use</Text>
           </TouchableOpacity>
-          <Text style={styles.legalDot}>{" \u00B7 "}</Text>
+          <Text style={styles.legalDot}>{" · "}</Text>
           <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
             <Text style={styles.legalText}>Privacy Policy</Text>
           </TouchableOpacity>
@@ -325,14 +347,13 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
     {
       id: "annual",
       label: "Annual",
-      badge: "Best Value — Save 55%",
       trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
         ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
         : "3-day free trial",
       priceText: annualPkg
-        ? `${annualPkg.product.priceString}/year`
-        : "$69.99/year",
-      perWeek: "$1.35/week",
+        ? `${annualPkg.product.priceString}/yr`
+        : "$69.99/yr",
+      perWeek: "$1.35/wk",
       pkg: annualPkg,
     },
     {
@@ -342,8 +363,8 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
         ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
         : "",
       priceText: weeklyPkg
-        ? `${weeklyPkg.product.priceString}/week`
-        : "$2.99/week",
+        ? `${weeklyPkg.product.priceString}/wk`
+        : "$2.99/wk",
       pkg: weeklyPkg,
     },
   ];
@@ -351,57 +372,80 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
 
 // ── Styles ──
 
+
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     backgroundColor: colors.background,
   },
   container: {
-    paddingHorizontal: spacing.xxl + 4,
-    paddingTop: spacing.xxxl + 16,
-    paddingBottom: spacing.xxxl,
     alignItems: "center",
+    paddingBottom: spacing.xxxl,
+  },
+
+  // Hero
+  hero: {
+    width: "100%",
+    paddingTop: spacing.xxxl + 20,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.xxl,
+    alignItems: "center",
+    borderBottomLeftRadius: radii.xl,
+    borderBottomRightRadius: radii.xl,
   },
   closeButton: {
     position: "absolute",
-    top: spacing.xxxl,
-    right: spacing.xxl,
+    top: spacing.xxxl + 4,
+    right: spacing.lg,
     zIndex: 10,
     padding: spacing.xs,
   },
-  title: {
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: spacing.lg,
+    ...shadows.md,
+  },
+  heroTitle: {
     ...typography.title,
-    color: colors.text,
+    color: colors.white,
     textAlign: "center",
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  titleNoSubtitle: {
-    marginBottom: spacing.xl,
-  },
-  subtitle: {
+  heroSubtitle: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: "rgba(255,255,255,0.85)",
     textAlign: "center",
-    marginBottom: spacing.xl,
-    paddingHorizontal: spacing.md,
-    lineHeight: 22,
+    fontSize: 15,
   },
 
   // Features
-  featureList: {
+  featureSection: {
     alignSelf: "stretch",
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  featureSectionTitle: {
+    ...typography.label,
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: spacing.md,
   },
   featureRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
   },
   featureText: {
     ...typography.body,
     color: colors.text,
-    flex: 1,
     fontSize: 15,
   },
 
@@ -411,39 +455,51 @@ const styles = StyleSheet.create({
   },
   planList: {
     alignSelf: "stretch",
-    gap: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.sm + 2,
+    marginTop: spacing.md,
     marginBottom: spacing.xl,
   },
   planCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 2,
     borderColor: colors.border,
     paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xl,
-  },
-  planCardRecommended: {
-    borderColor: colors.primary,
-    ...shadows.sm,
+    paddingHorizontal: spacing.lg,
   },
   planCardSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.primaryBg,
   },
-  planHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  saveBadge: {
+    position: "absolute",
+    top: -10,
+    right: spacing.lg,
+    backgroundColor: colors.success,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 2,
   },
-  planLabelRow: {
+  saveBadgeText: {
+    ...typography.caption,
+    color: colors.white,
+    fontWeight: "700",
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  planLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: colors.textMuted,
     justifyContent: "center",
@@ -453,79 +509,103 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: colors.primary,
+  },
+  planLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   planLabel: {
     ...typography.bodyBold,
     color: colors.text,
+    fontSize: 16,
   },
   planLabelSelected: {
     color: colors.primary,
   },
-  planPerWeek: {
-    ...typography.caption,
-    color: colors.success,
-    fontWeight: "600",
-    marginTop: 1,
-  },
-  planBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.success,
+  saveInline: {
+    backgroundColor: colors.successLight,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginBottom: spacing.sm,
+    paddingVertical: 1,
   },
-  planBadgeText: {
+  saveInlineText: {
     ...typography.caption,
-    color: colors.white,
+    color: colors.success,
     fontWeight: "700",
-    fontSize: 11,
+    fontSize: 10,
   },
-  planPriceCol: {
+  planSub: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  planSubSelected: {
+    color: colors.primary,
+    opacity: 0.8,
+  },
+  planRight: {
     alignItems: "flex-end",
   },
-  planPriceMain: {
+  planPrice: {
     ...typography.bodyBold,
     color: colors.text,
-    fontSize: 15,
+    fontSize: 16,
   },
   planPriceSelected: {
     color: colors.primary,
   },
-  planTrialText: {
+  planPerWeek: {
     ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  planPerWeekSelected: {
     color: colors.primary,
-    fontWeight: "600",
-    marginTop: 2,
+    opacity: 0.8,
   },
 
-  // Subscribe button
-  subscribeWrap: {
+  // CTA
+  ctaWrap: {
     alignSelf: "stretch",
+    paddingHorizontal: spacing.xxl,
     ...shadows.md,
     borderRadius: radii.xl,
   },
-  subscribeButton: {
+  ctaButton: {
     borderRadius: radii.xl,
-    paddingVertical: 18,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  subscribeButtonDisabled: {
+  ctaButtonDisabled: {
     opacity: 0.6,
   },
-  subscribeButtonText: {
+  ctaButtonText: {
     ...typography.button,
     color: colors.white,
     fontSize: 17,
     letterSpacing: 0.3,
   },
+  ctaSublabel: {
+    ...typography.caption,
+    color: "rgba(255,255,255,0.75)",
+    marginTop: 2,
+    fontSize: 12,
+  },
+  noChargeNote: {
+    ...typography.caption,
+    color: colors.success,
+    fontWeight: "600",
+    marginTop: spacing.sm,
+    textAlign: "center",
+  },
 
-  // Secondary actions (restore + promo toggle)
+  // Secondary
   secondaryActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -545,10 +625,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 
-  // Promo code
+  // Promo
   promoRow: {
     flexDirection: "row",
     alignSelf: "stretch",
+    paddingHorizontal: spacing.xxl,
     gap: spacing.sm,
     marginTop: spacing.sm,
   },

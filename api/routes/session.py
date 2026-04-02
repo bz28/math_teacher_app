@@ -52,6 +52,7 @@ def _session_to_response(session: SessionModel) -> SessionResponse:
             session.mode == "learn"
             and is_final
             and session.status != SessionStatus.COMPLETED
+            and session.current_step < session.total_steps
         ):
             detail.final_answer = ""
         steps.append(detail)
