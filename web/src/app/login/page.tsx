@@ -5,16 +5,33 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
-import { clearTokens } from "@/lib/api";
+import { clearTokens, auth as authApi } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const { login, loading, error, clearError } = useAuthStore();
   const router = useRouter();
   const toast = useToast();
+
+  async function handleForgotPassword(e: FormEvent) {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await authApi.forgotPassword(forgotEmail);
+      setForgotSent(true);
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  }
 
   // Clear stale tokens so loadUser() doesn't fire "Session expired"
   useEffect(() => {
@@ -101,7 +118,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="text-xs font-medium text-text-muted transition-colors hover:text-primary"
-                onClick={() => toast.info("Password reset coming soon")}
+                onClick={() => setShowForgot(true)}
               >
                 Forgot password?
               </button>
@@ -130,6 +147,68 @@ export default function LoginPage() {
           </p>
         </div>
       </motion.div>
+
+      {/* Forgot password overlay */}
+      {showForgot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6" onClick={() => setShowForgot(false)}>
+          <motion.div
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-lg"
+          >
+            {forgotSent ? (
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
+                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-text-primary">Check your email</h3>
+                <p className="mt-2 text-sm text-text-secondary">
+                  If an account exists for <strong>{forgotEmail}</strong>, we sent a password reset link.
+                </p>
+                <button
+                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(""); }}
+                  className="mt-4 text-sm font-semibold text-primary hover:text-primary-dark"
+                >
+                  Back to Login
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold text-text-primary">Reset your password</h3>
+                <p className="mt-1 text-sm text-text-secondary">
+                  Enter your email and we&apos;ll send you a reset link.
+                </p>
+                <form onSubmit={handleForgotPassword} className="mt-4 space-y-4">
+                  <Input
+                    label="Email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgot(false)}
+                      className="flex-1 rounded-[--radius-md] border border-border px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:border-primary/30"
+                    >
+                      Cancel
+                    </button>
+                    <Button type="submit" loading={forgotLoading} gradient className="flex-1">
+                      Send Link
+                    </Button>
+                  </div>
+                </form>
+              </>
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,12 @@
-from datetime import UTC, datetime
+import asyncio
+import hashlib
+import logging
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +20,7 @@ from api.core.auth import (
     rotate_refresh_token,
     verify_password,
 )
+from api.core.email import send_email
 from api.core.entitlements import (
     FREE_DAILY_CHAT_LIMIT,
     FREE_DAILY_IMAGE_SCAN_LIMIT,
@@ -273,3 +279,87 @@ async def enrolled_courses(
             for r in rows
         ]
     }
+
+
+# ── Password reset ────────────────────────────────────────────────────────
+
+logger = logging.getLogger(__name__)
+
+RESET_TOKEN_EXPIRY_HOURS = 1
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class SetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/forgot-password")
+@limiter.limit("3/minute")
+async def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Send a password reset email. Always returns 200 to avoid leaking user existence."""
+    user = (await db.execute(select(User).where(User.email == body.email.lower()))).scalar_one_or_none()
+    if user and user.is_active:
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        user.password_reset_token_hash = token_hash
+        user.password_reset_expires = datetime.now(UTC) + timedelta(hours=RESET_TOKEN_EXPIRY_HOURS)
+        await db.commit()
+
+        reset_url = f"https://veradicai.com/set-password?token={raw_token}"
+        asyncio.create_task(send_email(
+            to=[body.email.lower()],
+            subject="Reset your Veradic AI password",
+            html=(
+                f"<h2>Password Reset</h2>"
+                f"<p>Click the link below to reset your password:</p>"
+                f'<p><a href="{reset_url}" style="display:inline-block;padding:12px 24px;'
+                f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
+                f'font-weight:600;">Reset Password</a></p>'
+                f"<p style=\"color:#64748b;font-size:13px;\">This link expires in {RESET_TOKEN_EXPIRY_HOURS} hour.</p>"
+                f'<p style="color:#94a3b8;font-size:12px;">'
+                f"If you didn't request this, you can safely ignore this email.</p>"
+            ),
+        ))
+
+    return {"status": "ok", "message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/set-password")
+@limiter.limit("5/minute")
+async def set_password(
+    request: Request,
+    body: SetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Set a new password using a reset token (from invite or forgot-password)."""
+    if len(body.password) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters")
+
+    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+    user = (await db.execute(
+        select(User).where(User.password_reset_token_hash == token_hash)
+    )).scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired link")
+    if user.password_reset_expires and user.password_reset_expires < datetime.now(UTC):
+        user.password_reset_token_hash = None
+        user.password_reset_expires = None
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This link has expired")
+
+    user.password_hash = hash_password(body.password)
+    user.password_reset_token_hash = None
+    user.password_reset_expires = None
+    await db.commit()
+
+    logger.info("Password set via token for user=%s", user.id)
+    return {"status": "ok"}

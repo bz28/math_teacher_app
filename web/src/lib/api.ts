@@ -341,6 +341,20 @@ export const auth = {
   enrolledCourses() {
     return apiFetch<{ courses: EnrolledCourse[] }>("/auth/enrolled-courses");
   },
+
+  forgotPassword(email: string) {
+    return apiFetch<{ status: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  setPassword(token: string, password: string) {
+    return apiFetch<{ status: string }>("/auth/set-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+  },
 };
 
 // ── Session endpoints ──

@@ -41,6 +41,13 @@ export default function Users() {
     return () => document.removeEventListener("click", close);
   }, [openMenu]);
 
+  // Invite admin form
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+
   if (!data) return <p>Loading...</p>;
 
   const topSpender = data.users.length > 0 ? data.users[0] : null;
@@ -91,9 +98,85 @@ export default function Users() {
     }
   };
 
+  const handleInviteAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviting(true);
+    setInviteSuccess(null);
+    try {
+      await api.inviteAdmin(inviteEmail.trim(), inviteName.trim());
+      setInviteSuccess(inviteEmail.trim());
+      setInviteName("");
+      setInviteEmail("");
+      setShowInvite(false);
+      reload();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setInviting(false);
+    }
+  };
+
   return (
     <div>
-      <h1>Users</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <h1 style={{ marginBottom: 0 }}>Users</h1>
+        {!showInvite && (
+          <button onClick={() => { setShowInvite(true); setInviteSuccess(null); }} className="btn-primary">
+            + Invite Admin
+          </button>
+        )}
+      </div>
+
+      {inviteSuccess && (
+        <div style={{
+          marginBottom: 16, padding: "10px 14px", background: "#f0fdf4",
+          borderRadius: 6, border: "1px solid #bbf7d0", fontSize: 13, color: "#16a34a",
+        }}>
+          Invite sent to <strong>{inviteSuccess}</strong>
+        </div>
+      )}
+
+      {showInvite && (
+        <div className="table-card" style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ marginBottom: 0 }}>Invite New Admin</h3>
+            <button onClick={() => setShowInvite(false)} className="btn-secondary">Cancel</button>
+          </div>
+          <form onSubmit={handleInviteAdmin} style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b", letterSpacing: 0.5 }}>
+                Name
+              </label>
+              <input
+                type="text"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Jane Smith"
+                required
+                className="input"
+                style={{ marginTop: 4 }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b", letterSpacing: 0.5 }}>
+                Email
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="jane@veradicai.com"
+                required
+                className="input"
+                style={{ marginTop: 4 }}
+              />
+            </div>
+            <button type="submit" disabled={inviting} className="btn-primary" style={{ whiteSpace: "nowrap" }}>
+              {inviting ? "Sending..." : "Send Invite"}
+            </button>
+          </form>
+        </div>
+      )}
 
       <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
         <SearchInput value={search} onChange={handleSearchChange} placeholder="Search by name or email..." />

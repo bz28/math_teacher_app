@@ -77,6 +77,7 @@ export const api = {
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
+  inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
   // Leads
   leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
   updateLeadStatus: (leadId: string, status: string) =>
@@ -107,6 +108,15 @@ export const api = {
     const data = await res.json();
     setToken(data.access_token);
     return data;
+  },
+  forgotPassword: async (email: string) => {
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error("Request failed");
+    return res.json();
   },
 };
 
