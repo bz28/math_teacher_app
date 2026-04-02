@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
@@ -34,12 +35,23 @@ export default function Schools() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const reload = () => {
     setLoading(true);
     api.schools().then((d) => setSchools(d.schools)).finally(() => setLoading(false));
   };
 
   useEffect(() => { reload(); }, []);
+
+  // Auto-open detail modal from query param (e.g. /schools?detail=xxx)
+  useEffect(() => {
+    const detailId = searchParams.get("detail");
+    if (detailId && !detail && !loadingDetail) {
+      handleViewDetail(detailId);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!openMenu) return;
@@ -174,6 +186,7 @@ export default function Schools() {
       setDeleteTarget(null);
       if (detail?.id === deleteTarget.id) setDetail(null);
       reload();
+      alert("School deleted. If this was converted from a lead, don't forget to update the lead status in the Leads tab.");
     } catch (e) {
       alert((e as Error).message);
     } finally {
