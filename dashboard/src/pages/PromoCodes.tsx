@@ -113,7 +113,7 @@ export default function PromoCodes() {
             <h3 style={{ marginBottom: 0 }}>Create New Code</h3>
             <button onClick={() => setShowCreate(false)} style={btnGhost}>Cancel</button>
           </div>
-          <form onSubmit={handleCreate} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16 }}>
+          <form onSubmit={handleCreate} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <FormField label="Code">
               <input
                 type="text"
@@ -170,6 +170,7 @@ export default function PromoCodes() {
           All Codes
           <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({totalCodes})</span>
         </h3>
+        <div className="table-scroll">
         <table>
           <colgroup>
             <col style={{ width: "18%" }} />
@@ -285,6 +286,7 @@ export default function PromoCodes() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* ── Redemptions modal ───────────────────────────────────── */}
