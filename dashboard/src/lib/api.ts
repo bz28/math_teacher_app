@@ -109,6 +109,15 @@ export const api = {
     setToken(data.access_token);
     return data;
   },
+  forgotPassword: async (email: string) => {
+    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error("Request failed");
+    return res.json();
+  },
 };
 
 // Types
