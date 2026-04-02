@@ -145,7 +145,6 @@ export default function Schools() {
   const totalSchools = schools.length;
   const activeSchools = schools.filter((s) => s.is_active).length;
   const totalTeachers = schools.reduce((sum, s) => sum + s.teacher_count, 0);
-  const totalStudents = schools.reduce((sum, s) => sum + s.student_count, 0);
 
   return (
     <div>
@@ -162,7 +161,6 @@ export default function Schools() {
         <StatCard label="Total Schools" value={totalSchools} />
         <StatCard label="Active" value={activeSchools} />
         <StatCard label="Teachers" value={totalTeachers} />
-        <StatCard label="Students" value={totalStudents} />
       </div>
 
       {/* ── Create form ─────────────────────────────────────────── */}
@@ -250,19 +248,19 @@ export default function Schools() {
             <col style={{ width: "18%" }} />
             <col style={{ width: "18%" }} />
             <col style={{ width: "8%" }} />
-            <col style={{ width: "8%" }} />
             <col style={{ width: "9%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "11%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
           </colgroup>
           <thead>
             <tr>
               <th>School</th>
               <th>Contact</th>
               <th>Teachers</th>
-              <th>Students</th>
               <th>Status</th>
+              <th>Notes</th>
               <th>Updated</th>
               <th>Added</th>
               <th></th>
@@ -286,7 +284,6 @@ export default function Schools() {
                   <div style={{ fontSize: 11, color: "#64748b" }}>{s.contact_email}</div>
                 </td>
                 <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
-                <td style={{ fontWeight: 600 }}>{s.student_count}</td>
                 <td>
                   <span className="badge" style={
                     s.is_active
@@ -295,6 +292,15 @@ export default function Schools() {
                   }>
                     {s.is_active ? "Active" : "Inactive"}
                   </span>
+                </td>
+                <td>
+                  {s.notes ? (
+                    <div style={{ fontSize: 12, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.notes}>
+                      {s.notes}
+                    </div>
+                  ) : (
+                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                  )}
                 </td>
                 <td>
                   {s.updated_by ? (

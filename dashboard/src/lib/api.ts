@@ -265,7 +265,7 @@ export interface SchoolListItem {
   contact_email: string;
   is_active: boolean;
   teacher_count: number;
-  student_count: number;
+  notes: string | null;
   created_at: string;
   updated_at: string | null;
   updated_by: string | null;
