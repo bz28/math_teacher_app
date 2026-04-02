@@ -41,6 +41,13 @@ export default function Users() {
     return () => document.removeEventListener("click", close);
   }, [openMenu]);
 
+  // Invite admin form
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+
   if (!data) return <p>Loading...</p>;
 
   const topSpender = data.users.length > 0 ? data.users[0] : null;
@@ -90,13 +97,6 @@ export default function Users() {
       alert((e as Error).message);
     }
   };
-
-  // Invite admin form
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteName, setInviteName] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
   const handleInviteAdmin = async (e: React.FormEvent) => {
     e.preventDefault();

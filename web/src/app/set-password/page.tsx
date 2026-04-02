@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -9,6 +9,14 @@ import { Button, useToast } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/input";
 
 export default function SetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center"><p className="text-text-secondary">Loading...</p></div>}>
+      <SetPasswordContent />
+    </Suspense>
+  );
+}
+
+function SetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [password, setPassword] = useState("");
