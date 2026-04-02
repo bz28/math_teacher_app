@@ -315,7 +315,7 @@ function LearnPageContent() {
       </AnimatePresence>
 
       {/* Add problems — image upload + text input */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={cn("grid gap-4", isScanning ? "" : "sm:grid-cols-2")}>
         {/* Image upload */}
         <Card variant="flat" className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
@@ -335,8 +335,8 @@ function LearnPageContent() {
           />
         </Card>
 
-        {/* Text input */}
-        <Card variant="flat" className="space-y-3">
+        {/* Text input — hidden during scanning since it's disabled anyway */}
+        <Card variant="flat" className={cn("space-y-3", isScanning && "hidden sm:hidden")}>
           <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
             Or type a problem
           </p>

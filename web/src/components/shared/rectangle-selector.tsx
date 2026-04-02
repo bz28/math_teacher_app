@@ -274,11 +274,12 @@ export function RectangleSelector({
           ref={imgRef}
           src={`data:image/jpeg;base64,${imageBase64}`}
           alt="Uploaded"
-          className="block w-full max-h-[60vh] object-contain"
+          className="block w-full"
           onLoad={(e) => {
             const el = e.currentTarget;
             setImgNatural({ w: el.naturalWidth, h: el.naturalHeight });
             setDisplaySize({ w: el.clientWidth, h: el.clientHeight });
+            setDisplaySize({ w: dw, h: dh });
           }}
           draggable={false}
         />
