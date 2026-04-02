@@ -105,6 +105,34 @@ export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
         </LinearGradient>
       </AnimatedPressable>
 
+      <AnimatedPressable
+        style={[styles.subjectCard, shadows.md, { marginTop: spacing.md }]}
+        onPress={() => onSelect("physics")}
+        scaleDown={0.97}
+        accessibilityRole="button"
+        accessibilityLabel="Study Physics"
+      >
+        <LinearGradient
+          colors={gradients.physics}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.subjectGradient}
+        >
+          <View style={styles.subjectContent}>
+            <View style={styles.subjectIconWrap}>
+              <Ionicons name="rocket" size={28} color={colors.white} />
+            </View>
+            <View style={styles.subjectTextWrap}>
+              <Text style={styles.subjectTitle}>Physics</Text>
+              <Text style={styles.subjectDesc}>
+                Mechanics, energy, waves, and more
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />
+          </View>
+        </LinearGradient>
+      </AnimatedPressable>
+
       {/* Upgrade card — only for free users */}
       {!isPro && (
         <AnimatedPressable
