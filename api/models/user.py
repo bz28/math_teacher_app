@@ -44,6 +44,10 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Password reset
+    password_reset_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    password_reset_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Brute force protection
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
