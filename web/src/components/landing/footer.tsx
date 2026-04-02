@@ -3,27 +3,85 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 export function Footer() {
   return (
-    <footer className="border-t border-border-light px-6 py-10">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
-        {/* Logo + copyright */}
-        <div className="flex items-center gap-2.5">
-          <LogoMark size={28} />
-          <span className="text-sm text-text-muted">
-            &copy; {new Date().getFullYear()} Veradic AI
-          </span>
+    <footer className="border-t border-border-light px-6 py-12">
+      <div className="mx-auto max-w-6xl">
+        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
+          {/* Brand */}
+          <div>
+            <div className="flex items-center gap-2.5">
+              <LogoMark size={28} />
+              <span className="text-base font-semibold text-text-primary">Veradic AI</span>
+            </div>
+            <p className="mt-3 text-sm text-text-muted leading-relaxed">
+              Your AI tutor that breaks any math or science problem into steps you actually understand.
+            </p>
+          </div>
+
+          {/* Subjects */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-text-primary">Subjects</h3>
+            <ul className="space-y-2 text-sm text-text-muted">
+              <li>
+                <Link href="/subjects/math" className="hover:text-primary transition-colors">
+                  Math Tutor
+                </Link>
+              </li>
+              <li>
+                <Link href="/subjects/physics" className="hover:text-primary transition-colors">
+                  Physics Tutor
+                </Link>
+              </li>
+              <li>
+                <Link href="/subjects/chemistry" className="hover:text-primary transition-colors">
+                  Chemistry Tutor
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Product */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-text-primary">Product</h3>
+            <ul className="space-y-2 text-sm text-text-muted">
+              <li>
+                <Link href="/#features" className="hover:text-primary transition-colors">
+                  Features
+                </Link>
+              </li>
+              <li>
+                <Link href="/#faq" className="hover:text-primary transition-colors">
+                  FAQ
+                </Link>
+              </li>
+              <li>
+                <Link href="/teachers" className="hover:text-primary transition-colors">
+                  For Schools
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Get Started */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-text-primary">Get Started</h3>
+            <ul className="space-y-2 text-sm text-text-muted">
+              <li>
+                <Link href="/register" className="hover:text-primary transition-colors">
+                  Sign Up Free
+                </Link>
+              </li>
+              <li>
+                <Link href="/login" className="hover:text-primary transition-colors">
+                  Sign In
+                </Link>
+              </li>
+            </ul>
+          </div>
         </div>
 
-        {/* Links */}
-        <div className="flex gap-6 text-sm text-text-muted">
-          <Link href="/teachers" className="transition-colors hover:text-primary">
-            For Schools
-          </Link>
-          <Link href="/login" className="transition-colors hover:text-primary">
-            Sign In
-          </Link>
-          <Link href="/register" className="transition-colors hover:text-primary">
-            Get Started
-          </Link>
+        {/* Copyright */}
+        <div className="mt-10 border-t border-border-light pt-6 text-center text-sm text-text-muted">
+          &copy; {new Date().getFullYear()} Veradic AI. All rights reserved.
         </div>
       </div>
     </footer>
