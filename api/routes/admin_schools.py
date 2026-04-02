@@ -14,10 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
-from api.models.course import Course
 from api.models.school import School
-from api.models.section import Section
-from api.models.section_enrollment import SectionEnrollment
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 
@@ -70,38 +67,12 @@ async def list_schools(
         .subquery()
     )
 
-    # Student count per school (students enrolled in any section of a school's courses)
-    student_counts = (
-        select(
-            Course.teacher_id,
-            func.count(func.distinct(SectionEnrollment.student_id)).label("student_count"),
-        )
-        .join(Section, Section.course_id == Course.id)
-        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
-        .group_by(Course.teacher_id)
-        .subquery()
-    )
-
-    # Aggregate student counts by school
-    school_student_counts = (
-        select(
-            User.school_id,
-            func.coalesce(func.sum(student_counts.c.student_count), 0).label("student_count"),
-        )
-        .outerjoin(student_counts, student_counts.c.teacher_id == User.id)
-        .where(User.school_id.isnot(None), User.role == "teacher")
-        .group_by(User.school_id)
-        .subquery()
-    )
-
     rows = (await db.execute(
         select(
             School,
             func.coalesce(teacher_counts.c.teacher_count, 0).label("teacher_count"),
-            func.coalesce(school_student_counts.c.student_count, 0).label("student_count"),
         )
         .outerjoin(teacher_counts, teacher_counts.c.school_id == School.id)
-        .outerjoin(school_student_counts, school_student_counts.c.school_id == School.id)
         .order_by(School.created_at.desc())
     )).all()
 
@@ -115,13 +86,13 @@ async def list_schools(
                 "contact_name": s.contact_name,
                 "contact_email": s.contact_email,
                 "is_active": s.is_active,
-                "teacher_count": tc,
-                "student_count": sc,
+                "teacher_count": int(tc),
+                "notes": s.notes,
                 "created_at": s.created_at.isoformat(),
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                 "updated_by": s.updated_by_name,
             }
-            for s, tc, sc in rows
+            for s, tc in rows
         ]
     }
 
@@ -132,6 +103,16 @@ async def create_school(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    # Prevent duplicate schools by contact email
+    existing = (await db.execute(
+        select(School).where(School.contact_email == body.contact_email.lower())
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A school with this contact email already exists: {existing.name}",
+        )
+
     school = School(
         name=body.name,
         city=body.city,

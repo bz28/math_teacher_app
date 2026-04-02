@@ -1,6 +1,7 @@
 """Admin contact lead management endpoints."""
 
 import logging
+import uuid as _uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,6 +22,7 @@ VALID_STATUSES = ("new", "contacted", "converted", "declined")
 
 class UpdateLeadStatusRequest(BaseModel):
     status: str
+    school_id: str | None = None
 
 
 @router.get("/leads")
@@ -46,6 +48,7 @@ async def list_leads(
                 "created_at": lead.created_at.isoformat(),
                 "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,
                 "updated_by": lead.updated_by_name,
+                "school_id": str(lead.school_id) if lead.school_id else None,
             }
             for lead in rows
         ]
@@ -70,6 +73,8 @@ async def update_lead_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
     lead.status = body.status
+    if body.school_id:
+        lead.school_id = _uuid.UUID(body.school_id)
     lead.updated_at = func.now()
     lead.updated_by_id = current_user.user_id
     lead.updated_by_name = current_user.name

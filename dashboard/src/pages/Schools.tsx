@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
@@ -16,6 +17,11 @@ export default function Schools() {
   const [detail, setDetail] = useState<SchoolDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", contact_name: "", contact_email: "", city: "", state: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+
   // Invite form
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -29,12 +35,23 @@ export default function Schools() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const reload = () => {
     setLoading(true);
     api.schools().then((d) => setSchools(d.schools)).finally(() => setLoading(false));
   };
 
   useEffect(() => { reload(); }, []);
+
+  // Auto-open detail modal from query param (e.g. /schools?detail=xxx)
+  useEffect(() => {
+    const detailId = searchParams.get("detail");
+    if (detailId && !detail && !loadingDetail) {
+      handleViewDetail(detailId);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!openMenu) return;
@@ -68,6 +85,7 @@ export default function Schools() {
   const handleViewDetail = async (schoolId: string) => {
     setLoadingDetail(true);
     setDetail(null);
+    setEditing(false);
     setInviteEmail("");
     setInviteResult(null);
     try {
@@ -77,6 +95,41 @@ export default function Schools() {
       alert((e as Error).message);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const startEditing = () => {
+    if (!detail) return;
+    setEditForm({
+      name: detail.name,
+      contact_name: detail.contact_name,
+      contact_email: detail.contact_email,
+      city: detail.city || "",
+      state: detail.state || "",
+      notes: detail.notes || "",
+    });
+    setEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!detail) return;
+    setSaving(true);
+    try {
+      await api.updateSchool(detail.id, {
+        name: editForm.name.trim(),
+        contact_name: editForm.contact_name.trim(),
+        contact_email: editForm.contact_email.trim(),
+        city: editForm.city.trim() || undefined,
+        state: editForm.state.trim() || undefined,
+        notes: editForm.notes.trim() || undefined,
+      });
+      setEditing(false);
+      handleViewDetail(detail.id);
+      reload();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -133,6 +186,7 @@ export default function Schools() {
       setDeleteTarget(null);
       if (detail?.id === deleteTarget.id) setDetail(null);
       reload();
+      alert("School deleted. If this was converted from a lead, don't forget to update the lead status in the Leads tab.");
     } catch (e) {
       alert((e as Error).message);
     } finally {
@@ -145,7 +199,6 @@ export default function Schools() {
   const totalSchools = schools.length;
   const activeSchools = schools.filter((s) => s.is_active).length;
   const totalTeachers = schools.reduce((sum, s) => sum + s.teacher_count, 0);
-  const totalStudents = schools.reduce((sum, s) => sum + s.student_count, 0);
 
   return (
     <div>
@@ -162,7 +215,6 @@ export default function Schools() {
         <StatCard label="Total Schools" value={totalSchools} />
         <StatCard label="Active" value={activeSchools} />
         <StatCard label="Teachers" value={totalTeachers} />
-        <StatCard label="Students" value={totalStudents} />
       </div>
 
       {/* ── Create form ─────────────────────────────────────────── */}
@@ -250,19 +302,19 @@ export default function Schools() {
             <col style={{ width: "18%" }} />
             <col style={{ width: "18%" }} />
             <col style={{ width: "8%" }} />
-            <col style={{ width: "8%" }} />
             <col style={{ width: "9%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "11%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
           </colgroup>
           <thead>
             <tr>
               <th>School</th>
               <th>Contact</th>
               <th>Teachers</th>
-              <th>Students</th>
               <th>Status</th>
+              <th>Notes</th>
               <th>Updated</th>
               <th>Added</th>
               <th></th>
@@ -286,7 +338,6 @@ export default function Schools() {
                   <div style={{ fontSize: 11, color: "#64748b" }}>{s.contact_email}</div>
                 </td>
                 <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
-                <td style={{ fontWeight: 600 }}>{s.student_count}</td>
                 <td>
                   <span className="badge" style={
                     s.is_active
@@ -295,6 +346,15 @@ export default function Schools() {
                   }>
                     {s.is_active ? "Active" : "Inactive"}
                   </span>
+                </td>
+                <td>
+                  {s.notes ? (
+                    <div style={{ fontSize: 12, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.notes}>
+                      {s.notes}
+                    </div>
+                  ) : (
+                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                  )}
                 </td>
                 <td>
                   {s.updated_by ? (
@@ -382,19 +442,61 @@ export default function Schools() {
             ) : detail && (
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-                  <div>
-                    <h2 style={{ marginBottom: 4 }}>{detail.name}</h2>
-                    <div style={{ fontSize: 13, color: "#64748b" }}>
-                      {detail.contact_name} · {detail.contact_email}
-                      {(detail.city || detail.state) && ` · ${[detail.city, detail.state].filter(Boolean).join(", ")}`}
-                    </div>
-                    {detail.notes && (
-                      <div style={{ marginTop: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 6, fontSize: 13, color: "#475569" }}>
-                        {detail.notes}
+                  {editing ? (
+                    <div style={{ flex: 1, marginRight: 12 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                        <FormField label="School Name">
+                          <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required style={inputStyle} />
+                        </FormField>
+                        <FormField label="Contact Name">
+                          <input type="text" value={editForm.contact_name} onChange={(e) => setEditForm({ ...editForm, contact_name: e.target.value })} required style={inputStyle} />
+                        </FormField>
+                        <FormField label="Contact Email">
+                          <input type="email" value={editForm.contact_email} onChange={(e) => setEditForm({ ...editForm, contact_email: e.target.value })} required style={inputStyle} />
+                        </FormField>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <FormField label="City">
+                            <input type="text" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} style={inputStyle} />
+                          </FormField>
+                          <FormField label="State">
+                            <input type="text" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} style={{ ...inputStyle, maxWidth: 80 }} />
+                          </FormField>
+                        </div>
                       </div>
-                    )}
+                      <FormField label="Notes">
+                        <textarea
+                          value={editForm.notes}
+                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                          placeholder="Deal context, pricing, etc."
+                          rows={3}
+                          style={{ ...inputStyle, resize: "vertical" }}
+                        />
+                      </FormField>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                        <button onClick={() => setEditing(false)} disabled={saving} style={btnGhost}>Cancel</button>
+                        <button onClick={handleSaveEdit} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>
+                          {saving ? "Saving..." : "Save Changes"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <h2 style={{ marginBottom: 4 }}>{detail.name}</h2>
+                      <div style={{ fontSize: 13, color: "#64748b" }}>
+                        {detail.contact_name} · {detail.contact_email}
+                        {(detail.city || detail.state) && ` · ${[detail.city, detail.state].filter(Boolean).join(", ")}`}
+                      </div>
+                      {detail.notes && (
+                        <div style={{ marginTop: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 6, fontSize: 13, color: "#475569" }}>
+                          {detail.notes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {!editing && <button onClick={startEditing} style={btnSmall}>Edit</button>}
+                    <button onClick={() => { setDetail(null); setEditing(false); setInviteResult(null); }} style={btnGhost}>Close</button>
                   </div>
-                  <button onClick={() => { setDetail(null); setInviteResult(null); }} style={btnGhost}>Close</button>
                 </div>
 
                 {/* Teachers */}
