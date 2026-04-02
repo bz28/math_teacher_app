@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
