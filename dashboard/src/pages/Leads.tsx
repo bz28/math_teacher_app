@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type ContactLeadData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
@@ -100,11 +101,18 @@ export default function Leads() {
     setTimeout(() => setCopiedId(null), 1500);
   };
 
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState<"active" | "all">("active");
+
   if (loading) return <p>Loading...</p>;
 
   const newCount = leads.filter((l) => l.status === "new").length;
   const contactedCount = leads.filter((l) => l.status === "contacted").length;
   const convertedCount = leads.filter((l) => l.status === "converted").length;
+
+  const filteredLeads = filter === "active"
+    ? leads.filter((l) => l.status === "new" || l.status === "contacted")
+    : leads;
 
   return (
     <div>
@@ -118,6 +126,28 @@ export default function Leads() {
       </div>
 
       <div className="table-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ marginBottom: 0 }}>
+            {filter === "active" ? "Active Leads" : "All Leads"}
+            <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({filteredLeads.length})</span>
+          </h3>
+          <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 6, padding: 2 }}>
+            {(["active", "all"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  background: filter === f ? "#fff" : "transparent",
+                  color: filter === f ? "#1e293b" : "#94a3b8",
+                  boxShadow: filter === f ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                }}
+              >
+                {f === "active" ? `Active (${newCount + contactedCount})` : `All (${leads.length})`}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="table-scroll">
         <table>
           <colgroup>
@@ -141,9 +171,21 @@ export default function Leads() {
             </tr>
           </thead>
           <tbody>
-            {leads.map((lead) => (
+            {filteredLeads.map((lead) => (
               <tr key={lead.id} style={{ opacity: lead.status === "declined" ? 0.55 : 1 }}>
-                <td style={{ fontWeight: 600 }}>{lead.school_name}</td>
+                <td>
+                  <span style={{ fontWeight: 600 }}>{lead.school_name}</span>
+                  {lead.status === "converted" && lead.school_id && (
+                    <div>
+                      <button
+                        onClick={() => navigate("/schools")}
+                        style={{ fontSize: 11, color: "#6366f1", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}
+                      >
+                        View School &rarr;
+                      </button>
+                    </div>
+                  )}
+                </td>
                 <td>
                   <div style={{ fontSize: 13 }}>{lead.contact_name}</div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{lead.contact_email}</div>
@@ -191,12 +233,21 @@ export default function Leads() {
                 <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(lead.created_at)}</td>
               </tr>
             ))}
-            {leads.length === 0 && (
+            {filteredLeads.length === 0 && (
               <tr>
                 <td colSpan={7} style={{ textAlign: "center", padding: 48 }}>
                   <div style={{ color: "#94a3b8" }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>No leads yet</div>
-                    <div style={{ fontSize: 14 }}>Leads will appear here when schools submit the contact form on the /teachers page.</div>
+                    {filter === "active" && leads.length > 0 ? (
+                      <>
+                        <div style={{ fontSize: 20, marginBottom: 8 }}>No active leads</div>
+                        <div style={{ fontSize: 14 }}>All leads have been converted or declined. <button onClick={() => setFilter("all")} style={{ color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14 }}>View all leads</button></div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>No leads yet</div>
+                        <div style={{ fontSize: 14 }}>Leads will appear here when schools submit the contact form on the /teachers page.</div>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
