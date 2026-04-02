@@ -6,6 +6,7 @@
 - No squash merges. Use `--merge` to preserve commit history.
 - Don't open PRs automatically. Push to branch, summarize changes, let the user decide when to open the PR.
 - Don't push empty commits to trigger CI. CI runs automatically on PRs.
+- After opening a PR, monitor CI until all checks pass. If any check fails, update the user with: which check failed, why it failed, and what you're doing to fix it. Then fix the issue and push the fix. Repeat until all checks are green before telling the user the PR is ready.
 - Small, cohesive commits (~150 lines). Each commit should be logically related.
 - Conventional commit prefixes: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
 
