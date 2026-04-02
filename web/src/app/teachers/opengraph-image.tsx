@@ -128,7 +128,7 @@ export default function TeachersOpenGraphImage() {
               maxWidth: 750,
             }}
           >
-            A personal AI tutor for every student in your classroom: step-by-step guidance at every student&apos;s pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most.
+            {"A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most."}
           </div>
         </div>
 
