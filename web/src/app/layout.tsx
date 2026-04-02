@@ -18,10 +18,29 @@ export const metadata: Metadata = {
   description:
     "Snap a photo or type any problem. Veradic AI breaks it into guided steps you actually understand, then generates unlimited practice until you master it.",
   metadataBase: new URL("https://veradicai.com"),
+  keywords: [
+    "AI tutor",
+    "math tutor",
+    "science tutor",
+    "step-by-step learning",
+    "AI homework help",
+    "math solver",
+    "physics tutor",
+    "chemistry tutor",
+    "practice problems",
+    "exam prep",
+    "AI education",
+    "Veradic AI",
+  ],
+  authors: [{ name: "Veradic AI" }],
+  creator: "Veradic AI",
+  publisher: "Veradic AI",
+  applicationName: "Veradic AI",
+  category: "Education",
   openGraph: {
     title: "Veradic AI — Snap. Learn. Master.",
     description:
-      "Your AI tutor that breaks any problem into steps you actually understand.",
+      "Your AI tutor that breaks any math or science problem into steps you actually understand.",
     url: "https://veradicai.com",
     siteName: "Veradic AI",
     locale: "en_US",
@@ -31,11 +50,23 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Veradic AI — Snap. Learn. Master.",
     description:
-      "Your AI tutor that breaks any problem into steps you actually understand.",
+      "Your AI tutor that breaks any math or science problem into steps you actually understand.",
+    creator: "@veradicai",
+    site: "@veradicai",
   },
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  alternates: {
+    canonical: "https://veradicai.com",
   },
 };
 
