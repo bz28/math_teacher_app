@@ -82,8 +82,8 @@ export default function Leads() {
         invite_url = res.invite_url;
       }
 
-      // 3. Update lead status
-      await api.updateLeadStatus(convertLead.id, "converted");
+      // 3. Update lead status and link to school
+      await api.updateLeadStatus(convertLead.id, "converted", school.id);
 
       setConvertResult({ invite_url });
       reload();
