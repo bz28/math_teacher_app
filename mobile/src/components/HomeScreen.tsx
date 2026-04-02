@@ -79,34 +79,6 @@ export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
 
       <AnimatedPressable
         style={[styles.subjectCard, shadows.md, { marginTop: spacing.md }]}
-        onPress={() => onSelect("chemistry")}
-        scaleDown={0.97}
-        accessibilityRole="button"
-        accessibilityLabel="Study Chemistry"
-      >
-        <LinearGradient
-          colors={gradients.chemistry}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.subjectGradient}
-        >
-          <View style={styles.subjectContent}>
-            <View style={styles.subjectIconWrap}>
-              <Ionicons name="flask" size={28} color={colors.white} />
-            </View>
-            <View style={styles.subjectTextWrap}>
-              <Text style={styles.subjectTitle}>Chemistry</Text>
-              <Text style={styles.subjectDesc}>
-                Reactions, balancing equations, stoichiometry, and more
-              </Text>
-            </View>
-            <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />
-          </View>
-        </LinearGradient>
-      </AnimatedPressable>
-
-      <AnimatedPressable
-        style={[styles.subjectCard, shadows.md, { marginTop: spacing.md }]}
         onPress={() => onSelect("physics")}
         scaleDown={0.97}
         accessibilityRole="button"
@@ -126,6 +98,34 @@ export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
               <Text style={styles.subjectTitle}>Physics</Text>
               <Text style={styles.subjectDesc}>
                 Mechanics, energy, waves, and more
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />
+          </View>
+        </LinearGradient>
+      </AnimatedPressable>
+
+      <AnimatedPressable
+        style={[styles.subjectCard, shadows.md, { marginTop: spacing.md }]}
+        onPress={() => onSelect("chemistry")}
+        scaleDown={0.97}
+        accessibilityRole="button"
+        accessibilityLabel="Study Chemistry"
+      >
+        <LinearGradient
+          colors={gradients.chemistry}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.subjectGradient}
+        >
+          <View style={styles.subjectContent}>
+            <View style={styles.subjectIconWrap}>
+              <Ionicons name="flask" size={28} color={colors.white} />
+            </View>
+            <View style={styles.subjectTextWrap}>
+              <Text style={styles.subjectTitle}>Chemistry</Text>
+              <Text style={styles.subjectDesc}>
+                Reactions, balancing equations, stoichiometry, and more
               </Text>
             </View>
             <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />

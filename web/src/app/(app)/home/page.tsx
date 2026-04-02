@@ -17,17 +17,17 @@ const genericSubjects = [
     modes: ["Learn", "Mock Test"],
   },
   {
-    id: "chemistry",
-    name: "Chemistry",
-    description: "Reactions, balancing equations, stoichiometry, and more",
-    gradient: "from-[#00B894] to-[#55EFC4]",
-    modes: ["Learn", "Mock Test"],
-  },
-  {
     id: "physics",
     name: "Physics",
     description: "Mechanics, energy, waves, and more",
     gradient: "from-[#0984E3] to-[#74B9FF]",
+    modes: ["Learn", "Mock Test"],
+  },
+  {
+    id: "chemistry",
+    name: "Chemistry",
+    description: "Reactions, balancing equations, stoichiometry, and more",
+    gradient: "from-[#00B894] to-[#55EFC4]",
     modes: ["Learn", "Mock Test"],
   },
 ];

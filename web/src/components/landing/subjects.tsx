@@ -11,16 +11,16 @@ const subjects = [
     icon: MathIcon,
   },
   {
-    name: "Chemistry",
-    description: "Reactions, balancing equations, stoichiometry, and more",
-    gradient: "from-success to-[#55EFC4]",
-    icon: ChemIcon,
-  },
-  {
     name: "Physics",
     description: "Mechanics, energy, waves, and more",
     gradient: "from-[#0984E3] to-[#74B9FF]",
     icon: PhysicsIcon,
+  },
+  {
+    name: "Chemistry",
+    description: "Reactions, balancing equations, stoichiometry, and more",
+    gradient: "from-success to-[#55EFC4]",
+    icon: ChemIcon,
   },
 ];
 
