@@ -25,19 +25,9 @@ export default function Schools() {
   const [deleteTarget, setDeleteTarget] = useState<SchoolListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Action menu
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-
   // Copied feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // Close action menu on outside click
-  useEffect(() => {
-    if (!openMenu) return;
-    const close = () => setOpenMenu(null);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [openMenu]);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   const reload = () => {
     setLoading(true);
@@ -45,6 +35,13 @@ export default function Schools() {
   };
 
   useEffect(() => { reload(); }, []);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const close = () => setOpenMenu(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openMenu]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,95 +245,105 @@ export default function Schools() {
 
       {/* ── Schools table ───────────────────────────────────────── */}
       <div className="table-card">
-        <div className="table-scroll">
-          <table>
-            <colgroup>
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "12%" }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>School</th>
-                <th>Contact</th>
-                <th>Teachers</th>
-                <th>Students</th>
-                <th>Status</th>
-                <th>Added</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {schools.map((s) => (
-                <tr key={s.id} style={{ opacity: s.is_active ? 1 : 0.55 }}>
-                  <td>
+        <table>
+          <colgroup>
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "11%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>School</th>
+              <th>Contact</th>
+              <th>Teachers</th>
+              <th>Students</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {schools.map((s) => (
+              <tr key={s.id} style={{ opacity: s.is_active ? 1 : 0.55 }}>
+                <td>
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{s.name}</span>
+                    {(s.city || s.state) && (
+                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                        {[s.city, s.state].filter(Boolean).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <div style={{ fontSize: 13 }}>{s.contact_name}</div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{s.contact_email}</div>
+                </td>
+                <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
+                <td style={{ fontWeight: 600 }}>{s.student_count}</td>
+                <td>
+                  <span className="badge" style={
+                    s.is_active
+                      ? { background: "#dcfce7", color: "#16a34a" }
+                      : { background: "#fef2f2", color: "#dc2626" }
+                  }>
+                    {s.is_active ? "Active" : "Inactive"}
+                  </span>
+                </td>
+                <td>
+                  {s.updated_by ? (
                     <div>
-                      <span style={{ fontWeight: 600 }}>{s.name}</span>
-                      {(s.city || s.state) && (
-                        <div style={{ fontSize: 12, color: "#64748b" }}>
-                          {[s.city, s.state].filter(Boolean).join(", ")}
-                        </div>
-                      )}
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{s.updated_by}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8" }}>{s.updated_at ? formatRelativeDate(s.updated_at) : ""}</div>
                     </div>
-                  </td>
-                  <td>
-                    <div style={{ fontSize: 13 }}>{s.contact_name}</div>
-                    <div style={{ fontSize: 11, color: "#64748b" }}>{s.contact_email}</div>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
-                  <td style={{ fontWeight: 600 }}>{s.student_count}</td>
-                  <td>
-                    <span className="badge" style={
-                      s.is_active
-                        ? { background: "#dcfce7", color: "#16a34a" }
-                        : { background: "#fef2f2", color: "#dc2626" }
-                    }>
-                      {s.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(s.created_at)}</td>
-                  <td>
-                    <div className="action-menu-wrapper">
-                      <button
-                        className="action-toggle"
-                        onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === s.id ? null : s.id); }}
-                      >
-                        ...
-                      </button>
-                      {openMenu === s.id && (
-                        <div className="action-dropdown" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => { setOpenMenu(null); handleViewDetail(s.id); }}>
-                            View Details
-                          </button>
-                          <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
-                            {s.is_active ? "Deactivate" : "Activate"}
-                          </button>
-                          <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
-                            Delete School
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {schools.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: "center", padding: 48 }}>
-                    <div style={{ color: "#94a3b8" }}>
-                      <div style={{ fontSize: 32, marginBottom: 8 }}>No schools yet</div>
-                      <div style={{ fontSize: 14 }}>Click "+ Add School" when you close your first deal.</div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                  )}
+                </td>
+                <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(s.created_at)}</td>
+                <td>
+                  <div className="action-menu-wrapper">
+                    <button
+                      className="action-toggle"
+                      onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === s.id ? null : s.id); }}
+                    >
+                      ...
+                    </button>
+                    {openMenu === s.id && (
+                      <div className="action-dropdown" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => { setOpenMenu(null); handleViewDetail(s.id); }}>
+                          View Details
+                        </button>
+                        <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
+                          {s.is_active ? "Deactivate" : "Activate"}
+                        </button>
+                        <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
+                          Delete School
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {schools.length === 0 && (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: 48 }}>
+                  <div style={{ color: "#94a3b8" }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>No schools yet</div>
+                    <div style={{ fontSize: 14 }}>Click "+ Add School" when you close your first deal.</div>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* ── Delete confirmation modal ──────────────────────────── */}
