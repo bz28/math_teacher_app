@@ -11,8 +11,8 @@
 - [ ] Create a new app in [App Store Connect](https://appstoreconnect.apple.com/)
 - [ ] Go to **Monetization > Subscriptions** and create a subscription group (e.g. "Veradic Pro")
 - [ ] Create two subscription products:
-  - **Monthly**: $9.99/month, auto-renewable
-  - **Yearly**: $59.99/year, auto-renewable, with 7-day free trial
+  - **Weekly**: $2.99/week, auto-renewable
+  - **Yearly**: $79.99/year, auto-renewable, with 7-day free trial
 - [ ] Set subscription descriptions, display names, and review screenshots
 - [ ] Submit subscriptions for review (Apple reviews subscriptions separately from the app)
 
@@ -25,7 +25,7 @@
   - Add the shared secret from App Store Connect (App > App Information > App-Specific Shared Secret)
 - [ ] Create **Products** in RevenueCat matching your App Store product IDs
 - [ ] Create an **Offering** named "default" with two packages:
-  - `$rc_monthly` → your monthly product
+  - `$rc_weekly` → your weekly product
   - `$rc_annual` → your yearly product
 - [ ] Create **Entitlement** named "pro" and attach both products to it
 

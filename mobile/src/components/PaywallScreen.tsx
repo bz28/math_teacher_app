@@ -89,8 +89,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
       .then((offerings) => {
         const current = offerings.current;
         const annualPkg = current?.annual ?? null;
-        const monthlyPkg = current?.monthly ?? null;
-        const weeklyPkg = current?.weekly ?? monthlyPkg;
+        const weeklyPkg = current?.weekly ?? null;
         setPlans(buildPlans(annualPkg, weeklyPkg));
       })
       .catch(() => {
@@ -238,7 +237,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
                         <Text style={[styles.planLabel, isSelected && styles.planLabelSelected]}>{plan.label}</Text>
                         {isAnnual && (
                           <View style={styles.saveInline}>
-                            <Text style={styles.saveInlineText}>Save 55%</Text>
+                            <Text style={styles.saveInlineText}>Save 49%</Text>
                           </View>
                         )}
                       </View>
@@ -352,8 +351,8 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
         : "3-day free trial",
       priceText: annualPkg
         ? `${annualPkg.product.priceString}/yr`
-        : "$69.99/yr",
-      perWeek: "$1.35/wk",
+        : "$79.99/yr",
+      perWeek: "$1.54/wk",
       pkg: annualPkg,
     },
     {

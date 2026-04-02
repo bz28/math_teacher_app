@@ -32,9 +32,9 @@ const plans: {
   {
     id: "annual",
     name: "Yearly",
-    price: "$69.99",
+    price: "$79.99",
     period: "/year",
-    perWeek: "$1.35/week",
+    perWeek: "$1.54/week",
     badge: "Most Popular",
     trial: "3-day free trial",
     cta: "Start Free Trial",
@@ -119,7 +119,7 @@ export default function PricingPage() {
 
             {plan.perWeek && (
               <p className="mt-1.5 text-sm font-semibold text-success">
-                That&apos;s just {plan.perWeek} — save 55%
+                That&apos;s just {plan.perWeek} — save 49%
               </p>
             )}
 
