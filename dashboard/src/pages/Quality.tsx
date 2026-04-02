@@ -108,6 +108,7 @@ export default function Quality() {
 
       <div className="table-card">
         <h3>Evaluations ({data.total_count})</h3>
+        <div className="table-scroll">
         <table>
           <colgroup>
             <col style={{ width: "4%" }} />
@@ -170,6 +171,7 @@ export default function Quality() {
             ))}
           </tbody>
         </table>
+        </div>
         <Pagination
           offset={offset}
           limit={PAGE_SIZE}

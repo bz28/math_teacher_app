@@ -118,7 +118,17 @@ export default function Leads() {
       </div>
 
       <div className="table-card">
+        <div className="table-scroll">
         <table>
+          <colgroup>
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "12%" }} />
+          </colgroup>
           <thead>
             <tr>
               <th>School</th>
@@ -184,6 +194,7 @@ export default function Leads() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Convert modal */}

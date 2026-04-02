@@ -131,6 +131,7 @@ export default function Users() {
             <option value="name">Sort by Name</option>
           </select>
         </div>
+        <div className="table-scroll">
         <table>
           <colgroup>
             <col style={{ width: "22%" }} />
@@ -248,6 +249,7 @@ export default function Users() {
             )}
           </tbody>
         </table>
+        </div>
         <Pagination
           offset={offset}
           limit={PAGE_SIZE}

@@ -226,6 +226,15 @@ h3 {
   overflow: visible;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+  min-width: 700px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

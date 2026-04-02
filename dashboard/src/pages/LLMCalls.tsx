@@ -137,6 +137,7 @@ export default function LLMCalls() {
       {data.recent_failures.length > 0 && (
         <div className="table-card" style={{ borderLeft: "3px solid #ef4444" }}>
           <h3 style={{ color: "#ef4444" }}>Recent Failures ({data.recent_failures.length})</h3>
+          <div className="table-scroll">
           <table>
             <colgroup>
               <col style={{ width: "20%" }} />
@@ -173,11 +174,13 @@ export default function LLMCalls() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       <div className="table-card">
         <h3>By Function</h3>
+        <div className="table-scroll">
         <table>
           <colgroup>
             <col style={{ width: "28%" }} />
@@ -215,6 +218,7 @@ export default function LLMCalls() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="table-card">
@@ -248,6 +252,7 @@ export default function LLMCalls() {
             </button>
           </div>
         </div>
+        <div className="table-scroll">
         <table>
           <colgroup>
             <col style={{ width: "3%" }} />
@@ -317,6 +322,7 @@ export default function LLMCalls() {
             )}
           </tbody>
         </table>
+        </div>
         <Pagination
           offset={offset}
           limit={PAGE_SIZE}
