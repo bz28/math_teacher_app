@@ -179,8 +179,10 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
             <Text style={styles.subtitle}>{TRIGGER_MESSAGES[trigger].subtitle}</Text>
           </>
         ) : (
-          <Text style={styles.title}>Unlock your full potential</Text>
-          <Text style={styles.subtitle}>No daily limits. No locked features. Just learn.</Text>
+          <>
+            <Text style={styles.title}>Unlock your full potential</Text>
+            <Text style={styles.subtitle}>No daily limits. No locked features. Just learn.</Text>
+          </>
         )}
 
         {/* Free vs Pro comparison */}
