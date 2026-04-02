@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -32,6 +32,8 @@ def _code_response(c: PromoCode) -> PromoCodeResponse:
         expires_at=c.expires_at,
         is_active=c.is_active,
         created_at=c.created_at,
+        updated_at=c.updated_at,
+        updated_by=c.updated_by_name,
     )
 
 
@@ -162,6 +164,8 @@ async def create_promo_code(
         duration_days=body.duration_days,
         max_redemptions=body.max_redemptions,
         expires_at=body.expires_at,
+        updated_by_id=current_user.user_id,
+        updated_by_name=current_user.name,
     )
     db.add(promo)
     await db.commit()
@@ -205,6 +209,9 @@ async def update_promo_code(
     if "expires_at" in body.model_fields_set:
         promo.expires_at = body.expires_at
 
+    promo.updated_at = func.now()
+    promo.updated_by_id = current_user.user_id
+    promo.updated_by_name = current_user.name
     await db.commit()
     await db.refresh(promo)
 
