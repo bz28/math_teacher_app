@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoMark } from "@/components/shared/logo-mark";
 
 export function Footer() {
   return (
@@ -6,9 +7,7 @@ export function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
         {/* Logo + copyright */}
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-gradient-to-br from-primary to-primary-light">
-            <span className="text-xs font-extrabold text-white">V</span>
-          </div>
+          <LogoMark size={28} />
           <span className="text-sm text-text-muted">
             &copy; {new Date().getFullYear()} Veradic AI
           </span>

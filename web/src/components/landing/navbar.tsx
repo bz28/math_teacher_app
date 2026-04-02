@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LogoMark } from "@/components/shared/logo-mark";
 
 const studentNavLinks = [
   { label: "Features", href: "#features" },
@@ -34,7 +35,7 @@ export function Navbar() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5">
-          <LogoMark />
+          <LogoMark size={32} />
           <span className="text-lg font-bold tracking-tight text-text-primary">
             Veradic AI
           </span>
@@ -167,13 +168,5 @@ export function Navbar() {
         )}
       </AnimatePresence>
     </nav>
-  );
-}
-
-function LogoMark() {
-  return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-[--radius-sm] bg-gradient-to-br from-primary to-primary-light">
-      <span className="text-sm font-extrabold text-white">V</span>
-    </div>
   );
 }

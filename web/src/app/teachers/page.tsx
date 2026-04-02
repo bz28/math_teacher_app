@@ -111,9 +111,10 @@ export default function TeachersPage() {
               transition={{ delay: 0.35 }}
               className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-text-secondary md:text-xl"
             >
-              Give every student a personal AI tutor that explains problems
-              step-by-step &mdash; while you track progress and focus on what
-              matters most.
+              A personal AI tutor for every student in your classroom:
+              step-by-step guidance at every student&rsquo;s pace, automated
+              grading, endless practice problems, and actionable insights
+              &mdash; so you can spend your time where it matters most.
             </motion.p>
 
             <motion.div

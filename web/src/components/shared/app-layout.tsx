@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/shared/logo-mark";
 
 // ── Student nav items ──
 
@@ -54,9 +55,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-6">
             <Link href="/home" className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-gradient-to-br from-primary to-primary-light">
-                <span className="text-xs font-extrabold text-white">V</span>
-              </div>
+              <LogoMark size={28} />
               <span className="text-base font-bold tracking-tight text-text-primary">
                 Veradic AI
               </span>
@@ -150,9 +149,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-border-light bg-surface md:flex">
         {/* Brand */}
         <div className="flex h-16 items-center gap-2.5 border-b border-border-light px-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[6px] bg-gradient-to-br from-primary to-primary-light">
-            <span className="text-sm font-extrabold text-white">V</span>
-          </div>
+          <LogoMark size={32} />
           <div className="min-w-0">
             <div className="text-sm font-bold tracking-tight text-text-primary">Veradic AI</div>
             <div className="truncate text-[11px] font-medium text-text-muted">
@@ -231,9 +228,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col md:min-w-0">
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-light bg-surface/90 px-4 backdrop-blur-md md:hidden">
           <Link href="/teacher" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-gradient-to-br from-primary to-primary-light">
-              <span className="text-xs font-extrabold text-white">V</span>
-            </div>
+            <LogoMark size={28} />
             <span className="text-sm font-bold text-text-primary">
               {user?.school_name || "Teacher"}
             </span>
