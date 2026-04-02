@@ -120,5 +120,6 @@ export const gradients = {
   warning: ["#E17055", "#FDCB6E"] as const,
   chemistry: ["#00B894", "#55EFC4"] as const,
   physics: ["#0984E3", "#74B9FF"] as const,
+  cs: ["#E17055", "#FDCB6E"] as const,
   card: ["#F8F7FF", "#F0EDFF"] as const,
 } as const;

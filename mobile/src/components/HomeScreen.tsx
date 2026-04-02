@@ -107,6 +107,34 @@ export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
 
       <AnimatedPressable
         style={[styles.subjectCard, shadows.md, { marginTop: spacing.md }]}
+        onPress={() => onSelect("cs")}
+        scaleDown={0.97}
+        accessibilityRole="button"
+        accessibilityLabel="Study Computer Science"
+      >
+        <LinearGradient
+          colors={gradients.cs}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.subjectGradient}
+        >
+          <View style={styles.subjectContent}>
+            <View style={styles.subjectIconWrap}>
+              <Ionicons name="code-slash" size={28} color={colors.white} />
+            </View>
+            <View style={styles.subjectTextWrap}>
+              <Text style={styles.subjectTitle}>Computer Science</Text>
+              <Text style={styles.subjectDesc}>
+                Data structures, algorithms, system design, and more
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color="rgba(255,255,255,0.7)" />
+          </View>
+        </LinearGradient>
+      </AnimatedPressable>
+
+      <AnimatedPressable
+        style={[styles.subjectCard, shadows.md, { marginTop: spacing.md }]}
         onPress={() => onSelect("chemistry")}
         scaleDown={0.97}
         accessibilityRole="button"
