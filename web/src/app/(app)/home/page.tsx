@@ -168,7 +168,7 @@ export default function HomePage() {
 
       {/* Regular student — generic subjects */}
       {!isSchoolStudent && !loadingCourses && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2">
           {genericSubjects.map((subject, i) => (
             <motion.div
               key={subject.id}
