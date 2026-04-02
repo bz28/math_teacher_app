@@ -201,24 +201,30 @@ export default function Leads() {
                   )}
                 </td>
                 <td>
-                  <select
-                    value={lead.status}
-                    onChange={(e) => handleStatusChange(lead.id, e.target.value, lead)}
-                    style={{
-                      ...STATUS_STYLES[lead.status],
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 4,
-                      padding: "3px 8px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      outline: "none",
-                    }}
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                    ))}
-                  </select>
+                  {lead.school_id ? (
+                    <span className="badge" style={STATUS_STYLES[lead.status]} title="Linked to a school — delete the school to unlock">
+                      {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                    </span>
+                  ) : (
+                    <select
+                      value={lead.status}
+                      onChange={(e) => handleStatusChange(lead.id, e.target.value, lead)}
+                      style={{
+                        ...STATUS_STYLES[lead.status],
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 4,
+                        padding: "3px 8px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        outline: "none",
+                      }}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                      ))}
+                    </select>
+                  )}
                 </td>
                 <td>
                   {lead.updated_by ? (
