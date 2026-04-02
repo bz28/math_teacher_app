@@ -1,5 +1,6 @@
 """Admin school management endpoints."""
 
+import asyncio
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -10,6 +11,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.course import Course
@@ -211,6 +213,42 @@ async def update_school(
     return {"status": "ok"}
 
 
+@router.delete("/schools/{school_id}")
+async def delete_school(
+    school_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    school = (await db.execute(select(School).where(School.id == school_id))).scalar_one_or_none()
+    if not school:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="School not found")
+
+    school_name = school.name
+
+    # Count affected records for the response
+    teacher_count = (await db.execute(
+        select(func.count()).select_from(User).where(User.school_id == school.id, User.role == "teacher")
+    )).scalar() or 0
+    invite_count = (await db.execute(
+        select(func.count()).select_from(TeacherInvite).where(
+            TeacherInvite.school_id == school.id, TeacherInvite.status == "pending"
+        )
+    )).scalar() or 0
+
+    await db.delete(school)
+    await db.commit()
+
+    logger.info(
+        "AUDIT: admin=%s deleted school=%s (%s), teachers_unlinked=%d, invites_deleted=%d",
+        current_user.user_id, school_id, school_name, teacher_count, invite_count,
+    )
+    return {
+        "status": "ok",
+        "teachers_unlinked": teacher_count,
+        "invites_deleted": invite_count,
+    }
+
+
 # ── Teacher Invites ──────────────────────────────────────────────────────────
 
 
@@ -262,7 +300,21 @@ async def invite_teacher(
         current_user.user_id, body.email, school_id, school.name, invite.id,
     )
 
-    # TODO: Send invite email via Resend/SendGrid when email service is configured
+    # Fire-and-forget invite email to teacher
+    asyncio.create_task(send_email(
+        to=[body.email.lower()],
+        subject=f"You've been invited to join {school.name} on Veradic AI",
+        html=(
+            f"<h2>You're invited!</h2>"
+            f"<p><strong>{school.name}</strong> has invited you to join Veradic AI as a teacher.</p>"
+            f"<p>Click the link below to create your account:</p>"
+            f'<p><a href="{invite_url}" style="display:inline-block;padding:12px 24px;'
+            f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
+            f'font-weight:600;">Accept Invite</a></p>'
+            f"<p style=\"color:#64748b;font-size:13px;\">This invite expires in {INVITE_EXPIRY_DAYS} days.</p>"
+        ),
+    ))
+
     return {"status": "ok", "invite_url": invite_url}
 
 

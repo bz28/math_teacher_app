@@ -21,6 +21,10 @@ export default function Schools() {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<string | null>(null);
 
+  // Delete modal
+  const [deleteTarget, setDeleteTarget] = useState<SchoolListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Copied feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -111,6 +115,21 @@ export default function Schools() {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.deleteSchool(deleteTarget.id);
+      setDeleteTarget(null);
+      if (detail?.id === deleteTarget.id) setDetail(null);
+      reload();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) return <p>Loading...</p>;
@@ -268,6 +287,12 @@ export default function Schools() {
                     >
                       {s.is_active ? "Deactivate" : "Activate"}
                     </button>
+                    <button
+                      onClick={() => setDeleteTarget(s)}
+                      style={{ ...btnSmall, color: "#ef4444", borderColor: "#fecaca" }}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -285,6 +310,33 @@ export default function Schools() {
           </tbody>
         </table>
       </div>
+
+      {/* ── Delete confirmation modal ──────────────────────────── */}
+      {deleteTarget && (
+        <div style={overlay} onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="table-card" style={{ ...modalCard, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginBottom: 8, color: "#dc2626" }}>Delete School</h2>
+            <p style={{ color: "#475569", marginBottom: 16 }}>
+              Permanently delete <strong>{deleteTarget.name}</strong>?
+            </p>
+            <ul style={{ color: "#64748b", fontSize: 13, marginBottom: 20, paddingLeft: 20 }}>
+              <li>{deleteTarget.teacher_count} teacher{deleteTarget.teacher_count !== 1 ? "s" : ""} will be unlinked from this school</li>
+              <li>All pending invites will be cancelled</li>
+              <li>This cannot be undone</li>
+            </ul>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} style={btnGhost}>Cancel</button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ ...btnPrimary, background: "#dc2626", opacity: deleting ? 0.6 : 1 }}
+              >
+                {deleting ? "Deleting..." : "Delete School"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── School detail modal ─────────────────────────────────── */}
       {(detail || loadingDetail) && (
