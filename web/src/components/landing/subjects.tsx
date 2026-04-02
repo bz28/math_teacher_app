@@ -11,6 +11,12 @@ const subjects = [
     icon: MathIcon,
   },
   {
+    name: "Physics",
+    description: "Mechanics, energy, waves, and more",
+    gradient: "from-[#0984E3] to-[#74B9FF]",
+    icon: PhysicsIcon,
+  },
+  {
     name: "Chemistry",
     description: "Reactions, balancing equations, stoichiometry, and more",
     gradient: "from-success to-[#55EFC4]",
@@ -39,7 +45,7 @@ export function Subjects() {
           </p>
         </motion.div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-3">
           {subjects.map((subject, i) => (
             <motion.div
               key={subject.name}
@@ -85,6 +91,17 @@ function ChemIcon() {
     <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 3h6v7l4 9H5l4-9V3z" />
       <line x1="9" y1="3" x2="15" y2="3" />
+    </svg>
+  );
+}
+
+function PhysicsIcon() {
+  return (
+    <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+      <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
     </svg>
   );
 }
