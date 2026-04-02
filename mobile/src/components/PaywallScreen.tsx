@@ -39,12 +39,11 @@ interface PlanOption {
   pkg: PurchasesPackage | null;
 }
 
-const FEATURES = [
-  "Unlimited sessions per day",
-  "Mock exams with timer",
-  "Work photo diagnosis (AI grading)",
-  "Unlimited image scanning",
-  "Full session history",
+const COMPARISONS = [
+  { feature: "Problem sessions", free: "5 per day", pro: "Unlimited" },
+  { feature: "Chat messages", free: "20 per day", pro: "Unlimited" },
+  { feature: "Image scanning", free: "3 per day", pro: "Unlimited" },
+  { feature: "Work diagnosis", free: "—", pro: "Full AI grading" },
 ];
 
 const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
@@ -180,15 +179,28 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
             <Text style={styles.subtitle}>{TRIGGER_MESSAGES[trigger].subtitle}</Text>
           </>
         ) : (
-          <Text style={[styles.title, styles.titleNoSubtitle]}>Unlock Veradic AI Pro</Text>
+          <Text style={styles.title}>Unlock your full potential</Text>
+          <Text style={styles.subtitle}>No daily limits. No locked features. Just learn.</Text>
         )}
 
-        {/* Features */}
-        <View style={styles.featureList}>
-          {FEATURES.map((feature) => (
-            <View key={feature} style={styles.featureRow}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={styles.featureText}>{feature}</Text>
+        {/* Free vs Pro comparison */}
+        <View style={styles.comparisonTable}>
+          <View style={styles.comparisonHeader}>
+            <Text style={[styles.comparisonHeaderText, { flex: 1 }]}>Feature</Text>
+            <Text style={[styles.comparisonHeaderText, styles.comparisonColCenter]}>Free</Text>
+            <Text style={[styles.comparisonHeaderText, styles.comparisonColCenter, { color: colors.primary }]}>Pro</Text>
+          </View>
+          {COMPARISONS.map((row, i) => (
+            <View
+              key={row.feature}
+              style={[styles.comparisonRow, i < COMPARISONS.length - 1 && styles.comparisonRowBorder]}
+            >
+              <Text style={[styles.comparisonFeature, { flex: 1 }]}>{row.feature}</Text>
+              <Text style={[styles.comparisonFree, styles.comparisonColCenter]}>{row.free}</Text>
+              <View style={[styles.comparisonColCenter, { flexDirection: "row", alignItems: "center", gap: 4 }]}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                <Text style={styles.comparisonPro}>{row.pro}</Text>
+              </View>
             </View>
           ))}
         </View>
@@ -225,7 +237,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
                       <View>
                         <Text style={[styles.planLabel, isSelected && styles.planLabelSelected]}>{plan.label}</Text>
                         {plan.perWeek && (
-                          <Text style={styles.planPerWeek}>{plan.perWeek}</Text>
+                          <Text style={styles.planPerWeek}>That's just {plan.perWeek} — save 55%</Text>
                         )}
                       </View>
                     </View>
@@ -240,6 +252,16 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
               );
             })}
           </View>
+        )}
+
+        {/* Trial highlight */}
+        {selectedPlanOption?.trialText ? (
+          <View style={styles.trialHighlight}>
+            <Text style={styles.trialHighlightTitle}>Try free for 3 days</Text>
+            <Text style={styles.trialHighlightSubtitle}>You won't be charged today</Text>
+          </View>
+        ) : (
+          <Text style={styles.noCommitmentText}>Cancel anytime, no commitment</Text>
         )}
 
         {/* Subscribe button */}
@@ -375,9 +397,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: spacing.sm,
   },
-  titleNoSubtitle: {
-    marginBottom: spacing.xl,
-  },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
@@ -387,22 +406,88 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // Features
-  featureList: {
+  // Comparison table
+  comparisonTable: {
     alignSelf: "stretch",
-    gap: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
     marginBottom: spacing.xl,
   },
-  featureRow: {
+  comparisonHeader: {
+    flexDirection: "row",
+    backgroundColor: colors.card,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  comparisonHeaderText: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  comparisonColCenter: {
+    width: 90,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  comparisonRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.white,
   },
-  featureText: {
+  comparisonRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  comparisonFeature: {
     ...typography.body,
     color: colors.text,
-    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  comparisonFree: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  comparisonPro: {
+    ...typography.caption,
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  // Trial highlight
+  trialHighlight: {
+    alignSelf: "stretch",
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  trialHighlightTitle: {
+    ...typography.bodyBold,
+    color: colors.primary,
     fontSize: 15,
+  },
+  trialHighlightSubtitle: {
+    ...typography.caption,
+    color: colors.primary,
+    opacity: 0.7,
+    marginTop: 2,
+  },
+  noCommitmentText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginBottom: spacing.lg,
   },
 
   // Plans
