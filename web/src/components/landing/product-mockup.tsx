@@ -64,7 +64,7 @@ export function LearnSessionMockup() {
             <p className="mt-1 text-[11px] leading-relaxed text-text-primary">
               We have a <span className="font-bold">quadratic equation</span> 2x² + 5x − 3 = 0
               and need to find the values of x that make it true. Since the highest power is x², we
-              expect to find two solutions. The most elegant approach is the <span className="font-bold">quadratic formula</span> since
+              expect to find two solutions. The most elegant approach is the <span className="font-bold">quadratic formula</span>{" "}since
               this doesn&apos;t factor easily.
             </p>
           </div>
@@ -121,9 +121,9 @@ export function StepTimelineMockup() {
       {/* Progress */}
       <div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
-          <div className="h-full w-3/5 rounded-full bg-gradient-to-r from-primary to-primary-light" />
+          <div className="h-full w-1/4 rounded-full bg-gradient-to-r from-primary to-primary-light" />
         </div>
-        <p className="mt-1 text-[10px] text-text-muted">Step 3 of 5</p>
+        <p className="mt-1 text-[10px] text-text-muted">Step 2 of 4</p>
       </div>
 
       {/* Completed step 1 — expanded with real explanation */}
@@ -308,34 +308,6 @@ function StepCard({
   );
 }
 
-function CompletedStepCollapsed({
-  num,
-  title,
-  summary,
-}: {
-  num: number;
-  title: string;
-  summary: string;
-}) {
-  return (
-    <div className="flex items-start gap-2 py-0.5">
-      <div className="flex flex-col items-center">
-        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success">
-          <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        </div>
-        <div className="w-px flex-1 bg-border-light" />
-      </div>
-      <div className="min-w-0 pb-2">
-        <p className="text-[10px] font-semibold text-success">
-          Step {num} — {title}
-        </p>
-        <p className="text-[11px] text-text-secondary line-clamp-1">{summary}</p>
-      </div>
-    </div>
-  );
-}
 
 function ChoiceButton({
   label,
