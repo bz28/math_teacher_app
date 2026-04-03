@@ -22,22 +22,22 @@ class TestParseDecomposition:
             ],
             "final_answer": "x = 3",
         }
-        steps, final_answer, distractors, answer_type = _parse_decomposition(data)
+        steps, final_answer, answer_type = _parse_decomposition(data)
         assert len(steps) == 2
         assert steps[0] == {"title": "", "description": "Subtract 6 from both sides to get 2x = 6"}
         assert final_answer == "x = 3"
-        assert distractors == []
+        assert answer_type == "text"
 
-    def test_parse_with_distractors(self) -> None:
+    def test_parse_with_answer_type(self) -> None:
         data = {
             "steps": ["Solve to get x = 3"],
             "final_answer": "x = 3",
-            "distractors": ["x = 2", "x = 4", "x = -3"],
+            "answer_type": "diagram",
         }
-        steps, final_answer, distractors, answer_type = _parse_decomposition(data)
+        steps, final_answer, answer_type = _parse_decomposition(data)
         assert len(steps) == 1
         assert final_answer == "x = 3"
-        assert distractors == ["x = 2", "x = 4", "x = -3"]
+        assert answer_type == "diagram"
 
     def test_parse_invalid_type_raises(self) -> None:
         with pytest.raises((KeyError, TypeError, ValueError)):
@@ -55,16 +55,15 @@ class TestDecompositionDataclass:
             steps=["Subtract 6 from both sides", "Divide by 2"],
             final_answer="x = 3",
             problem_type="linear",
-            distractors=["x = 2", "x = 4", "x = -3"],
         )
         assert d.problem_type == "linear"
         assert len(d.steps) == 2
+        assert d.answer_type == "text"
 
 
 MOCK_LLM_RESPONSE = {
     "steps": ["Subtract 6 from both sides to get 2x = 6", "Divide both sides by 2"],
     "final_answer": "x = 3",
-    "distractors": ["x = 6", "x = -3", "x = 9"],
 }
 
 
@@ -88,7 +87,7 @@ async def test_decompose_quadratic() -> None:
         mock.return_value = {
             "steps": ["Factor the quadratic", "Set each factor to zero", "Solve for x"],
             "final_answer": "x = -2, x = -3",
-            "distractors": ["x = 2", "x = 3", "x = -6"],
+            # distractors now generated separately: ["x = 2", "x = 3", "x = -6"],
         }
         result = await decompose_problem("x^2 + 5*x + 6 = 0")
     assert result.problem_type == "math"
@@ -103,7 +102,7 @@ async def test_decompose_arithmetic() -> None:
         mock.return_value = {
             "steps": ["Add 3 + 5 = 8", "Multiply 8 * 2 = 16", "Subtract 16 - 4 = 12"],
             "final_answer": "12",
-            "distractors": ["8", "16", "10"],
+            # distractors now generated separately: ["8", "16", "10"],
         }
         result = await decompose_problem("(3 + 5) * 2 - 4")
     assert len(result.steps) >= 1

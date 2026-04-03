@@ -96,14 +96,22 @@ async def create_session(
         if not steps_data:
             raise RuntimeError("Decomposition returned no steps")
 
-        # Attach final_answer and shuffled multiple-choice to the last step
+        # Attach final_answer to the last step
         last = steps_data[-1]
         last["final_answer"] = decomposition.final_answer
         last["answer_type"] = decomposition.answer_type
-        if decomposition.distractors:
-            choices = [decomposition.final_answer] + decomposition.distractors[:3]
-            random.shuffle(choices)
-            last["choices"] = choices
+
+        # Generate distractors only for practice/mock test (not learn mode)
+        if mode != SessionMode.LEARN:
+            from api.core.practice import generate_distractors
+            distractors = await generate_distractors(
+                problem, decomposition.final_answer, decomposition.answer_type,
+                user_id=str(user_id), subject=subject,
+            )
+            if distractors:
+                choices = [decomposition.final_answer] + distractors[:3]
+                random.shuffle(choices)
+                last["choices"] = choices
 
     session = Session(
         user_id=user_id,

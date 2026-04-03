@@ -260,11 +260,6 @@ export default function LearnSessionPage() {
                     >
                       <MathText text={step.description} />
                     </div>
-                    {expanded && step.final_answer && (
-                      <p className="mt-1 text-sm font-medium text-text-primary">
-                        &rarr; {step.final_answer}
-                      </p>
-                    )}
                   </div>
                   <svg
                     className={cn(
@@ -283,6 +278,16 @@ export default function LearnSessionPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Answer card after all steps when session is completed */}
+      {session.status === "completed" && steps.length > 0 && steps[steps.length - 1].final_answer && (
+        <Card variant="elevated" className="mb-6 border-success-border bg-success-light">
+          <p className="text-sm font-bold text-success">Answer</p>
+          <div className="mt-2 text-lg font-semibold text-text-primary">
+            <MathText text={steps[steps.length - 1].final_answer ?? ""} />
+          </div>
+        </Card>
       )}
 
       {/* ── Completed state ── */}
@@ -394,6 +399,23 @@ export default function LearnSessionPage() {
               </div>
             </Card>
           </motion.div>
+
+          {/* Final Answer — its own card after the last step */}
+          {isFinalStep && currentStepData?.final_answer && (
+            <motion.div
+              key="final-answer"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Card variant="elevated" className="border-success-border bg-success-light">
+                <p className="text-sm font-bold text-success">Answer</p>
+                <div className="mt-2 text-lg font-semibold text-text-primary">
+                  <MathText text={currentStepData.final_answer} />
+                </div>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Final step: "I understand" to complete */}
           {isFinalStep && !isCompleted && (

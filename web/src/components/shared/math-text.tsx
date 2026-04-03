@@ -24,8 +24,10 @@ type Segment =
   | { type: "bold"; content: string };
 
 function parse(input: string): Segment[] {
-  // Replace <br> tags with newlines before parsing
-  const text = input.replace(/<br\s*\/?>/gi, "\n");
+  // Clean up before parsing
+  let text = input.replace(/<br\s*\/?>/gi, "\n");
+  // Strip arrow characters that Claude sometimes inserts inside SVG (→, ←, etc.)
+  text = text.replace(/→\s*/g, "").replace(/←\s*/g, "");
   const segments: Segment[] = [];
   // Match $$...$$, $...$, <svg>...</svg>, and **...**
   const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|<svg[\s\S]*?<\/svg>|\*\*[^*]+\*\*)/g;
