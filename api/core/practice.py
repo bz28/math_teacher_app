@@ -51,10 +51,12 @@ Rules:
 - Each distractor should target a common student mistake (sign errors, off-by-one, \
 wrong formula, partial solution, etc.)
 - Distractors must be clearly wrong but look reasonable to a student who made an error
-- If the correct answer is an <svg> diagram, generate 3 WRONG <svg> diagrams \
-(wrong charge states, wrong bonds, mirror images, missing components). \
-Escape quotes as \\" in SVG attributes since output is JSON.
-- Use LaTeX $ delimiters for math in text answers
+- Use LaTeX $ delimiters for ALL math, even simple expressions
+- If the correct answer contains @@{{"diagram_type": "smiles", ...}}@@, generate 3 WRONG \
+SMILES structures using the same @@{{...}}@@ notation (wrong functional groups, wrong \
+charges, wrong connectivity)
+- If the correct answer contains @@{{"diagram_type": "graph", ...}}@@, generate 3 WRONG \
+graph definitions (wrong functions, shifted curves, etc.)
 
 Respond with ONLY valid JSON:
 {{"distractors": ["wrong answer 1", "wrong answer 2", "wrong answer 3"]}}"""
@@ -131,9 +133,10 @@ async def generate_practice_problems(
     if has_diagram:
         user_msg += (
             "\n\nIMPORTANT: The original problem included a diagram. Each generated problem "
-            "MUST include an <svg> diagram showing the setup, embedded directly in the problem text. "
-            "Keep SVGs simple: lines, circles, rects, text labels. Max 300x300 viewBox. "
-            'Escape all quotes inside SVG attribute values as \\" since the output is JSON.'
+            "MUST include a diagram using structured notation:\n"
+            '- Chemistry: @@{"diagram_type": "smiles", "smiles": "SMILES_STRING", "label": "description"}@@\n'
+            '- Math graphs: @@{"diagram_type": "graph", "functions": [...], "xRange": [...], "yRange": [...]}@@\n'
+            "- Physics/other: use <svg> blocks"
         )
 
     try:
