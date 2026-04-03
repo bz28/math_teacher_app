@@ -38,13 +38,13 @@ from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.course import Course
+from api.models.llm_call import LLMCall
+from api.models.promo import PromoRedemption
 from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
-from api.models.teacher_invite import TeacherInvite
-from api.models.llm_call import LLMCall
-from api.models.promo import PromoRedemption
 from api.models.session import Session
+from api.models.teacher_invite import TeacherInvite
 from api.models.user import RefreshToken, User
 from api.models.work_submission import WorkSubmission
 from api.schemas.auth import (
