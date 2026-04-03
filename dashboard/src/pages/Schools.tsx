@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
@@ -36,6 +36,8 @@ export default function Schools() {
   // Copied feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
+  const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -55,11 +57,29 @@ export default function Schools() {
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function openMenuFor(schoolId: string) {
+    if (openMenu === schoolId) { setOpenMenu(null); return; }
+    const btn = menuToggleRefs.current[schoolId];
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 160) {
+      setMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right });
+    } else {
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpenMenu(schoolId);
+  }
+
   useEffect(() => {
     if (!openMenu) return;
     const close = () => setOpenMenu(null);
     document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("scroll", close, true);
+    };
   }, [openMenu]);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -376,27 +396,34 @@ export default function Schools() {
                 </td>
                 <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(s.created_at)}</td>
                 <td>
-                  <div className="action-menu-wrapper">
-                    <button
-                      className="action-toggle"
-                      onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === s.id ? null : s.id); }}
+                  <button
+                    ref={(el) => { menuToggleRefs.current[s.id] = el; }}
+                    className="action-toggle"
+                    onClick={(e) => { e.stopPropagation(); openMenuFor(s.id); }}
+                  >
+                    ...
+                  </button>
+                  {openMenu === s.id && (
+                    <div
+                      className="action-dropdown"
+                      style={{
+                        ...(menuPos.top != null ? { top: menuPos.top } : {}),
+                        ...(menuPos.bottom != null ? { bottom: menuPos.bottom } : {}),
+                        right: menuPos.right,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      ...
-                    </button>
-                    {openMenu === s.id && (
-                      <div className="action-dropdown" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => { setOpenMenu(null); handleViewDetail(s.id); }}>
-                          View Details
-                        </button>
-                        <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
-                          {s.is_active ? "Deactivate" : "Activate"}
-                        </button>
-                        <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
-                          Delete School
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                      <button onClick={() => { setOpenMenu(null); handleViewDetail(s.id); }}>
+                        View Details
+                      </button>
+                      <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
+                        {s.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                      <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
+                        Delete School
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

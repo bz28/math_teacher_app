@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
@@ -16,6 +16,8 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
+  const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const reload = () =>
     api.users({
@@ -25,6 +27,33 @@ export default function Users() {
       offset: String(offset),
       ...(search ? { search } : {}),
     }).then(setData);
+
+  function openMenuFor(userId: string) {
+    if (openMenu === userId) { setOpenMenu(null); return; }
+    const btn = menuToggleRefs.current[userId];
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const menuHeight = 240; // approximate max dropdown height
+    if (spaceBelow < menuHeight) {
+      setMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right });
+    } else {
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpenMenu(userId);
+  }
+
+  // Close dropdown on outside click or scroll
+  useEffect(() => {
+    if (!openMenu) return;
+    const close = () => setOpenMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [openMenu]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [hours, sortBy, search, offset]);
@@ -302,37 +331,44 @@ export default function Users() {
                   </div>
                 </td>
                 <td>
-                  <div className="action-menu-wrapper">
-                    <button
-                      className="action-toggle"
-                      onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === u.id ? null : u.id); }}
+                  <button
+                    ref={(el) => { menuToggleRefs.current[u.id] = el; }}
+                    className="action-toggle"
+                    onClick={(e) => { e.stopPropagation(); openMenuFor(u.id); }}
+                  >
+                    ...
+                  </button>
+                  {openMenu === u.id && (
+                    <div
+                      className="action-dropdown"
+                      style={{
+                        ...(menuPos.top != null ? { top: menuPos.top } : {}),
+                        ...(menuPos.bottom != null ? { bottom: menuPos.bottom } : {}),
+                        right: menuPos.right,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      ...
-                    </button>
-                    {openMenu === u.id && (
-                      <div className="action-dropdown" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${u.id}`); }}>
-                          View Calls
+                      <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${u.id}`); }}>
+                        View Calls
+                      </button>
+                      <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>
+                        {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
+                      </button>
+                      {(["student", "teacher", "admin"] as const).filter((r) => r !== u.role).map((r) => (
+                        <button key={r} onClick={() => { setOpenMenu(null); handleChangeRole(u.id, r); }}>
+                          Make {r.charAt(0).toUpperCase() + r.slice(1)}
                         </button>
-                        <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>
-                          {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
+                      ))}
+                      {u.subscription_tier !== "pro" && (
+                        <button onClick={() => { setOpenMenu(null); handleResetLimit(u.id); }}>
+                          Reset Daily Limits
                         </button>
-                        {(["student", "teacher", "admin"] as const).filter((r) => r !== u.role).map((r) => (
-                          <button key={r} onClick={() => { setOpenMenu(null); handleChangeRole(u.id, r); }}>
-                            Make {r.charAt(0).toUpperCase() + r.slice(1)}
-                          </button>
-                        ))}
-                        {u.subscription_tier !== "pro" && (
-                          <button onClick={() => { setOpenMenu(null); handleResetLimit(u.id); }}>
-                            Reset Daily Limits
-                          </button>
-                        )}
-                        <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}>
-                          Delete User
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                      <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}>
+                        Delete User
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

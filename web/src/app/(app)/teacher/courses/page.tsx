@@ -12,6 +12,7 @@ export default function CourseListPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("math");
+  const [gradeLevel, setGradeLevel] = useState<number | "">("");
   const [creating, setCreating] = useState(false);
   const toast = useToast();
 
@@ -28,9 +29,14 @@ export default function CourseListPage() {
     e.preventDefault();
     setCreating(true);
     try {
-      await teacher.createCourse({ name: name.trim(), subject });
+      await teacher.createCourse({
+        name: name.trim(),
+        subject,
+        ...(gradeLevel !== "" && { grade_level: Number(gradeLevel) }),
+      });
       setName("");
       setSubject("math");
+      setGradeLevel("");
       setShowCreate(false);
       reload();
       toast.success("Course created");
@@ -69,7 +75,7 @@ export default function CourseListPage() {
             </button>
           </div>
           <form onSubmit={handleCreate} className="mt-4 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <div className="sm:col-span-2">
                 <label className="text-[13px] font-semibold text-text-secondary">Course Name</label>
                 <input
@@ -91,6 +97,19 @@ export default function CourseListPage() {
                   <option value="math">Math</option>
                   <option value="physics">Physics</option>
                   <option value="chemistry">Chemistry</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[13px] font-semibold text-text-secondary">Grade Level</label>
+                <select
+                  value={gradeLevel}
+                  onChange={(e) => setGradeLevel(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-primary"
+                >
+                  <option value="">Optional</option>
+                  {[6, 7, 8, 9, 10, 11, 12].map((g) => (
+                    <option key={g} value={g}>Grade {g}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -126,7 +145,7 @@ export default function CourseListPage() {
                 href={`/teacher/courses/${course.id}`}
                 className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface p-5 transition-colors hover:border-primary/30 hover:bg-primary-bg/20"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-text-primary">{course.name}</h3>
                     <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
@@ -137,13 +156,31 @@ export default function CourseListPage() {
                       {course.status}
                     </span>
                   </div>
-                  <div className="mt-1 flex gap-3 text-xs text-text-muted">
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
                     <span className="capitalize">{course.subject}</span>
-                    <span>{course.section_count} section{course.section_count !== 1 ? "s" : ""}</span>
-                    <span>{course.doc_count} document{course.doc_count !== 1 ? "s" : ""}</span>
+                    {course.grade_level && (
+                      <>
+                        <span className="text-border">·</span>
+                        <span>Grade {course.grade_level}</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="mt-2 flex gap-4 text-xs text-text-muted">
+                    <span className="flex items-center gap-1">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" /><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+                      </svg>
+                      {course.section_count} section{course.section_count !== 1 ? "s" : ""}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" />
+                      </svg>
+                      {course.doc_count} doc{course.doc_count !== 1 ? "s" : ""}
+                    </span>
                   </div>
                 </div>
-                <svg className="h-5 w-5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="h-5 w-5 shrink-0 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </Link>

@@ -288,15 +288,7 @@ tr.clickable:hover {
   background: #f1f5f9;
 }
 
-/* Action menu — parent td must allow overflow for the dropdown */
-td:has(.action-menu-wrapper) {
-  overflow: visible !important;
-}
-
-.action-menu-wrapper {
-  position: relative;
-}
-
+/* Action menu */
 .action-toggle {
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -315,16 +307,13 @@ td:has(.action-menu-wrapper) {
 }
 
 .action-dropdown {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 4px;
+  position: fixed;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  z-index: 20;
-  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  min-width: 170px;
   padding: 4px;
 }
 
