@@ -117,6 +117,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
     setDeleteError(null);
     try {
       await deleteAccount(deletePassword);
+      setDeletePassword("");
       await clearAuth();
       setDeleteModalVisible(false);
       if (onAccountDeleted) { onAccountDeleted(); } else { onLogout(); }

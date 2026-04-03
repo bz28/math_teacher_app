@@ -214,7 +214,9 @@ async def me(
 
 
 @router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("3/minute")
 async def delete_account(
+    request: Request,
     body: DeleteAccountRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
