@@ -12,7 +12,8 @@ import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
-import { cn, renderBold } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { MathText } from "@/components/shared/math-text";
 import { FREE_DAILY_CHAT_LIMIT } from "@/lib/constants";
 import { LearnSummary } from "./_components/learn-summary";
 import { LearnCompleted } from "./_components/learn-completed";
@@ -177,9 +178,9 @@ export default function LearnSessionPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-text-muted">Problem</p>
-            <p className="mt-1 text-lg font-semibold text-text-primary">
-              {session.problem}
-            </p>
+            <div className="mt-1 text-lg font-semibold text-text-primary">
+              <MathText text={session.problem} />
+            </div>
             {sessionImage && (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
@@ -242,7 +243,7 @@ export default function LearnSessionPage() {
                         !expanded && "line-clamp-1",
                       )}
                     >
-                      {renderBold(step.description)}
+                      <MathText text={step.description} />
                     </p>
                     {expanded && step.final_answer && (
                       <p className="mt-1 text-sm font-medium text-text-primary">
@@ -300,7 +301,7 @@ export default function LearnSessionPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-primary">Tutor</p>
-                      <p className="mt-1 text-sm leading-relaxed text-text-primary">{msg.text}</p>
+                      <div className="mt-1 text-sm leading-relaxed text-text-primary"><MathText text={msg.text} /></div>
                     </div>
                   </div>
                 </Card>
@@ -372,7 +373,7 @@ export default function LearnSessionPage() {
                     Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
                   </p>
                   <p className="mt-1 text-base leading-relaxed text-text-primary">
-                    {currentStepData ? renderBold(currentStepData.description) : "Loading..."}
+                    {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
                   </p>
                 </motion.div>
               </div>
@@ -468,9 +469,9 @@ export default function LearnSessionPage() {
                       <p className="text-xs font-semibold text-primary">
                         Tutor
                       </p>
-                      <p className="mt-1 text-sm leading-relaxed text-text-primary">
-                        {msg.text}
-                      </p>
+                      <div className="mt-1 text-sm leading-relaxed text-text-primary">
+                        <MathText text={msg.text} />
+                      </div>
                     </div>
                   </div>
                 </Card>

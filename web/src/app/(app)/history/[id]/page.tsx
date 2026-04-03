@@ -12,7 +12,8 @@ import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
 import { FREE_DAILY_SESSION_LIMIT } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
-import { cn, renderBold } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { MathText } from "@/components/shared/math-text";
 
 export default function SessionReviewPage({
   params,
@@ -105,9 +106,9 @@ export default function SessionReviewPage({
           Back to History
         </button>
 
-        <h1 className="text-xl font-extrabold text-text-primary">
-          {session.problem}
-        </h1>
+        <div className="text-xl font-extrabold text-text-primary">
+          <MathText text={session.problem} />
+        </div>
         <div className="mt-2 flex items-center gap-2">
           <Badge variant={isCompleted ? "success" : "muted"}>
             {statusLabel}
@@ -163,7 +164,7 @@ export default function SessionReviewPage({
                           <p className="text-xs font-bold text-primary">{step.title}</p>
                         )}
                         <p className="text-sm font-medium text-text-primary">
-                          {renderBold(step.description)}
+                          <MathText text={step.description} />
                         </p>
                         {step.final_answer && (
                           <p className="mt-1 text-sm text-text-secondary">
@@ -246,7 +247,7 @@ function SessionChat({ sessionId }: { sessionId: string }) {
                   : "bg-surface-raised text-text-primary mr-8",
               )}
             >
-              {renderBold(msg.text)}
+              <MathText text={msg.text} />
             </div>
           ))}
           {thinking && (
