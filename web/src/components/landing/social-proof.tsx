@@ -16,6 +16,14 @@ export function SocialProof() {
   return (
     <section ref={ref} className="border-y border-border-light bg-card/50 px-6 py-14 md:py-16">
       <div className="mx-auto max-w-4xl">
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.4 }}
+          className="mb-6 text-center text-sm font-semibold text-text-muted"
+        >
+          Students love learning with Veradic
+        </motion.p>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}

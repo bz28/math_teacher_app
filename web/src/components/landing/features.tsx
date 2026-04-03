@@ -70,7 +70,7 @@ export function Features() {
             Everything You Need to Master Any Topic
           </h2>
           <p className="mt-3 text-lg text-text-secondary">
-            Powerful features designed for real understanding, not just answers
+            Six tools that make Veradic your ultimate study partner
           </p>
         </motion.div>
 

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { SITE_URL, subjectBreadcrumbJsonLd } from "@/lib/seo";
+import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "AI Physics Tutor — Step-by-Step Physics Help",
+  title: "Veradic AI Physics Tutor — Step-by-Step Physics Help",
   description:
-    "Struggling with mechanics, thermodynamics, or waves? Veradic AI breaks any physics problem into guided steps you actually understand, then generates unlimited practice until you master it.",
+    "Veradic is an AI physics tutor that breaks any mechanics, thermodynamics, or waves problem into guided steps you actually understand, then generates unlimited practice.",
   keywords: [
+    "veradic",
+    "veradic physics tutor",
     "AI physics tutor",
     "physics homework help",
     "physics solver",
@@ -18,13 +20,13 @@ export const metadata: Metadata = {
     "AI physics help",
   ],
   openGraph: {
-    title: "Veradic AI — Your AI Physics Tutor",
+    title: "Veradic — Your AI Physics Tutor",
     description:
       "Break any physics problem into steps you actually understand. Mechanics, energy, waves, and more.",
     url: `${SITE_URL}/subjects/physics`,
   },
   twitter: {
-    title: "Veradic AI — Your AI Physics Tutor",
+    title: "Veradic — Your AI Physics Tutor",
     description:
       "Break any physics problem into steps you actually understand. Mechanics, energy, waves, and more.",
   },
@@ -49,40 +51,39 @@ const examples = [
   { topic: "Electricity", problem: "Three resistors (2Ω, 4Ω, 6Ω) are in parallel. Find the total resistance." },
   { topic: "Thermodynamics", problem: "How much heat is needed to raise 2 kg of water from 20°C to 100°C?" },
   { topic: "Optics", problem: "A convex lens has focal length 10 cm. Where is the image of an object at 25 cm?" },
+  { topic: "Magnetism", problem: "A 2m wire carrying 5A is in a 0.3T magnetic field. Find the force on the wire." },
+  { topic: "Kinematics", problem: "A ball is thrown upward at 20 m/s. How high does it go and when does it return?" },
 ];
 
 const features = [
   {
     title: "Step-by-Step Solutions",
-    description: "Every physics problem is broken into clear steps — identify forces, set up equations, solve, and verify. No hand-waving.",
+    description: "Every physics problem is broken into clear steps — identify forces, draw free-body diagrams, set up equations, solve, and verify. No hand-waving.",
   },
   {
     title: "Ask Questions at Any Step",
-    description: "Not sure why F = ma applies here? Ask your AI tutor and get an explanation that connects the concept to the problem.",
+    description: "Not sure why F = ma applies here? Ask your Veradic tutor and get an explanation that connects the concept to the problem.",
   },
   {
     title: "Unlimited Practice Variations",
-    description: "Same concept, different numbers and scenarios. Build real problem-solving intuition through varied repetition.",
+    description: "Same physics concept, different masses, angles, and velocities. Veradic generates fresh scenarios so you build real problem-solving intuition.",
   },
   {
     title: "Photo Scan Your Homework",
-    description: "Snap a photo of your physics worksheet — diagrams and all. Veradic AI extracts the problems and guides you through each one.",
+    description: "Snap a photo of your physics worksheet — diagrams and all. Veradic extracts the problems and guides you through each one.",
   },
 ];
 
 export default function PhysicsPage() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(subjectBreadcrumbJsonLd("Physics", "physics")),
-        }}
-      />
       <SubjectPage
         name="Physics"
+        slug="physics"
         tagline="Your AI Physics Tutor"
-        description="From mechanics to thermodynamics, Veradic AI breaks any physics problem into guided steps you actually understand — then generates unlimited practice until you master it."
+        description="From mechanics to thermodynamics, Veradic breaks any physics problem into guided steps you actually understand — then generates unlimited practice until you master it."
+        detailedDescription="Whether you're analyzing projectile motion, calculating electric fields, or solving thermodynamics problems, Veradic walks you through the physics step by step. Understand the why, not just the how."
+        educationalProgramDescription="AI-powered physics tutoring with step-by-step solutions for mechanics, thermodynamics, waves, and more."
         gradient="from-[#0984E3] to-[#74B9FF]"
         badgeColor="#0984E3"
         icon={physicsIcon}

@@ -13,7 +13,7 @@ export function Footer() {
               <span className="text-base font-semibold text-text-primary">Veradic AI</span>
             </div>
             <p className="mt-3 text-sm text-text-muted leading-relaxed">
-              Your AI tutor that breaks any math or science problem into steps you actually understand.
+              Veradic breaks any math or science problem into steps you actually understand.
             </p>
           </div>
 
@@ -75,13 +75,28 @@ export function Footer() {
                   Sign In
                 </Link>
               </li>
+              <li>
+                <Link href="/support" className="hover:text-primary transition-colors">
+                  Support
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
 
-        {/* Copyright */}
-        <div className="mt-10 border-t border-border-light pt-6 text-center text-sm text-text-muted">
-          &copy; {new Date().getFullYear()} Veradic AI. All rights reserved.
+        {/* Legal + Copyright */}
+        <div className="mt-10 border-t border-border-light pt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+          <div className="flex gap-4 text-sm text-text-muted">
+            <Link href="/privacy" className="hover:text-primary transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-primary transition-colors">
+              Terms of Service
+            </Link>
+          </div>
+          <p className="text-sm text-text-muted">
+            &copy; {new Date().getFullYear()} Veradic LLC. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>

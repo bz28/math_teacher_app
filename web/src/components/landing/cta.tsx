@@ -40,7 +40,7 @@ export function CTA() {
             href="/teachers"
             className="font-semibold text-primary transition-colors hover:text-primary-dark"
           >
-            See how Veradic AI works in your classroom &rarr;
+            See how Veradic works in your classroom &rarr;
           </Link>
         </p>
       </motion.div>

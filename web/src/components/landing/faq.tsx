@@ -22,7 +22,7 @@ export function FAQ() {
             Frequently Asked Questions
           </h2>
           <p className="mt-4 text-lg text-text-secondary">
-            Everything you need to know about Veradic AI
+            Everything you need to know about Veradic
           </p>
         </motion.div>
 

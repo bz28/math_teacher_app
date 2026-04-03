@@ -34,8 +34,8 @@ export function Hero() {
           </h1>
 
           <p className="mt-5 max-w-lg text-lg leading-relaxed text-text-secondary">
-            Your AI tutor that breaks any math or science problem into steps
-            you actually understand.
+            Veradic — your personal AI tutor that breaks any math or science
+            problem into steps you actually understand.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
