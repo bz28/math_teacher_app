@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { MOCK_ASSIGNMENTS, type MockAssignment } from "@/components/teacher/assignments-data";
 import { CreateAssignmentModal } from "@/components/teacher/create-assignment-modal";
+import { GradingView } from "@/components/teacher/grading-view";
 
 type FilterCourse = string | "all";
 type FilterType = "all" | "homework" | "quiz" | "test";
@@ -13,6 +14,7 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<MockAssignment[]>(MOCK_ASSIGNMENTS);
   const [filterCourse, setFilterCourse] = useState<FilterCourse>("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [gradingAssignment, setGradingAssignment] = useState<MockAssignment | null>(null);
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
 
@@ -25,6 +27,11 @@ export default function AssignmentsPage() {
     if (filterStatus !== "all" && a.status !== filterStatus) return false;
     return true;
   });
+
+  // Grading view takes over the full page
+  if (gradingAssignment) {
+    return <GradingView assignment={gradingAssignment} onBack={() => setGradingAssignment(null)} />;
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -97,7 +104,7 @@ export default function AssignmentsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
             >
-              <AssignmentCard assignment={a} />
+              <AssignmentCard assignment={a} onClick={() => setGradingAssignment(a)} />
             </motion.div>
           ))
         )}
@@ -132,7 +139,7 @@ export default function AssignmentsPage() {
   );
 }
 
-function AssignmentCard({ assignment: a }: { assignment: MockAssignment }) {
+function AssignmentCard({ assignment: a, onClick }: { assignment: MockAssignment; onClick?: () => void }) {
   const typeIcon = a.type === "test" || a.type === "quiz" ? "📋" : "📝";
 
   const statusColors: Record<string, string> = {
@@ -147,7 +154,10 @@ function AssignmentCard({ assignment: a }: { assignment: MockAssignment }) {
   const pendingReview = a.submitted - a.graded;
 
   return (
-    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-5 transition-colors hover:border-primary/30">
+    <div
+      onClick={onClick}
+      className={`rounded-[--radius-lg] border border-border-light bg-surface p-5 transition-colors hover:border-primary/30 ${onClick ? "cursor-pointer" : ""}`}
+    >
       {/* Top row: title + status */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
