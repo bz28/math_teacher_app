@@ -17,7 +17,6 @@ interface PracticeSummaryProps {
   sessionsRemaining: number;
   onToggleFlag: (index: number) => void;
   onStartLearnQueue: (problems: string[]) => Promise<void>;
-  onRetryFlagged: (subject: Subject) => Promise<void>;
   onUpgradeNeeded: (entitlement: string, message: string) => void;
   onReset: () => void;
 }
@@ -28,7 +27,6 @@ export function PracticeSummary({
   sessionsRemaining,
   onToggleFlag,
   onStartLearnQueue,
-  onRetryFlagged,
   onUpgradeNeeded,
   onReset,
 }: PracticeSummaryProps) {
@@ -130,25 +128,6 @@ export function PracticeSummary({
               className="w-full"
             >
               Learn {flagged} Flagged Problem{flagged > 1 ? "s" : ""}
-            </Button>
-            <Button
-              variant="secondary"
-              loading={loading}
-              onClick={async () => {
-                if (sessionsRemaining < flagged) {
-                  onUpgradeNeeded("create_session",
-                    sessionsRemaining <= 0
-                      ? `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`
-                      : `You only have ${sessionsRemaining} problem${sessionsRemaining !== 1 ? "s" : ""} remaining today, but this would use ${flagged}. Upgrade to Pro for unlimited access.`
-                  );
-                  return;
-                }
-                setLoading(true);
-                await onRetryFlagged(subject);
-              }}
-              className="w-full"
-            >
-              Practice {flagged} Similar Problem{flagged > 1 ? "s" : ""}
             </Button>
           </>
         )}

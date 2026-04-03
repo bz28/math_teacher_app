@@ -60,18 +60,23 @@ _SYSTEM_PROMPT_TEMPLATE = (
     '  - "description": the full explanation of the step.\n'
     "  Formatting rules for descriptions:\n"
     "  - Do NOT use HTML tags like <br> — use plain newlines (\\n) for line breaks\n"
-    "  - Use LaTeX with $ delimiters for inline math (e.g., $x^2 + 1$)\n"
+    "  - Use LaTeX with $ delimiters for ALL math, even simple expressions like $2 \\times 3$ or $n = 5$\n"
     "  - Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
     "  - Use **double asterisks** for emphasis on key terms\n"
     "  - For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
-    "  - If a visual diagram would help the student (geometric shape, graph, coordinate plane,\n"
-    "    molecular structure), include it as an <svg> block with viewBox.\n"
-    "    Keep SVGs simple: lines, circles, rects, text labels. Max 300x300 viewBox.\n"
-    "    IMPORTANT: Escape all quotes inside SVG attribute values as \\\" since this is JSON.\n"
-    '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
+    "  - For diagrams, use structured @@{{...}}@@ notation:\n"
+    "    - Chemistry: @@{{\"diagram_type\": \"smiles\",\n"
+    "      \"smiles\": \"SMILES_STRING\", \"label\": \"desc\"}}@@\n"
+    "    - Math graphs: @@{{\"diagram_type\": \"graph\",\n"
+    "      \"functions\": [{{\"fn\": \"x^2-4\"}}],\n"
+    "      \"xRange\": [-5,5], \"yRange\": [-5,10]}}@@\n"
+    "    - Physics/other: use <svg> blocks as before\n"
+    '  Do NOT use plain strings for steps — every step must be\n'
+    '  {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
-    '- "answer_type": "text" (default) or "diagram" if the answer is a visual drawing/structure\n'
-    '  If answer_type is "diagram", final_answer MUST be an <svg> block.\n\n'
+    '- "answer_type": "text" or "diagram"\n'
+    "  If diagram for chemistry, use @@{{...smiles...}}@@\n"
+    "  If diagram for math, use @@{{...graph...}}@@\n\n"
     "Respond with ONLY valid JSON — no markdown, no explanation:\n"
     '{{"steps": [...], "final_answer": "...", "answer_type": "text"}}'
 )
