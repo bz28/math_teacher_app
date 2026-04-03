@@ -224,6 +224,46 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
     setShowUpload(false);
   }
 
+  // ── AI auto-organize ──
+
+  const [showAutoOrganize, setShowAutoOrganize] = useState(false);
+  const [autoOrganizing, setAutoOrganizing] = useState(false);
+  const [autoSuggestions, setAutoSuggestions] = useState<{ docId: string; filename: string; targetUnit: string; targetUnitId: string | null }[]>([]);
+
+  function handleAutoOrganize() {
+    setShowAutoOrganize(true);
+    setAutoOrganizing(true);
+
+    // Fake AI: assign uncategorized docs to units based on simple keyword matching
+    setTimeout(() => {
+      const suggestions = uncategorized.map((doc) => {
+        const name = doc.filename.toLowerCase();
+        // Try to match to existing units
+        const matched = units.find((u) => {
+          const keywords = u.name.toLowerCase().replace(/unit \d+:?\s*/i, "").split(/\s+/);
+          return keywords.some((kw) => kw.length > 3 && name.includes(kw));
+        });
+        return {
+          docId: doc.id,
+          filename: doc.filename,
+          targetUnit: matched?.name ?? "Keep Uncategorized",
+          targetUnitId: matched?.id ?? null,
+        };
+      });
+      setAutoSuggestions(suggestions);
+      setAutoOrganizing(false);
+    }, 1500);
+  }
+
+  function handleApplyAutoOrganize() {
+    const updates = autoSuggestions.filter((s) => s.targetUnitId !== null);
+    setDocuments(documents.map((d) => {
+      const suggestion = updates.find((s) => s.docId === d.id);
+      return suggestion ? { ...d, unit_id: suggestion.targetUnitId } : d;
+    }));
+    setShowAutoOrganize(false);
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -432,11 +472,10 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
             ))}
           </div>
 
-          {/* AI auto-organize placeholder */}
+          {/* AI auto-organize */}
           <button
-            disabled
-            title="Coming soon"
-            className="mt-3 flex items-center gap-1.5 rounded-[--radius-sm] border border-dashed border-border px-3 py-2 text-xs font-semibold text-text-muted opacity-50 cursor-not-allowed"
+            onClick={handleAutoOrganize}
+            className="mt-3 flex items-center gap-1.5 rounded-[--radius-sm] border border-dashed border-primary/40 px-3 py-2 text-xs font-semibold text-primary hover:border-primary hover:bg-primary-bg/30"
           >
             <SparkleIcon />
             Auto-organize with AI
@@ -588,6 +627,93 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
                     </div>
                   </>
                 )}
+              </>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      {/* Auto-organize modal */}
+      {showAutoOrganize && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowAutoOrganize(false)}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mx-4 w-full max-w-lg rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-text-primary">
+                <span className="mr-2"><SparkleIcon /></span>
+                AI Suggestions
+              </h3>
+              <button onClick={() => setShowAutoOrganize(false)} className="text-text-muted hover:text-text-secondary">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {autoOrganizing ? (
+              <div className="mt-8 flex flex-col items-center py-8">
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <SparkleIcon />
+                  Analyzing your documents...
+                </div>
+                <div className="mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-border">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: 1.5 }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Group suggestions by target unit */}
+                <div className="mt-4 space-y-4">
+                  {(() => {
+                    const grouped: Record<string, typeof autoSuggestions> = {};
+                    for (const s of autoSuggestions) {
+                      const key = s.targetUnit;
+                      if (!grouped[key]) grouped[key] = [];
+                      grouped[key].push(s);
+                    }
+                    return Object.entries(grouped).map(([unitName, docs]) => (
+                      <div key={unitName}>
+                        <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
+                          {unitName === "Keep Uncategorized" ? (
+                            <span className="text-text-muted">Keep Uncategorized</span>
+                          ) : (
+                            <>
+                              <FolderIcon />
+                              Move to {unitName}
+                            </>
+                          )}
+                        </div>
+                        <div className="mt-1.5 space-y-1">
+                          {docs.map((d) => (
+                            <div key={d.docId} className="flex items-center gap-2 rounded-[--radius-sm] bg-primary-bg/20 px-3 py-1.5 text-sm">
+                              <FileIcon />
+                              <span className="text-text-primary">{d.filename}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2">
+                  <button onClick={() => setShowAutoOrganize(false)} className="rounded-[--radius-sm] border border-border px-4 py-2 text-xs font-semibold text-text-muted hover:bg-primary-bg/50">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleApplyAutoOrganize}
+                    className="rounded-[--radius-sm] bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-dark"
+                  >
+                    Apply All
+                  </button>
+                </div>
               </>
             )}
           </motion.div>
