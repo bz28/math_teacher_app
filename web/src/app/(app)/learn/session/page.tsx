@@ -260,13 +260,10 @@ export default function LearnSessionPage() {
                     >
                       <MathText text={step.description} />
                     </div>
-                    {step.final_answer && (expanded || i === completedSteps.length - 1) && (
-                      <div className="mt-2 rounded-[--radius-md] border border-success-border bg-success-light p-2">
-                        <p className="text-xs font-semibold text-success">Final Answer</p>
-                        <div className="mt-1 text-sm font-semibold text-text-primary">
-                          <MathText text={step.final_answer} />
-                        </div>
-                      </div>
+                    {expanded && step.final_answer && (
+                      <p className="mt-1 text-sm font-medium text-text-primary">
+                        &rarr; <MathText text={step.final_answer} />
+                      </p>
                     )}
                   </div>
                   <svg
@@ -286,6 +283,16 @@ export default function LearnSessionPage() {
             );
           })}
         </div>
+
+        {/* Answer card after all steps when session is completed */}
+        {session.status === "completed" && steps.length > 0 && steps[steps.length - 1].final_answer && (
+          <Card variant="elevated" className="mb-6 border-success-border bg-success-light">
+            <p className="text-sm font-bold text-success">Answer</p>
+            <div className="mt-2 text-lg font-semibold text-text-primary">
+              <MathText text={steps[steps.length - 1].final_answer} />
+            </div>
+          </Card>
+        )}
       )}
 
       {/* ── Completed state ── */}
@@ -393,18 +400,27 @@ export default function LearnSessionPage() {
                   <div className="mt-1 text-base leading-relaxed text-text-primary">
                     {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
                   </div>
-                  {isFinalStep && currentStepData?.final_answer && (
-                    <div className="mt-3 rounded-[--radius-md] border border-success-border bg-success-light p-3">
-                      <p className="text-xs font-semibold text-success">Final Answer</p>
-                      <div className="mt-1 text-base font-semibold text-text-primary">
-                        <MathText text={currentStepData.final_answer} />
-                      </div>
-                    </div>
-                  )}
                 </motion.div>
               </div>
             </Card>
           </motion.div>
+
+          {/* Final Answer — its own card after the last step */}
+          {isFinalStep && currentStepData?.final_answer && (
+            <motion.div
+              key="final-answer"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Card variant="elevated" className="border-success-border bg-success-light">
+                <p className="text-sm font-bold text-success">Answer</p>
+                <div className="mt-2 text-lg font-semibold text-text-primary">
+                  <MathText text={currentStepData.final_answer} />
+                </div>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Final step: "I understand" to complete */}
           {isFinalStep && !isCompleted && (
