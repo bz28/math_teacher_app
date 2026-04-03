@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { SITE_URL } from "@/lib/seo";
 
 export const alt =
   "Veradic AI for Teachers — A personal AI tutor for every student in your classroom.";
@@ -140,7 +141,7 @@ export default function TeachersOpenGraphImage() {
             justifyContent: "space-between",
           }}
         >
-          <span style={{ color: "#6C5CE7", fontSize: 20, fontWeight: 600 }}>veradicai.com/teachers</span>
+          <span style={{ color: "#6C5CE7", fontSize: 20, fontWeight: 600 }}>{`${SITE_URL.replace(/^https?:\/\//, "")}/teachers`}</span>
           <div style={{ display: "flex", gap: 12 }}>
             {["Personal AI Tutor", "Auto Grading", "Course Management"].map((tag) => (
               <div
