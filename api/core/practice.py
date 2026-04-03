@@ -66,7 +66,15 @@ async def generate_practice_problems(
         return [{"question": problem, "answer": decomposition.final_answer, "distractors": decomposition.distractors}]
 
     # Generate question text only (no answers — they'd be unreliable)
+    has_diagram = "[" in problem
     user_msg = f"{problem}\n\nGenerate {count} similar problems (do not include the originals)."
+    if has_diagram:
+        user_msg += (
+            "\n\nIMPORTANT: The original problem included a diagram. Each generated problem "
+            "MUST include an <svg> diagram showing the setup, embedded directly in the problem text. "
+            "Keep SVGs simple: lines, circles, rects, text labels. Max 300x300 viewBox. "
+            'Escape all quotes inside SVG attribute values as \\" since the output is JSON.'
+        )
 
     try:
         result = await call_claude_json(
@@ -75,7 +83,7 @@ async def generate_practice_problems(
             mode=LLMMode.PRACTICE_GENERATE,
             user_id=user_id,
             model=MODEL_REASON,
-            max_tokens=2048,
+            max_tokens=4096 if has_diagram else 2048,
         )
         raw_problems = result.get("problems")
         if not isinstance(raw_problems, list) or len(raw_problems) == 0:
