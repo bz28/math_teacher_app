@@ -250,7 +250,7 @@ async def delete_account(
     await db.delete(user)
     await db.commit()
 
-    logger.info("Account deleted: user=%s email=%s", user.id, user.email)
+    logger.info("Account deleted: user=%s", user.id)
 
 
 @router.get("/entitlements", response_model=EntitlementsResponse)
