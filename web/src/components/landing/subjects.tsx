@@ -60,7 +60,7 @@ export function Subjects() {
             Pick Your Subject
           </h2>
           <p className="mt-3 text-lg text-text-secondary">
-            Math, Physics, Chemistry — more coming soon
+            Math, Physics, Chemistry on Veradic — more coming soon
           </p>
         </motion.div>
 
