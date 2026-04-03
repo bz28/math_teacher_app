@@ -118,7 +118,6 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     const hiddenFrom = sections.filter((s) => visibility.hiddenUnits[s.id]?.has(unitId));
     if (hiddenFrom.length === 0) return { text: "All sections", color: "green" };
     if (hiddenFrom.length === sections.length) return { text: "Hidden from all", color: "red" };
-    const visibleTo = sections.filter((s) => !visibility.hiddenUnits[s.id]?.has(unitId));
     return { text: `Hidden from: ${hiddenFrom.map((s) => s.name).join(", ")}`, color: "yellow" };
   }
 
@@ -525,7 +524,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                           formatSize={formatSize}
                           openDocMenu={openDocMenu}
                           docMenuPos={docMenuPos}
-                          docMenuRefs={docMenuRefs}
+                          onRegisterMenuRef={(docId, el) => { docMenuRefs.current[docId] = el; }}
                           onOpenMenu={openDocMenuFor}
                           onMove={handleMoveDoc}
                           onDelete={handleDeleteDoc}
@@ -570,7 +569,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                   formatSize={formatSize}
                   openDocMenu={openDocMenu}
                   docMenuPos={docMenuPos}
-                  docMenuRefs={docMenuRefs}
+                  onRegisterMenuRef={(docId, el) => { docMenuRefs.current[docId] = el; }}
                   onOpenMenu={openDocMenuFor}
                   onMove={handleMoveDoc}
                   onDelete={handleDeleteDoc}
@@ -838,7 +837,7 @@ function DocRow({
   formatSize,
   openDocMenu,
   docMenuPos,
-  docMenuRefs,
+  onRegisterMenuRef,
   onOpenMenu,
   onMove,
   onDelete,
@@ -854,7 +853,7 @@ function DocRow({
   formatSize: (bytes: number) => string;
   openDocMenu: string | null;
   docMenuPos: { top?: number; bottom?: number; right: number };
-  docMenuRefs: React.MutableRefObject<Record<string, HTMLButtonElement | null>>;
+  onRegisterMenuRef: (docId: string, el: HTMLButtonElement | null) => void;
   onOpenMenu: (docId: string, btn: HTMLButtonElement) => void;
   onMove: (docId: string, unitId: string | null) => void;
   onDelete: (docId: string) => void;
@@ -905,7 +904,7 @@ function DocRow({
       </div>
       <div className="relative">
         <button
-          ref={(el) => { docMenuRefs.current[doc.id] = el; }}
+          ref={(el) => { onRegisterMenuRef(doc.id, el); }}
           onClick={(e) => { e.stopPropagation(); onOpenMenu(doc.id, e.currentTarget); }}
           className="rounded-[--radius-sm] p-1.5 text-text-muted hover:bg-primary-bg/50 hover:text-text-secondary"
         >

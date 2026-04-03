@@ -17,6 +17,8 @@ export function GradingView({ assignment, onBack }: GradingViewProps) {
     submissions.find((s) => s.status === "ai_graded")?.id ?? submissions[0]?.id ?? null
   );
   const [filter, setFilter] = useState<"all" | "pending" | "reviewed" | "missing">("all");
+  const [showOverride, setShowOverride] = useState(false);
+  const [overrideScore, setOverrideScore] = useState("");
 
   const selected = submissions.find((s) => s.id === selectedId) ?? null;
   const gradedCount = submissions.filter((s) => s.status === "teacher_reviewed").length;
@@ -30,11 +32,12 @@ export function GradingView({ assignment, onBack }: GradingViewProps) {
   });
 
   function handleApprove(subId: string) {
-    setSubmissions(submissions.map((s) =>
+    const updated = submissions.map((s) =>
       s.id === subId ? { ...s, status: "teacher_reviewed" as const, finalScore: s.aiScore } : s
-    ));
-    // Auto-advance to next pending
-    const nextPending = submissions.find((s) => s.id !== subId && s.status === "ai_graded");
+    );
+    setSubmissions(updated);
+    // Auto-advance to next pending (use updated array, not stale state)
+    const nextPending = updated.find((s) => s.id !== subId && s.status === "ai_graded");
     if (nextPending) setSelectedId(nextPending.id);
   }
 
@@ -201,15 +204,46 @@ export function GradingView({ assignment, onBack }: GradingViewProps) {
                       >
                         Approve AI Grade
                       </button>
-                      <button
-                        onClick={() => {
-                          const score = prompt("Override score (0-100):", String(selected.aiScore));
-                          if (score !== null) handleOverride(selected.id, Number(score));
-                        }}
-                        className="rounded-[--radius-sm] border border-border px-4 py-2 text-xs font-semibold text-text-secondary hover:bg-primary-bg/50"
-                      >
-                        Override
-                      </button>
+                      {!showOverride ? (
+                        <button
+                          onClick={() => { setShowOverride(true); setOverrideScore(String(selected.aiScore)); }}
+                          className="rounded-[--radius-sm] border border-border px-4 py-2 text-xs font-semibold text-text-secondary hover:bg-primary-bg/50"
+                        >
+                          Override
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={overrideScore}
+                            onChange={(e) => setOverrideScore(e.target.value)}
+                            min={0}
+                            max={100}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && overrideScore) {
+                                handleOverride(selected.id, Number(overrideScore));
+                                setShowOverride(false);
+                              }
+                              if (e.key === "Escape") setShowOverride(false);
+                            }}
+                            className="w-16 rounded-[--radius-sm] border border-primary bg-input-bg px-2 py-1.5 text-xs text-text-primary outline-none"
+                            placeholder="0-100"
+                          />
+                          <button
+                            onClick={() => { if (overrideScore) { handleOverride(selected.id, Number(overrideScore)); setShowOverride(false); } }}
+                            className="rounded-[--radius-sm] bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setShowOverride(false)}
+                            className="text-xs font-semibold text-text-muted hover:text-text-secondary"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                   {selected.status === "teacher_reviewed" && (

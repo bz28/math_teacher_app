@@ -234,7 +234,7 @@ export default function CourseDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1 border-b border-border-light">
+      <div className="mt-6 flex gap-1 overflow-x-auto border-b border-border-light">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -536,7 +536,8 @@ export default function CourseDetailPage() {
                 Preview mode — showing sample assignments for this course.
               </div>
               {(() => {
-                const courseAssignments = MOCK_ASSIGNMENTS.filter((a) => a.courseId === "c1");
+                // Mock: show Algebra I assignments for any course (real backend would filter by actual course ID)
+                const courseAssignments = MOCK_ASSIGNMENTS.filter((a) => a.courseName === course?.name || a.courseId === "c1");
                 if (courseAssignments.length === 0) {
                   return (
                     <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
