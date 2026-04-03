@@ -95,36 +95,22 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     return `${(bytes / 1024).toFixed(0)} KB`;
   }
 
-  // Visibility popover state
-  const [visPopover, setVisPopover] = useState<{ type: "unit" | "doc"; id: string } | null>(null);
-  const [visPopoverPos, setVisPopoverPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  // Inline visibility panel state — which doc/unit has its panel expanded
+  const [visExpanded, setVisExpanded] = useState<{ type: "unit" | "doc"; id: string } | null>(null);
 
-  function openVisPopover(type: "unit" | "doc", id: string, btn: HTMLElement) {
-    if (visPopover?.type === type && visPopover.id === id) { setVisPopover(null); return; }
-    const rect = btn.getBoundingClientRect();
-    setVisPopoverPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    setVisPopover({ type, id });
+  function toggleVisPanel(type: "unit" | "doc", id: string) {
+    if (visExpanded?.type === type && visExpanded.id === id) {
+      setVisExpanded(null);
+    } else {
+      setVisExpanded({ type, id });
+    }
   }
 
-  // Open visibility popover for a doc, positioned at its [...] toggle button
+  // Open doc visibility panel from the [...] menu
   function openDocVisFromMenu(docId: string) {
-    setOpenDocMenu(null); // close the [...] menu first
-    // Delay so the click-outside handler doesn't immediately close the popover
-    setTimeout(() => {
-      const btn = docMenuRefs.current[docId];
-      if (btn) openVisPopover("doc", docId, btn);
-    }, 50);
+    setOpenDocMenu(null);
+    setTimeout(() => setVisExpanded({ type: "doc", id: docId }), 50);
   }
-
-  useEffect(() => {
-    if (!visPopover) return;
-    const close = () => setVisPopover(null);
-    // Use setTimeout so the click that opened the popover doesn't close it
-    const timer = setTimeout(() => {
-      document.addEventListener("click", close);
-    }, 0);
-    return () => { clearTimeout(timer); document.removeEventListener("click", close); };
-  }, [visPopover]);
 
   // Visibility helpers
   function getUnitVisibilityLabel(unitId: string): { text: string; color: "green" | "yellow" | "red" } {
@@ -454,7 +440,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                     };
                     return (
                       <button
-                        onClick={(e) => { e.stopPropagation(); openVisPopover("unit", unit.id, e.currentTarget); }}
+                        onClick={(e) => { e.stopPropagation(); toggleVisPanel("unit", unit.id); }}
                         className={`hidden sm:inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold transition-colors ${colorMap[vis.color]}`}
                       >
                         {vis.color === "green" ? <EyeIcon /> : <EyeOffIcon />}
@@ -490,6 +476,38 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                 </div>
               </div>
 
+              {/* Inline unit visibility panel */}
+              {visExpanded?.type === "unit" && visExpanded.id === unit.id && onToggleUnit && visibility && sections.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="border-t border-primary/20 bg-primary-bg/10 px-4 py-3"
+                >
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Unit visibility by section</div>
+                  <div className="space-y-1">
+                    {sections.map((sec) => {
+                      const isHidden = visibility.hiddenUnits[sec.id]?.has(unit.id);
+                      return (
+                        <button
+                          key={sec.id}
+                          onClick={() => onToggleUnit(sec.id, unit.id)}
+                          className="flex w-full items-center justify-between rounded-[--radius-sm] px-3 py-2 text-xs transition-colors hover:bg-surface"
+                        >
+                          <span className="font-medium text-text-secondary">{sec.name}</span>
+                          <span className={`flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 font-semibold ${
+                            !isHidden
+                              ? "bg-green-50 text-green-600 dark:bg-green-500/10"
+                              : "bg-red-50 text-red-500 dark:bg-red-500/10"
+                          }`}>
+                            {!isHidden ? <><EyeIcon /> Visible</> : <><EyeOffIcon /> Hidden</>}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+
               {/* Documents in unit */}
               {!isCollapsed && (
                 <div className="border-t border-border-light">
@@ -513,6 +531,10 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                           onDelete={handleDeleteDoc}
                           visibilityLabel={getDocVisibilityLabel(doc.id, doc.unit_id)}
                           onVisClick={(docId) => openDocVisFromMenu(docId)}
+                          visExpanded={visExpanded?.type === "doc" && visExpanded.id === doc.id}
+                          sections={sections}
+                          visibility={visibility}
+                          onToggleDoc={onToggleDoc}
                         />
                       ))}
                     </div>
@@ -718,42 +740,6 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
         </div>
       )}
 
-      {/* Visibility popover */}
-      {visPopover && onToggleUnit && onToggleDoc && visibility && sections.length > 0 && (
-        <div
-          className="fixed z-50 min-w-[200px] rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-xl"
-          style={{ top: visPopoverPos.top, right: visPopoverPos.right }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="mb-2 text-xs font-semibold text-text-primary">
-            {visPopover.type === "unit" ? "Unit visibility by section" : "Document visibility by section"}
-          </div>
-          <div className="space-y-1.5">
-            {sections.map((sec) => {
-              const isHidden = visPopover.type === "unit"
-                ? visibility.hiddenUnits[sec.id]?.has(visPopover.id)
-                : visibility.hiddenDocs[sec.id]?.has(visPopover.id);
-              const isVisible = !isHidden;
-              return (
-                <button
-                  key={sec.id}
-                  onClick={() => {
-                    if (visPopover.type === "unit") onToggleUnit(sec.id, visPopover.id);
-                    else onToggleDoc(sec.id, visPopover.id);
-                  }}
-                  className="flex w-full items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-xs transition-colors hover:bg-primary-bg/50"
-                >
-                  <span className="font-medium text-text-secondary">{sec.name}</span>
-                  <span className={`flex items-center gap-1 font-semibold ${isVisible ? "text-green-600" : "text-red-500"}`}>
-                    {isVisible ? <><EyeIcon /> Visible</> : <><EyeOffIcon /> Hidden</>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Auto-organize modal */}
       {showAutoOrganize && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowAutoOrganize(false)}>
@@ -858,6 +844,10 @@ function DocRow({
   onDelete,
   visibilityLabel,
   onVisClick,
+  visExpanded,
+  sections,
+  visibility,
+  onToggleDoc,
 }: {
   doc: MockDocument;
   units: MockUnit[];
@@ -870,6 +860,10 @@ function DocRow({
   onDelete: (docId: string) => void;
   visibilityLabel?: { text: string; color: "green" | "yellow" | "red" } | null;
   onVisClick?: (docId: string) => void;
+  visExpanded?: boolean;
+  sections?: { id: string; name: string }[];
+  visibility?: VisibilityState;
+  onToggleDoc?: (sectionId: string, docId: string) => void;
 }) {
   const moveTargets = [
     ...units.filter((u) => u.id !== doc.unit_id).map((u) => ({ id: u.id, label: u.name })),
@@ -877,6 +871,7 @@ function DocRow({
   ];
 
   return (
+    <div>
     <div className="flex items-center justify-between px-4 py-2.5 hover:bg-primary-bg/20">
       <div className="flex items-center gap-2.5">
         <FileIcon />
@@ -966,6 +961,34 @@ function DocRow({
           </div>
         )}
       </div>
+    </div>
+    {/* Inline visibility panel */}
+    {visExpanded && onToggleDoc && visibility && sections && sections.length > 0 && (
+      <div className="border-t border-primary/20 bg-primary-bg/10 px-6 py-2.5">
+        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Visibility by section</div>
+        <div className="space-y-0.5">
+          {sections.map((sec) => {
+            const isHidden = visibility.hiddenDocs[sec.id]?.has(doc.id);
+            return (
+              <button
+                key={sec.id}
+                onClick={() => onToggleDoc(sec.id, doc.id)}
+                className="flex w-full items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-xs transition-colors hover:bg-surface"
+              >
+                <span className="font-medium text-text-secondary">{sec.name}</span>
+                <span className={`flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold ${
+                  !isHidden
+                    ? "bg-green-50 text-green-600 dark:bg-green-500/10"
+                    : "bg-red-50 text-red-500 dark:bg-red-500/10"
+                }`}>
+                  {!isHidden ? <><EyeIcon /> Visible</> : <><EyeOffIcon /> Hidden</>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    )}
     </div>
   );
 }
