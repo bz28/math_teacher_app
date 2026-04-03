@@ -29,6 +29,7 @@ export default function CourseDetailPage() {
   // Settings
   const [editName, setEditName] = useState("");
   const [editSubject, setEditSubject] = useState("");
+  const [editGradeLevel, setEditGradeLevel] = useState<number | "">("");
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -39,6 +40,7 @@ export default function CourseDetailPage() {
       setCourse(c);
       setEditName(c.name);
       setEditSubject(c.subject);
+      setEditGradeLevel(c.grade_level ?? "");
       setLoading(false);
     }).catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -119,7 +121,11 @@ export default function CourseDetailPage() {
   async function handleUpdateCourse(e: FormEvent) {
     e.preventDefault();
     try {
-      await teacher.updateCourse(id, { name: editName.trim(), subject: editSubject });
+      await teacher.updateCourse(id, {
+        name: editName.trim(),
+        subject: editSubject,
+        ...(editGradeLevel !== "" && { grade_level: Number(editGradeLevel) }),
+      });
       const c = await teacher.course(id);
       setCourse(c);
       toast.success("Course updated");
@@ -170,7 +176,10 @@ export default function CourseDetailPage() {
         </button>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">{course.name}</h1>
-          <p className="text-sm capitalize text-text-muted">{course.subject}</p>
+          <p className="text-sm text-text-muted">
+            <span className="capitalize">{course.subject}</span>
+            {course.grade_level && <span> · Grade {course.grade_level}</span>}
+          </p>
         </div>
       </div>
 
@@ -519,8 +528,8 @@ export default function CourseDetailPage() {
           <div className="space-y-8">
             <form onSubmit={handleUpdateCourse} className="space-y-4">
               <h2 className="text-lg font-bold text-text-primary">Course Details</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="sm:col-span-1">
                   <label className="text-[13px] font-semibold text-text-secondary">Course Name</label>
                   <input
                     type="text"
@@ -540,6 +549,19 @@ export default function CourseDetailPage() {
                     <option value="math">Math</option>
                     <option value="physics">Physics</option>
                     <option value="chemistry">Chemistry</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[13px] font-semibold text-text-secondary">Grade Level</label>
+                  <select
+                    value={editGradeLevel}
+                    onChange={(e) => setEditGradeLevel(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-primary"
+                  >
+                    <option value="">Not set</option>
+                    {[6, 7, 8, 9, 10, 11, 12].map((g) => (
+                      <option key={g} value={g}>Grade {g}</option>
+                    ))}
                   </select>
                 </div>
               </div>
