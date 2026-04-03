@@ -17,9 +17,6 @@ class Settings(BaseSettings):
     # Claude API
     claude_api_key: str
 
-    # OpenAI API
-    openai_api_key: str = ""
-
     # Sentry
     sentry_dsn: str = ""
 
@@ -43,6 +40,9 @@ class Settings(BaseSettings):
 
     # Request size limit (bytes) - 10MB
     max_request_size: int = 10 * 1024 * 1024
+
+    # Frontend URL (used for password reset links, etc.)
+    frontend_url: str = "https://veradicai.com"
 
     # Email (Resend)
     resend_api_key: str = ""
