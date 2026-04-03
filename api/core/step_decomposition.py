@@ -60,12 +60,9 @@ _SYSTEM_PROMPT_TEMPLATE = (
     '  - "description": the full explanation of the step.\n'
     "  Formatting rules for descriptions:\n"
     "  - Use LaTeX with $ delimiters for inline math (e.g., $x^2 + 1$)\n"
-    "  - Use $$ delimiters for display math on its own line (e.g., $$\\\\frac{{a}}{{b}}$$)\n"
+    "  - Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
     "  - Use **double asterisks** for emphasis on key terms\n"
-    "  - For matrices, use $\\\\begin{{pmatrix}}...\\\\end{{pmatrix}}$\n"
-    "  - If a visual diagram would help the student (geometric shape, graph, coordinate plane),\n"
-    "    include it as an <svg> block with viewBox, using clean labeled shapes.\n"
-    "    Keep SVGs simple: lines, circles, rects, text labels. Max 300x300 viewBox.\n"
+    "  - For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
     '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
