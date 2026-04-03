@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { subjectBreadcrumbJsonLd } from "../layout";
+import { SITE_URL, subjectBreadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "AI Math Tutor — Step-by-Step Math Help",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     title: "Veradic AI — Your AI Math Tutor",
     description:
       "Break any math problem into steps you actually understand. Algebra, calculus, word problems, and more.",
-    url: "https://veradicai.com/subjects/math",
+    url: `${SITE_URL}/subjects/math`,
   },
   twitter: {
     title: "Veradic AI — Your AI Math Tutor",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
       "Break any math problem into steps you actually understand. Algebra, calculus, word problems, and more.",
   },
   alternates: {
-    canonical: "https://veradicai.com/subjects/math",
+    canonical: `${SITE_URL}/subjects/math`,
   },
 };
 
@@ -78,17 +78,15 @@ export default function MathPage() {
         }}
       />
       <SubjectPage
-      name="Math"
-      tagline="Your AI Math Tutor"
-      description="From algebra to calculus, Veradic AI breaks any math problem into guided steps you actually understand — then generates unlimited practice until you master it."
-      gradient="from-primary to-primary-light"
-      iconGradient="from-primary to-primary-light"
-      badgeColor="#6C5CE7"
-      badgeBg="#F0EDFF"
-      icon={mathIcon}
-      examples={examples}
-      features={features}
-    />
+        name="Math"
+        tagline="Your AI Math Tutor"
+        description="From algebra to calculus, Veradic AI breaks any math problem into guided steps you actually understand — then generates unlimited practice until you master it."
+        gradient="from-primary to-primary-light"
+        badgeColor="#6C5CE7"
+        icon={mathIcon}
+        examples={examples}
+        features={features}
+      />
     </>
   );
 }

@@ -29,13 +29,14 @@ export function FAQ() {
         <div className="space-y-3">
           {faqs.map((faq, i) => (
             <motion.div
-              key={i}
+              key={faq.question}
               initial={{ opacity: 0, y: 16 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.06 * i, duration: 0.4 }}
             >
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                aria-expanded={openIndex === i}
                 className="flex w-full items-center justify-between gap-4 rounded-[--radius-lg] border border-border-light bg-surface px-6 py-5 text-left transition-all hover:border-primary-light hover:shadow-sm"
               >
                 <span className="text-base font-semibold text-text-primary md:text-lg">

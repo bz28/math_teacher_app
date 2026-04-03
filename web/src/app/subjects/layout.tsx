@@ -14,25 +14,3 @@ export default function SubjectsLayout({
     </>
   );
 }
-
-/** Breadcrumb JSON-LD helper for subject pages */
-export function subjectBreadcrumbJsonLd(name: string, slug: string) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Home",
-        item: "https://veradicai.com",
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: `${name} Tutor`,
-        item: `https://veradicai.com/subjects/${slug}`,
-      },
-    ],
-  };
-}

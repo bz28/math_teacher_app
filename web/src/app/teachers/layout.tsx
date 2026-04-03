@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "For Schools & Teachers",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
     title: "Veradic AI — AI-Powered Tutoring for Your Classroom",
     description:
       "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most.",
-    url: "https://veradicai.com/teachers",
+    url: `${SITE_URL}/teachers`,
   },
   twitter: {
     title: "Veradic AI — AI-Powered Tutoring for Your Classroom",
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
       "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most.",
   },
   alternates: {
-    canonical: "https://veradicai.com/teachers",
+    canonical: `${SITE_URL}/teachers`,
   },
 };
 
@@ -38,13 +39,13 @@ export default function TeachersLayout({
                 "@type": "ListItem",
                 position: 1,
                 name: "Home",
-                item: "https://veradicai.com",
+                item: SITE_URL,
               },
               {
                 "@type": "ListItem",
                 position: 2,
                 name: "For Schools & Teachers",
-                item: "https://veradicai.com/teachers",
+                item: `${SITE_URL}/teachers`,
               },
             ],
           }),

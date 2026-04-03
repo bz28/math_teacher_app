@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { subjectBreadcrumbJsonLd } from "../layout";
+import { SITE_URL, subjectBreadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "AI Chemistry Tutor — Step-by-Step Chemistry Help",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     title: "Veradic AI — Your AI Chemistry Tutor",
     description:
       "Break any chemistry problem into steps you actually understand. Reactions, stoichiometry, organic chemistry, and more.",
-    url: "https://veradicai.com/subjects/chemistry",
+    url: `${SITE_URL}/subjects/chemistry`,
   },
   twitter: {
     title: "Veradic AI — Your AI Chemistry Tutor",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
       "Break any chemistry problem into steps you actually understand. Reactions, stoichiometry, organic chemistry, and more.",
   },
   alternates: {
-    canonical: "https://veradicai.com/subjects/chemistry",
+    canonical: `${SITE_URL}/subjects/chemistry`,
   },
 };
 
@@ -79,17 +79,15 @@ export default function ChemistryPage() {
         }}
       />
       <SubjectPage
-      name="Chemistry"
-      tagline="Your AI Chemistry Tutor"
-      description="From balancing equations to organic chemistry, Veradic AI breaks any chemistry problem into guided steps you actually understand — then generates unlimited practice until you master it."
-      gradient="from-success to-[#55EFC4]"
-      iconGradient="from-success to-[#55EFC4]"
-      badgeColor="#00B894"
-      badgeBg="#E8F8F5"
-      icon={chemIcon}
-      examples={examples}
-      features={features}
-    />
+        name="Chemistry"
+        tagline="Your AI Chemistry Tutor"
+        description="From balancing equations to organic chemistry, Veradic AI breaks any chemistry problem into guided steps you actually understand — then generates unlimited practice until you master it."
+        gradient="from-success to-[#55EFC4]"
+        badgeColor="#00B894"
+        icon={chemIcon}
+        examples={examples}
+        features={features}
+      />
     </>
   );
 }

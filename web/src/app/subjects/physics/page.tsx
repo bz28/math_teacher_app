@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { subjectBreadcrumbJsonLd } from "../layout";
+import { SITE_URL, subjectBreadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "AI Physics Tutor — Step-by-Step Physics Help",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     title: "Veradic AI — Your AI Physics Tutor",
     description:
       "Break any physics problem into steps you actually understand. Mechanics, energy, waves, and more.",
-    url: "https://veradicai.com/subjects/physics",
+    url: `${SITE_URL}/subjects/physics`,
   },
   twitter: {
     title: "Veradic AI — Your AI Physics Tutor",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
       "Break any physics problem into steps you actually understand. Mechanics, energy, waves, and more.",
   },
   alternates: {
-    canonical: "https://veradicai.com/subjects/physics",
+    canonical: `${SITE_URL}/subjects/physics`,
   },
 };
 
@@ -80,17 +80,15 @@ export default function PhysicsPage() {
         }}
       />
       <SubjectPage
-      name="Physics"
-      tagline="Your AI Physics Tutor"
-      description="From mechanics to thermodynamics, Veradic AI breaks any physics problem into guided steps you actually understand — then generates unlimited practice until you master it."
-      gradient="from-[#0984E3] to-[#74B9FF]"
-      iconGradient="from-[#0984E3] to-[#74B9FF]"
-      badgeColor="#0984E3"
-      badgeBg="#E8F4FD"
-      icon={physicsIcon}
-      examples={examples}
-      features={features}
-    />
+        name="Physics"
+        tagline="Your AI Physics Tutor"
+        description="From mechanics to thermodynamics, Veradic AI breaks any physics problem into guided steps you actually understand — then generates unlimited practice until you master it."
+        gradient="from-[#0984E3] to-[#74B9FF]"
+        badgeColor="#0984E3"
+        icon={physicsIcon}
+        examples={examples}
+        features={features}
+      />
     </>
   );
 }

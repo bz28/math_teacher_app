@@ -1,3 +1,5 @@
+export const SITE_URL = "https://veradicai.com";
+
 /** FAQ data shared between the FAQ component and JSON-LD schema */
 export const faqs = [
   {
@@ -50,5 +52,27 @@ export function faqJsonLd() {
         text: faq.answer,
       },
     })),
+  };
+}
+
+/** Breadcrumb JSON-LD helper for subject pages */
+export function subjectBreadcrumbJsonLd(name: string, slug: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: SITE_URL,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: `${name} Tutor`,
+        item: `${SITE_URL}/subjects/${slug}`,
+      },
+    ],
   };
 }

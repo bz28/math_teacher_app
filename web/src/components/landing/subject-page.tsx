@@ -19,9 +19,7 @@ interface SubjectPageProps {
   tagline: string;
   description: string;
   gradient: string;
-  iconGradient: string;
   badgeColor: string;
-  badgeBg: string;
   icon: React.ReactNode;
   examples: ExampleProblem[];
   features: Feature[];
@@ -32,9 +30,7 @@ export function SubjectPage({
   tagline,
   description,
   gradient,
-  iconGradient,
   badgeColor,
-  badgeBg,
   icon,
   examples,
   features,
@@ -58,7 +54,7 @@ export function SubjectPage({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={heroInView ? { opacity: 1, scale: 1 } : {}}
             transition={{ duration: 0.5 }}
-            className={`mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[--radius-xl] bg-gradient-to-br ${iconGradient} text-white shadow-lg`}
+            className={`mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[--radius-xl] bg-gradient-to-br ${gradient} text-white shadow-lg`}
           >
             {icon}
           </motion.div>
@@ -86,7 +82,7 @@ export function SubjectPage({
           >
             <Link
               href="/register"
-              className={`inline-flex items-center rounded-[--radius-pill] bg-gradient-to-r ${iconGradient} px-8 py-3.5 text-base font-semibold text-white shadow-md transition-transform hover:scale-[1.03]`}
+              className={`inline-flex items-center rounded-[--radius-pill] bg-gradient-to-r ${gradient} px-8 py-3.5 text-base font-semibold text-white shadow-md transition-transform hover:scale-[1.03]`}
             >
               Start Learning {name} Free
             </Link>
@@ -119,7 +115,7 @@ export function SubjectPage({
           <div className="grid gap-4 sm:grid-cols-2">
             {examples.map((ex, i) => (
               <motion.div
-                key={i}
+                key={ex.topic}
                 initial={{ opacity: 0, y: 16 }}
                 animate={examplesInView ? { opacity: 1, y: 0 } : {}}
                 transition={{ delay: 0.08 * i, duration: 0.4 }}
@@ -154,7 +150,7 @@ export function SubjectPage({
           <div className="grid gap-6 sm:grid-cols-2">
             {features.map((feat, i) => (
               <motion.div
-                key={i}
+                key={feat.title}
                 initial={{ opacity: 0, y: 16 }}
                 animate={featuresInView ? { opacity: 1, y: 0 } : {}}
                 transition={{ delay: 0.1 * i, duration: 0.4 }}
@@ -179,7 +175,7 @@ export function SubjectPage({
           </p>
           <Link
             href="/register"
-            className={`mt-8 inline-flex items-center rounded-[--radius-pill] bg-gradient-to-r ${iconGradient} px-8 py-3.5 text-base font-semibold text-white shadow-md transition-transform hover:scale-[1.03]`}
+            className={`mt-8 inline-flex items-center rounded-[--radius-pill] bg-gradient-to-r ${gradient} px-8 py-3.5 text-base font-semibold text-white shadow-md transition-transform hover:scale-[1.03]`}
           >
             Get Started Free
           </Link>
