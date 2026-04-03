@@ -14,9 +14,12 @@ interface ChemDiagramProps {
   height?: number;
 }
 
+let canvasCounter = 0;
+
 export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDiagramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState(false);
+  const [canvasId] = useState(() => `chem-canvas-${++canvasCounter}`);
 
   useEffect(() => {
     if (!canvasRef.current || !smiles) return;
@@ -35,7 +38,7 @@ export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDi
         if (!SmiDrawer) throw new Error("SmiDrawer not found");
 
         const drawer = new SmiDrawer({ width, height });
-        drawer.draw(smiles, canvasRef.current!, "light");
+        drawer.draw(smiles, `#${canvasId}`, "light");
       } catch {
         if (!cancelled) setError(true);
       }
@@ -57,7 +60,7 @@ export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDi
   return (
     <div className="my-3 flex flex-col items-center">
       <div className="rounded-lg bg-white p-4">
-        <canvas ref={canvasRef} width={width} height={height} />
+        <canvas ref={canvasRef} id={canvasId} width={width} height={height} />
       </div>
       {label && <p className="mt-2 text-xs text-text-muted">{label}</p>}
     </div>
