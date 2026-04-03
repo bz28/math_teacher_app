@@ -34,7 +34,7 @@ const sections = [
       <p><strong>Device and Technical Information</strong></p>
       <p>Veradic collects device type, operating system, browser type, IP address, and general location data (country/region level) to improve performance and security.</p>
       <p><strong>Payment Information</strong></p>
-      <p>If you subscribe to a paid Veradic plan, payment processing is handled by our third-party provider (RevenueCat/Apple/Google). Veradic does not store your credit card number or payment details directly.</p>
+      <p>If you subscribe to a paid Veradic plan, payment processing is handled by third-party payment processors. Veradic does not store your credit card number or payment details directly.</p>
     `,
   },
   {
@@ -59,14 +59,14 @@ const sections = [
     id: "third-party-services",
     title: "Third-Party Services",
     content: `
-      <p>Veradic relies on trusted third-party services to operate. These providers may process your data on behalf of Veradic:</p>
+      <p>Veradic relies on trusted third-party service providers to operate. These providers may process your data on behalf of Veradic in the following categories:</p>
       <ul>
-        <li><strong>AI Providers</strong> — Veradic sends problem content to AI language model providers to generate tutoring responses. This content is processed according to each provider's data handling policies.</li>
-        <li><strong>Hosting</strong> — Veradic is hosted on Vercel. Your interactions with Veradic pass through their infrastructure.</li>
-        <li><strong>Payment Processing</strong> — RevenueCat, Apple App Store, and Google Play handle subscription billing for Veradic.</li>
-        <li><strong>Analytics</strong> — Veradic uses Vercel Analytics and Google Analytics to understand how the Service is used. These tools collect anonymized usage data.</li>
+        <li><strong>AI Service Providers</strong> — Veradic sends problem content to AI language model providers to generate tutoring responses.</li>
+        <li><strong>Cloud Hosting Providers</strong> — Veradic uses cloud infrastructure providers to host and deliver the Service.</li>
+        <li><strong>Payment Processors</strong> — Third-party payment processors and app store platforms handle subscription billing for Veradic.</li>
+        <li><strong>Analytics Services</strong> — Veradic uses analytics tools to understand how the Service is used and to improve performance.</li>
       </ul>
-      <p>Veradic requires all third-party providers to handle your data securely and in accordance with applicable laws.</p>
+      <p>We select service providers we believe maintain appropriate security practices. Veradic may change its service providers at any time without notice to you.</p>
     `,
   },
   {
@@ -74,14 +74,14 @@ const sections = [
     title: "Data Retention",
     content: `
       <p>Veradic retains your personal information for as long as your account is active or as needed to provide the Service. Session history and practice data are retained so you can review past work on Veradic.</p>
-      <p>If you delete your Veradic account, we will delete or anonymize your personal data within 30 days, except where Veradic is required to retain it for legal or regulatory purposes.</p>
+      <p>If you delete your Veradic account, we will delete or anonymize your personal data within a reasonable timeframe, except where Veradic is required to retain it for legal, regulatory, or legitimate business purposes.</p>
     `,
   },
   {
     id: "data-deletion",
     title: "Your Rights and Data Deletion",
     content: `
-      <p>You have the right to:</p>
+      <p>Depending on your jurisdiction, you may have rights regarding your personal data, which may include:</p>
       <ul>
         <li><strong>Access</strong> — Request a copy of the personal data Veradic holds about you</li>
         <li><strong>Correction</strong> — Ask Veradic to correct inaccurate information</li>
@@ -89,31 +89,31 @@ const sections = [
         <li><strong>Portability</strong> — Request your data in a portable format from Veradic</li>
       </ul>
       <p>To delete your Veradic account, go to <strong>Account Settings</strong> in the Veradic app and select <strong>Delete Account</strong>. You can also contact Veradic at <a href="mailto:support@veradicai.com" class="text-primary hover:underline">support@veradicai.com</a> to request deletion.</p>
+      <p>Veradic will respond to valid requests within a reasonable timeframe and in accordance with applicable law.</p>
     `,
   },
   {
     id: "childrens-privacy",
     title: "Children's Privacy",
     content: `
-      <p>Veradic is designed for students of all ages, including those under 13. Veradic takes children's privacy seriously and complies with applicable children's privacy laws, including COPPA (Children's Online Privacy Protection Act).</p>
-      <p>For users under 13, Veradic collects only the minimum information necessary to provide the tutoring service. Veradic does not knowingly collect personal information from children under 13 without parental or school consent.</p>
-      <p>If you believe Veradic has collected information from a child without proper consent, please contact us at <a href="mailto:support@veradicai.com" class="text-primary hover:underline">support@veradicai.com</a> and Veradic will promptly delete the information.</p>
+      <p>Veradic does not knowingly collect personal information from children under 13 without appropriate consent. When Veradic is used in a school setting, the school is responsible for providing any necessary consent for students under 13 in accordance with applicable law, including COPPA (Children's Online Privacy Protection Act).</p>
+      <p>If you believe Veradic has inadvertently collected information from a child under 13 without proper consent, please contact us at <a href="mailto:support@veradicai.com" class="text-primary hover:underline">support@veradicai.com</a> and Veradic will promptly investigate and take appropriate action.</p>
     `,
   },
   {
     id: "security",
     title: "Security",
     content: `
-      <p>Veradic takes reasonable measures to protect your personal information from unauthorized access, alteration, disclosure, or destruction. This includes encryption of data in transit and at rest, secure authentication, and regular security reviews.</p>
-      <p>However, no method of transmission over the internet is 100% secure. While Veradic strives to protect your data, we cannot guarantee absolute security.</p>
+      <p>Veradic implements commercially reasonable administrative, technical, and physical safeguards designed to protect your personal information from unauthorized access, alteration, disclosure, or destruction.</p>
+      <p>However, no method of transmission over the internet or method of electronic storage is completely secure. While Veradic strives to protect your data, we cannot guarantee absolute security and are not liable for any unauthorized access that occurs despite our commercially reasonable efforts.</p>
     `,
   },
   {
     id: "changes",
     title: "Changes to This Policy",
     content: `
-      <p>Veradic may update this Privacy Policy from time to time. When we make changes, Veradic will update the "Last updated" date at the top of this page. We encourage you to review this policy periodically.</p>
-      <p>If Veradic makes material changes, we will notify you by email or through a notice on the Veradic platform.</p>
+      <p>Veradic may update this Privacy Policy from time to time at our sole discretion. When we make changes, Veradic will update the "Last updated" date at the top of this page. Your continued use of Veradic after any changes constitutes acceptance of the updated policy.</p>
+      <p>We encourage you to review this policy periodically. For material changes, Veradic will make reasonable efforts to notify you through the Service or via email.</p>
     `,
   },
   {
