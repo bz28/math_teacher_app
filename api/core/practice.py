@@ -6,7 +6,7 @@ import logging
 
 import anthropic
 
-from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_client import MODEL_HAIKU, MODEL_REASON, LLMMode, call_claude_json
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 from api.core.tutor import check_answer_equivalence
@@ -42,6 +42,62 @@ def _build_generate_prompt(subject: str) -> str:
     )
 
 
+_DISTRACTOR_PROMPT = """\
+You are a worldclass {professor_role} designing multiple choice test options.
+
+Given a {domain} problem and its correct answer, generate exactly 3 plausible but WRONG answers.
+
+Rules:
+- Each distractor should target a common student mistake (sign errors, off-by-one, \
+wrong formula, partial solution, etc.)
+- Distractors must be clearly wrong but look reasonable to a student who made an error
+- If the correct answer is an <svg> diagram, generate 3 WRONG <svg> diagrams \
+(wrong charge states, wrong bonds, mirror images, missing components). \
+Escape quotes as \\" in SVG attributes since output is JSON.
+- Use LaTeX $ delimiters for math in text answers
+
+Respond with ONLY valid JSON:
+{{"distractors": ["wrong answer 1", "wrong answer 2", "wrong answer 3"]}}"""
+
+
+async def generate_distractors(
+    problem: str,
+    final_answer: str,
+    answer_type: str = "text",
+    *,
+    user_id: str | None = None,
+    subject: str = Subject.MATH,
+) -> list[str]:
+    """Generate 3 plausible wrong answers for MC. Uses Haiku for text, Sonnet for diagrams."""
+    cfg = get_config(subject)
+    system_prompt = _DISTRACTOR_PROMPT.format(
+        professor_role=cfg["professor_role"],
+        domain=cfg["domain"],
+    )
+    user_msg = f"Problem: {problem}\nCorrect answer: {final_answer}"
+
+    is_diagram = answer_type == "diagram"
+    model = MODEL_REASON if is_diagram else MODEL_HAIKU
+    max_tokens = 4096 if is_diagram else 1024
+
+    try:
+        result = await call_claude_json(
+            system_prompt,
+            user_msg,
+            mode=LLMMode.PRACTICE_EVAL,
+            user_id=user_id,
+            model=model,
+            max_tokens=max_tokens,
+        )
+        distractors = result.get("distractors", [])
+        if isinstance(distractors, list) and len(distractors) >= 3:
+            return [str(d) for d in distractors[:3]]
+    except Exception:
+        logger.warning("Failed to generate distractors for: %s", problem[:80])
+
+    return []
+
+
 async def generate_practice_problems(
     problem: str,
     count: int,
@@ -63,7 +119,11 @@ async def generate_practice_problems(
         decomposition = await decompose_problem(
             problem, user_id=user_id, subject=subject, image_base64=image_base64,
         )
-        return [{"question": problem, "answer": decomposition.final_answer, "distractors": decomposition.distractors}]
+        distractors = await generate_distractors(
+            problem, decomposition.final_answer, decomposition.answer_type,
+            user_id=user_id, subject=subject,
+        )
+        return [{"question": problem, "answer": decomposition.final_answer, "distractors": distractors}]
 
     # Generate question text only (no answers — they'd be unreliable)
     has_diagram = "[" in problem
@@ -100,7 +160,11 @@ async def generate_practice_problems(
     async def solve_one(q: str) -> dict[str, object] | None:
         try:
             decomp = await decompose_problem(q, user_id=user_id, subject=subject)
-            return {"question": q, "answer": decomp.final_answer, "distractors": decomp.distractors}
+            distractors = await generate_distractors(
+                q, decomp.final_answer, decomp.answer_type,
+                user_id=user_id, subject=subject,
+            )
+            return {"question": q, "answer": decomp.final_answer, "distractors": distractors}
         except RuntimeError:
             logger.warning("Failed to solve generated problem: %s", q[:80])
             return None
