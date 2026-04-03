@@ -69,11 +69,12 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "    IMPORTANT: Escape all quotes inside SVG attribute values as \\\" since this is JSON.\n"
     '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
-    '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
+    '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n'
+    '- "answer_type": "text" (default) or "diagram" if the answer is a visual drawing/structure\n'
+    '  If answer_type is "diagram", final_answer and all distractors MUST be <svg> blocks.\n'
+    '  Common diagram distractors: wrong charge states, wrong bonds, mirror images, missing components.\n\n'
     "Respond with ONLY valid JSON — no markdown, no explanation:\n"
-    '{{"steps": [{{"title": "Understand the Problem", "description": "We have..."}}, '
-    '{{"title": "Isolate the Variable", "description": "Divide both sides..."}}], '
-    '"final_answer": "...", "distractors": ["wrong1", "wrong2", "wrong3"]}}'
+    '{{"steps": [...], "final_answer": "...", "distractors": ["...", "...", "..."], "answer_type": "text"}}'
 )
 
 
@@ -92,13 +93,15 @@ class Decomposition:
     final_answer: str
     problem_type: str
     distractors: list[str]
+    answer_type: str = "text"
 
 
-def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, list[str]]:
-    """Parse LLM JSON response into steps, final_answer, and distractors."""
+def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, list[str], str]:
+    """Parse LLM JSON response into steps, final_answer, distractors, and answer_type."""
     steps_data = data["steps"]
     final_answer = data.get("final_answer", "")
     distractors = data.get("distractors", [])
+    answer_type = str(data.get("answer_type", "text"))
 
     if not isinstance(steps_data, list):
         raise ValueError("Expected 'steps' to be a list")
@@ -111,10 +114,14 @@ def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]],
             # Backward compat: plain string from older prompt format
             steps.append({"title": "", "description": str(s)})
 
+    if answer_type not in ("text", "diagram"):
+        answer_type = "text"
+
     return (
         steps,
         str(final_answer),
         list(distractors) if isinstance(distractors, list) else [],
+        answer_type,
     )
 
 
@@ -206,7 +213,7 @@ async def decompose_problem(
             user_id=user_id,
         )
 
-    steps, final_answer, distractors = _parse_decomposition(data)
+    steps, final_answer, distractors, answer_type = _parse_decomposition(data)
     if not steps:
         raise RuntimeError("Empty steps returned from decomposition")
     if not final_answer:
@@ -218,6 +225,7 @@ async def decompose_problem(
         final_answer=final_answer,
         problem_type=problem_type,
         distractors=distractors,
+        answer_type=answer_type,
     )
     logger.info(
         "Decomposition succeeded for %s",
