@@ -414,20 +414,72 @@ export default function CourseDetailPage() {
 
         {/* Materials tab */}
         {tab === "materials" && (
-          <div>
+          <div className="space-y-5">
+            {/* Coming soon banners */}
+            <div className="rounded-[--radius-lg] border border-primary/20 bg-primary-bg/30 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-text-primary">Organize by Units — Coming Soon</div>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    Group documents by chapter or topic. AI will help sort your files automatically.
+                  </p>
+                </div>
+                <span className="ml-auto shrink-0 rounded-[--radius-pill] bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
+                  Soon
+                </span>
+              </div>
+            </div>
+
+            {/* Upload button (disabled) */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-text-primary">Documents</h2>
+              <button
+                disabled
+                title="Upload coming soon"
+                className="flex items-center gap-1.5 rounded-[--radius-sm] border border-border px-3 py-1.5 text-xs font-semibold text-text-muted opacity-50 cursor-not-allowed"
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                </svg>
+                Upload
+              </button>
+            </div>
+
+            {/* Document list */}
             {documents.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm text-text-muted">No documents yet.</p>
-                <p className="mt-1 text-xs text-text-muted">Document upload coming soon.</p>
+              <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-bg/50 text-text-muted">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <path d="M14 2v6h6" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-text-primary">No documents yet</p>
+                <p className="mt-1 text-xs text-text-muted">Document upload and unit organization coming soon.</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {documents.map((doc) => (
                   <div key={doc.id} className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface p-4">
-                    <div>
-                      <div className="font-medium text-text-primary">{doc.filename}</div>
-                      <div className="text-xs text-text-muted">
-                        {doc.file_type} · {(doc.file_size / 1024).toFixed(0)} KB
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-text-muted">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                          <path d="M14 2v6h6" />
+                        </svg>
+                      </span>
+                      <div>
+                        <div className="text-sm font-medium text-text-primary">{doc.filename}</div>
+                        <div className="text-xs text-text-muted">
+                          {doc.file_type} · {doc.file_size >= 1048576
+                            ? `${(doc.file_size / 1048576).toFixed(1)} MB`
+                            : `${(doc.file_size / 1024).toFixed(0)} KB`}
+                        </div>
                       </div>
                     </div>
                     <button
