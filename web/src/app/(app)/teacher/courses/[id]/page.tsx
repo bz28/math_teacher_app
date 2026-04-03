@@ -6,6 +6,23 @@ import { motion } from "framer-motion";
 import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { MaterialsTab } from "@/components/teacher/materials-tab";
+import { SectionMaterials, type VisibilityState } from "@/components/teacher/section-materials";
+
+// Mock units/docs for visibility (same seed as materials-tab — shared reference)
+const MOCK_UNITS = [
+  { id: "u1", name: "Unit 1: Linear Equations", position: 0 },
+  { id: "u2", name: "Unit 2: Systems of Equations", position: 1 },
+  { id: "u3", name: "Unit 3: Quadratic Equations", position: 2 },
+];
+const MOCK_DOCS = [
+  { id: "d1", filename: "Chapter 1 Notes.pdf", file_type: "application/pdf", file_size: 2_350_000, unit_id: "u1" },
+  { id: "d2", filename: "Practice Problems Set A.pdf", file_type: "application/pdf", file_size: 1_100_000, unit_id: "u1" },
+  { id: "d3", filename: "Answer Key.pdf", file_type: "application/pdf", file_size: 820_000, unit_id: "u1" },
+  { id: "d4", filename: "Systems Overview.pdf", file_type: "application/pdf", file_size: 1_500_000, unit_id: "u2" },
+  { id: "d5", filename: "Substitution Method HW.pdf", file_type: "application/pdf", file_size: 670_000, unit_id: "u2" },
+  { id: "d6", filename: "Syllabus.pdf", file_type: "application/pdf", file_size: 120_000, unit_id: null },
+  { id: "d7", filename: "Grading Rubric.pdf", file_type: "application/pdf", file_size: 85_000, unit_id: null },
+];
 
 type Tab = "overview" | "sections" | "materials" | "assignments" | "settings";
 
@@ -33,6 +50,35 @@ export default function CourseDetailPage() {
   const [editGradeLevel, setEditGradeLevel] = useState<number | "">("");
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [sectionSubTab, setSectionSubTab] = useState<"students" | "materials">("students");
+
+  // Visibility state (mock — shared between Sections and Materials tabs)
+  const [visibility, setVisibility] = useState<VisibilityState>({
+    hiddenUnits: {},
+    hiddenDocs: {},
+  });
+
+  function handleToggleUnit(sectionId: string, unitId: string) {
+    setVisibility((prev) => {
+      const next = { ...prev, hiddenUnits: { ...prev.hiddenUnits } };
+      const set = new Set(next.hiddenUnits[sectionId] ?? []);
+      if (set.has(unitId)) set.delete(unitId);
+      else set.add(unitId);
+      next.hiddenUnits[sectionId] = set;
+      return next;
+    });
+  }
+
+  function handleToggleDoc(sectionId: string, docId: string) {
+    setVisibility((prev) => {
+      const next = { ...prev, hiddenDocs: { ...prev.hiddenDocs } };
+      const set = new Set(next.hiddenDocs[sectionId] ?? []);
+      if (set.has(docId)) set.delete(docId);
+      else set.add(docId);
+      next.hiddenDocs[sectionId] = set;
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -373,43 +419,83 @@ export default function CourseDetailPage() {
                     </div>
                   </div>
 
-                  {/* Section detail (roster) */}
+                  {/* Section detail (roster + materials visibility) */}
                   {sectionDetail?.id === s.id && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       className="mt-4 border-t border-border-light pt-4"
                     >
-                      <form onSubmit={handleAddStudent} className="flex gap-2">
-                        <input
-                          type="email"
-                          value={addStudentEmail}
-                          onChange={(e) => setAddStudentEmail(e.target.value)}
-                          placeholder="Add student by email"
-                          required
-                          className="flex-1 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-primary"
-                        />
-                        <Button type="submit" size="sm">Add</Button>
-                      </form>
-                      {sectionDetail.students.length > 0 ? (
-                        <div className="mt-3 space-y-1">
-                          {sectionDetail.students.map((st) => (
-                            <div key={st.id} className="flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-sm hover:bg-primary-bg/30">
-                              <div>
-                                <span className="font-medium text-text-primary">{st.name || "—"}</span>
-                                <span className="ml-2 text-text-muted">{st.email}</span>
-                              </div>
-                              <button
-                                onClick={() => handleRemoveStudent(st.id)}
-                                className="text-xs font-medium text-red-500 hover:underline"
-                              >
-                                Remove
-                              </button>
+                      {/* Sub-tabs: Students | Materials */}
+                      <div className="mb-4 flex gap-1 border-b border-border-light">
+                        <button
+                          onClick={() => setSectionSubTab("students")}
+                          className={`px-3 py-2 text-xs font-semibold transition-colors ${
+                            sectionSubTab === "students"
+                              ? "border-b-2 border-primary text-primary"
+                              : "text-text-muted hover:text-text-secondary"
+                          }`}
+                        >
+                          Students
+                        </button>
+                        <button
+                          onClick={() => setSectionSubTab("materials")}
+                          className={`px-3 py-2 text-xs font-semibold transition-colors ${
+                            sectionSubTab === "materials"
+                              ? "border-b-2 border-primary text-primary"
+                              : "text-text-muted hover:text-text-secondary"
+                          }`}
+                        >
+                          Materials
+                        </button>
+                      </div>
+
+                      {sectionSubTab === "students" && (
+                        <>
+                          <form onSubmit={handleAddStudent} className="flex gap-2">
+                            <input
+                              type="email"
+                              value={addStudentEmail}
+                              onChange={(e) => setAddStudentEmail(e.target.value)}
+                              placeholder="Add student by email"
+                              required
+                              className="flex-1 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-primary"
+                            />
+                            <Button type="submit" size="sm">Add</Button>
+                          </form>
+                          {sectionDetail.students.length > 0 ? (
+                            <div className="mt-3 space-y-1">
+                              {sectionDetail.students.map((st) => (
+                                <div key={st.id} className="flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-sm hover:bg-primary-bg/30">
+                                  <div>
+                                    <span className="font-medium text-text-primary">{st.name || "—"}</span>
+                                    <span className="ml-2 text-text-muted">{st.email}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleRemoveStudent(st.id)}
+                                    className="text-xs font-medium text-red-500 hover:underline"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-3 text-sm text-text-muted">No students enrolled yet.</p>
+                          ) : (
+                            <p className="mt-3 text-sm text-text-muted">No students enrolled yet.</p>
+                          )}
+                        </>
+                      )}
+
+                      {sectionSubTab === "materials" && (
+                        <SectionMaterials
+                          sectionId={s.id}
+                          sectionName={s.name}
+                          units={MOCK_UNITS}
+                          documents={MOCK_DOCS}
+                          visibility={visibility}
+                          onToggleUnit={handleToggleUnit}
+                          onToggleDoc={handleToggleDoc}
+                        />
                       )}
                     </motion.div>
                   )}
