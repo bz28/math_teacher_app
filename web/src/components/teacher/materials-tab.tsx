@@ -106,11 +106,24 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     setVisPopover({ type, id });
   }
 
+  // Open visibility popover for a doc, positioned at its [...] toggle button
+  function openDocVisFromMenu(docId: string) {
+    setOpenDocMenu(null); // close the [...] menu first
+    // Delay so the click-outside handler doesn't immediately close the popover
+    setTimeout(() => {
+      const btn = docMenuRefs.current[docId];
+      if (btn) openVisPopover("doc", docId, btn);
+    }, 50);
+  }
+
   useEffect(() => {
     if (!visPopover) return;
     const close = () => setVisPopover(null);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    // Use setTimeout so the click that opened the popover doesn't close it
+    const timer = setTimeout(() => {
+      document.addEventListener("click", close);
+    }, 0);
+    return () => { clearTimeout(timer); document.removeEventListener("click", close); };
   }, [visPopover]);
 
   // Visibility helpers
@@ -499,7 +512,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                           onMove={handleMoveDoc}
                           onDelete={handleDeleteDoc}
                           visibilityLabel={getDocVisibilityLabel(doc.id, doc.unit_id)}
-                          onVisClick={(docId, btn) => openVisPopover("doc", docId, btn)}
+                          onVisClick={(docId) => openDocVisFromMenu(docId)}
                         />
                       ))}
                     </div>
@@ -856,7 +869,7 @@ function DocRow({
   onMove: (docId: string, unitId: string | null) => void;
   onDelete: (docId: string) => void;
   visibilityLabel?: { text: string; color: "green" | "yellow" | "red" } | null;
-  onVisClick?: (docId: string, btn: HTMLElement) => void;
+  onVisClick?: (docId: string) => void;
 }) {
   const moveTargets = [
     ...units.filter((u) => u.id !== doc.unit_id).map((u) => ({ id: u.id, label: u.name })),
@@ -879,7 +892,7 @@ function DocRow({
               };
               return onVisClick ? (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onVisClick(doc.id, e.currentTarget); }}
+                  onClick={(e) => { e.stopPropagation(); onVisClick(doc.id); }}
                   className={`hidden sm:inline-flex items-center gap-0.5 cursor-pointer hover:underline ${colorMap[visibilityLabel.color]}`}
                 >
                   {visibilityLabel.color !== "green" ? <EyeOffIcon /> : null}
@@ -934,7 +947,7 @@ function DocRow({
             {onVisClick && (
               <>
                 <button
-                  onClick={(e) => { onVisClick(doc.id, e.currentTarget); }}
+                  onClick={() => { onVisClick(doc.id); }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-text-secondary hover:bg-primary-bg/50"
                 >
                   <EyeIcon />
