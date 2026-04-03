@@ -5,6 +5,26 @@ import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
+import { MaterialsTab } from "@/components/teacher/materials-tab";
+import { SectionMaterials, type VisibilityState } from "@/components/teacher/section-materials";
+import { MOCK_ASSIGNMENTS, type MockAssignment } from "@/components/teacher/assignments-data";
+import { GradingView } from "@/components/teacher/grading-view";
+
+// Mock units/docs for visibility (same seed as materials-tab — shared reference)
+const MOCK_UNITS = [
+  { id: "u1", name: "Unit 1: Linear Equations", position: 0 },
+  { id: "u2", name: "Unit 2: Systems of Equations", position: 1 },
+  { id: "u3", name: "Unit 3: Quadratic Equations", position: 2 },
+];
+const MOCK_DOCS = [
+  { id: "d1", filename: "Chapter 1 Notes.pdf", file_type: "application/pdf", file_size: 2_350_000, unit_id: "u1" },
+  { id: "d2", filename: "Practice Problems Set A.pdf", file_type: "application/pdf", file_size: 1_100_000, unit_id: "u1" },
+  { id: "d3", filename: "Answer Key.pdf", file_type: "application/pdf", file_size: 820_000, unit_id: "u1" },
+  { id: "d4", filename: "Systems Overview.pdf", file_type: "application/pdf", file_size: 1_500_000, unit_id: "u2" },
+  { id: "d5", filename: "Substitution Method HW.pdf", file_type: "application/pdf", file_size: 670_000, unit_id: "u2" },
+  { id: "d6", filename: "Syllabus.pdf", file_type: "application/pdf", file_size: 120_000, unit_id: null },
+  { id: "d7", filename: "Grading Rubric.pdf", file_type: "application/pdf", file_size: 85_000, unit_id: null },
+];
 
 type Tab = "overview" | "sections" | "materials" | "assignments" | "settings";
 
@@ -32,6 +52,36 @@ export default function CourseDetailPage() {
   const [editGradeLevel, setEditGradeLevel] = useState<number | "">("");
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [sectionSubTab, setSectionSubTab] = useState<"students" | "materials">("students");
+  const [gradingAssignment, setGradingAssignment] = useState<MockAssignment | null>(null);
+
+  // Visibility state (mock — shared between Sections and Materials tabs)
+  const [visibility, setVisibility] = useState<VisibilityState>({
+    hiddenUnits: {},
+    hiddenDocs: {},
+  });
+
+  function handleToggleUnit(sectionId: string, unitId: string) {
+    setVisibility((prev) => {
+      const next = { ...prev, hiddenUnits: { ...prev.hiddenUnits } };
+      const set = new Set(next.hiddenUnits[sectionId] ?? []);
+      if (set.has(unitId)) set.delete(unitId);
+      else set.add(unitId);
+      next.hiddenUnits[sectionId] = set;
+      return next;
+    });
+  }
+
+  function handleToggleDoc(sectionId: string, docId: string) {
+    setVisibility((prev) => {
+      const next = { ...prev, hiddenDocs: { ...prev.hiddenDocs } };
+      const set = new Set(next.hiddenDocs[sectionId] ?? []);
+      if (set.has(docId)) set.delete(docId);
+      else set.add(docId);
+      next.hiddenDocs[sectionId] = set;
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -184,7 +234,7 @@ export default function CourseDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1 border-b border-border-light">
+      <div className="mt-6 flex gap-1 overflow-x-auto border-b border-border-light">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -372,43 +422,83 @@ export default function CourseDetailPage() {
                     </div>
                   </div>
 
-                  {/* Section detail (roster) */}
+                  {/* Section detail (roster + materials visibility) */}
                   {sectionDetail?.id === s.id && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       className="mt-4 border-t border-border-light pt-4"
                     >
-                      <form onSubmit={handleAddStudent} className="flex gap-2">
-                        <input
-                          type="email"
-                          value={addStudentEmail}
-                          onChange={(e) => setAddStudentEmail(e.target.value)}
-                          placeholder="Add student by email"
-                          required
-                          className="flex-1 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-primary"
-                        />
-                        <Button type="submit" size="sm">Add</Button>
-                      </form>
-                      {sectionDetail.students.length > 0 ? (
-                        <div className="mt-3 space-y-1">
-                          {sectionDetail.students.map((st) => (
-                            <div key={st.id} className="flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-sm hover:bg-primary-bg/30">
-                              <div>
-                                <span className="font-medium text-text-primary">{st.name || "—"}</span>
-                                <span className="ml-2 text-text-muted">{st.email}</span>
-                              </div>
-                              <button
-                                onClick={() => handleRemoveStudent(st.id)}
-                                className="text-xs font-medium text-red-500 hover:underline"
-                              >
-                                Remove
-                              </button>
+                      {/* Sub-tabs: Students | Materials */}
+                      <div className="mb-4 flex gap-1 border-b border-border-light">
+                        <button
+                          onClick={() => setSectionSubTab("students")}
+                          className={`px-3 py-2 text-xs font-semibold transition-colors ${
+                            sectionSubTab === "students"
+                              ? "border-b-2 border-primary text-primary"
+                              : "text-text-muted hover:text-text-secondary"
+                          }`}
+                        >
+                          Students
+                        </button>
+                        <button
+                          onClick={() => setSectionSubTab("materials")}
+                          className={`px-3 py-2 text-xs font-semibold transition-colors ${
+                            sectionSubTab === "materials"
+                              ? "border-b-2 border-primary text-primary"
+                              : "text-text-muted hover:text-text-secondary"
+                          }`}
+                        >
+                          Materials
+                        </button>
+                      </div>
+
+                      {sectionSubTab === "students" && (
+                        <>
+                          <form onSubmit={handleAddStudent} className="flex gap-2">
+                            <input
+                              type="email"
+                              value={addStudentEmail}
+                              onChange={(e) => setAddStudentEmail(e.target.value)}
+                              placeholder="Add student by email"
+                              required
+                              className="flex-1 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-primary"
+                            />
+                            <Button type="submit" size="sm">Add</Button>
+                          </form>
+                          {sectionDetail.students.length > 0 ? (
+                            <div className="mt-3 space-y-1">
+                              {sectionDetail.students.map((st) => (
+                                <div key={st.id} className="flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-sm hover:bg-primary-bg/30">
+                                  <div>
+                                    <span className="font-medium text-text-primary">{st.name || "—"}</span>
+                                    <span className="ml-2 text-text-muted">{st.email}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleRemoveStudent(st.id)}
+                                    className="text-xs font-medium text-red-500 hover:underline"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-3 text-sm text-text-muted">No students enrolled yet.</p>
+                          ) : (
+                            <p className="mt-3 text-sm text-text-muted">No students enrolled yet.</p>
+                          )}
+                        </>
+                      )}
+
+                      {sectionSubTab === "materials" && (
+                        <SectionMaterials
+                          sectionId={s.id}
+                          sectionName={s.name}
+                          units={MOCK_UNITS}
+                          documents={MOCK_DOCS}
+                          visibility={visibility}
+                          onToggleUnit={handleToggleUnit}
+                          onToggleDoc={handleToggleDoc}
+                        />
                       )}
                     </motion.div>
                   )}
@@ -423,104 +513,86 @@ export default function CourseDetailPage() {
 
         {/* Materials tab */}
         {tab === "materials" && (
-          <div className="space-y-5">
-            {/* Coming soon banners */}
-            <div className="rounded-[--radius-lg] border border-primary/20 bg-primary-bg/30 p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-text-primary">Organize by Units — Coming Soon</div>
-                  <p className="mt-0.5 text-xs text-text-secondary">
-                    Group documents by chapter or topic. AI will help sort your files automatically.
-                  </p>
-                </div>
-                <span className="ml-auto shrink-0 rounded-[--radius-pill] bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
-                  Soon
-                </span>
-              </div>
-            </div>
-
-            {/* Upload button (disabled) */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-text-primary">Documents</h2>
-              <button
-                disabled
-                title="Upload coming soon"
-                className="flex items-center gap-1.5 rounded-[--radius-sm] border border-border px-3 py-1.5 text-xs font-semibold text-text-muted opacity-50 cursor-not-allowed"
-              >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                </svg>
-                Upload
-              </button>
-            </div>
-
-            {/* Document list */}
-            {documents.length === 0 ? (
-              <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-bg/50 text-text-muted">
-                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <path d="M14 2v6h6" />
-                  </svg>
-                </div>
-                <p className="text-sm font-semibold text-text-primary">No documents yet</p>
-                <p className="mt-1 text-xs text-text-muted">Document upload and unit organization coming soon.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface p-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-text-muted">
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                          <path d="M14 2v6h6" />
-                        </svg>
-                      </span>
-                      <div>
-                        <div className="text-sm font-medium text-text-primary">{doc.filename}</div>
-                        <div className="text-xs text-text-muted">
-                          {doc.file_type} · {doc.file_size >= 1048576
-                            ? `${(doc.file_size / 1048576).toFixed(1)} MB`
-                            : `${(doc.file_size / 1024).toFixed(0)} KB`}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteDocument(doc.id)}
-                      className="text-xs font-semibold text-red-500 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <MaterialsTab
+            realDocuments={documents}
+            onDeleteDocument={handleDeleteDocument}
+            sections={sections.map((s) => ({ id: s.id, name: s.name }))}
+            visibility={visibility}
+            onToggleUnit={handleToggleUnit}
+            onToggleDoc={handleToggleDoc}
+          />
         )}
 
         {/* Assignments tab */}
         {tab === "assignments" && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-bg text-primary">
-              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-              </svg>
+          gradingAssignment ? (
+            <GradingView assignment={gradingAssignment} onBack={() => setGradingAssignment(null)} />
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-text-primary">Assignments</h2>
+              </div>
+              <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                Preview mode — showing sample assignments for this course.
+              </div>
+              {(() => {
+                // Mock: show Algebra I assignments for any course (real backend would filter by actual course ID)
+                const courseAssignments = MOCK_ASSIGNMENTS.filter((a) => a.courseName === course?.name || a.courseId === "c1");
+                if (courseAssignments.length === 0) {
+                  return (
+                    <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
+                      <p className="text-sm font-semibold text-text-primary">No assignments yet</p>
+                      <p className="mt-1 text-xs text-text-muted">Create assignments from the Assignments page.</p>
+                    </div>
+                  );
+                }
+                return courseAssignments.map((a) => {
+                  const progressPct = a.totalStudents > 0 ? Math.round((a.submitted / a.totalStudents) * 100) : 0;
+                  const pending = a.submitted - a.graded;
+                  const typeIcon = a.type === "test" || a.type === "quiz" ? "📋" : "📝";
+                  const statusColors: Record<string, string> = {
+                    draft: "bg-gray-100 text-gray-600 dark:bg-gray-500/10",
+                    published: "bg-blue-50 text-blue-600 dark:bg-blue-500/10",
+                    grading: "bg-amber-50 text-amber-600 dark:bg-amber-500/10",
+                    completed: "bg-green-50 text-green-600 dark:bg-green-500/10",
+                    scheduled: "bg-purple-50 text-purple-600 dark:bg-purple-500/10",
+                  };
+                  return (
+                    <div
+                      key={a.id}
+                      onClick={() => setGradingAssignment(a)}
+                      className="cursor-pointer rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-colors hover:border-primary/30"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span>{typeIcon}</span>
+                          <span className="text-sm font-bold text-text-primary">{a.title}</span>
+                        </div>
+                        <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusColors[a.status] ?? ""}`}>
+                          {a.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-text-muted">
+                        {a.sectionNames.join(", ")} · {a.type}{a.dueAt ? ` · Due ${a.dueAt}` : ""}
+                      </div>
+                      {a.status !== "scheduled" && a.status !== "draft" && (
+                        <div className="mt-2">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
+                            <span>{a.submitted}/{a.totalStudents} submitted</span>
+                            <span>{a.graded} graded</span>
+                            {pending > 0 && <span className="font-semibold text-amber-600">{pending} pending</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
-            <h3 className="text-lg font-bold text-text-primary">Assignments — Coming Soon</h3>
-            <span className="mt-2 inline-flex items-center rounded-[--radius-pill] bg-amber-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
-              Coming Soon
-            </span>
-            <p className="mt-3 max-w-sm text-sm text-text-secondary">
-              Create homework and tests for your students. Upload worksheets or let AI generate problems from your course materials.
-            </p>
-          </div>
+          )
         )}
 
         {/* Settings tab */}
