@@ -230,12 +230,9 @@ export function PracticeMockup() {
   return (
     <div className="space-y-3">
       {/* Progress */}
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-semibold text-text-muted">Question 3 of 5</p>
-        <p className="text-[10px] font-semibold text-success">2/2 correct</p>
-      </div>
+      <p className="text-[10px] font-semibold text-text-muted">Question 4 of 5</p>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
-        <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-primary to-primary-light" />
+        <div className="h-full w-3/5 rounded-full bg-gradient-to-r from-primary to-primary-light" />
       </div>
 
       {/* Question with triangle diagram */}
