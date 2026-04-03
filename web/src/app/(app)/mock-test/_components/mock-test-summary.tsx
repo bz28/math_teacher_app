@@ -114,13 +114,13 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
             <div className="text-sm font-medium text-text-primary"><MathText text={r.question} /></div>
             {r.isCorrect === true && (
               <div>
-                <p className="text-xs text-text-secondary">Your answer: {r.userAnswer}</p>
+                <div className="text-xs text-text-secondary">Your answer: <MathText text={r.userAnswer ?? ""} /></div>
                 <p className="text-xs font-medium text-success">Correct!</p>
               </div>
             )}
             {r.isCorrect === false && (
               <div>
-                <p className="text-xs text-error">Your answer: {r.userAnswer}</p>
+                <div className="text-xs text-error">Your answer: <MathText text={r.userAnswer ?? ""} /></div>
                 <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
               </div>
             )}
