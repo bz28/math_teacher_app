@@ -76,9 +76,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (variant: ToastVariant, message: string) => {
       const id = ++nextId;
       setToasts((prev) => [...prev, { id, message, variant }]);
-      setTimeout(() => dismiss(id), 4000);
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
     },
-    [dismiss],
+    [],
   );
 
   const api: ToastAPI = {
