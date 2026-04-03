@@ -395,7 +395,7 @@ export const session = {
       `/session/${sessionId}/similar`,
       {
         method: "POST",
-        timeout: LLM_TIMEOUT,
+        timeout: SESSION_CREATE_TIMEOUT,
       },
     );
   },
@@ -506,7 +506,7 @@ export const work = {
     return apiFetch<WorkSubmitResponse>("/work/submit", {
       method: "POST",
       body: JSON.stringify(data),
-      timeout: LLM_TIMEOUT,
+      timeout: SESSION_CREATE_TIMEOUT,
     });
   },
 };
