@@ -66,9 +66,10 @@ export function ImageUpload({
         }
         onExtractComplete?.();
         setResult(res);
-        // Attach original image when single problem (common case — user photos one problem).
-        // Skip for multiple problems (full page scan — same image for each is confusing).
-        setCropImages(new Array(res.problems.length).fill(res.problems.length === 1 ? base64 : undefined));
+        // Attach original image only when single problem WITH a diagram (bracket description).
+        // No diagram = pure text = image adds no value. Multiple problems = skip (full page).
+        const hasDiagram = res.problems.length === 1 && res.problems[0].includes("[");
+        setCropImages(new Array(res.problems.length).fill(hasDiagram ? base64 : undefined));
         setSelected(new Array(res.problems.length).fill(true));
         setPhase("upload");
         setImageBase64(null);
