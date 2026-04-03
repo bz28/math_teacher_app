@@ -167,9 +167,9 @@ export default function SessionReviewPage({
                           <MathText text={step.description} />
                         </div>
                         {step.final_answer && (
-                          <p className="mt-1 text-sm text-text-secondary">
-                            &rarr; {step.final_answer}
-                          </p>
+                          <div className="mt-1 text-sm text-text-secondary">
+                            &rarr; <MathText text={step.final_answer} />
+                          </div>
                         )}
                       </>
                     ) : (
