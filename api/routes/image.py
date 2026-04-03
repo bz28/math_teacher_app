@@ -33,10 +33,11 @@ async def extract(
             body.image_base64, user_id=str(user.id),
             subject=body.subject,
         )
-    except ValueError as e:
+    except ValueError:
+        logger.exception("Image extraction returned invalid format")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Could not extract problems from this image",
         )
     except RuntimeError:
         logger.exception("Image extraction failed")
