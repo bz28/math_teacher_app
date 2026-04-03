@@ -400,7 +400,7 @@ async def test_learn_mode_steps_visible_in_session(client: AsyncClient, auth_tok
 async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting the final answer directly completes the session."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose, \
-         patch("api.core.session.generate_distractors", new_callable=AsyncMock) as mock_dist:
+         patch("api.core.practice.generate_distractors", new_callable=AsyncMock) as mock_dist:
         mock_dist.return_value = ["wrong1", "wrong2", "wrong3"]
         mock_decompose.return_value = _mock_practice_decomposition("2x + 6 = 12", "x = 3")
         create_resp = await client.post(
@@ -427,7 +427,7 @@ async def test_practice_mode_skip_to_final_answer(client: AsyncClient, auth_toke
 async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting a wrong answer is rejected."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose, \
-         patch("api.core.session.generate_distractors", new_callable=AsyncMock) as mock_dist:
+         patch("api.core.practice.generate_distractors", new_callable=AsyncMock) as mock_dist:
         mock_dist.return_value = ["wrong1", "wrong2", "wrong3"]
         mock_decompose.return_value = _mock_practice_decomposition("2x + 6 = 12", "x = 3")
         create_resp = await client.post(
@@ -453,7 +453,7 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
 async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: submitting a wrong answer returns error feedback."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose, \
-         patch("api.core.session.generate_distractors", new_callable=AsyncMock) as mock_dist:
+         patch("api.core.practice.generate_distractors", new_callable=AsyncMock) as mock_dist:
         mock_dist.return_value = ["wrong1", "wrong2", "wrong3"]
         mock_decompose.return_value = _mock_practice_decomposition("2x + 6 = 12", "x = 3")
         create_resp = await client.post(
@@ -479,7 +479,7 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
 async def test_practice_mode_no_step_skip_rejection(client: AsyncClient, auth_token: str) -> None:
     """Practice mode: any correct final answer completes the session."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose, \
-         patch("api.core.session.generate_distractors", new_callable=AsyncMock) as mock_dist:
+         patch("api.core.practice.generate_distractors", new_callable=AsyncMock) as mock_dist:
         mock_dist.return_value = ["wrong1", "wrong2", "wrong3"]
         mock_decompose.return_value = _mock_practice_decomposition("3x + 9 = 18", "3")
         create_resp = await client.post(
