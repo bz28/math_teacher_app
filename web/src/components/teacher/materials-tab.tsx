@@ -53,7 +53,15 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
   const [documents, setDocuments] = useState<MockDocument[]>(SEED_DOCS);
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
 
+  // Unit CRUD state
+  const [showCreateUnit, setShowCreateUnit] = useState(false);
+  const [newUnitName, setNewUnitName] = useState("");
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [editUnitName, setEditUnitName] = useState("");
+
   const uncategorized = documents.filter((d) => d.unit_id === null);
+  let nextId = 100; // simple counter for mock IDs
+  function mockId() { return `mock-${nextId++}-${Date.now()}`; }
 
   function toggleCollapse(unitId: string) {
     setCollapsedUnits((prev) => {
@@ -73,6 +81,31 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
     return `${(bytes / 1024).toFixed(0)} KB`;
   }
 
+  // ── Unit CRUD ──
+
+  function handleCreateUnit() {
+    const name = newUnitName.trim();
+    if (!name) return;
+    const maxPos = units.reduce((max, u) => Math.max(max, u.position), -1);
+    setUnits([...units, { id: mockId(), name, position: maxPos + 1 }]);
+    setNewUnitName("");
+    setShowCreateUnit(false);
+  }
+
+  function handleRenameUnit(unitId: string) {
+    const name = editUnitName.trim();
+    if (!name) return;
+    setUnits(units.map((u) => u.id === unitId ? { ...u, name } : u));
+    setEditingUnitId(null);
+    setEditUnitName("");
+  }
+
+  function handleDeleteUnit(unitId: string) {
+    // Move docs to uncategorized
+    setDocuments(documents.map((d) => d.unit_id === unitId ? { ...d, unit_id: null } : d));
+    setUnits(units.filter((u) => u.id !== unitId));
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -80,9 +113,8 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
         <h2 className="text-base font-bold text-text-primary">Materials</h2>
         <div className="flex gap-2">
           <button
-            disabled
-            title="Coming in next commit"
-            className="flex items-center gap-1.5 rounded-[--radius-sm] border border-border px-3 py-1.5 text-xs font-semibold text-text-muted opacity-50 cursor-not-allowed"
+            onClick={() => setShowCreateUnit(true)}
+            className="flex items-center gap-1.5 rounded-[--radius-sm] border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-bg"
           >
             + New Unit
           </button>
@@ -102,6 +134,40 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
         Preview mode — using sample data. Changes reset on refresh.
       </div>
 
+      {/* Create unit form */}
+      {showCreateUnit && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[--radius-lg] border border-primary/30 bg-surface p-4"
+        >
+          <div className="text-sm font-semibold text-text-primary">New Unit</div>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={newUnitName}
+              onChange={(e) => setNewUnitName(e.target.value)}
+              placeholder="e.g. Unit 4: Polynomials"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateUnit(); if (e.key === "Escape") setShowCreateUnit(false); }}
+              className="flex-1 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-primary"
+            />
+            <button
+              onClick={handleCreateUnit}
+              className="rounded-[--radius-sm] bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-dark"
+            >
+              Create
+            </button>
+            <button
+              onClick={() => { setShowCreateUnit(false); setNewUnitName(""); }}
+              className="rounded-[--radius-sm] border border-border px-3 py-2 text-xs font-semibold text-text-muted hover:bg-primary-bg/50"
+            >
+              Cancel
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Units */}
       {units
         .sort((a, b) => a.position - b.position)
@@ -117,11 +183,11 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
               className="rounded-[--radius-lg] border border-border-light bg-surface"
             >
               {/* Unit header */}
-              <button
-                onClick={() => toggleCollapse(unit.id)}
-                className="flex w-full items-center justify-between px-4 py-3 text-left"
-              >
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between px-4 py-3">
+                <button
+                  onClick={() => toggleCollapse(unit.id)}
+                  className="flex items-center gap-2 text-left"
+                >
                   <svg
                     className={`h-4 w-4 text-text-muted transition-transform ${isCollapsed ? "" : "rotate-90"}`}
                     viewBox="0 0 24 24"
@@ -134,12 +200,55 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
                     <path d="M9 18l6-6-6-6" />
                   </svg>
                   <FolderIcon />
-                  <span className="text-sm font-semibold text-text-primary">{unit.name}</span>
-                  <span className="text-xs text-text-muted">
-                    {unitDocs.length} file{unitDocs.length !== 1 ? "s" : ""}
-                  </span>
+                  {editingUnitId === unit.id ? (
+                    <input
+                      type="text"
+                      value={editUnitName}
+                      onChange={(e) => setEditUnitName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRenameUnit(unit.id);
+                        if (e.key === "Escape") { setEditingUnitId(null); setEditUnitName(""); }
+                      }}
+                      onBlur={() => handleRenameUnit(unit.id)}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-[--radius-sm] border border-primary bg-input-bg px-2 py-0.5 text-sm font-semibold text-text-primary outline-none"
+                    />
+                  ) : (
+                    <>
+                      <span className="text-sm font-semibold text-text-primary">{unit.name}</span>
+                      <span className="text-xs text-text-muted">
+                        {unitDocs.length} file{unitDocs.length !== 1 ? "s" : ""}
+                      </span>
+                    </>
+                  )}
+                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingUnitId(unit.id);
+                      setEditUnitName(unit.name);
+                    }}
+                    title="Rename unit"
+                    className="rounded-[--radius-sm] p-1.5 text-text-muted hover:bg-primary-bg/50 hover:text-primary"
+                  >
+                    <PencilIcon />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete "${unit.name}"? Documents will be moved to Uncategorized.`)) {
+                        handleDeleteUnit(unit.id);
+                      }
+                    }}
+                    title="Delete unit"
+                    className="rounded-[--radius-sm] p-1.5 text-text-muted hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                  >
+                    <TrashIcon />
+                  </button>
                 </div>
-              </button>
+              </div>
 
               {/* Documents in unit */}
               {!isCollapsed && (
@@ -257,6 +366,22 @@ function SparkleIcon() {
   return (
     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
     </svg>
   );
 }
