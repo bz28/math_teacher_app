@@ -513,6 +513,10 @@ export default function CourseDetailPage() {
           <MaterialsTab
             realDocuments={documents}
             onDeleteDocument={handleDeleteDocument}
+            sections={sections.map((s) => ({ id: s.id, name: s.name }))}
+            visibility={visibility}
+            onToggleUnit={handleToggleUnit}
+            onToggleDoc={handleToggleDoc}
           />
         )}
 

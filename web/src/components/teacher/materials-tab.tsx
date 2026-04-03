@@ -40,14 +40,28 @@ const SEED_DOCS: MockDocument[] = [
 
 // ── Props ──
 
+interface SectionInfo {
+  id: string;
+  name: string;
+}
+
+interface VisibilityState {
+  hiddenUnits: Record<string, Set<string>>;
+  hiddenDocs: Record<string, Set<string>>;
+}
+
 interface MaterialsTabProps {
   realDocuments: TeacherDocument[];
   onDeleteDocument: (docId: string) => void;
+  sections?: SectionInfo[];
+  visibility?: VisibilityState;
+  onToggleUnit?: (sectionId: string, unitId: string) => void;
+  onToggleDoc?: (sectionId: string, docId: string) => void;
 }
 
 // ── Component ──
 
-export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabProps) {
+export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], visibility, onToggleUnit, onToggleDoc }: MaterialsTabProps) {
   // Use mock data (seed), ignore real documents for now
   const [units, setUnits] = useState<MockUnit[]>(SEED_UNITS);
   const [documents, setDocuments] = useState<MockDocument[]>(SEED_DOCS);
@@ -79,6 +93,24 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
   function formatSize(bytes: number) {
     if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
     return `${(bytes / 1024).toFixed(0)} KB`;
+  }
+
+  // Visibility helpers
+  function getUnitVisibilityLabel(unitId: string): { text: string; color: "green" | "yellow" | "red" } {
+    if (!visibility || sections.length === 0) return { text: "All sections", color: "green" };
+    const hiddenFrom = sections.filter((s) => visibility.hiddenUnits[s.id]?.has(unitId));
+    if (hiddenFrom.length === 0) return { text: "All sections", color: "green" };
+    if (hiddenFrom.length === sections.length) return { text: "Hidden from all", color: "red" };
+    const visibleTo = sections.filter((s) => !visibility.hiddenUnits[s.id]?.has(unitId));
+    return { text: `Hidden from: ${hiddenFrom.map((s) => s.name).join(", ")}`, color: "yellow" };
+  }
+
+  function getDocVisibilityLabel(docId: string, unitId: string | null): { text: string; color: "green" | "yellow" | "red" } | null {
+    if (!visibility || sections.length === 0 || !unitId) return null;
+    const hiddenFrom = sections.filter((s) => visibility.hiddenDocs[s.id]?.has(docId));
+    if (hiddenFrom.length === 0) return null; // inherits from unit, no override
+    if (hiddenFrom.length === sections.length) return { text: "Hidden from all sections", color: "red" };
+    return { text: `Hidden from: ${hiddenFrom.map((s) => s.name).join(", ")}`, color: "yellow" };
   }
 
   // ── Unit CRUD ──
@@ -380,6 +412,22 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
                     </>
                   )}
                 </button>
+                <div className="flex items-center gap-2">
+                  {/* Visibility badge */}
+                  {sections.length > 0 && (() => {
+                    const vis = getUnitVisibilityLabel(unit.id);
+                    const colorMap = {
+                      green: "bg-green-50 text-green-600 dark:bg-green-500/10",
+                      yellow: "bg-amber-50 text-amber-600 dark:bg-amber-500/10",
+                      red: "bg-red-50 text-red-500 dark:bg-red-500/10",
+                    };
+                    return (
+                      <span className={`hidden sm:inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold ${colorMap[vis.color]}`}>
+                        {vis.color === "green" ? <EyeIcon /> : <EyeOffIcon />}
+                        {vis.text}
+                      </span>
+                    );
+                  })()}
                 <div className="flex items-center gap-1">
                   <button
                     onClick={(e) => {
@@ -405,6 +453,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
                     <TrashIcon />
                   </button>
                 </div>
+                </div>
               </div>
 
               {/* Documents in unit */}
@@ -428,6 +477,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
                           onOpenMenu={openDocMenuFor}
                           onMove={handleMoveDoc}
                           onDelete={handleDeleteDoc}
+                          visibilityLabel={getDocVisibilityLabel(doc.id, doc.unit_id)}
                         />
                       ))}
                     </div>
@@ -735,6 +785,7 @@ function DocRow({
   onOpenMenu,
   onMove,
   onDelete,
+  visibilityLabel,
 }: {
   doc: MockDocument;
   units: MockUnit[];
@@ -745,6 +796,7 @@ function DocRow({
   onOpenMenu: (docId: string, btn: HTMLButtonElement) => void;
   onMove: (docId: string, unitId: string | null) => void;
   onDelete: (docId: string) => void;
+  visibilityLabel?: { text: string; color: "green" | "yellow" | "red" } | null;
 }) {
   const moveTargets = [
     ...units.filter((u) => u.id !== doc.unit_id).map((u) => ({ id: u.id, label: u.name })),
@@ -757,7 +809,22 @@ function DocRow({
         <FileIcon />
         <div>
           <div className="text-sm font-medium text-text-primary">{doc.filename}</div>
-          <div className="text-[11px] text-text-muted">{formatSize(doc.file_size)}</div>
+          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+            <span>{formatSize(doc.file_size)}</span>
+            {visibilityLabel && (() => {
+              const colorMap = {
+                green: "text-green-600",
+                yellow: "text-amber-600",
+                red: "text-red-500",
+              };
+              return (
+                <span className={`hidden sm:inline-flex items-center gap-0.5 ${colorMap[visibilityLabel.color]}`}>
+                  {visibilityLabel.color !== "green" ? <EyeOffIcon /> : null}
+                  {visibilityLabel.text}
+                </span>
+              );
+            })()}
+          </div>
         </div>
       </div>
       <div className="relative">
@@ -841,6 +908,24 @@ function SparkleIcon() {
   return (
     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
     </svg>
   );
 }
