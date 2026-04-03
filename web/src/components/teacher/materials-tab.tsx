@@ -95,6 +95,24 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     return `${(bytes / 1024).toFixed(0)} KB`;
   }
 
+  // Visibility popover state
+  const [visPopover, setVisPopover] = useState<{ type: "unit" | "doc"; id: string } | null>(null);
+  const [visPopoverPos, setVisPopoverPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+
+  function openVisPopover(type: "unit" | "doc", id: string, btn: HTMLElement) {
+    if (visPopover?.type === type && visPopover.id === id) { setVisPopover(null); return; }
+    const rect = btn.getBoundingClientRect();
+    setVisPopoverPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    setVisPopover({ type, id });
+  }
+
+  useEffect(() => {
+    if (!visPopover) return;
+    const close = () => setVisPopover(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [visPopover]);
+
   // Visibility helpers
   function getUnitVisibilityLabel(unitId: string): { text: string; color: "green" | "yellow" | "red" } {
     if (!visibility || sections.length === 0) return { text: "All sections", color: "green" };
@@ -413,19 +431,22 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                   )}
                 </button>
                 <div className="flex items-center gap-2">
-                  {/* Visibility badge */}
+                  {/* Visibility badge (clickable) */}
                   {sections.length > 0 && (() => {
                     const vis = getUnitVisibilityLabel(unit.id);
                     const colorMap = {
-                      green: "bg-green-50 text-green-600 dark:bg-green-500/10",
-                      yellow: "bg-amber-50 text-amber-600 dark:bg-amber-500/10",
-                      red: "bg-red-50 text-red-500 dark:bg-red-500/10",
+                      green: "bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-500/10 dark:hover:bg-green-500/20",
+                      yellow: "bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20",
+                      red: "bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20",
                     };
                     return (
-                      <span className={`hidden sm:inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold ${colorMap[vis.color]}`}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openVisPopover("unit", unit.id, e.currentTarget); }}
+                        className={`hidden sm:inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold transition-colors ${colorMap[vis.color]}`}
+                      >
                         {vis.color === "green" ? <EyeIcon /> : <EyeOffIcon />}
                         {vis.text}
-                      </span>
+                      </button>
                     );
                   })()}
                 <div className="flex items-center gap-1">
@@ -478,6 +499,7 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
                           onMove={handleMoveDoc}
                           onDelete={handleDeleteDoc}
                           visibilityLabel={getDocVisibilityLabel(doc.id, doc.unit_id)}
+                          onVisClick={(docId, btn) => openVisPopover("doc", docId, btn)}
                         />
                       ))}
                     </div>
@@ -683,6 +705,42 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
         </div>
       )}
 
+      {/* Visibility popover */}
+      {visPopover && onToggleUnit && onToggleDoc && visibility && sections.length > 0 && (
+        <div
+          className="fixed z-50 min-w-[200px] rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-xl"
+          style={{ top: visPopoverPos.top, right: visPopoverPos.right }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-2 text-xs font-semibold text-text-primary">
+            {visPopover.type === "unit" ? "Unit visibility by section" : "Document visibility by section"}
+          </div>
+          <div className="space-y-1.5">
+            {sections.map((sec) => {
+              const isHidden = visPopover.type === "unit"
+                ? visibility.hiddenUnits[sec.id]?.has(visPopover.id)
+                : visibility.hiddenDocs[sec.id]?.has(visPopover.id);
+              const isVisible = !isHidden;
+              return (
+                <button
+                  key={sec.id}
+                  onClick={() => {
+                    if (visPopover.type === "unit") onToggleUnit(sec.id, visPopover.id);
+                    else onToggleDoc(sec.id, visPopover.id);
+                  }}
+                  className="flex w-full items-center justify-between rounded-[--radius-sm] px-2 py-1.5 text-xs transition-colors hover:bg-primary-bg/50"
+                >
+                  <span className="font-medium text-text-secondary">{sec.name}</span>
+                  <span className={`flex items-center gap-1 font-semibold ${isVisible ? "text-green-600" : "text-red-500"}`}>
+                    {isVisible ? <><EyeIcon /> Visible</> : <><EyeOffIcon /> Hidden</>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Auto-organize modal */}
       {showAutoOrganize && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowAutoOrganize(false)}>
@@ -786,6 +844,7 @@ function DocRow({
   onMove,
   onDelete,
   visibilityLabel,
+  onVisClick,
 }: {
   doc: MockDocument;
   units: MockUnit[];
@@ -797,6 +856,7 @@ function DocRow({
   onMove: (docId: string, unitId: string | null) => void;
   onDelete: (docId: string) => void;
   visibilityLabel?: { text: string; color: "green" | "yellow" | "red" } | null;
+  onVisClick?: (docId: string, btn: HTMLElement) => void;
 }) {
   const moveTargets = [
     ...units.filter((u) => u.id !== doc.unit_id).map((u) => ({ id: u.id, label: u.name })),
@@ -813,11 +873,19 @@ function DocRow({
             <span>{formatSize(doc.file_size)}</span>
             {visibilityLabel && (() => {
               const colorMap = {
-                green: "text-green-600",
-                yellow: "text-amber-600",
-                red: "text-red-500",
+                green: "text-green-600 hover:text-green-700",
+                yellow: "text-amber-600 hover:text-amber-700",
+                red: "text-red-500 hover:text-red-600",
               };
-              return (
+              return onVisClick ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onVisClick(doc.id, e.currentTarget); }}
+                  className={`hidden sm:inline-flex items-center gap-0.5 cursor-pointer hover:underline ${colorMap[visibilityLabel.color]}`}
+                >
+                  {visibilityLabel.color !== "green" ? <EyeOffIcon /> : null}
+                  {visibilityLabel.text}
+                </button>
+              ) : (
                 <span className={`hidden sm:inline-flex items-center gap-0.5 ${colorMap[visibilityLabel.color]}`}>
                   {visibilityLabel.color !== "green" ? <EyeOffIcon /> : null}
                   {visibilityLabel.text}
