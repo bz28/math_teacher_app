@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 
-type Tab = "sections" | "documents" | "settings";
+type Tab = "overview" | "sections" | "materials" | "assignments" | "settings";
 
 export default function CourseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,7 +14,7 @@ export default function CourseDetailPage() {
   const toast = useToast();
 
   const [course, setCourse] = useState<TeacherCourse | null>(null);
-  const [tab, setTab] = useState<Tab>("sections");
+  const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
 
   // Sections
@@ -45,10 +45,10 @@ export default function CourseDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (tab === "sections") {
+    if (tab === "overview" || tab === "sections") {
       teacher.sections(id).then((d) => setSections(d.sections)).catch(() => {});
     }
-    if (tab === "documents") {
+    if (tab === "overview" || tab === "materials") {
       teacher.documents(id).then((d) => setDocuments(d.documents)).catch(() => {});
     }
   }, [tab, id]);
@@ -151,9 +151,13 @@ export default function CourseDetailPage() {
   if (loading) return <div className="py-12 text-center text-text-muted">Loading...</div>;
   if (!course) return <div className="py-12 text-center text-text-muted">Course not found</div>;
 
+  const totalStudents = sections.reduce((sum, s) => sum + s.student_count, 0);
+
   const tabs: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
     { key: "sections", label: "Sections" },
-    { key: "documents", label: "Documents" },
+    { key: "materials", label: "Materials" },
+    { key: "assignments", label: "Assignments" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -188,6 +192,119 @@ export default function CourseDetailPage() {
       </div>
 
       <div className="mt-6">
+        {/* Overview tab */}
+        {tab === "overview" && (
+          <div className="space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4 text-center">
+                <div className="text-2xl font-extrabold text-text-primary">{sections.length}</div>
+                <div className="mt-0.5 text-xs font-medium text-text-muted">Sections</div>
+              </div>
+              <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4 text-center">
+                <div className="text-2xl font-extrabold text-text-primary">{totalStudents}</div>
+                <div className="mt-0.5 text-xs font-medium text-text-muted">Students</div>
+              </div>
+              <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4 text-center">
+                <div className="text-2xl font-extrabold text-text-primary">{documents.length}</div>
+                <div className="mt-0.5 text-xs font-medium text-text-muted">Documents</div>
+              </div>
+            </div>
+
+            {/* Sections summary */}
+            {sections.length > 0 && (
+              <div>
+                <h2 className="text-base font-bold text-text-primary">Sections</h2>
+                <div className="mt-3 space-y-2">
+                  {sections.map((s) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface px-4 py-3"
+                    >
+                      <div>
+                        <span className="font-semibold text-text-primary">{s.name}</span>
+                        <span className="ml-2 text-xs text-text-muted">
+                          {s.student_count} student{s.student_count !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      {s.join_code ? (
+                        <button
+                          onClick={() => copyJoinCode(s.join_code!)}
+                          className="rounded-[--radius-sm] border border-border px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary-bg"
+                        >
+                          {copiedCode === s.join_code ? "Copied!" : `Code: ${s.join_code}`}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleGenerateCode(s.id)}
+                          className="rounded-[--radius-sm] border border-border px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary-bg"
+                        >
+                          Generate Code
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {sections.length === 0 && (
+              <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-8 text-center">
+                <p className="text-sm font-semibold text-text-primary">No sections yet</p>
+                <p className="mt-1 text-xs text-text-muted">
+                  Go to the Sections tab to create your first class period.
+                </p>
+                <button
+                  onClick={() => setTab("sections")}
+                  className="mt-3 text-sm font-semibold text-primary hover:text-primary-dark"
+                >
+                  Create Section &rarr;
+                </button>
+              </div>
+            )}
+
+            {/* Recent documents */}
+            {documents.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-text-primary">Recent Documents</h2>
+                  {documents.length > 3 && (
+                    <button
+                      onClick={() => setTab("materials")}
+                      className="text-sm font-semibold text-primary hover:text-primary-dark"
+                    >
+                      View all ({documents.length})
+                    </button>
+                  )}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {documents.slice(0, 3).map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface px-4 py-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-text-muted">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                            <path d="M14 2v6h6" />
+                          </svg>
+                        </span>
+                        <span className="text-sm font-medium text-text-primary">{doc.filename}</span>
+                      </div>
+                      <span className="text-xs text-text-muted">
+                        {doc.file_size >= 1048576
+                          ? `${(doc.file_size / 1048576).toFixed(1)} MB`
+                          : `${(doc.file_size / 1024).toFixed(0)} KB`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Sections tab */}
         {tab === "sections" && (
           <div>
@@ -295,8 +412,8 @@ export default function CourseDetailPage() {
           </div>
         )}
 
-        {/* Documents tab */}
-        {tab === "documents" && (
+        {/* Materials tab */}
+        {tab === "materials" && (
           <div>
             {documents.length === 0 ? (
               <div className="py-12 text-center">
@@ -323,6 +440,25 @@ export default function CourseDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Assignments tab */}
+        {tab === "assignments" && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-bg text-primary">
+              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-text-primary">Assignments — Coming Soon</h3>
+            <span className="mt-2 inline-flex items-center rounded-[--radius-pill] bg-amber-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
+              Coming Soon
+            </span>
+            <p className="mt-3 max-w-sm text-sm text-text-secondary">
+              Create homework and tests for your students. Upload worksheets or let AI generate problems from your course materials.
+            </p>
           </div>
         )}
 
