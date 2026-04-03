@@ -15,13 +15,13 @@ export function Footer() {
 
         {/* Links */}
         <div className="flex gap-6 text-sm text-text-muted">
-          <Link href="/teachers" className="hover:text-primary transition-colors">
+          <Link href="/teachers" className="transition-colors hover:text-primary">
             For Schools
           </Link>
-          <Link href="/login" className="hover:text-primary transition-colors">
+          <Link href="/login" className="transition-colors hover:text-primary">
             Sign In
           </Link>
-          <Link href="/register" className="hover:text-primary transition-colors">
+          <Link href="/register" className="transition-colors hover:text-primary">
             Get Started
           </Link>
         </div>
