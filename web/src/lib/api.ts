@@ -463,7 +463,7 @@ export const practice = {
     return apiFetch<PracticeGenerateResponse>("/practice/generate", {
       method: "POST",
       body: JSON.stringify(data),
-      timeout: LLM_TIMEOUT,
+      timeout: SESSION_CREATE_TIMEOUT,
     });
   },
 
