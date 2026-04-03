@@ -3,6 +3,7 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
+import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
 
 const ALL_SUBJECTS = [
   {
@@ -55,8 +56,11 @@ interface Feature {
 
 interface SubjectPageProps {
   name: string;
+  slug: string;
   tagline: string;
   description: string;
+  detailedDescription?: string;
+  educationalProgramDescription: string;
   gradient: string;
   badgeColor: string;
   icon: React.ReactNode;
@@ -66,8 +70,11 @@ interface SubjectPageProps {
 
 export function SubjectPage({
   name,
+  slug,
   tagline,
   description,
+  detailedDescription,
+  educationalProgramDescription,
   gradient,
   badgeColor,
   icon,
@@ -83,6 +90,19 @@ export function SubjectPage({
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(subjectBreadcrumbJsonLd(name, slug)),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(subjectEducationalProgramJsonLd(name, slug, educationalProgramDescription)),
+        }}
+      />
+
       {/* Hero */}
       <section ref={heroRef} className="relative overflow-hidden px-6 pt-32 pb-20 md:pt-40 md:pb-28">
         <div
@@ -139,6 +159,16 @@ export function SubjectPage({
           >
             {description}
           </motion.p>
+          {detailedDescription && (
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              animate={heroInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ delay: 0.25, duration: 0.5 }}
+              className="mx-auto mt-4 max-w-2xl text-base text-text-muted"
+            >
+              {detailedDescription}
+            </motion.p>
+          )}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={heroInView ? { opacity: 1, y: 0 } : {}}
@@ -174,7 +204,7 @@ export function SubjectPage({
               Problems You Can Solve
             </h2>
             <p className="mt-4 text-lg text-text-secondary">
-              Snap a photo or type any of these — Veradic AI walks you through every step
+              Snap a photo or type any of these — Veradic walks you through every step
             </p>
           </motion.div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -273,7 +303,7 @@ export function SubjectPage({
             Ready to master {name.toLowerCase()}?
           </h2>
           <p className="mx-auto mt-4 max-w-lg text-lg text-text-secondary">
-            Join thousands of students who are learning {name.toLowerCase()} step by step with Veradic AI.
+            Join thousands of students who are learning {name.toLowerCase()} step by step with Veradic.
           </p>
           <Link
             href="/register"

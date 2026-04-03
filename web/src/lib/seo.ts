@@ -55,6 +55,29 @@ export function faqJsonLd() {
   };
 }
 
+/** EducationalOccupationalProgram JSON-LD for subject pages */
+export function subjectEducationalProgramJsonLd(name: string, slug: string, description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "EducationalOccupationalProgram",
+    name: `Veradic AI ${name} Tutor`,
+    description,
+    url: `${SITE_URL}/subjects/${slug}`,
+    provider: {
+      "@type": "Organization",
+      name: "Veradic AI",
+      url: SITE_URL,
+    },
+    educationalProgramMode: "online",
+    offers: {
+      "@type": "Offer",
+      category: "Free",
+      price: "0",
+      priceCurrency: "USD",
+    },
+  };
+}
+
 /** Breadcrumb JSON-LD helper for subject pages */
 export function subjectBreadcrumbJsonLd(name: string, slug: string) {
   return {
