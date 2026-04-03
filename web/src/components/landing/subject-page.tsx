@@ -4,6 +4,12 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
 
+const ALL_SUBJECTS = [
+  { name: "Math", href: "/subjects/math", gradient: "from-primary to-primary-light", color: "#6C5CE7" },
+  { name: "Physics", href: "/subjects/physics", gradient: "from-[#0984E3] to-[#74B9FF]", color: "#0984E3" },
+  { name: "Chemistry", href: "/subjects/chemistry", gradient: "from-success to-[#55EFC4]", color: "#00B894" },
+];
+
 interface ExampleProblem {
   topic: string;
   problem: string;
@@ -55,9 +61,35 @@ export function SubjectPage({
             animate={heroInView ? { opacity: 1, scale: 1 } : {}}
             transition={{ duration: 0.5 }}
             className={`mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[--radius-xl] bg-gradient-to-br ${gradient} text-white shadow-lg`}
+            aria-hidden="true"
           >
             {icon}
           </motion.div>
+          {/* Subject tabs */}
+          <motion.nav
+            initial={{ opacity: 0, y: 12 }}
+            animate={heroInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.05, duration: 0.4 }}
+            className="mb-8 flex items-center justify-center gap-2"
+            aria-label="Subjects"
+          >
+            {ALL_SUBJECTS.map((s) => {
+              const isActive = s.name === name;
+              return (
+                <Link
+                  key={s.name}
+                  href={s.href}
+                  className={`rounded-[--radius-pill] px-5 py-2 text-sm font-semibold transition-all ${
+                    isActive
+                      ? "bg-gradient-to-r text-white shadow-sm " + s.gradient
+                      : "border border-border-light bg-surface text-text-secondary hover:border-primary-light hover:text-primary"
+                  }`}
+                >
+                  {s.name}
+                </Link>
+              );
+            })}
+          </motion.nav>
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
             animate={heroInView ? { opacity: 1, y: 0 } : {}}
@@ -159,6 +191,43 @@ export function SubjectPage({
                 <h3 className="text-lg font-bold text-text-primary">{feat.title}</h3>
                 <p className="mt-2 text-text-secondary leading-relaxed">{feat.description}</p>
               </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Explore Other Subjects */}
+      <section className="bg-bg-secondary px-6 py-20 md:py-28">
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-10 text-center">
+            <h2 className="text-2xl font-extrabold tracking-tight text-text-primary md:text-3xl">
+              Explore Other Subjects
+            </h2>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {ALL_SUBJECTS.filter((s) => s.name !== name).map((s) => (
+              <Link
+                key={s.name}
+                href={s.href}
+                className="group rounded-[--radius-xl] border border-border-light bg-surface p-6 transition-all hover:border-primary-light hover:shadow-lg"
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[--radius-lg] bg-gradient-to-br ${s.gradient} text-white shadow-md`}
+                    aria-hidden="true"
+                  >
+                    <span className="text-lg font-bold">{s.name[0]}</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
+                      {s.name} Tutor
+                    </h3>
+                    <p className="text-sm text-text-secondary">
+                      AI-powered step-by-step {s.name.toLowerCase()} help
+                    </p>
+                  </div>
+                </div>
+              </Link>
             ))}
           </div>
         </div>
