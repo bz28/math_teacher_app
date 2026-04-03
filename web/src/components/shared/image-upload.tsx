@@ -5,6 +5,7 @@ import { image as imageApi, type ImageExtractResponse } from "@/lib/api";
 import { Button, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { cropImage } from "@/lib/crop-image";
+import { MathText } from "./math-text";
 import { RectangleSelector, type Rectangle } from "./rectangle-selector";
 
 interface ImageUploadProps {
@@ -48,9 +49,40 @@ export function ImageUpload({
 
   const remaining = maxProblems - currentQueueLength;
 
+  const [manualMode, setManualMode] = useState(false);
+
+  const autoExtract = useCallback(
+    async (base64: string) => {
+      setPhase("extracting");
+      setExtractProgress({ done: 0, total: 1 });
+      try {
+        const res = await imageApi.extract(base64, subject);
+        setExtractProgress({ done: 1, total: 1 });
+        if (res.problems.length === 0) {
+          setError("No problems found. Try selecting areas manually.");
+          setManualMode(true);
+          setPhase("select");
+          return;
+        }
+        onExtractComplete?.();
+        setResult(res);
+        setCropImages(new Array(res.problems.length).fill(base64));
+        setSelected(new Array(res.problems.length).fill(true));
+        setPhase("upload");
+        setImageBase64(null);
+      } catch {
+        setError("Extraction failed. Try selecting areas manually.");
+        setManualMode(true);
+        setPhase("select");
+      }
+    },
+    [subject, setPhase, onExtractComplete],
+  );
+
   const processFile = useCallback(
     (file: File) => {
       setError(null);
+      setManualMode(false);
 
       if (!file.type.startsWith("image/")) {
         setError("Please upload an image file.");
@@ -65,11 +97,11 @@ export function ImageUpload({
       reader.onload = () => {
         const base64 = (reader.result as string).split(",")[1];
         setImageBase64(base64);
-        setPhase("select");
+        autoExtract(base64);
       };
       reader.readAsDataURL(file);
     },
-    [setPhase],
+    [autoExtract],
   );
 
   const handleExtractRectangles = useCallback(
@@ -153,8 +185,8 @@ export function ImageUpload({
     setSelected((prev) => prev.map((s, i) => (i === index ? !s : s)));
   }
 
-  // Rectangle selection phase
-  if (phase === "select" && imageBase64) {
+  // Rectangle selection phase (manual fallback)
+  if (phase === "select" && imageBase64 && manualMode) {
     return (
       <RectangleSelector
         imageBase64={imageBase64}
@@ -162,6 +194,7 @@ export function ImageUpload({
         onCancel={() => {
           setPhase("upload");
           setImageBase64(null);
+          setManualMode(false);
         }}
         maxRectangles={Math.min(10, remaining, scansRemaining)}
         limitHint={scansRemaining < Infinity && scansRemaining <= remaining ? "scan limit" : undefined}
@@ -173,15 +206,11 @@ export function ImageUpload({
   if (phase === "extracting") {
     return (
       <div className="flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed border-primary bg-primary-bg p-8 text-center">
-        <div className="h-1 w-32 overflow-hidden rounded-full bg-border-light">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${(extractProgress.done / extractProgress.total) * 100}%` }}
-          />
-        </div>
+        <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
         <p className="text-sm font-semibold text-primary">
-          Extracting problem {extractProgress.done} of {extractProgress.total}...
+          Extracting problems from image...
         </p>
+        <p className="text-xs text-text-muted">This usually takes a few seconds</p>
       </div>
     );
   }
@@ -279,7 +308,7 @@ export function ImageUpload({
                     onChange={() => toggleSelected(i)}
                     className="mt-0.5 h-4 w-4 accent-primary"
                   />
-                  <span className="text-sm text-text-primary">{problem}</span>
+                  <span className="text-sm text-text-primary"><MathText text={problem} /></span>
                 </label>
               ))}
             </div>
