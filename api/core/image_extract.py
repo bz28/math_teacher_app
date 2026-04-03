@@ -19,19 +19,14 @@ Rules:
 - For word problems, include the full text with any math in $ delimiters
 - Only include {problems_noun} — ignore instructions, headers, or unrelated text
 - If the image includes a diagram, figure, graph, geometric shape, molecular structure,
-  circuit, or any visual element:
-  1. First, describe it in extreme detail in brackets at the end of the problem text.
-     Include: every shape, label, measurement, angle, direction, connection, position,
-     and spatial relationship. Be detailed enough that someone could recreate the diagram
-     from the description alone.
-     e.g. "[Right triangle ABC: vertex A at top-left, B at bottom-left, C at bottom-right.
-     Side AB (vertical) = 3cm, side BC (horizontal) = 4cm, hypotenuse AC labeled 'c'.
-     Right angle marker at B.]"
-  2. Then, include an <svg> block that recreates the diagram. Use viewBox="0 0 300 300".
-     Use clean lines, circles, rects, text labels, and polygons. Label all measurements
-     and important points. Use black stroke, white fill for shapes, and legible font sizes.
-     IMPORTANT: Escape all quotes in SVG attributes as \\" since this is JSON.
-- For graphs, describe axes, scale, plotted points/curves, and include an <svg> rendering
+  circuit, or any visual element, describe it in detail in brackets at the end of the
+  problem text. Include: every shape, label, measurement, angle, direction, connection,
+  position, and spatial relationship. Be detailed enough that someone could recreate
+  the diagram from the description alone.
+  e.g. "[Right triangle ABC: vertex A at top-left, B at bottom-left, C at bottom-right.
+  Side AB (vertical) = 3cm, side BC (horizontal) = 4cm, hypotenuse AC labeled 'c'.
+  Right angle marker at B.]"
+- For graphs, describe the axes, scale, and any plotted points or curves in detail
 - If you cannot read something clearly, skip it rather than guessing
 
 Return valid JSON in this exact format:

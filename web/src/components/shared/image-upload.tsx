@@ -66,8 +66,10 @@ export function ImageUpload({
         }
         onExtractComplete?.();
         setResult(res);
-        // No image attachment needed — diagrams are extracted as inline SVG in the problem text.
-        setCropImages(new Array(res.problems.length).fill(undefined));
+        // Attach original image when single problem has a diagram (bracket description).
+        // The original photo IS the diagram — cheaper than generating SVG during extraction.
+        const hasDiagram = res.problems.length === 1 && res.problems[0].includes("[");
+        setCropImages(new Array(res.problems.length).fill(hasDiagram ? base64 : undefined));
         setSelected(new Array(res.problems.length).fill(true));
         setPhase("upload");
         setImageBase64(null);
