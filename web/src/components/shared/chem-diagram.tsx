@@ -26,6 +26,7 @@ export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDi
     async function render() {
       try {
         // Dynamic import to avoid SSR issues
+        // @ts-expect-error — smiles-drawer has no type declarations
         const SmilesDrawer = (await import("smiles-drawer")).default;
         if (cancelled) return;
 
