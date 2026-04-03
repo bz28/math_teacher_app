@@ -103,11 +103,6 @@ export default function RootLayout({
                 priceCurrency: "USD",
                 description: "Free tier available",
               },
-              aggregateRating: {
-                "@type": "AggregateRating",
-                ratingValue: "5",
-                ratingCount: "1",
-              },
             }),
           }}
         />
