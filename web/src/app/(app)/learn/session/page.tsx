@@ -134,7 +134,7 @@ export default function LearnSessionPage() {
   const isFinalStep = stepIndex >= totalSteps - 1;
   const isCompleted = phase === "completed";
   const isThinking = phase === "thinking";
-  const completedSteps = steps.slice(0, stepIndex);
+  const completedSteps = session.status === "completed" ? steps : steps.slice(0, stepIndex);
   const messages = chatHistory[stepIndex] ?? [];
 
   // Choice selection scoped to current step (use stepIndex for consistency)
