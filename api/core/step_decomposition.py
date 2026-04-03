@@ -59,6 +59,7 @@ _SYSTEM_PROMPT_TEMPLATE = (
     '  - "title": a short 2-5 word heading (e.g., "Isolate the Variable")\n'
     '  - "description": the full explanation of the step.\n'
     "  Formatting rules for descriptions:\n"
+    "  - Do NOT use HTML tags like <br> — use plain newlines (\\n) for line breaks\n"
     "  - Use LaTeX with $ delimiters for inline math (e.g., $x^2 + 1$)\n"
     "  - Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
     "  - Use **double asterisks** for emphasis on key terms\n"

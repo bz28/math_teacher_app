@@ -173,7 +173,7 @@ export default function PracticePage() {
                     <button
                       key={i}
                       onClick={() => handleChoiceSelect(choice)}
-                      disabled={isThinking || feedback === "correct"}
+                      disabled={isThinking}
                       className={cn(
                         "flex w-full items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-all",
                         isWrong && "border-error bg-error-light text-error",

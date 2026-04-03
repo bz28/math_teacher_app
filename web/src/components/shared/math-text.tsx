@@ -23,7 +23,9 @@ type Segment =
   | { type: "svg"; content: string }
   | { type: "bold"; content: string };
 
-function parse(text: string): Segment[] {
+function parse(input: string): Segment[] {
+  // Replace <br> tags with newlines before parsing
+  const text = input.replace(/<br\s*\/?>/gi, "\n");
   const segments: Segment[] = [];
   // Match $$...$$, $...$, <svg>...</svg>, and **...**
   const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|<svg[\s\S]*?<\/svg>|\*\*[^*]+\*\*)/g;
@@ -89,7 +91,7 @@ export function MathText({ text, className }: MathTextProps) {
       {segments.map((seg, i) => {
         switch (seg.type) {
           case "text":
-            return <span key={i}>{seg.content}</span>;
+            return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{seg.content}</span>;
           case "bold":
             return <strong key={i}>{seg.content}</strong>;
           case "math-inline":
