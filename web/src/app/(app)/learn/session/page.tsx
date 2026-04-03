@@ -260,11 +260,6 @@ export default function LearnSessionPage() {
                     >
                       <MathText text={step.description} />
                     </div>
-                    {expanded && step.final_answer && (
-                      <p className="mt-1 text-sm font-medium text-text-primary">
-                        &rarr; <MathText text={step.final_answer} />
-                      </p>
-                    )}
                   </div>
                   <svg
                     className={cn(
