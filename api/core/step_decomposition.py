@@ -63,6 +63,10 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "  - Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
     "  - Use **double asterisks** for emphasis on key terms\n"
     "  - For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
+    "  - If a visual diagram would help the student (geometric shape, graph, coordinate plane,\n"
+    "    molecular structure), include it as an <svg> block with viewBox.\n"
+    "    Keep SVGs simple: lines, circles, rects, text labels. Max 300x300 viewBox.\n"
+    "    IMPORTANT: Escape all quotes inside SVG attribute values as \\\" since this is JSON.\n"
     '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
@@ -189,7 +193,7 @@ async def decompose_problem(
             user_content,
             mode=llm_mode,
             model=MODEL_REASON,
-            max_tokens=1024,
+            max_tokens=4096,
             user_id=user_id,
         )
     else:
@@ -198,7 +202,7 @@ async def decompose_problem(
             prompt,
             mode=llm_mode,
             model=MODEL_REASON,
-            max_tokens=1024,
+            max_tokens=4096,
             user_id=user_id,
         )
 
