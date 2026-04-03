@@ -182,12 +182,27 @@ export default function LearnSessionPage() {
               <MathText text={session.problem} />
             </div>
             {sessionImage && (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={`data:image/jpeg;base64,${sessionImage}`}
-                alt="Problem"
-                className="mt-2 max-h-40 rounded-[--radius-md] border border-border object-contain"
-              />
+              <details className="mt-3" open>
+                <summary className="cursor-pointer text-xs font-semibold text-text-muted hover:text-text-secondary">
+                  Original photo
+                </summary>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`data:image/jpeg;base64,${sessionImage}`}
+                  alt="Problem"
+                  className="mt-2 max-h-80 rounded-[--radius-md] border border-border object-contain cursor-pointer"
+                  onClick={(e) => {
+                    const img = e.currentTarget;
+                    if (img.classList.contains("max-h-80")) {
+                      img.classList.remove("max-h-80");
+                      img.classList.add("max-h-[80vh]");
+                    } else {
+                      img.classList.remove("max-h-[80vh]");
+                      img.classList.add("max-h-80");
+                    }
+                  }}
+                />
+              </details>
             )}
           </div>
           {learnQueue && (
