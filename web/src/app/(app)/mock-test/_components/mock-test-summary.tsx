@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
@@ -110,7 +111,7 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
                 {mockTest.flags[i] ? "Flagged" : "Flag"}
               </button>
             </div>
-            <p className="text-sm font-medium text-text-primary">{r.question}</p>
+            <div className="text-sm font-medium text-text-primary"><MathText text={r.question} /></div>
             {r.isCorrect === true && (
               <div>
                 <p className="text-xs text-text-secondary">Your answer: {r.userAnswer}</p>

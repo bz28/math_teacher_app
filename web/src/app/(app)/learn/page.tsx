@@ -9,6 +9,7 @@ import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
+import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
@@ -371,9 +372,9 @@ function LearnPageContent() {
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
-                    {item.text}
-                  </p>
+                  <div className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
+                    <MathText text={item.text} />
+                  </div>
                   {item.image && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
