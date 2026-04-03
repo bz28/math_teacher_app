@@ -150,7 +150,7 @@ async def llm_calls(
                 "model": c.model,
                 "retry_count": c.retry_count,
                 "output_text": c.output_text,
-                "user_name": name or email or None,
+                "user_name": name or email or "Deleted User",
                 "created_at": c.created_at.isoformat(),
             }
             for c, email, name in recent_failures
@@ -198,7 +198,7 @@ async def llm_calls(
                 "output_text": c.output_text,
                 "session_id": str(c.session_id) if c.session_id else None,
                 "user_id": str(c.user_id) if c.user_id else None,
-                "user_name": user_name or user_email or None,
+                "user_name": user_name or user_email or "Deleted User",
                 "created_at": c.created_at.isoformat(),
             }
             for c, user_email, user_name in calls

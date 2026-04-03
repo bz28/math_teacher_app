@@ -67,6 +67,10 @@ class UserResponse(BaseModel):
     is_pro: bool = False
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
 class EntitlementLimits(BaseModel):
     daily_sessions_used: int
     daily_sessions_limit: int | None

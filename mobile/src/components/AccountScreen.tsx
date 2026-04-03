@@ -1,18 +1,31 @@
-import { useState } from "react";
-import { Alert, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated as RNAnimated,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { PaywallScreen } from "./PaywallScreen";
-import { getUserName } from "../services/api";
+import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AccountScreenProps {
   onBack: () => void;
   onLogout: () => void;
+  onAccountDeleted?: () => void;
 }
 
 function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: string }) {
@@ -34,7 +47,7 @@ function UsageBar({ label, used, limit, icon }: { label: string; used: number; l
   );
 }
 
-export function AccountScreen({ onBack, onLogout }: AccountScreenProps) {
+export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScreenProps) {
   const name = getUserName();
   const isPro = useEntitlementStore((s) => s.isPro);
   const status = useEntitlementStore((s) => s.status);
@@ -48,6 +61,13 @@ export function AccountScreen({ onBack, onLogout }: AccountScreenProps) {
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
   const [paywallVisible, setPaywallVisible] = useState(false);
 
+  // Delete account state
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const shakeAnim = useRef(new RNAnimated.Value(0)).current;
+
   const initial = (name ?? "?")[0].toUpperCase();
 
   const handleManageSubscription = () => {
@@ -55,6 +75,59 @@ export function AccountScreen({ onBack, onLogout }: AccountScreenProps) {
       ? "https://apps.apple.com/account/subscriptions"
       : "https://play.google.com/store/account/subscriptions";
     Linking.openURL(url);
+  };
+
+  const triggerShake = () => {
+    shakeAnim.setValue(0);
+    RNAnimated.sequence([
+      RNAnimated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      RNAnimated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      RNAnimated.timing(shakeAnim, { toValue: 8, duration: 50, useNativeDriver: true }),
+      RNAnimated.timing(shakeAnim, { toValue: -8, duration: 50, useNativeDriver: true }),
+      RNAnimated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const handleDeleteAccount = () => {
+    const message = isPro
+      ? "You have an active subscription. Please cancel it in your App Store/Play Store settings first, or you'll continue to be charged.\n\nThis will permanently delete your account and all your data. This action cannot be undone."
+      : "This will permanently delete your account and all your data. This action cannot be undone.";
+
+    Alert.alert("Delete Your Account?", message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete Account",
+        style: "destructive",
+        onPress: () => {
+          setDeletePassword("");
+          setDeleteError(null);
+          setDeleteModalVisible(true);
+        },
+      },
+    ]);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletePassword.trim()) {
+      setDeleteError("Please enter your password");
+      triggerShake();
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount(deletePassword);
+      setDeletePassword("");
+      await clearAuth();
+      setDeleteModalVisible(false);
+      if (onAccountDeleted) { onAccountDeleted(); } else { onLogout(); }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setDeleteError(message);
+      triggerShake();
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -132,6 +205,12 @@ export function AccountScreen({ onBack, onLogout }: AccountScreenProps) {
           </AnimatedPressable>
         )}
 
+        {/* Delete Account */}
+        <AnimatedPressable style={styles.deleteButton} onPress={handleDeleteAccount} scaleDown={0.97}>
+          <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
+          <Text style={styles.deleteText}>Delete Account</Text>
+        </AnimatedPressable>
+
         {/* Logout */}
         <AnimatedPressable style={styles.logoutButton} onPress={handleLogout} scaleDown={0.97}>
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
@@ -144,6 +223,64 @@ export function AccountScreen({ onBack, onLogout }: AccountScreenProps) {
         onClose={() => setPaywallVisible(false)}
         onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
       />
+
+      {/* Delete Account Password Modal */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !deleteLoading && setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, shadows.lg]}>
+            <View style={styles.modalAccent} />
+            <Text style={styles.modalTitle}>Verify Your Identity</Text>
+            <Text style={styles.modalSubtitle}>Enter your password to confirm deletion</Text>
+
+            <RNAnimated.View style={[styles.modalInputWrap, { transform: [{ translateX: shakeAnim }] }]}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.modalInputIcon} />
+              <TextInput
+                style={styles.modalInput}
+                value={deletePassword}
+                onChangeText={(t) => { setDeletePassword(t); setDeleteError(null); }}
+                placeholder="Password"
+                secureTextEntry
+                placeholderTextColor={colors.textMuted}
+                editable={!deleteLoading}
+                autoFocus
+                returnKeyType="go"
+                onSubmitEditing={handleConfirmDelete}
+              />
+            </RNAnimated.View>
+
+            {deleteError && (
+              <Text style={styles.modalError}>{deleteError}</Text>
+            )}
+
+            <AnimatedPressable
+              style={[styles.modalDeleteBtn, deleteLoading && { opacity: 0.6 }]}
+              onPress={handleConfirmDelete}
+              scaleDown={0.97}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.modalDeleteBtnText}>Delete My Account</Text>
+              )}
+            </AnimatedPressable>
+
+            <AnimatedPressable
+              style={styles.modalCancelBtn}
+              onPress={() => setDeleteModalVisible(false)}
+              scaleDown={0.97}
+              disabled={deleteLoading}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </AnimatedPressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -308,17 +445,113 @@ const styles = StyleSheet.create({
     ...typography.button,
     color: colors.white,
   },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    marginTop: spacing.xl,
+  },
+  deleteText: {
+    ...typography.body,
+    color: colors.textMuted,
+    fontSize: 14,
+  },
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
     paddingVertical: spacing.lg,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   logoutText: {
     ...typography.bodyBold,
     color: colors.error,
+    fontSize: 14,
+  },
+
+  // Delete account modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlayDark,
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xxxl + 12,
+    paddingTop: spacing.lg,
+    overflow: "hidden",
+  },
+  modalAccent: {
+    height: 3,
+    backgroundColor: colors.error,
+    borderRadius: 2,
+    width: 40,
+    alignSelf: "center",
+    marginBottom: spacing.xl,
+  },
+  modalTitle: {
+    ...typography.heading,
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    fontSize: 14,
+    marginBottom: spacing.xl,
+  },
+  modalInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.inputBg,
+    marginBottom: spacing.sm,
+  },
+  modalInputIcon: {
+    paddingLeft: spacing.lg,
+  },
+  modalInput: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
+    ...typography.body,
+    color: colors.text,
+  },
+  modalError: {
+    ...typography.caption,
+    color: colors.error,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  modalDeleteBtn: {
+    backgroundColor: colors.error,
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: spacing.md,
+  },
+  modalDeleteBtnText: {
+    ...typography.button,
+    color: colors.white,
+  },
+  modalCancelBtn: {
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+  modalCancelText: {
+    ...typography.bodyBold,
+    color: colors.textSecondary,
     fontSize: 14,
   },
 });

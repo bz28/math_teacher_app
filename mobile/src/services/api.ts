@@ -252,6 +252,18 @@ async function apiGet<T>(path: string): Promise<T> {
   return resp.json();
 }
 
+async function apiDelete(path: string, body: object): Promise<void> {
+  const resp = await _fetchWithRefresh(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => null);
+    throw new Error(extractError(data, resp.status));
+  }
+}
+
 // Session API — LLM-backed endpoints use longer timeout
 export const createSession = (
   problem: string, mode: string = "learn", subject: string = "math", imageBase64?: string,
@@ -325,6 +337,9 @@ export const register = (email: string, password: string, name: string, gradeLev
     name,
     grade_level: gradeLevel,
   });
+
+export const deleteAccount = (password: string) =>
+  apiDelete("/auth/account", { password });
 
 // Entitlements
 export interface EntitlementLimits {

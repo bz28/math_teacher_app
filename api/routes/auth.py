@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -38,13 +38,18 @@ from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.course import Course
+from api.models.llm_call import LLMCall
+from api.models.promo import PromoRedemption
 from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
+from api.models.session import Session
 from api.models.teacher_invite import TeacherInvite
-from api.models.user import User
+from api.models.user import RefreshToken, User
+from api.models.work_submission import WorkSubmission
 from api.schemas.auth import (
     CheckEmailRequest,
+    DeleteAccountRequest,
     EntitlementLimits,
     EntitlementsResponse,
     LoginRequest,
@@ -53,6 +58,8 @@ from api.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -206,6 +213,46 @@ async def me(
     )
 
 
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("3/minute")
+async def delete_account(
+    request: Request,
+    body: DeleteAccountRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Permanently delete the current user's account with hybrid anonymization."""
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
+
+    # Block teachers with active courses
+    if user.role == "teacher":
+        course_count = (await db.execute(
+            select(func.count()).select_from(Course).where(Course.teacher_id == user.id)
+        )).scalar() or 0
+        if course_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="You have active courses. Please delete or transfer them before deleting your account.",
+            )
+
+    # Anonymize analytics: set user_id = NULL on sessions and llm_calls
+    await db.execute(update(Session).where(Session.user_id == user.id).values(user_id=None))
+    await db.execute(update(LLMCall).where(LLMCall.user_id == user.id).values(user_id=None))
+
+    # Hard delete PII and user-specific data
+    await db.execute(delete(PromoRedemption).where(PromoRedemption.user_id == user.id))
+    await db.execute(delete(WorkSubmission).where(WorkSubmission.user_id == user.id))
+    await db.execute(delete(SectionEnrollment).where(SectionEnrollment.student_id == user.id))
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+
+    # Delete the user row
+    await db.delete(user)
+    await db.commit()
+
+    logger.info("Account deleted: user=%s email=%s", user.id, user.email)
+
+
 @router.get("/entitlements", response_model=EntitlementsResponse)
 async def entitlements(
     user: User = Depends(get_current_user_full),
@@ -283,8 +330,6 @@ async def enrolled_courses(
 
 
 # ── Password reset ────────────────────────────────────────────────────────
-
-logger = logging.getLogger(__name__)
 
 RESET_TOKEN_EXPIRY_HOURS = 1
 
