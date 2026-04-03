@@ -23,10 +23,16 @@ from api.models.user import RefreshToken, User  # noqa: F401 — register models
 
 @pytest.fixture(scope="session", autouse=True)
 async def setup_db() -> None:
-    """Create tables (if missing) and truncate before the test session."""
+    """Create tables (if missing) and truncate before the test session.
+
+    In CI, migrations run first via `alembic upgrade head`, so tables already
+    exist.  We drop with CASCADE to handle circular FKs (schools <-> users),
+    then recreate via metadata so tests always start from a clean schema.
+    """
     engine = get_engine()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
         await conn.run_sync(Base.metadata.create_all)
     async with get_session_factory()() as session:
         await session.execute(text("TRUNCATE TABLE sessions, refresh_tokens, users CASCADE"))
