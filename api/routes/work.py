@@ -10,9 +10,9 @@ from api.core.step_decomposition import decompose_problem
 from api.core.work_diagnosis import diagnose_work
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 from api.models.work_submission import WorkSubmission
-from api.middleware.rate_limit import limiter
 from api.schemas.work import DiagnosisResult, DiagnosisStep, SubmitWorkRequest, SubmitWorkResponse
 
 logger = logging.getLogger(__name__)
