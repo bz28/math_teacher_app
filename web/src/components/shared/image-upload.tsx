@@ -66,7 +66,7 @@ export function ImageUpload({
         }
         onExtractComplete?.();
         setResult(res);
-        setCropImages(new Array(res.problems.length).fill(base64));
+        setCropImages(new Array(res.problems.length).fill(undefined));
         setSelected(new Array(res.problems.length).fill(true));
         setPhase("upload");
         setImageBase64(null);
