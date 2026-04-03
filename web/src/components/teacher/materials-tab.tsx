@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { TeacherDocument } from "@/lib/api";
 
@@ -104,6 +104,41 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
     // Move docs to uncategorized
     setDocuments(documents.map((d) => d.unit_id === unitId ? { ...d, unit_id: null } : d));
     setUnits(units.filter((u) => u.id !== unitId));
+  }
+
+  // ── Document actions ──
+
+  const [openDocMenu, setOpenDocMenu] = useState<string | null>(null);
+  const [docMenuPos, setDocMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
+  const docMenuRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  function openDocMenuFor(docId: string, btnEl: HTMLButtonElement) {
+    if (openDocMenu === docId) { setOpenDocMenu(null); return; }
+    const rect = btnEl.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 200) {
+      setDocMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right });
+    } else {
+      setDocMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpenDocMenu(docId);
+  }
+
+  useEffect(() => {
+    if (!openDocMenu) return;
+    const close = () => setOpenDocMenu(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openDocMenu]);
+
+  function handleMoveDoc(docId: string, targetUnitId: string | null) {
+    setDocuments(documents.map((d) => d.id === docId ? { ...d, unit_id: targetUnitId } : d));
+    setOpenDocMenu(null);
+  }
+
+  function handleDeleteDoc(docId: string) {
+    setDocuments(documents.filter((d) => d.id !== docId));
+    setOpenDocMenu(null);
   }
 
   return (
@@ -260,19 +295,18 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
                   ) : (
                     <div className="divide-y divide-border-light">
                       {unitDocs.map((doc) => (
-                        <div
+                        <DocRow
                           key={doc.id}
-                          className="flex items-center justify-between px-4 py-2.5 hover:bg-primary-bg/20"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <FileIcon />
-                            <div>
-                              <div className="text-sm font-medium text-text-primary">{doc.filename}</div>
-                              <div className="text-[11px] text-text-muted">{formatSize(doc.file_size)}</div>
-                            </div>
-                          </div>
-                          <span className="text-xs text-text-muted">{formatSize(doc.file_size)}</span>
-                        </div>
+                          doc={doc}
+                          units={units}
+                          formatSize={formatSize}
+                          openDocMenu={openDocMenu}
+                          docMenuPos={docMenuPos}
+                          docMenuRefs={docMenuRefs}
+                          onOpenMenu={openDocMenuFor}
+                          onMove={handleMoveDoc}
+                          onDelete={handleDeleteDoc}
+                        />
                       ))}
                     </div>
                   )}
@@ -293,18 +327,18 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
           </div>
           <div className="space-y-1.5">
             {uncategorized.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between rounded-[--radius-md] border border-border-light bg-surface px-4 py-2.5"
-              >
-                <div className="flex items-center gap-2.5">
-                  <FileIcon />
-                  <div>
-                    <div className="text-sm font-medium text-text-primary">{doc.filename}</div>
-                    <div className="text-[11px] text-text-muted">{formatSize(doc.file_size)}</div>
-                  </div>
-                </div>
-                <span className="text-xs text-text-muted">{formatSize(doc.file_size)}</span>
+              <div key={doc.id} className="rounded-[--radius-md] border border-border-light bg-surface">
+                <DocRow
+                  doc={doc}
+                  units={units}
+                  formatSize={formatSize}
+                  openDocMenu={openDocMenu}
+                  docMenuPos={docMenuPos}
+                  docMenuRefs={docMenuRefs}
+                  onOpenMenu={openDocMenuFor}
+                  onMove={handleMoveDoc}
+                  onDelete={handleDeleteDoc}
+                />
               </div>
             ))}
           </div>
@@ -331,6 +365,93 @@ export function MaterialsTab({ realDocuments, onDeleteDocument }: MaterialsTabPr
           <p className="mt-1 text-xs text-text-muted">Create a unit and upload documents to get started.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── DocRow with action menu ──
+
+function DocRow({
+  doc,
+  units,
+  formatSize,
+  openDocMenu,
+  docMenuPos,
+  docMenuRefs,
+  onOpenMenu,
+  onMove,
+  onDelete,
+}: {
+  doc: MockDocument;
+  units: MockUnit[];
+  formatSize: (bytes: number) => string;
+  openDocMenu: string | null;
+  docMenuPos: { top?: number; bottom?: number; right: number };
+  docMenuRefs: React.MutableRefObject<Record<string, HTMLButtonElement | null>>;
+  onOpenMenu: (docId: string, btn: HTMLButtonElement) => void;
+  onMove: (docId: string, unitId: string | null) => void;
+  onDelete: (docId: string) => void;
+}) {
+  const moveTargets = [
+    ...units.filter((u) => u.id !== doc.unit_id).map((u) => ({ id: u.id, label: u.name })),
+    ...(doc.unit_id !== null ? [{ id: null as string | null, label: "Uncategorized" }] : []),
+  ];
+
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5 hover:bg-primary-bg/20">
+      <div className="flex items-center gap-2.5">
+        <FileIcon />
+        <div>
+          <div className="text-sm font-medium text-text-primary">{doc.filename}</div>
+          <div className="text-[11px] text-text-muted">{formatSize(doc.file_size)}</div>
+        </div>
+      </div>
+      <div className="relative">
+        <button
+          ref={(el) => { docMenuRefs.current[doc.id] = el; }}
+          onClick={(e) => { e.stopPropagation(); onOpenMenu(doc.id, e.currentTarget); }}
+          className="rounded-[--radius-sm] p-1.5 text-text-muted hover:bg-primary-bg/50 hover:text-text-secondary"
+        >
+          <MoreIcon />
+        </button>
+        {openDocMenu === doc.id && (
+          <div
+            className="fixed z-50 min-w-[180px] rounded-[--radius-md] border border-border-light bg-surface py-1 shadow-lg"
+            style={{
+              ...(docMenuPos.top != null ? { top: docMenuPos.top } : {}),
+              ...(docMenuPos.bottom != null ? { bottom: docMenuPos.bottom } : {}),
+              right: docMenuPos.right,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {moveTargets.length > 0 && (
+              <>
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Move to
+                </div>
+                {moveTargets.map((target) => (
+                  <button
+                    key={target.id ?? "uncat"}
+                    onClick={() => onMove(doc.id, target.id)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-text-secondary hover:bg-primary-bg/50"
+                  >
+                    {target.id ? <FolderIcon /> : <span className="h-4 w-4" />}
+                    {target.label}
+                  </button>
+                ))}
+                <div className="my-1 border-t border-border-light" />
+              </>
+            )}
+            <button
+              onClick={() => onDelete(doc.id)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+            >
+              <TrashIcon />
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -366,6 +487,14 @@ function SparkleIcon() {
   return (
     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
     </svg>
   );
 }
