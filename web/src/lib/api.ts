@@ -6,6 +6,7 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/v1";
 const DEFAULT_TIMEOUT = 15_000;
 const LLM_TIMEOUT = 30_000;
+const SESSION_CREATE_TIMEOUT = 90_000;
 
 // ── Types ──
 
@@ -370,7 +371,7 @@ export const session = {
     return apiFetch<SessionResponse>("/session", {
       method: "POST",
       body: JSON.stringify(data),
-      timeout: LLM_TIMEOUT,
+      timeout: SESSION_CREATE_TIMEOUT,
     });
   },
 
@@ -394,7 +395,7 @@ export const session = {
       `/session/${sessionId}/similar`,
       {
         method: "POST",
-        timeout: LLM_TIMEOUT,
+        timeout: SESSION_CREATE_TIMEOUT,
       },
     );
   },
@@ -462,7 +463,7 @@ export const practice = {
     return apiFetch<PracticeGenerateResponse>("/practice/generate", {
       method: "POST",
       body: JSON.stringify(data),
-      timeout: LLM_TIMEOUT,
+      timeout: SESSION_CREATE_TIMEOUT,
     });
   },
 
@@ -505,7 +506,7 @@ export const work = {
     return apiFetch<WorkSubmitResponse>("/work/submit", {
       method: "POST",
       body: JSON.stringify(data),
-      timeout: LLM_TIMEOUT,
+      timeout: SESSION_CREATE_TIMEOUT,
     });
   },
 };
