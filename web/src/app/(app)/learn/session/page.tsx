@@ -260,10 +260,13 @@ export default function LearnSessionPage() {
                     >
                       <MathText text={step.description} />
                     </div>
-                    {expanded && step.final_answer && (
-                      <p className="mt-1 text-sm font-medium text-text-primary">
-                        &rarr; {step.final_answer}
-                      </p>
+                    {step.final_answer && (expanded || i === completedSteps.length - 1) && (
+                      <div className="mt-2 rounded-[--radius-md] border border-success-border bg-success-light p-2">
+                        <p className="text-xs font-semibold text-success">Final Answer</p>
+                        <div className="mt-1 text-sm font-semibold text-text-primary">
+                          <MathText text={step.final_answer} />
+                        </div>
+                      </div>
                     )}
                   </div>
                   <svg
