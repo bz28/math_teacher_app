@@ -111,13 +111,9 @@ export function MathText({ text, className }: MathTextProps) {
             return (
               <div
                 key={i}
-                className="my-3 flex justify-center"
-              >
-                <div
-                  className="inline-block rounded-lg bg-white p-4 shadow-sm border border-border-light"
-                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(seg.content) }}
-                />
-              </div>
+                className="my-3 flex justify-center rounded-lg bg-white p-4"
+                dangerouslySetInnerHTML={{ __html: sanitizeSvg(seg.content) }}
+              />
             );
           default:
             return null;

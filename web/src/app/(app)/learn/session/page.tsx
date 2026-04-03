@@ -229,7 +229,7 @@ export default function LearnSessionPage() {
       </div>
 
       {/* ── Completed steps timeline ── */}
-      {completedSteps.length > 0 && !isCompleted && (
+      {completedSteps.length > 0 && (!isCompleted || session.status === "completed") && (
         <div className="mb-6 space-y-0">
           {completedSteps.map((step, i) => {
             const stepNum = i + 1;
