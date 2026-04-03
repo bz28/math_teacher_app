@@ -139,6 +139,7 @@ export function MathGraph({
         ctx.stroke();
       });
     } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(true);
     }
 
