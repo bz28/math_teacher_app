@@ -6,7 +6,7 @@ import Link from "next/link";
 
 const subjects = [
   {
-    name: "Mathematics",
+    name: "Math",
     description: "Algebra, calculus, geometry, word problems, and more",
     href: "/subjects/math",
     gradient: "from-primary to-primary-light",

@@ -152,7 +152,7 @@ export function SubjectPage({
               Start Learning {name} Free
             </Link>
             <Link
-              href="/#how-it-works"
+              href="/#features"
               className="inline-flex items-center rounded-[--radius-pill] border border-border-light bg-surface px-8 py-3.5 text-base font-semibold text-text-primary transition-all hover:border-primary-light hover:shadow-sm"
             >
               See How It Works
