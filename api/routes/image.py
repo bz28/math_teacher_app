@@ -2,13 +2,14 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_extract import extract_problems_from_image
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 from api.schemas.image import ImageExtractRequest, ImageExtractResponse
 
@@ -18,7 +19,9 @@ router = APIRouter(prefix="/image", tags=["image"])
 
 
 @router.post("/extract", response_model=ImageExtractResponse)
+@limiter.limit("10/minute")
 async def extract(
+    request: Request,
     body: ImageExtractRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
@@ -30,10 +33,11 @@ async def extract(
             body.image_base64, user_id=str(user.id),
             subject=body.subject,
         )
-    except ValueError as e:
+    except ValueError:
+        logger.exception("Image extraction returned invalid format")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Could not extract problems from this image",
         )
     except RuntimeError:
         logger.exception("Image extraction failed")

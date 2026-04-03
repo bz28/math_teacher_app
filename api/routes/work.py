@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
@@ -10,6 +10,7 @@ from api.core.step_decomposition import decompose_problem
 from api.core.work_diagnosis import diagnose_work
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.user import User
 from api.models.work_submission import WorkSubmission
 from api.schemas.work import DiagnosisResult, DiagnosisStep, SubmitWorkRequest, SubmitWorkResponse
@@ -20,7 +21,9 @@ router = APIRouter(prefix="/work", tags=["work"])
 
 
 @router.post("/submit", response_model=SubmitWorkResponse)
+@limiter.limit("10/minute")
 async def submit_work(
+    request: Request,
     body: SubmitWorkRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),

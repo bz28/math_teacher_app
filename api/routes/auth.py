@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.config import settings
 from api.core.auth import (
     check_lockout,
     create_access_token,
@@ -313,7 +314,7 @@ async def forgot_password(
         user.password_reset_expires = datetime.now(UTC) + timedelta(hours=RESET_TOKEN_EXPIRY_HOURS)
         await db.commit()
 
-        reset_url = f"https://veradicai.com/set-password?token={raw_token}"
+        reset_url = f"{settings.frontend_url}/set-password?token={raw_token}"
         asyncio.create_task(send_email(
             to=[body.email.lower()],
             subject="Reset your Veradic AI password",
