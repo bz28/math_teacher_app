@@ -37,7 +37,10 @@ jobs:
       - name: Run migrations
         env:
           DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test
+          JWT_SECRET: ci-test-secret
+          CLAUDE_API_KEY: sk-ant-ci-fake-key
           APP_ENV: test
+          SENTRY_DSN: ""
         run: alembic upgrade head
 
       - name: Lint
