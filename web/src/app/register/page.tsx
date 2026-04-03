@@ -278,6 +278,17 @@ function RegisterPageContent() {
           >
             {isInviteFlow ? "Set Up Your Account" : "Create Account"}
           </Button>
+
+          <p className="mt-4 text-center text-xs text-text-muted">
+            By signing up, you agree to our{" "}
+            <Link href="/terms" className="text-primary hover:underline">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="text-primary hover:underline">
+              Privacy Policy
+            </Link>.
+          </p>
         </form>
 
         <div className="mt-6 border-t border-border-light pt-4 text-center">
