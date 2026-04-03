@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
@@ -10,6 +10,7 @@ from api.core.image_extract import extract_problems_from_image
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.models.user import User
+from api.middleware.rate_limit import limiter
 from api.schemas.image import ImageExtractRequest, ImageExtractResponse
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,9 @@ router = APIRouter(prefix="/image", tags=["image"])
 
 
 @router.post("/extract", response_model=ImageExtractResponse)
+@limiter.limit("10/minute")
 async def extract(
+    request: Request,
     body: ImageExtractRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),

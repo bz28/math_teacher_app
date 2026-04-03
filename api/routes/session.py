@@ -3,7 +3,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from api.core.session import (
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.session import Session as SessionModel
 from api.models.session import SessionMode, SessionStatus
 from api.models.user import User
@@ -114,7 +115,9 @@ async def _has_session_for_problem_today(db: AsyncSession, user_id: uuid.UUID, p
 
 
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create(
+    request: Request,
     body: CreateSessionRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),

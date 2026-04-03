@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
@@ -10,6 +10,7 @@ from api.core.practice import check_answer, generate_practice_problems
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
 from api.models.user import User
+from api.middleware.rate_limit import limiter
 from api.schemas.practice import (
     PracticeCheckRequest,
     PracticeCheckResponse,
@@ -24,7 +25,9 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 
 
 @router.post("/generate", response_model=PracticeGenerateResponse)
+@limiter.limit("10/minute")
 async def generate(
+    request: Request,
     body: PracticeGenerateRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
@@ -56,7 +59,9 @@ async def generate(
 
 
 @router.post("/check", response_model=PracticeCheckResponse)
+@limiter.limit("20/minute")
 async def check(
+    request: Request,
     body: PracticeCheckRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PracticeCheckResponse:
