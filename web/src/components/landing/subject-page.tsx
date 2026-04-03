@@ -5,9 +5,42 @@ import { useRef } from "react";
 import Link from "next/link";
 
 const ALL_SUBJECTS = [
-  { name: "Math", href: "/subjects/math", gradient: "from-primary to-primary-light", color: "#6C5CE7" },
-  { name: "Physics", href: "/subjects/physics", gradient: "from-[#0984E3] to-[#74B9FF]", color: "#0984E3" },
-  { name: "Chemistry", href: "/subjects/chemistry", gradient: "from-success to-[#55EFC4]", color: "#00B894" },
+  {
+    name: "Math",
+    href: "/subjects/math",
+    gradient: "from-primary to-primary-light",
+    description: "Algebra, calculus, geometry, and more",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="2" x2="12" y2="22" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+      </svg>
+    ),
+  },
+  {
+    name: "Physics",
+    href: "/subjects/physics",
+    gradient: "from-[#0984E3] to-[#74B9FF]",
+    description: "Mechanics, energy, waves, and more",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+        <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+      </svg>
+    ),
+  },
+  {
+    name: "Chemistry",
+    href: "/subjects/chemistry",
+    gradient: "from-success to-[#55EFC4]",
+    description: "Reactions, stoichiometry, and more",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 3h6v7l4 9H5l4-9V3z" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </svg>
+    ),
+  },
 ];
 
 interface ExampleProblem {
@@ -129,7 +162,7 @@ export function SubjectPage({
       </section>
 
       {/* Example Problems */}
-      <section ref={examplesRef} className="px-6 py-20 md:py-28">
+      <section ref={examplesRef} className="bg-bg-secondary px-6 py-20 md:py-28">
         <div className="mx-auto max-w-4xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -216,14 +249,14 @@ export function SubjectPage({
                     className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[--radius-lg] bg-gradient-to-br ${s.gradient} text-white shadow-md`}
                     aria-hidden="true"
                   >
-                    <span className="text-lg font-bold">{s.name[0]}</span>
+                    {s.icon}
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
                       {s.name} Tutor
                     </h3>
                     <p className="text-sm text-text-secondary">
-                      AI-powered step-by-step {s.name.toLowerCase()} help
+                      {s.description}
                     </p>
                   </div>
                 </div>
