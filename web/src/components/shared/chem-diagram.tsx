@@ -27,10 +27,14 @@ export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDi
       try {
         // Dynamic import to avoid SSR issues
         // @ts-expect-error — smiles-drawer has no type declarations
-        const SmilesDrawer = (await import("smiles-drawer")).default;
+        const mod = await import("smiles-drawer");
         if (cancelled) return;
 
-        const drawer = new SmilesDrawer.SmiDrawer({ width, height });
+        // smiles-drawer exports SmiDrawer as a named export
+        const SmiDrawer = mod.SmiDrawer || mod.default?.SmiDrawer;
+        if (!SmiDrawer) throw new Error("SmiDrawer not found");
+
+        const drawer = new SmiDrawer({ width, height });
         drawer.draw(smiles, canvasRef.current!, "light");
       } catch {
         if (!cancelled) setError(true);

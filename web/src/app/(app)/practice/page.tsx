@@ -106,7 +106,6 @@ export default function PracticePage() {
         sessionsRemaining={remainingSessions}
         onToggleFlag={togglePracticeFlag}
         onStartLearnQueue={startLearnQueue}
-        onRetryFlagged={retryFlaggedProblems}
         onUpgradeNeeded={showUpgrade}
         onReset={reset}
       />
