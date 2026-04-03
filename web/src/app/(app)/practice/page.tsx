@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
@@ -10,10 +10,10 @@ import { session as sessionApi } from "@/lib/api";
 import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
-import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
-import { AttachWork } from "@/components/ui/attach-work";
+import { MathText } from "@/components/shared/math-text";
+import { cn } from "@/lib/utils";
 import { PracticeSummary } from "./_components/practice-summary";
 
 export default function PracticePage() {
@@ -36,11 +36,21 @@ export default function PracticePage() {
   const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
 
   const { fire: fireConfetti } = useConfetti();
-  const [answer, setAnswer] = useState("");
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
-  const [showNudge, setShowNudge] = useState(false);
-  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+
+  // Build MC choices — must be before early returns (rules of hooks)
+  const currentProblem = practiceBatch?.problems[practiceBatch.currentIndex];
+  const choices = useMemo(() => {
+    if (!currentProblem?.answer || !currentProblem.distractors?.length) return [];
+    const all = [currentProblem.answer, ...currentProblem.distractors.slice(0, 3)];
+    const seed = (currentProblem.question.length + (practiceBatch?.currentIndex ?? 0)) | 0;
+    return all.sort((a, b) => {
+      const ha = Array.from(a).reduce((h, c) => h * 31 + c.charCodeAt(0) + seed, 0);
+      const hb = Array.from(b).reduce((h, c) => h * 31 + c.charCodeAt(0) + seed, 0);
+      return ha - hb;
+    });
+  }, [currentProblem, practiceBatch?.currentIndex]);
 
   useRedirectOnIdle(phase, practiceBatch);
   useErrorToast(phase, error);
@@ -62,30 +72,9 @@ export default function PracticePage() {
     }
   }, [phase, practiceBatch, fireConfetti]);
 
-  const doSubmit = useCallback(async () => {
-    if (!answer.trim() || !practiceBatch) return;
-    const idx = practiceBatch.currentIndex;
-    const text = answer.trim();
-
-    // Fire work diagnosis in background if image attached
-    if (attachedImage) {
-      submitPracticeWork(idx, attachedImage, text, subject);
-    }
-
-    await submitPracticeAnswer(text, subject);
-    setAnswer("");
-    setAttachedImage(null);
-    setShowNudge(false);
-  }, [answer, attachedImage, practiceBatch, submitPracticeAnswer, submitPracticeWork, subject]);
-
-  function handleSubmitOrNudge() {
-    if (!answer.trim()) return;
-    // Nudge once if no work attached and nudge not yet dismissed
-    if (!attachedImage && !nudgeDismissed) {
-      setShowNudge(true);
-      return;
-    }
-    doSubmit();
+  async function handleChoiceSelect(choice: string) {
+    setSelectedChoice(choices.indexOf(choice));
+    await submitPracticeAnswer(choice, subject);
   }
 
   if (phase === "loading" || !practiceBatch) {
@@ -149,16 +138,16 @@ export default function PracticePage() {
       </div>
 
       <Card variant="elevated" className="space-y-4">
-        <p className="text-base font-medium text-text-primary">
-          {current.question}
-        </p>
+        <div className="text-base font-medium text-text-primary">
+          <MathText text={current.question} />
+        </div>
 
         {feedback === "correct" ? (
           <div className="space-y-3">
             <div className="rounded-[--radius-md] p-3 bg-success-light border border-success-border">
               <p className="text-sm font-medium">Correct!</p>
             </div>
-            <Button variant="secondary" size="sm" onClick={nextPracticeProblem}>
+            <Button variant="secondary" size="sm" onClick={() => { setSelectedChoice(null); nextPracticeProblem(); }}>
               {practiceBatch.currentIndex < practiceBatch.problems.length - 1
                 ? "Next Problem"
                 : "See Results"}
@@ -166,38 +155,52 @@ export default function PracticePage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Wrong answer feedback */}
             {feedback === "wrong" && (
               <div className="rounded-[--radius-md] p-3 bg-error-light border border-error-border">
                 <p className="text-sm font-medium">Not quite, try again!</p>
               </div>
             )}
 
-            <div className="flex gap-2">
-              <Input
-                placeholder="Enter your answer..."
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSubmitOrNudge();
-                  }
-                }}
-                disabled={isThinking}
-                className="flex-1"
-              />
-              <Button
-                onClick={handleSubmitOrNudge}
-                loading={isThinking}
-                disabled={!answer.trim()}
-                size="sm"
-              >
-                Answer
-              </Button>
-            </div>
+            {/* MC choices */}
+            {choices.length > 0 ? (
+              <div className="space-y-2">
+                {choices.map((choice, i) => {
+                  const isSelected = selectedChoice === i;
+                  const isWrong = isSelected && feedback === "wrong";
+                  const isSvg = choice.trim().startsWith("<svg");
 
-            {/* Skip button */}
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => handleChoiceSelect(choice)}
+                      disabled={isThinking}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-all",
+                        isWrong && "border-error bg-error-light text-error",
+                        !isWrong && "border-border bg-surface text-text-primary hover:border-primary hover:bg-primary-bg",
+                        isThinking && !isSelected && "opacity-50",
+                      )}
+                    >
+                      <span className={cn(
+                        "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                        isWrong && "bg-error text-white",
+                        !isWrong && "bg-input-bg text-text-secondary",
+                      )}>
+                        {isWrong ? "\u2717" : String.fromCharCode(65 + i)}
+                      </span>
+                      {isSvg ? (
+                        <div className="rounded bg-white p-2" dangerouslySetInnerHTML={{ __html: choice }} />
+                      ) : (
+                        <MathText text={choice} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">Loading choices...</p>
+            )}
+
             <button
               onClick={skipPracticeProblem}
               disabled={isThinking}
@@ -205,27 +208,6 @@ export default function PracticePage() {
             >
               Skip this problem
             </button>
-
-            {/* Attach work */}
-            <AttachWork
-              attached={!!attachedImage}
-              onAttach={(base64) => { setAttachedImage(base64); setShowNudge(false); }}
-              isPro={isPro}
-              onUpgradeNeeded={() => showUpgrade("work_diagnosis", "Get detailed feedback on your work — step-by-step accuracy analysis and tailored learning. Upgrade to Pro to unlock.")}
-            />
-
-            {/* Work nudge */}
-            {showNudge && (
-              <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg p-3 space-y-2">
-                <p className="text-sm font-medium text-primary">Attach your work?</p>
-                <p className="text-xs text-text-secondary">
-                  You&apos;ll get feedback on exactly where you went wrong.
-                </p>
-                <Button size="sm" variant="secondary" onClick={() => { setShowNudge(false); setNudgeDismissed(true); doSubmit(); }}>
-                  Skip &amp; submit without work
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </Card>

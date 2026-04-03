@@ -9,6 +9,7 @@ import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
 import { ImageUpload } from "@/components/shared/image-upload";
+import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,6 @@ function LearnPageContent() {
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
-  const [multipleChoice, setMultipleChoice] = useState(true);
 
   useEffect(() => {
     setSubject(subject);
@@ -129,7 +129,7 @@ function LearnPageContent() {
       } else {
         const generateCount = examType === "generate_similar" ? problems.length : 0;
         const timeLimit = untimed ? null : timeLimitMinutes;
-        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, multipleChoice);
+        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, true);
         router.push(`/mock-test?subject=${subject}`);
       }
     } catch (err) {
@@ -284,30 +284,6 @@ function LearnPageContent() {
               )}
             </div>
 
-            {/* Answer format */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-muted">Answers:</span>
-              <div className="flex rounded-full border border-border bg-surface p-0.5">
-                <button
-                  onClick={() => setMultipleChoice(true)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                    multipleChoice ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
-                  )}
-                >
-                  Multiple choice
-                </button>
-                <button
-                  onClick={() => setMultipleChoice(false)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                    !multipleChoice ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
-                  )}
-                >
-                  Free response
-                </button>
-              </div>
-            </div>
           </div>
         </Card>
         </motion.div>
@@ -396,9 +372,9 @@ function LearnPageContent() {
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
-                    {item.text}
-                  </p>
+                  <div className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
+                    <MathText text={item.text} />
+                  </div>
                   {item.image && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img

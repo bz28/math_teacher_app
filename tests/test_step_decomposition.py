@@ -22,7 +22,7 @@ class TestParseDecomposition:
             ],
             "final_answer": "x = 3",
         }
-        steps, final_answer, distractors = _parse_decomposition(data)
+        steps, final_answer, distractors, answer_type = _parse_decomposition(data)
         assert len(steps) == 2
         assert steps[0] == {"title": "", "description": "Subtract 6 from both sides to get 2x = 6"}
         assert final_answer == "x = 3"
@@ -34,7 +34,7 @@ class TestParseDecomposition:
             "final_answer": "x = 3",
             "distractors": ["x = 2", "x = 4", "x = -3"],
         }
-        steps, final_answer, distractors = _parse_decomposition(data)
+        steps, final_answer, distractors, answer_type = _parse_decomposition(data)
         assert len(steps) == 1
         assert final_answer == "x = 3"
         assert distractors == ["x = 2", "x = 4", "x = -3"]

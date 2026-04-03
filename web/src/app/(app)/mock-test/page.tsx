@@ -15,6 +15,7 @@ import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
 import { cn } from "@/lib/utils";
+import { MathText } from "@/components/shared/math-text";
 
 export default function MockTestPage() {
   const router = useRouter();
@@ -190,9 +191,9 @@ export default function MockTestPage() {
               Question {mockTest.currentIndex + 1} of{" "}
               {mockTest.questions.length}
             </Badge>
-            <p className="mt-3 text-base font-medium text-text-primary">
-              {current.question}
-            </p>
+            <div className="mt-3 text-base font-medium text-text-primary">
+              <MathText text={current.question} />
+            </div>
           </div>
           <button
             onClick={() => toggleMockTestFlag(mockTest.currentIndex)}
@@ -232,7 +233,7 @@ export default function MockTestPage() {
                         : "border-border-light bg-surface text-text-primary hover:border-primary/30",
                     )}
                   >
-                    {choice}
+                    <MathText text={choice} />
                   </button>
                 ));
               })()}

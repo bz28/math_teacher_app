@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
 import { CheckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
+import { MathText } from "@/components/shared/math-text";
 import type { LearnQueue } from "@/stores/learn";
 
 interface LearnSummaryProps {
@@ -35,7 +36,7 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
         {learnQueue.problems.map((problem, i) => (
           <div key={i} className="flex items-center gap-3 rounded-[--radius-md] border border-success-border bg-success-light px-4 py-3">
             <CheckIcon className="h-5 w-5 flex-shrink-0 text-success" />
-            <p className="flex-1 text-sm font-medium text-text-primary">{problem}</p>
+            <div className="flex-1 text-sm font-medium text-text-primary"><MathText text={problem} /></div>
             <button
               onClick={() => onToggleFlag(i)}
               className={cn(

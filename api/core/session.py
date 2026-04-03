@@ -14,7 +14,6 @@ from api.core.constants import (
     MAX_STUDENT_MESSAGES,
     RECENT_EXCHANGES_LIMIT,
 )
-from api.core.practice import check_answer
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject
 from api.core.tutor import completed_chat, step_chat
@@ -100,6 +99,7 @@ async def create_session(
         # Attach final_answer and shuffled multiple-choice to the last step
         last = steps_data[-1]
         last["final_answer"] = decomposition.final_answer
+        last["answer_type"] = decomposition.answer_type
         if decomposition.distractors:
             choices = [decomposition.final_answer] + decomposition.distractors[:3]
             random.shuffle(choices)
@@ -235,11 +235,8 @@ async def _respond_practice_mode(
 
     _add_exchange(session, "student", student_response)
 
-    is_correct = await check_answer(
-        session.problem, correct_answer, student_response,
-        session_id=str(session.id), user_id=str(session.user_id),
-        subject=getattr(session, "subject", Subject.MATH),
-    )
+    # MC: direct string comparison (no LLM call needed)
+    is_correct = student_response.strip() == correct_answer.strip()
 
     if is_correct:
         return await _complete_session(db, session)

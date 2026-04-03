@@ -66,7 +66,10 @@ export function ImageUpload({
         }
         onExtractComplete?.();
         setResult(res);
-        setCropImages(new Array(res.problems.length).fill(base64));
+        // Attach original image only when single problem WITH a diagram (bracket description).
+        // No diagram = pure text = image adds no value. Multiple problems = skip (full page).
+        const hasDiagram = res.problems.length === 1 && res.problems[0].includes("[");
+        setCropImages(new Array(res.problems.length).fill(hasDiagram ? base64 : undefined));
         setSelected(new Array(res.problems.length).fill(true));
         setPhase("upload");
         setImageBase64(null);

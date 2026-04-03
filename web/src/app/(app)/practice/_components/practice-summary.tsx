@@ -91,9 +91,9 @@ export function PracticeSummary({
               </span>
               <div className="flex-1 min-w-0 space-y-0.5">
                 <div className="text-sm font-medium text-text-primary"><MathText text={result.problem} /></div>
-                <p className="text-xs text-text-secondary">
-                  {result.userAnswer === "(skipped)" ? "Skipped" : `Your answer: ${result.userAnswer}`}
-                </p>
+                <div className="text-xs text-text-secondary">
+                  {result.userAnswer === "(skipped)" ? "Skipped" : <span>Your answer: <MathText text={result.userAnswer} /></span>}
+                </div>
                 <DiagnosisTeaser diagnosis={workSubmissions[i]} />
               </div>
               <button

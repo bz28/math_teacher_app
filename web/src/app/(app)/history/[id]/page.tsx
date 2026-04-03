@@ -163,9 +163,9 @@ export default function SessionReviewPage({
                         {step.title && (
                           <p className="text-xs font-bold text-primary">{step.title}</p>
                         )}
-                        <p className="text-sm font-medium text-text-primary">
+                        <div className="text-sm font-medium text-text-primary">
                           <MathText text={step.description} />
-                        </p>
+                        </div>
                         {step.final_answer && (
                           <p className="mt-1 text-sm text-text-secondary">
                             &rarr; {step.final_answer}

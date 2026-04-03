@@ -252,14 +252,14 @@ export default function LearnSessionPage() {
                     <p className="text-xs font-semibold text-success">
                       Step {stepNum}{step.title ? ` — ${step.title}` : ""}
                     </p>
-                    <p
+                    <div
                       className={cn(
                         "text-sm text-text-secondary",
                         !expanded && "line-clamp-1",
                       )}
                     >
                       <MathText text={step.description} />
-                    </p>
+                    </div>
                     {expanded && step.final_answer && (
                       <p className="mt-1 text-sm font-medium text-text-primary">
                         &rarr; {step.final_answer}
@@ -387,9 +387,9 @@ export default function LearnSessionPage() {
                   <p className="text-xs font-semibold text-text-muted">
                     Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
                   </p>
-                  <p className="mt-1 text-base leading-relaxed text-text-primary">
+                  <div className="mt-1 text-base leading-relaxed text-text-primary">
                     {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
-                  </p>
+                  </div>
                 </motion.div>
               </div>
             </Card>
