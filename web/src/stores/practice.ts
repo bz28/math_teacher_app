@@ -225,19 +225,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         correctAnswer = resolved;
       }
 
-      // Skip API call if exact match (avoids unnecessary LLM equivalence check)
-      let is_correct: boolean;
-      if (answer.trim() === correctAnswer.trim()) {
-        is_correct = true;
-      } else {
-        const resp: PracticeCheckResponse = await practiceApi.check({
-          question: current.question,
-          correct_answer: correctAnswer,
-          user_answer: answer,
-          subject,
-        });
-        is_correct = resp.is_correct;
-      }
+      // MC: direct string comparison (no LLM call needed)
+      const is_correct = answer.trim() === correctAnswer.trim();
 
       const newFirstAttempt = [...practiceBatch.firstAttemptCorrect];
       if (newFirstAttempt[idx] === null) newFirstAttempt[idx] = is_correct;
