@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { MOCK_ASSIGNMENTS, type MockAssignment } from "@/components/teacher/assignments-data";
+import { CreateAssignmentModal } from "@/components/teacher/create-assignment-modal";
 
 type FilterCourse = string | "all";
 type FilterType = "all" | "homework" | "quiz" | "test";
 type FilterStatus = "all" | "published" | "grading" | "completed" | "scheduled" | "draft";
 
 export default function AssignmentsPage() {
-  const [assignments] = useState<MockAssignment[]>(MOCK_ASSIGNMENTS);
+  const [assignments, setAssignments] = useState<MockAssignment[]>(MOCK_ASSIGNMENTS);
   const [filterCourse, setFilterCourse] = useState<FilterCourse>("all");
+  const [showCreate, setShowCreate] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
 
@@ -32,9 +34,8 @@ export default function AssignmentsPage() {
           <p className="mt-0.5 text-sm text-text-muted">Homework, quizzes, and tests across all courses.</p>
         </div>
         <button
-          disabled
-          title="Coming in next commit"
-          className="rounded-[--radius-sm] bg-primary px-4 py-2 text-xs font-semibold text-white opacity-50 cursor-not-allowed"
+          onClick={() => setShowCreate(true)}
+          className="rounded-[--radius-sm] bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-dark"
         >
           + New Assignment
         </button>
@@ -101,6 +102,32 @@ export default function AssignmentsPage() {
           ))
         )}
       </div>
+
+      {/* Create assignment modal */}
+      {showCreate && (
+        <CreateAssignmentModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(data) => {
+            const newAssignment: MockAssignment = {
+              id: `a-new-${Date.now()}`,
+              courseId: "c1",
+              courseName: "Algebra I",
+              title: data.title,
+              type: data.type,
+              status: "published",
+              dueAt: data.dueDate || null,
+              sectionNames: data.sections.length > 0 ? data.sections.map((_, i) => ["Period 3", "Period 5", "Block A"][i] || `Section ${i + 1}`) : ["Period 3"],
+              totalStudents: data.sections.length * 20,
+              submitted: 0,
+              graded: 0,
+              avgScore: null,
+              createdAt: new Date().toISOString().split("T")[0],
+            };
+            setAssignments([newAssignment, ...assignments]);
+            setShowCreate(false);
+          }}
+        />
+      )}
     </div>
   );
 }
