@@ -436,14 +436,12 @@ async def test_practice_mode_intermediate_step(client: AsyncClient, auth_token: 
         )
     session_id = create_resp.json()["id"]
 
-    # Submit intermediate step (2x = 6) — not the final answer
-    with patch("api.core.session.check_answer", new_callable=AsyncMock) as mock_check:
-        mock_check.return_value = False
-        resp = await client.post(
-            f"/v1/session/{session_id}/respond",
-            json={"student_response": "2x = 6"},
-            headers=_auth_headers(auth_token),
-        )
+    # Submit intermediate step (2x = 6) — not the final answer (direct string mismatch)
+    resp = await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "2x = 6"},
+        headers=_auth_headers(auth_token),
+    )
     data = resp.json()
     assert data["action"] == "error"
     assert data["is_correct"] is False
@@ -462,14 +460,12 @@ async def test_practice_mode_wrong_answer(client: AsyncClient, auth_token: str) 
         )
     session_id = create_resp.json()["id"]
 
-    # Submit wrong answer — no symbolic match, LLM also says wrong
-    with patch("api.core.session.check_answer", new_callable=AsyncMock) as mock_check:
-        mock_check.return_value = False
-        resp = await client.post(
-            f"/v1/session/{session_id}/respond",
-            json={"student_response": "x = 99"},
-            headers=_auth_headers(auth_token),
-        )
+    # Submit wrong answer — direct string mismatch
+    resp = await client.post(
+        f"/v1/session/{session_id}/respond",
+        json={"student_response": "x = 99"},
+        headers=_auth_headers(auth_token),
+    )
     data = resp.json()
     assert data["action"] == "error"
     assert data["is_correct"] is False

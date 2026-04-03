@@ -39,6 +39,19 @@ export default function PracticePage() {
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
+  // Build MC choices — must be before early returns (rules of hooks)
+  const currentProblem = practiceBatch?.problems[practiceBatch.currentIndex];
+  const choices = useMemo(() => {
+    if (!currentProblem?.answer || !currentProblem.distractors?.length) return [];
+    const all = [currentProblem.answer, ...currentProblem.distractors.slice(0, 3)];
+    const seed = (currentProblem.question.length + (practiceBatch?.currentIndex ?? 0)) | 0;
+    return all.sort((a, b) => {
+      const ha = Array.from(a).reduce((h, c) => h * 31 + c.charCodeAt(0) + seed, 0);
+      const hb = Array.from(b).reduce((h, c) => h * 31 + c.charCodeAt(0) + seed, 0);
+      return ha - hb;
+    });
+  }, [currentProblem, practiceBatch?.currentIndex]);
+
   useRedirectOnIdle(phase, practiceBatch);
   useErrorToast(phase, error);
 
@@ -105,19 +118,6 @@ export default function PracticePage() {
   const isThinking = phase === "thinking";
   const feedback = practiceBatch.currentFeedback;
   const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
-
-  // Build MC choices: correct answer + distractors, shuffled deterministically per index
-  const choices = useMemo(() => {
-    if (!current.answer || !current.distractors?.length) return [];
-    const all = [current.answer, ...current.distractors.slice(0, 3)];
-    // Deterministic shuffle based on question text (same order on re-render)
-    const seed = current.question.length + practiceBatch.currentIndex;
-    return all.sort((a, b) => {
-      const ha = Array.from(a).reduce((h, c) => h * 31 + c.charCodeAt(0) + seed, 0);
-      const hb = Array.from(b).reduce((h, c) => h * 31 + c.charCodeAt(0) + seed, 0);
-      return ha - hb;
-    });
-  }, [current, practiceBatch.currentIndex]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
