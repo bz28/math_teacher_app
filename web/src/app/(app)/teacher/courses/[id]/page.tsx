@@ -7,6 +7,8 @@ import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDe
 import { Button, useToast } from "@/components/ui";
 import { MaterialsTab } from "@/components/teacher/materials-tab";
 import { SectionMaterials, type VisibilityState } from "@/components/teacher/section-materials";
+import { MOCK_ASSIGNMENTS, type MockAssignment } from "@/components/teacher/assignments-data";
+import { GradingView } from "@/components/teacher/grading-view";
 
 // Mock units/docs for visibility (same seed as materials-tab — shared reference)
 const MOCK_UNITS = [
@@ -51,6 +53,7 @@ export default function CourseDetailPage() {
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [sectionSubTab, setSectionSubTab] = useState<"students" | "materials">("students");
+  const [gradingAssignment, setGradingAssignment] = useState<MockAssignment | null>(null);
 
   // Visibility state (mock — shared between Sections and Materials tabs)
   const [visibility, setVisibility] = useState<VisibilityState>({
@@ -522,21 +525,73 @@ export default function CourseDetailPage() {
 
         {/* Assignments tab */}
         {tab === "assignments" && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-bg text-primary">
-              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-              </svg>
+          gradingAssignment ? (
+            <GradingView assignment={gradingAssignment} onBack={() => setGradingAssignment(null)} />
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-text-primary">Assignments</h2>
+              </div>
+              <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                Preview mode — showing sample assignments for this course.
+              </div>
+              {(() => {
+                const courseAssignments = MOCK_ASSIGNMENTS.filter((a) => a.courseId === "c1");
+                if (courseAssignments.length === 0) {
+                  return (
+                    <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
+                      <p className="text-sm font-semibold text-text-primary">No assignments yet</p>
+                      <p className="mt-1 text-xs text-text-muted">Create assignments from the Assignments page.</p>
+                    </div>
+                  );
+                }
+                return courseAssignments.map((a) => {
+                  const progressPct = a.totalStudents > 0 ? Math.round((a.submitted / a.totalStudents) * 100) : 0;
+                  const pending = a.submitted - a.graded;
+                  const typeIcon = a.type === "test" || a.type === "quiz" ? "📋" : "📝";
+                  const statusColors: Record<string, string> = {
+                    draft: "bg-gray-100 text-gray-600 dark:bg-gray-500/10",
+                    published: "bg-blue-50 text-blue-600 dark:bg-blue-500/10",
+                    grading: "bg-amber-50 text-amber-600 dark:bg-amber-500/10",
+                    completed: "bg-green-50 text-green-600 dark:bg-green-500/10",
+                    scheduled: "bg-purple-50 text-purple-600 dark:bg-purple-500/10",
+                  };
+                  return (
+                    <div
+                      key={a.id}
+                      onClick={() => setGradingAssignment(a)}
+                      className="cursor-pointer rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-colors hover:border-primary/30"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span>{typeIcon}</span>
+                          <span className="text-sm font-bold text-text-primary">{a.title}</span>
+                        </div>
+                        <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusColors[a.status] ?? ""}`}>
+                          {a.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-text-muted">
+                        {a.sectionNames.join(", ")} · {a.type}{a.dueAt ? ` · Due ${a.dueAt}` : ""}
+                      </div>
+                      {a.status !== "scheduled" && a.status !== "draft" && (
+                        <div className="mt-2">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
+                            <span>{a.submitted}/{a.totalStudents} submitted</span>
+                            <span>{a.graded} graded</span>
+                            {pending > 0 && <span className="font-semibold text-amber-600">{pending} pending</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
-            <h3 className="text-lg font-bold text-text-primary">Assignments — Coming Soon</h3>
-            <span className="mt-2 inline-flex items-center rounded-[--radius-pill] bg-amber-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
-              Coming Soon
-            </span>
-            <p className="mt-3 max-w-sm text-sm text-text-secondary">
-              Create homework and tests for your students. Upload worksheets or let AI generate problems from your course materials.
-            </p>
-          </div>
+          )
         )}
 
         {/* Settings tab */}
