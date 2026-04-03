@@ -285,7 +285,7 @@ export default function LearnSessionPage() {
         <Card variant="elevated" className="mb-6 border-success-border bg-success-light">
           <p className="text-sm font-bold text-success">Answer</p>
           <div className="mt-2 text-lg font-semibold text-text-primary">
-            <MathText text={steps[steps.length - 1].final_answer} />
+            <MathText text={steps[steps.length - 1].final_answer ?? ""} />
           </div>
         </Card>
       )}
