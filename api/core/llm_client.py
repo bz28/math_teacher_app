@@ -226,7 +226,7 @@ async def call_claude_json(
                 max_tokens=max_tokens,
                 system=_system_with_cache(system_prompt),
                 messages=[{"role": "user", "content": user_message}],
-                timeout=30.0,
+                timeout=90.0,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
             first_block = response.content[0]
@@ -308,7 +308,7 @@ async def call_claude_vision(
             model=use_model,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": user_content}],
-            timeout=30.0,
+            timeout=90.0,
         )
         latency_ms = round((time.monotonic() - start) * 1000, 2)
         first_block = response.content[0]
