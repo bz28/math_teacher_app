@@ -20,8 +20,7 @@ const studentNavItems = [
 const teacherNavItems = [
   { label: "Dashboard", href: "/teacher", icon: DashboardIcon, exact: true },
   { label: "Courses", href: "/teacher/courses", icon: CoursesIcon },
-  { label: "Homework", href: "/teacher/homework", icon: HomeworkIcon },
-  { label: "Tests", href: "/teacher/tests", icon: TestsIcon },
+  { label: "Assignments", href: "/teacher/assignments", icon: AssignmentsIcon },
   { label: "Analytics", href: "/teacher/analytics", icon: AnalyticsIcon },
 ];
 
@@ -335,20 +334,11 @@ function CoursesIcon({ active }: { active: boolean }) {
   );
 }
 
-function HomeworkIcon({ active }: { active: boolean }) {
+function AssignmentsIcon({ active }: { active: boolean }) {
   return (
     <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
       <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-    </svg>
-  );
-}
-
-function TestsIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 11l3 3L22 4" />
-      <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
     </svg>
   );
 }
