@@ -356,6 +356,13 @@ export const auth = {
       body: JSON.stringify({ token, password }),
     });
   },
+
+  deleteAccount(password: string) {
+    return apiFetch<void>("/auth/account", {
+      method: "DELETE",
+      body: JSON.stringify({ password }),
+    });
+  },
 };
 
 // ── Session endpoints ──
