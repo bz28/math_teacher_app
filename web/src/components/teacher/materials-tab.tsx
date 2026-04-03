@@ -931,6 +931,18 @@ function DocRow({
                 <div className="my-1 border-t border-border-light" />
               </>
             )}
+            {onVisClick && (
+              <>
+                <button
+                  onClick={(e) => { onVisClick(doc.id, e.currentTarget); }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-text-secondary hover:bg-primary-bg/50"
+                >
+                  <EyeIcon />
+                  Visibility...
+                </button>
+                <div className="my-1 border-t border-border-light" />
+              </>
+            )}
             <button
               onClick={() => onDelete(doc.id)}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
