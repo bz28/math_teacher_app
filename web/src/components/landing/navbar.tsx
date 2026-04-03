@@ -1,34 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogoMark } from "@/components/shared/logo-mark";
 
-const studentNavLinks = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Subjects", href: "#subjects" },
+const featureLinks = [
+  { label: "Step-by-Step Learning", href: "#step-by-step" },
+  { label: "Chat With Your Tutor", href: "#chat-tutor" },
+  { label: "Unlimited Practice", href: "#practice" },
 ];
 
 const teacherNavLinks = [
   { label: "How It Helps", href: "#outcomes" },
-  { label: "How It Works", href: "#how-it-works" },
   { label: "Contact", href: "#contact" },
 ];
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [featuresOpen, setFeaturesOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const isTeacherPage = pathname === "/teachers";
 
-  const navLinks = isTeacherPage ? teacherNavLinks : studentNavLinks;
-  const toggleLabel = isTeacherPage ? "For Students" : "For Schools";
-  const toggleHref = isTeacherPage ? "/" : "/teachers";
   const ctaLabel = isTeacherPage ? "Request a Demo" : "Get Started";
   const ctaHref = isTeacherPage ? "#contact" : "/register";
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setFeaturesOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   return (
     <nav className="sticky top-0 z-40 border-b border-border-light/50 bg-surface/80 backdrop-blur-lg">
@@ -43,26 +52,81 @@ export function Navbar() {
 
         {/* Desktop links */}
         <div className="hidden items-center gap-8 md:flex">
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
-            >
-              {link.label}
-            </a>
-          ))}
+          {isTeacherPage ? (
+            teacherNavLinks.map((link) =>
+              link.href.startsWith("#") ? (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+                >
+                  {link.label}
+                </Link>
+              )
+            )
+          ) : (
+            <>
+              {/* Features dropdown */}
+              <div ref={dropdownRef} className="relative">
+                <button
+                  onClick={() => setFeaturesOpen((o) => !o)}
+                  className="flex items-center gap-1 text-sm font-medium text-text-secondary transition-colors hover:text-primary focus:outline-none"
+                >
+                  Features
+                  <svg
+                    className={`h-3.5 w-3.5 transition-transform ${featuresOpen ? "rotate-180" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                <AnimatePresence>
+                  {featuresOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute left-0 top-full mt-2 w-56 rounded-[--radius-md] border border-border-light bg-surface py-2 shadow-lg"
+                    >
+                      {featureLinks.map((link) => (
+                        <a
+                          key={link.href}
+                          href={link.href}
+                          onClick={() => setFeaturesOpen(false)}
+                          className="block px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-primary-bg hover:text-primary"
+                        >
+                          {link.label}
+                        </a>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              <Link
+                href="/teachers"
+                className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+              >
+                For Schools
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Desktop CTAs */}
         <div className="hidden items-center gap-3 md:flex">
           <ThemeToggle />
-          <Link
-            href={toggleHref}
-            className="rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-4 py-1.5 text-sm font-semibold text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"
-          >
-            {toggleLabel}
-          </Link>
           <Link
             href="/login"
             className="text-sm font-semibold text-text-secondary transition-colors hover:text-primary"
@@ -113,33 +177,50 @@ export function Navbar() {
             className="overflow-hidden border-t border-border-light md:hidden"
           >
             <div className="flex flex-col gap-1 px-6 py-4">
-              {navLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
-                >
-                  {link.label}
-                </a>
-              ))}
-              <Link
-                href={toggleHref}
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-[--radius-sm] px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-bg"
-              >
-                {isTeacherPage ? (
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
-                  </svg>
-                )}
-                {toggleLabel}
-              </Link>
+              {isTeacherPage ? (
+                teacherNavLinks.map((link) =>
+                  link.href.startsWith("#") ? (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                    >
+                      {link.label}
+                    </Link>
+                  )
+                )
+              ) : (
+                <>
+                  <p className="px-3 py-1 text-xs font-semibold text-text-muted">Features</p>
+                  {featureLinks.map((link) => (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                  <Link
+                    href="/teachers"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                  >
+                    For Schools
+                  </Link>
+                </>
+              )}
               <hr className="my-2 border-border-light" />
               <Link
                 href="/login"

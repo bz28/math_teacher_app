@@ -13,37 +13,27 @@ const PAIN_POINTS = [
   "Staring at a pile of papers that won't grade themselves",
 ];
 
-const OUTCOMES = [
+const FEATURES = [
   {
+    icon: TutorIcon,
     title: "Every student gets a personal tutor",
     description: "AI breaks problems into steps and walks each student through at their own pace. No one gets left behind, no one gets bored.",
-    icon: TutorIcon,
   },
   {
-    title: "You see who's struggling — and on what",
-    description: "Student sessions are tracked to your class. You'll know exactly where to focus your time when you walk in Monday morning.",
     icon: InsightIcon,
-    comingSoon: true,
+    title: "See who's struggling — and on what",
+    description: "Student sessions are tracked to your class. You'll know exactly where to focus your time when you walk in Monday morning.",
   },
   {
+    icon: GradeIcon,
     title: "Homework grades itself",
     description: "Students photograph their work, AI grades it step-by-step. You review, override where needed, and move on.",
-    icon: GradeIcon,
-    comingSoon: true,
   },
   {
+    icon: TestIcon,
     title: "Tests generated in seconds",
     description: "Pick a topic, set the difficulty. AI creates a test with answer key and variants so no two students get the same version.",
-    icon: TestIcon,
-    comingSoon: true,
   },
-];
-
-const STEPS = [
-  { step: "1", title: "We set up your school", description: "Tell us about your school. We create your account, invite your teachers, and handle the setup." },
-  { step: "2", title: "Create courses and sections", description: "Organize your classes — Algebra I Period 3, Chemistry Block A. Just like your schedule." },
-  { step: "3", title: "Students join with a code", description: "Share a 6-character code. Students type it in and they're enrolled. No emails, no paperwork." },
-  { step: "4", title: "AI tutors, you teach", description: "Students get step-by-step help on demand. You see the data and focus on what the AI can't do — inspire." },
 ];
 
 export default function TeachersPage() {
@@ -74,29 +64,24 @@ export default function TeachersPage() {
     <>
       <Navbar />
       <main>
-        {/* Hero */}
-        <section className="relative overflow-hidden px-6 pb-20 pt-16 md:pb-28 md:pt-24">
-          <div className="pointer-events-none absolute inset-0 -top-40 overflow-hidden">
-            <div className="absolute left-1/2 top-0 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-3xl" />
-            <div className="absolute left-1/3 top-10 h-[400px] w-[400px] rounded-full bg-gradient-to-br from-primary-light/8 to-transparent blur-3xl" />
-          </div>
-
+        {/* ── Hero ── */}
+        <section className="relative overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6 pb-20 pt-14 md:pb-28 md:pt-20">
           <div className="relative mx-auto max-w-4xl text-center">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="mb-6 inline-flex items-center gap-2 rounded-[--radius-pill] border border-primary/20 bg-primary-bg px-4 py-1.5 text-sm font-semibold text-primary"
+              className="mb-5 inline-flex items-center gap-2 rounded-[--radius-pill] border border-primary/20 bg-primary-bg px-4 py-1.5 text-sm font-semibold text-primary"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              For Schools & Teachers
+              For Schools &amp; Teachers
             </motion.div>
 
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-5xl font-extrabold leading-tight tracking-tight text-text-primary md:text-6xl"
+              className="text-4xl font-black leading-[1.1] tracking-tight text-text-primary sm:text-5xl md:text-6xl"
             >
               AI-Powered Tutoring{" "}
               <span className="bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent">
@@ -108,7 +93,7 @@ export default function TeachersPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35 }}
-              className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-text-secondary md:text-xl"
+              className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-text-secondary"
             >
               A personal AI tutor for every student in your classroom:
               step-by-step guidance at every student&rsquo;s pace, automated
@@ -120,14 +105,16 @@ export default function TeachersPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
+              className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
             >
               <a
                 href="#contact"
-                className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] bg-gradient-to-r from-primary to-primary-light px-8 text-base font-bold text-white shadow-md transition-shadow hover:shadow-lg"
+                className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] bg-primary px-8 text-base font-bold text-white transition-colors hover:bg-primary-dark"
               >
                 Request a Demo
-                <ArrowDown />
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12l7 7 7-7" />
+                </svg>
               </a>
               <a
                 href="#outcomes"
@@ -139,134 +126,95 @@ export default function TeachersPage() {
           </div>
         </section>
 
-        {/* The Problem */}
-        <section className="bg-bg-secondary px-6 py-20">
-          <div className="mx-auto max-w-3xl text-center">
-            <motion.h2
+        {/* ── Pain Points ── */}
+        <section className="px-6 py-20 md:py-24">
+          <div className="mx-auto max-w-3xl">
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl"
+              className="text-center"
             >
-              You became a teacher to teach.
-              <br />
-              <span className="text-text-muted">Not to drown in paperwork.</span>
-            </motion.h2>
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
+                You became a teacher to teach.
+              </h2>
+              <p className="mt-2 text-2xl font-extrabold tracking-tight text-text-muted md:text-3xl">
+                Not to drown in paperwork.
+              </p>
+            </motion.div>
 
-            <div className="mt-10 space-y-3 text-left">
+            <div className="mx-auto mt-10 max-w-xl space-y-3">
               {PAIN_POINTS.map((point, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, x: -10 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: i * 0.08 }}
-                  className="flex items-center gap-3 rounded-[--radius-lg] border border-border-light bg-surface px-5 py-3.5"
+                  transition={{ delay: i * 0.07 }}
+                  className="flex items-center gap-3 rounded-[--radius-md] border-l-2 border-text-muted/30 bg-card/30 px-5 py-3"
                 >
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-500/10">
-                    <svg className="h-3.5 w-3.5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </div>
-                  <span className="text-sm font-medium text-text-primary">{point}</span>
+                  <span className="text-base leading-relaxed text-text-secondary">{point}</span>
                 </motion.div>
               ))}
             </div>
 
-            <motion.p
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="mt-8 text-lg font-semibold text-primary"
+              transition={{ delay: 0.3 }}
+              className="mt-10 text-center"
             >
-              What if AI handled the repetitive parts?
-            </motion.p>
+              <p className="text-xl font-bold text-primary md:text-2xl">
+                What if AI handled the repetitive parts?
+              </p>
+              <div className="mx-auto mt-3 h-px w-16 bg-primary/30" />
+            </motion.div>
           </div>
         </section>
 
-        {/* Outcomes */}
-        <section id="outcomes" className="relative px-6 py-20">
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute left-1/2 top-0 h-[300px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/5 to-transparent blur-3xl" />
-          </div>
-          <div className="relative mx-auto max-w-5xl">
-            <div className="text-center">
+        {/* ── What Teachers Get ── */}
+        <section id="outcomes" className="bg-gradient-to-b from-transparent via-primary-bg/20 to-transparent px-6 py-20 md:py-24">
+          <div className="mx-auto max-w-4xl">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center"
+            >
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
                 What Teachers Get
               </h2>
               <p className="mt-3 text-text-secondary">
                 Less busywork. More impact.
               </p>
-            </div>
+            </motion.div>
 
             <div className="mt-14 grid gap-6 md:grid-cols-2">
-              {OUTCOMES.map((o, i) => (
+              {FEATURES.map((feature, i) => (
                 <motion.div
-                  key={o.title}
+                  key={feature.title}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="rounded-[--radius-lg] border border-border-light bg-surface p-6 shadow-sm"
+                  transition={{ delay: i * 0.08 }}
+                  className="group rounded-[--radius-lg] border border-border-light bg-surface p-6 shadow-sm transition-all hover:border-primary/20 hover:shadow-md"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
-                      <o.icon />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-bold text-text-primary">{o.title}</h3>
-                        {o.comingSoon && (
-                          <span className="rounded-[--radius-pill] bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10">
-                            Coming Soon
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm leading-relaxed text-text-secondary">
-                        {o.description}
-                      </p>
-                    </div>
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                    <feature.icon />
                   </div>
+                  <h3 className="text-lg font-bold text-text-primary">{feature.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                    {feature.description}
+                  </p>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* How it works */}
-        <section id="how-it-works" className="bg-bg-secondary px-6 py-20">
-          <div className="mx-auto max-w-4xl">
-            <div className="text-center">
-              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-                Getting Started Is Simple
-              </h2>
-            </div>
-
-            <div className="mt-14 grid gap-8 md:grid-cols-2">
-              {STEPS.map((s, i) => (
-                <motion.div
-                  key={s.step}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="flex gap-4"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white">
-                    {s.step}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-text-primary">{s.title}</h3>
-                    <p className="mt-1 text-sm text-text-secondary">{s.description}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Contact form */}
-        <section id="contact" className="px-6 py-20">
+        {/* ── Contact Form ── */}
+        <section id="contact" className="px-6 py-20 md:py-24">
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
@@ -295,36 +243,33 @@ export default function TeachersPage() {
               </motion.div>
             ) : (
               <div className="mt-10 grid gap-10 md:grid-cols-2 md:items-start">
-                {/* Left: what happens next */}
+                {/* Left: what happens */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   className="space-y-6"
                 >
-                  <h3 className="text-lg font-bold text-text-primary">What happens next?</h3>
-                  {[
-                    { num: "1", title: "We reach out within 24 hours", desc: "A quick email to say hello and find a time that works." },
-                    { num: "2", title: "15-minute demo call", desc: "We walk you through the platform and answer your questions. No pressure." },
-                    { num: "3", title: "Your school goes live", desc: "We set up your school, invite your teachers, and you're ready to go." },
-                  ].map((step, i) => (
-                    <motion.div
-                      key={step.num}
-                      initial={{ opacity: 0, y: 10 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.1 }}
-                      className="flex gap-3"
-                    >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
-                        {step.num}
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-text-primary">{step.title}</div>
-                        <div className="mt-0.5 text-xs text-text-muted">{step.desc}</div>
-                      </div>
-                    </motion.div>
-                  ))}
+                  {/* Phase 1: After you submit */}
+                  <div>
+                    <h3 className="text-lg font-bold text-text-primary">After you reach out</h3>
+                    <div className="mt-4 space-y-4">
+                      <StepItem num="1" title="We respond within 24 hours" desc="A quick email to say hello and find a time that works." />
+                      <StepItem num="2" title="15-minute demo call" desc="We walk you through the platform and answer your questions. No pressure." />
+                    </div>
+                  </div>
+
+                  {/* Phase 2: Getting set up */}
+                  <div className="border-t border-border-light pt-5">
+                    <h3 className="text-sm font-bold text-text-muted">Then we get you set up</h3>
+                    <div className="mt-4 space-y-4">
+                      <StepItem num="3" title="We create your school" desc="We handle the account setup and invite your teachers." />
+                      <StepItem num="4" title="Organize your classes" desc="Create courses and sections — Algebra I Period 3, Chemistry Block A." />
+                      <StepItem num="5" title="Students join with a code" desc="Share a 6-character code. No emails, no paperwork." />
+                      <StepItem num="6" title="You're live" desc="Students get step-by-step help. You focus on teaching." />
+                    </div>
+                  </div>
+
                   <div className="rounded-[--radius-lg] bg-primary-bg/50 px-4 py-3">
                     <p className="text-xs leading-relaxed text-text-secondary">
                       No commitment required. No credit card. We just want to show you what&rsquo;s possible.
@@ -394,7 +339,7 @@ export default function TeachersPage() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full rounded-[--radius-md] bg-gradient-to-r from-primary to-primary-light py-3 text-base font-bold text-white shadow-md transition-all hover:shadow-lg disabled:opacity-60"
+                    className="w-full rounded-[--radius-md] bg-primary py-3 text-base font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-60"
                   >
                     {submitting ? "Sending..." : "Request a Demo"}
                   </button>
@@ -409,14 +354,22 @@ export default function TeachersPage() {
   );
 }
 
-function ArrowDown() {
+/* ── Step item for contact section ── */
+function StepItem({ num, title, desc }: { num: string; title: string; desc: string }) {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5v14M5 12l7 7 7-7" />
-    </svg>
+    <div className="flex gap-3">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
+        {num}
+      </div>
+      <div>
+        <div className="text-sm font-semibold text-text-primary">{title}</div>
+        <div className="mt-0.5 text-xs text-text-muted">{desc}</div>
+      </div>
+    </div>
   );
 }
 
+/* ── Icons ── */
 function TutorIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
