@@ -390,6 +390,14 @@ export default function LearnSessionPage() {
                   <div className="mt-1 text-base leading-relaxed text-text-primary">
                     {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
                   </div>
+                  {isFinalStep && currentStepData?.final_answer && (
+                    <div className="mt-3 rounded-[--radius-md] border border-success-border bg-success-light p-3">
+                      <p className="text-xs font-semibold text-success">Final Answer</p>
+                      <div className="mt-1 text-base font-semibold text-text-primary">
+                        <MathText text={currentStepData.final_answer} />
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               </div>
             </Card>
