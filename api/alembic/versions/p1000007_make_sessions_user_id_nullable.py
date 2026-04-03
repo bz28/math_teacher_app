@@ -23,7 +23,10 @@ def _get_fk_constraint_name(table: str, column: str, referred_table: str) -> str
     insp = sa.inspect(conn)
     for fk in insp.get_foreign_keys(table):
         if fk["constrained_columns"] == [column] and fk["referred_table"] == referred_table:
-            return fk["name"]
+            name = fk["name"]
+            if name is None:
+                raise ValueError(f"FK constraint on {table}.{column} -> {referred_table} has no name")
+            return name
     raise ValueError(f"No FK constraint found on {table}.{column} -> {referred_table}")
 
 
