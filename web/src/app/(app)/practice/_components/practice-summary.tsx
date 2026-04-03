@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
@@ -89,7 +90,7 @@ export function PracticeSummary({
                 {wasCorrect ? "\u2713" : "\u2717"}
               </span>
               <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-sm font-medium text-text-primary">{result.problem}</p>
+                <div className="text-sm font-medium text-text-primary"><MathText text={result.problem} /></div>
                 <p className="text-xs text-text-secondary">
                   {result.userAnswer === "(skipped)" ? "Skipped" : `Your answer: ${result.userAnswer}`}
                 </p>

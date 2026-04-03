@@ -11,8 +11,12 @@ logger = logging.getLogger(__name__)
 _EXTRACT_TEMPLATE = """Extract all {problems_noun} from this image.
 
 Rules:
-- Return each problem as plain text (not LaTeX)
-- For word problems, include the full text
+- For mathematical expressions, use LaTeX with $ delimiters for inline math
+  and $$ for display math. Examples:
+  - Inline: "Solve $x^2 + 2x + 1 = 0$"
+  - Matrix: "Find the determinant of $\\begin{{pmatrix}} 1 & 2 \\\\ 3 & 4 \\end{{pmatrix}}$"
+  - Fraction: "Evaluate $\\frac{{d}}{{dx}} x^3$"
+- For word problems, include the full text with any math in $ delimiters
 - Only include {problems_noun} — ignore instructions, headers, or unrelated text
 - If the image includes a diagram, figure, graph, or geometric shape, describe it in
   brackets at the end of the problem text, e.g. "Find the area [Right triangle with

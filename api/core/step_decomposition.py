@@ -57,9 +57,16 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "Given a {domain} problem, produce a JSON object with:\n"
     '- "steps": an array of objects. EACH step MUST be an object with exactly two keys:\n'
     '  - "title": a short 2-5 word heading (e.g., "Isolate the Variable")\n'
-    '  - "description": the full explanation of the step. '
-    "Wrap key terms, formulas, and operations in **double asterisks** for emphasis "
-    '(e.g., "We need to **divide both sides** by **4** to isolate **x**")\n'
+    '  - "description": the full explanation of the step.\n'
+    "  Formatting rules for descriptions:\n"
+    "  - Use LaTeX with $ delimiters for inline math (e.g., $x^2 + 1$)\n"
+    "  - Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
+    "  - Use **double asterisks** for emphasis on key terms\n"
+    "  - For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
+    "  - If a visual diagram would help the student (geometric shape, graph, coordinate plane,\n"
+    "    molecular structure), include it as an <svg> block with viewBox.\n"
+    "    Keep SVGs simple: lines, circles, rects, text labels. Max 300x300 viewBox.\n"
+    "    IMPORTANT: Escape all quotes inside SVG attribute values as \\\" since this is JSON.\n"
     '  Do NOT use plain strings for steps — every step must be {{"title": "...", "description": "..."}}.\n'
     '- "final_answer": the final simplified answer\n'
     '- "distractors": exactly 3 plausible but WRONG final answers (common student mistakes)\n\n'
@@ -186,7 +193,7 @@ async def decompose_problem(
             user_content,
             mode=llm_mode,
             model=MODEL_REASON,
-            max_tokens=1024,
+            max_tokens=4096,
             user_id=user_id,
         )
     else:
@@ -195,7 +202,7 @@ async def decompose_problem(
             prompt,
             mode=llm_mode,
             model=MODEL_REASON,
-            max_tokens=1024,
+            max_tokens=4096,
             user_id=user_id,
         )
 

@@ -12,7 +12,8 @@ import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
-import { cn, renderBold } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { MathText } from "@/components/shared/math-text";
 import { FREE_DAILY_CHAT_LIMIT } from "@/lib/constants";
 import { LearnSummary } from "./_components/learn-summary";
 import { LearnCompleted } from "./_components/learn-completed";
@@ -133,7 +134,7 @@ export default function LearnSessionPage() {
   const isFinalStep = stepIndex >= totalSteps - 1;
   const isCompleted = phase === "completed";
   const isThinking = phase === "thinking";
-  const completedSteps = steps.slice(0, stepIndex);
+  const completedSteps = session.status === "completed" ? steps : steps.slice(0, stepIndex);
   const messages = chatHistory[stepIndex] ?? [];
 
   // Choice selection scoped to current step (use stepIndex for consistency)
@@ -177,16 +178,31 @@ export default function LearnSessionPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-text-muted">Problem</p>
-            <p className="mt-1 text-lg font-semibold text-text-primary">
-              {session.problem}
-            </p>
+            <div className="mt-1 text-lg font-semibold text-text-primary">
+              <MathText text={session.problem} />
+            </div>
             {sessionImage && (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={`data:image/jpeg;base64,${sessionImage}`}
-                alt="Problem"
-                className="mt-2 max-h-40 rounded-[--radius-md] border border-border object-contain"
-              />
+              <details className="mt-3" open>
+                <summary className="cursor-pointer text-xs font-semibold text-text-muted hover:text-text-secondary">
+                  Original photo
+                </summary>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`data:image/jpeg;base64,${sessionImage}`}
+                  alt="Problem"
+                  className="mt-2 max-h-80 rounded-[--radius-md] border border-border object-contain cursor-pointer"
+                  onClick={(e) => {
+                    const img = e.currentTarget;
+                    if (img.classList.contains("max-h-80")) {
+                      img.classList.remove("max-h-80");
+                      img.classList.add("max-h-[80vh]");
+                    } else {
+                      img.classList.remove("max-h-[80vh]");
+                      img.classList.add("max-h-80");
+                    }
+                  }}
+                />
+              </details>
             )}
           </div>
           {learnQueue && (
@@ -213,7 +229,7 @@ export default function LearnSessionPage() {
       </div>
 
       {/* ── Completed steps timeline ── */}
-      {completedSteps.length > 0 && !isCompleted && (
+      {completedSteps.length > 0 && (!isCompleted || session.status === "completed") && (
         <div className="mb-6 space-y-0">
           {completedSteps.map((step, i) => {
             const stepNum = i + 1;
@@ -242,7 +258,7 @@ export default function LearnSessionPage() {
                         !expanded && "line-clamp-1",
                       )}
                     >
-                      {renderBold(step.description)}
+                      <MathText text={step.description} />
                     </p>
                     {expanded && step.final_answer && (
                       <p className="mt-1 text-sm font-medium text-text-primary">
@@ -300,7 +316,7 @@ export default function LearnSessionPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-primary">Tutor</p>
-                      <p className="mt-1 text-sm leading-relaxed text-text-primary">{msg.text}</p>
+                      <div className="mt-1 text-sm leading-relaxed text-text-primary"><MathText text={msg.text} /></div>
                     </div>
                   </div>
                 </Card>
@@ -372,65 +388,29 @@ export default function LearnSessionPage() {
                     Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
                   </p>
                   <p className="mt-1 text-base leading-relaxed text-text-primary">
-                    {currentStepData ? renderBold(currentStepData.description) : "Loading..."}
+                    {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
                   </p>
                 </motion.div>
               </div>
             </Card>
           </motion.div>
 
-          {/* Final step: multiple choice or text answer fallback */}
-          {isFinalStep && currentStepData?.choices && (
+          {/* Final step: "I understand" to complete */}
+          {isFinalStep && !isCompleted && (
             <motion.div
-              key={`choices-${stepIndex}`}
+              key={`complete-${stepIndex}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="space-y-2"
             >
-              <p className="text-sm font-semibold text-text-secondary">
-                What is the result?
-              </p>
-              {currentStepData.choices.map((choice, i) => {
-                const isSelected = choiceResult?.index === i;
-                const isCorrect =
-                  isSelected && choiceResult?.correct === true;
-                const isWrong =
-                  isSelected && choiceResult?.correct === false;
-
-                return (
-                  <button
-                    key={i}
-                    onClick={() => handleChoiceSelect(choice, i)}
-                    disabled={isThinking || (choiceResult?.correct === true)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-all",
-                      isCorrect &&
-                        "border-success bg-success-light text-success",
-                      isWrong && "border-error bg-error-light text-error",
-                      !isSelected &&
-                        "border-border bg-surface text-text-primary hover:border-primary hover:bg-primary-bg",
-                      isThinking && !isSelected && "opacity-50",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                        isCorrect && "bg-success text-white",
-                        isWrong && "bg-error text-white",
-                        !isSelected && "bg-input-bg text-text-secondary",
-                      )}
-                    >
-                      {isCorrect
-                        ? "\u2713"
-                        : isWrong
-                          ? "\u2717"
-                          : String.fromCharCode(65 + i)}
-                    </span>
-                    {choice}
-                  </button>
-                );
-              })}
+              <Button
+                gradient
+                className="w-full"
+                onClick={() => advanceStep()}
+                disabled={isThinking}
+              >
+                I understand — mark as complete
+              </Button>
             </motion.div>
           )}
 
@@ -468,9 +448,9 @@ export default function LearnSessionPage() {
                       <p className="text-xs font-semibold text-primary">
                         Tutor
                       </p>
-                      <p className="mt-1 text-sm leading-relaxed text-text-primary">
-                        {msg.text}
-                      </p>
+                      <div className="mt-1 text-sm leading-relaxed text-text-primary">
+                        <MathText text={msg.text} />
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -478,43 +458,6 @@ export default function LearnSessionPage() {
             </motion.div>
           ))}
 
-          {/* Final step fallback: text answer when no choices */}
-          {isFinalStep && !currentStepData?.choices && (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-text-secondary">
-                What is the answer?
-              </p>
-              <div className="flex gap-2">
-                <input
-                  placeholder="Type your answer..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && input.trim()) {
-                      e.preventDefault();
-                      submitAnswer(input.trim());
-                      setInput("");
-                    }
-                  }}
-                  disabled={isThinking}
-                  className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-4 py-2.5 text-sm placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (input.trim()) {
-                      submitAnswer(input.trim());
-                      setInput("");
-                    }
-                  }}
-                  loading={isThinking}
-                  disabled={!input.trim()}
-                >
-                  Submit
-                </Button>
-              </div>
-            </div>
-          )}
 
           {/* Thinking indicator */}
           {isThinking && (

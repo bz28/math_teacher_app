@@ -189,13 +189,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return;
     set({ phase: "thinking" });
     try {
-      await sessionApi.respond(session.id, {
+      const response = await sessionApi.respond(session.id, {
         student_response: "",
         request_advance: true,
       });
       // Re-fetch session to get updated steps/choices (matches mobile)
       const updated = await sessionApi.get(session.id);
-      set({ session: updated, lastResponse: null, phase: "awaiting_input" });
+      const nextPhase = response.action === "completed" ? "completed" : "awaiting_input";
+      set({ session: updated, lastResponse: response, phase: nextPhase as SessionPhase });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
