@@ -307,9 +307,9 @@ async def _respond_learn_mode(
             total_steps=session.total_steps,
         )
 
-    # --- Final step: multiple-choice answer ---
+    # --- Final step: "I understand" or answer ---
     if request_advance:
-        raise SessionError("You must provide an answer for the final step")
+        return await _complete_session(db, session)
 
     correct_answer = step_data["final_answer"]
     _add_exchange(session, "student", student_response)

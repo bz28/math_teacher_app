@@ -395,58 +395,22 @@ export default function LearnSessionPage() {
             </Card>
           </motion.div>
 
-          {/* Final step: multiple choice or text answer fallback */}
-          {isFinalStep && currentStepData?.choices && (
+          {/* Final step: "I understand" to complete */}
+          {isFinalStep && !isCompleted && (
             <motion.div
-              key={`choices-${stepIndex}`}
+              key={`complete-${stepIndex}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="space-y-2"
             >
-              <p className="text-sm font-semibold text-text-secondary">
-                What is the result?
-              </p>
-              {currentStepData.choices.map((choice, i) => {
-                const isSelected = choiceResult?.index === i;
-                const isCorrect =
-                  isSelected && choiceResult?.correct === true;
-                const isWrong =
-                  isSelected && choiceResult?.correct === false;
-
-                return (
-                  <button
-                    key={i}
-                    onClick={() => handleChoiceSelect(choice, i)}
-                    disabled={isThinking || (choiceResult?.correct === true)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-all",
-                      isCorrect &&
-                        "border-success bg-success-light text-success",
-                      isWrong && "border-error bg-error-light text-error",
-                      !isSelected &&
-                        "border-border bg-surface text-text-primary hover:border-primary hover:bg-primary-bg",
-                      isThinking && !isSelected && "opacity-50",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                        isCorrect && "bg-success text-white",
-                        isWrong && "bg-error text-white",
-                        !isSelected && "bg-input-bg text-text-secondary",
-                      )}
-                    >
-                      {isCorrect
-                        ? "\u2713"
-                        : isWrong
-                          ? "\u2717"
-                          : String.fromCharCode(65 + i)}
-                    </span>
-                    {choice}
-                  </button>
-                );
-              })}
+              <Button
+                gradient
+                className="w-full"
+                onClick={() => advanceStep()}
+                disabled={isThinking}
+              >
+                I understand — mark as complete
+              </Button>
             </motion.div>
           )}
 
@@ -494,43 +458,6 @@ export default function LearnSessionPage() {
             </motion.div>
           ))}
 
-          {/* Final step fallback: text answer when no choices */}
-          {isFinalStep && !currentStepData?.choices && (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-text-secondary">
-                What is the answer?
-              </p>
-              <div className="flex gap-2">
-                <input
-                  placeholder="Type your answer..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && input.trim()) {
-                      e.preventDefault();
-                      submitAnswer(input.trim());
-                      setInput("");
-                    }
-                  }}
-                  disabled={isThinking}
-                  className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-4 py-2.5 text-sm placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (input.trim()) {
-                      submitAnswer(input.trim());
-                      setInput("");
-                    }
-                  }}
-                  loading={isThinking}
-                  disabled={!input.trim()}
-                >
-                  Submit
-                </Button>
-              </div>
-            </div>
-          )}
 
           {/* Thinking indicator */}
           {isThinking && (
