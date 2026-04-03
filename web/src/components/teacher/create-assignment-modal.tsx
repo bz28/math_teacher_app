@@ -18,10 +18,26 @@ const MOCK_SECTIONS = [
   { id: "s3", name: "Block A", studentCount: 25 },
 ];
 
-const MOCK_UNITS = [
-  "Unit 1: Linear Equations",
-  "Unit 2: Systems of Equations",
-  "Unit 3: Quadratic Equations",
+const MOCK_UNITS_WITH_FILES = [
+  {
+    name: "Unit 1: Linear Equations",
+    files: [
+      { id: "f1", name: "Chapter 1 Notes.pdf" },
+      { id: "f2", name: "Practice Problems Set A.pdf" },
+      { id: "f3", name: "Answer Key.pdf" },
+    ],
+  },
+  {
+    name: "Unit 2: Systems of Equations",
+    files: [
+      { id: "f4", name: "Systems Overview.pdf" },
+      { id: "f5", name: "Substitution Method HW.pdf" },
+    ],
+  },
+  {
+    name: "Unit 3: Quadratic Equations",
+    files: [],
+  },
 ];
 
 export function CreateAssignmentModal({ onClose, onCreated }: CreateAssignmentModalProps) {
@@ -34,6 +50,7 @@ export function CreateAssignmentModal({ onClose, onCreated }: CreateAssignmentMo
   // Step 2
   const [source, setSource] = useState<ContentSource | null>(null);
   const [aiUnit, setAiUnit] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [aiDifficulty, setAiDifficulty] = useState("medium");
   const [aiQuestionCount, setAiQuestionCount] = useState("10");
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -43,6 +60,17 @@ export function CreateAssignmentModal({ onClose, onCreated }: CreateAssignmentMo
   const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
   const [dueDate, setDueDate] = useState("");
   const [latePolicy, setLatePolicy] = useState("deduct_10");
+
+  function toggleFile(id: string) {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedUnit = MOCK_UNITS_WITH_FILES.find((u) => u.name === aiUnit);
 
   function toggleSection(id: string) {
     setSelectedSections((prev) => {
@@ -189,13 +217,46 @@ export function CreateAssignmentModal({ onClose, onCreated }: CreateAssignmentMo
                         <label className="text-[13px] font-semibold text-text-secondary">Based on unit</label>
                         <select
                           value={aiUnit}
-                          onChange={(e) => setAiUnit(e.target.value)}
+                          onChange={(e) => { setAiUnit(e.target.value); setSelectedFiles(new Set()); }}
                           className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
                         >
                           <option value="">Select a unit...</option>
-                          {MOCK_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                          {MOCK_UNITS_WITH_FILES.map((u) => <option key={u.name} value={u.name}>{u.name}</option>)}
                         </select>
                       </div>
+                      {/* File selection within unit */}
+                      {selectedUnit && selectedUnit.files.length > 0 && (
+                        <div>
+                          <label className="text-[13px] font-semibold text-text-secondary">Use these files</label>
+                          <div className="mt-1.5 space-y-1">
+                            {selectedUnit.files.map((f) => (
+                              <button
+                                key={f.id}
+                                onClick={() => toggleFile(f.id)}
+                                className={`flex w-full items-center gap-2 rounded-[--radius-sm] border px-3 py-2 text-left text-xs transition-colors ${
+                                  selectedFiles.has(f.id)
+                                    ? "border-primary bg-primary-bg/20 text-text-primary"
+                                    : "border-border-light text-text-muted hover:border-primary/30"
+                                }`}
+                              >
+                                <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border ${
+                                  selectedFiles.has(f.id) ? "border-primary bg-primary" : "border-border"
+                                }`}>
+                                  {selectedFiles.has(f.id) && (
+                                    <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" /></svg>
+                                  )}
+                                </div>
+                                <span>📄 {f.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-1.5 text-[11px] text-text-muted">
+                            {selectedFiles.size === 0
+                              ? "Select files to base questions on, or leave empty to use all."
+                              : `${selectedFiles.size} file${selectedFiles.size !== 1 ? "s" : ""} selected`}
+                          </p>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-[13px] font-semibold text-text-secondary">Difficulty</label>
@@ -274,16 +335,40 @@ export function CreateAssignmentModal({ onClose, onCreated }: CreateAssignmentMo
                 </div>
               ) : (
                 <div>
-                  <button onClick={() => setSource(null)} className="mb-3 text-xs font-semibold text-primary hover:underline">← Back to options</button>
-                  <p className="text-sm text-text-secondary">Select problems from your uploaded documents.</p>
+                  <button onClick={() => { setSource(null); setSelectedFiles(new Set()); }} className="mb-3 text-xs font-semibold text-primary hover:underline">← Back to options</button>
+                  <p className="text-sm text-text-secondary">Select files to pull problems from.</p>
                   <div className="mt-3 space-y-2">
-                    {MOCK_UNITS.map((u) => (
-                      <div key={u} className="rounded-[--radius-md] border border-border-light bg-surface p-3">
-                        <div className="text-xs font-semibold text-text-primary">{u}</div>
-                        <div className="mt-1 text-[11px] text-text-muted">3 documents · ~15 problems extracted</div>
+                    {MOCK_UNITS_WITH_FILES.filter((u) => u.files.length > 0).map((u) => (
+                      <div key={u.name} className="rounded-[--radius-md] border border-border-light bg-surface p-3">
+                        <div className="text-xs font-semibold text-text-primary">{u.name}</div>
+                        <div className="mt-2 space-y-1">
+                          {u.files.map((f) => (
+                            <button
+                              key={f.id}
+                              onClick={() => toggleFile(f.id)}
+                              className={`flex w-full items-center gap-2 rounded-[--radius-sm] px-2 py-1.5 text-left text-xs transition-colors ${
+                                selectedFiles.has(f.id)
+                                  ? "bg-primary-bg/30 text-text-primary"
+                                  : "text-text-muted hover:bg-primary-bg/20"
+                              }`}
+                            >
+                              <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border ${
+                                selectedFiles.has(f.id) ? "border-primary bg-primary" : "border-border"
+                              }`}>
+                                {selectedFiles.has(f.id) && (
+                                  <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5" /></svg>
+                                )}
+                              </div>
+                              📄 {f.name}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
+                  {selectedFiles.size > 0 && (
+                    <p className="mt-2 text-xs font-semibold text-primary">{selectedFiles.size} file{selectedFiles.size !== 1 ? "s" : ""} selected</p>
+                  )}
                 </div>
               )}
             </div>
