@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.app_stat import AppStat
 from api.models.llm_call import LLMCall
 from api.models.session import Session
 from api.models.user import User
@@ -46,6 +47,11 @@ async def overview(
     # New users registered in period
     new_users = (await db.execute(
         select(func.count()).select_from(User).where(User.created_at >= since)
+    )).scalar() or 0
+
+    # Total registered users (lifetime)
+    total_users = (await db.execute(
+        select(func.count()).select_from(User)
     )).scalar() or 0
 
     # Total cost in period
@@ -111,6 +117,11 @@ async def overview(
         .group_by(Session.subject)
     )).all()
 
+    # Deleted accounts (lifetime counter — not filtered by time range)
+    deleted_accounts = (await db.execute(
+        select(AppStat.value).where(AppStat.key == "deleted_accounts")
+    )).scalar() or 0
+
     # Top spenders in period
     spender_filters = [LLMCall.created_at >= since]
     top_spenders = (await db.execute(
@@ -130,6 +141,8 @@ async def overview(
         "total_sessions": total_sessions,
         "active_users": active_users,
         "new_users": new_users,
+        "total_users": total_users,
+        "deleted_accounts": deleted_accounts,
         "total_cost": round(total_cost, 4),
         "total_calls": total_calls,
         "failed_calls": failed_calls,

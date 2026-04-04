@@ -37,6 +37,7 @@ from api.core.entitlements import (
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
+from api.models.app_stat import AppStat
 from api.models.course import Course
 from api.models.llm_call import LLMCall
 from api.models.promo import PromoRedemption
@@ -246,11 +247,19 @@ async def delete_account(
     await db.execute(delete(SectionEnrollment).where(SectionEnrollment.student_id == user.id))
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
 
+    # Increment lifetime counter (same transaction — rolls back if delete fails)
+    await db.execute(
+        update(AppStat).where(AppStat.key == "deleted_accounts").values(value=AppStat.value + 1)
+    )
+
+    # Capture ID before commit expires the ORM object
+    user_id = user.id
+
     # Delete the user row
     await db.delete(user)
     await db.commit()
 
-    logger.info("Account deleted: user=%s email=%s", user.id, user.email)
+    logger.info("Account deleted: user=%s", user_id)
 
 
 @router.get("/entitlements", response_model=EntitlementsResponse)

@@ -174,10 +174,13 @@ h3 {
   border-radius: 10px 0 0 10px;
 }
 
-.stat-card:nth-child(2)::before { background: #10b981; }
-.stat-card:nth-child(3)::before { background: #3b82f6; }
-.stat-card:nth-child(4)::before { background: #f59e0b; }
-.stat-card:nth-child(5)::before { background: #ef4444; }
+.stat-card:nth-child(2)::before { background: #10b981; }  /* Total Cost — green */
+.stat-card:nth-child(3)::before { background: #3b82f6; }  /* Active Users — blue */
+.stat-card:nth-child(4)::before { background: #f59e0b; }  /* New Users — amber */
+.stat-card:nth-child(5)::before { background: #0ea5e9; }  /* Total Users — sky */
+.stat-card:nth-child(6)::before { background: #64748b; }  /* Deleted Accounts — slate */
+.stat-card:nth-child(7)::before { background: #8b5cf6; }  /* Avg Latency — violet */
+.stat-card:nth-child(8)::before { background: #ef4444; }  /* Error Rate — red */
 
 .stat-label {
   font-size: 11px;

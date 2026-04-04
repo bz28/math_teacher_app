@@ -125,6 +125,8 @@ export interface OverviewData {
   total_sessions: number;
   active_users: number;
   new_users: number;
+  total_users: number;
+  deleted_accounts: number;
   total_cost: number;
   total_calls: number;
   failed_calls: number;
