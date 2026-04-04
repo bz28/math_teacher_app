@@ -295,6 +295,100 @@ async def assign_to_sections(
     return {"status": "ok"}
 
 
+# ── Submission + Grading endpoints ──
+
+class GradeRequest(BaseModel):
+    action: str  # "approve" | "override"
+    teacher_score: float | None = None
+    teacher_notes: str | None = None
+
+
+@router.get("/assignments/{assignment_id}/submissions")
+async def list_submissions(
+    assignment_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+
+    # Get all submissions with grades
+    from api.models.user import User
+    rows = (await db.execute(
+        select(Submission, SubmissionGrade, User.name, User.email)
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .join(User, User.id == Submission.student_id)
+        .where(Submission.assignment_id == a.id)
+        .order_by(Submission.submitted_at.desc())
+    )).all()
+
+    submissions = []
+    for sub, grade, student_name, student_email in rows:
+        submissions.append({
+            "id": str(sub.id),
+            "student_name": student_name or "",
+            "student_email": student_email,
+            "status": sub.status,
+            "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+            "is_late": sub.is_late,
+            "ai_score": grade.ai_score if grade else None,
+            "ai_breakdown": grade.ai_breakdown if grade else None,
+            "teacher_score": grade.teacher_score if grade else None,
+            "teacher_notes": grade.teacher_notes if grade else None,
+            "final_score": grade.final_score if grade else None,
+            "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
+        })
+
+    return {"submissions": submissions}
+
+
+@router.patch("/submissions/{submission_id}/grade")
+async def grade_submission(
+    submission_id: uuid.UUID, body: GradeRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    # Verify teacher owns the assignment
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    a = await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+
+    # Get or create grade record
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    if not grade:
+        grade = SubmissionGrade(submission_id=sub.id)
+        db.add(grade)
+
+    now = datetime.now(timezone.utc)
+
+    if body.action == "approve":
+        grade.final_score = grade.ai_score
+        grade.reviewed_by = current_user.user_id
+        grade.reviewed_at = now
+        sub.status = "teacher_reviewed"
+    elif body.action == "override":
+        if body.teacher_score is None:
+            raise HTTPException(status_code=400, detail="teacher_score required for override")
+        grade.teacher_score = body.teacher_score
+        grade.final_score = body.teacher_score
+        grade.reviewed_by = current_user.user_id
+        grade.reviewed_at = now
+        sub.status = "teacher_reviewed"
+    else:
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'override'")
+
+    if body.teacher_notes is not None:
+        grade.teacher_notes = body.teacher_notes
+
+    await db.commit()
+    return {"status": "ok"}
+
+
 # ── Private helpers ──
 
 async def _get_section_names(db: AsyncSession, assignment_id: uuid.UUID) -> list[str]:
