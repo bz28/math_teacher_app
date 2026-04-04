@@ -53,25 +53,27 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
   const [dueDate, setDueDate] = useState("");
   const [latePolicy, setLatePolicy] = useState("none");
 
-  // Fetch courses
+  // Fetch courses on mount
   useEffect(() => {
     teacher.courses().then((d) => setCourses(d.courses.map((c) => ({ id: c.id, name: c.name }))));
   }, []);
 
   // Fetch sections + units when course changes
   useEffect(() => {
-    if (!selectedCourseId) { setCourseSections([]); setCourseUnits([]); return; }
-    teacher.sections(selectedCourseId).then((d) => setCourseSections(d.sections));
+    if (!selectedCourseId) return;
+    let cancelled = false;
+    teacher.sections(selectedCourseId).then((d) => { if (!cancelled) setCourseSections(d.sections); });
     Promise.all([
       teacher.units(selectedCourseId),
       teacher.documents(selectedCourseId),
     ]).then(([unitsRes, docsRes]) => {
+      if (cancelled) return;
       setCourseUnits(unitsRes.units.map((u) => ({
         id: u.id, name: u.name,
         files: docsRes.documents.filter((d) => d.unit_id === u.id).map((d) => ({ id: d.id, name: d.filename })),
       })));
     });
-    setSelectedSections(new Set());
+    return () => { cancelled = true; };
   }, [selectedCourseId]);
 
   const selectedUnitData = courseUnits.find((u) => u.name === aiUnit);
@@ -166,7 +168,7 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
               {!preselectedCourseId && (
                 <div>
                   <label className="text-[13px] font-semibold text-text-secondary">Course</label>
-                  <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)}
+                  <select value={selectedCourseId} onChange={(e) => { setSelectedCourseId(e.target.value); setCourseSections([]); setCourseUnits([]); setSelectedSections(new Set()); }}
                     className="mt-1 w-full rounded-[--radius-sm] border border-border bg-input-bg px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-primary">
                     <option value="">Select a course...</option>
                     {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
