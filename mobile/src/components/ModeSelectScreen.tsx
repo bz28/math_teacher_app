@@ -67,8 +67,8 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
       const res = await getSessionHistory(subject, HISTORY_PREVIEW_LIMIT);
       setHistory(res.items);
       setHasMore(res.has_more);
-    } catch {
-      // Silently fail — history is non-critical
+    } catch (err) {
+      console.warn("Failed to load history preview:", err);
     } finally {
       setLoading(false);
     }

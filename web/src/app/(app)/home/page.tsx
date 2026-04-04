@@ -7,36 +7,13 @@ import { useAuthStore } from "@/stores/auth";
 import Link from "next/link";
 import { Card } from "@/components/ui";
 import { auth, student, type EnrolledCourse } from "@/lib/api";
+import { SUBJECT_CONFIG } from "@/lib/constants";
 
 const genericSubjects = [
-  {
-    id: "math",
-    name: "Mathematics",
-    description: "Algebra, equations, word problems, and more",
-    gradient: "from-primary to-primary-light",
-    modes: ["Learn", "Mock Test"],
-  },
-  {
-    id: "physics",
-    name: "Physics",
-    description: "Mechanics, energy, waves, and more",
-    gradient: "from-[#0984E3] to-[#74B9FF]",
-    modes: ["Learn", "Mock Test"],
-  },
-  {
-    id: "chemistry",
-    name: "Chemistry",
-    description: "Reactions, balancing equations, stoichiometry, and more",
-    gradient: "from-[#00B894] to-[#55EFC4]",
-    modes: ["Learn", "Mock Test"],
-  },
+  { id: "math", description: "Algebra, equations, word problems, and more", modes: ["Learn", "Mock Test"] },
+  { id: "physics", description: "Mechanics, energy, waves, and more", modes: ["Learn", "Mock Test"] },
+  { id: "chemistry", description: "Reactions, balancing equations, stoichiometry, and more", modes: ["Learn", "Mock Test"] },
 ];
-
-const SUBJECT_GRADIENTS: Record<string, string> = {
-  math: "from-primary to-primary-light",
-  chemistry: "from-[#00B894] to-[#55EFC4]",
-  physics: "from-[#0984E3] to-[#74B9FF]",
-};
 
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
@@ -55,7 +32,7 @@ export default function HomePage() {
     auth
       .enrolledCourses()
       .then((d) => setEnrolledCourses(d.courses))
-      .catch(() => {})
+      .catch((err: unknown) => console.warn("Failed to load enrolled courses:", err))
       .finally(() => setLoadingCourses(false));
   };
 
@@ -114,7 +91,7 @@ export default function HomePage() {
       {isSchoolStudent && (
         <div className="grid gap-6 sm:grid-cols-2">
           {enrolledCourses.map((course, i) => {
-            const gradient = SUBJECT_GRADIENTS[course.subject] || SUBJECT_GRADIENTS.math;
+            const gradient = SUBJECT_CONFIG[course.subject]?.gradient ?? SUBJECT_CONFIG.math.gradient;
             return (
               <motion.div
                 key={`${course.id}-${course.section_id}`}
@@ -173,15 +150,15 @@ export default function HomePage() {
                 className="relative overflow-hidden"
                 onClick={() => router.push(`/learn?subject=${subject.id}`)}
               >
-                <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${subject.gradient}`} />
+                <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient}`} />
                 <div className="flex items-start gap-4 pt-2">
                   <div
-                    className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${subject.gradient} text-white shadow-sm`}
+                    className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient} text-white shadow-sm`}
                   >
                     {subject.id === "math" ? <MathIcon /> : subject.id === "physics" ? <PhysicsIcon /> : <ChemIcon />}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-text-primary">{subject.name}</h2>
+                    <h2 className="text-lg font-bold text-text-primary">{SUBJECT_CONFIG[subject.id]?.name ?? subject.id}</h2>
                     <p className="mt-0.5 text-sm text-text-secondary">{subject.description}</p>
                     <div className="mt-3 flex gap-2">
                       {subject.modes.map((mode) => (
