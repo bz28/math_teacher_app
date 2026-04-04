@@ -8,6 +8,7 @@ import { Button, useToast } from "@/components/ui";
 import { MaterialsTab } from "@/components/teacher/materials-tab";
 import { SectionMaterials, type VisibilityState } from "@/components/teacher/section-materials";
 import { GradingView } from "@/components/teacher/grading-view";
+import { CreateAssignmentModal } from "@/components/teacher/create-assignment-modal";
 import type { TeacherAssignment } from "@/lib/api";
 
 type Tab = "overview" | "sections" | "materials" | "assignments" | "settings";
@@ -41,6 +42,7 @@ export default function CourseDetailPage() {
   const [sectionSubTab, setSectionSubTab] = useState<"students" | "materials">("students");
   const [gradingAssignment, setGradingAssignment] = useState<TeacherAssignment | null>(null);
   const [courseAssignments, setCourseAssignments] = useState<TeacherAssignment[]>([]);
+  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
 
   // Visibility state (mock — shared between Sections and Materials tabs)
   const [visibility, setVisibility] = useState<VisibilityState>({
@@ -530,6 +532,9 @@ export default function CourseDetailPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold text-text-primary">Assignments</h2>
+                <button onClick={() => setShowCreateAssignment(true)} className="rounded-[--radius-sm] bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark">
+                  + New Assignment
+                </button>
               </div>
               {courseAssignments.length === 0 ? (
                 <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
@@ -584,6 +589,17 @@ export default function CourseDetailPage() {
               )}
             </div>
           )
+        )}
+
+        {showCreateAssignment && (
+          <CreateAssignmentModal
+            preselectedCourseId={id}
+            onClose={() => setShowCreateAssignment(false)}
+            onCreated={() => {
+              setShowCreateAssignment(false);
+              teacher.assignments(id).then((d) => setCourseAssignments(d.assignments)).catch(() => {});
+            }}
+          />
         )}
 
         {/* Settings tab */}
