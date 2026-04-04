@@ -74,7 +74,7 @@ Documents to organize:
             discovered_units: list[str] = []  # new units from prior batches
 
             for i in range(0, len(images), batch_size):
-                batch = images[i:i + BATCH_SIZE]
+                batch = images[i:i + batch_size]
                 batch_filenames = [img["filename"] for img in batch]
                 batch_files_str = "\n".join(f"- {f}" for f in batch_filenames)
                 # Include units discovered by earlier batches
