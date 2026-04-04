@@ -23,13 +23,13 @@ async def fetch_document_images(
     document_ids: list[uuid.UUID],
     course_id: uuid.UUID,
     *,
-    max_images: int = MAX_VISION_IMAGES,
+    max_images: int | None = None,
 ) -> list[dict[str, str]]:
     """Fetch document images from DB for vision processing.
 
     Returns list of {"filename", "base64", "media_type"} for JPEG/PNG docs only.
     Validates all documents belong to the given course.
-    Caps at max_images to stay within vision token limits.
+    If max_images is set, caps the returned list.
     """
     if not document_ids:
         return []
@@ -50,7 +50,7 @@ async def fetch_document_images(
             "base64": row.image_data,
             "media_type": row.file_type,
         })
-        if len(images) >= max_images:
+        if max_images and len(images) >= max_images:
             break
 
     return images

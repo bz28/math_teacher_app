@@ -447,7 +447,7 @@ async def generate_assignment_questions(
     images = None
     if body.document_ids:
         from api.core.document_vision import fetch_document_images
-        images = await fetch_document_images(db, body.document_ids, body.course_id)
+        images = await fetch_document_images(db, body.document_ids, body.course_id, max_images=5)
 
     questions = await generate_questions(
         unit_name=body.unit_name,
