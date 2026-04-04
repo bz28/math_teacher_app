@@ -34,6 +34,7 @@ class Assignment(Base):
     late_policy: Mapped[str] = mapped_column(String(30), nullable=False, default="none")
     content: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # questions list
     answer_key: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # solutions
+    document_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # referenced doc UUIDs
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

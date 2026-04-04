@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { teacher } from "@/lib/api";
 
 type AssignmentType = "homework" | "quiz" | "test";
-type ContentSource = "upload" | "ai_generate" | "library";
+type ContentSource = "ai_generate" | "library";
 type Step = 1 | 2 | 3;
 
 interface CreateAssignmentModalProps {
@@ -115,11 +115,12 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
     try {
       const content = questions.length > 0 ? { questions: questions.map((q) => ({ text: q.text, difficulty: q.difficulty })) } : undefined;
       const answerKey = solutions.length > 0 ? { solutions: solutions.map((s) => ({ question_id: s.questionId, text: s.text })) } : undefined;
+      const documentIds = source === "library" && selectedFiles.size > 0 ? Array.from(selectedFiles) : undefined;
 
       const res = await teacher.createAssignment(selectedCourseId, {
         title: title.trim(), type, source_type: source ?? undefined,
         due_at: dueDate || undefined, late_policy: latePolicy,
-        content, answer_key: answerKey,
+        content, answer_key: answerKey, document_ids: documentIds,
       });
 
       const sectionIds = Array.from(selectedSections);
@@ -201,7 +202,6 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
               {!source ? (
                 <div className="grid gap-2">
                   {([
-                    { id: "upload" as const, icon: "📷", title: "Upload worksheet", desc: "Upload a photo or PDF" },
                     { id: "ai_generate" as const, icon: "🤖", title: "AI Generate", desc: "AI creates problems from your materials" },
                     { id: "library" as const, icon: "📚", title: "From Library", desc: "Pick from uploaded docs" },
                   ]).map((opt) => (
@@ -301,8 +301,12 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
               ) : (
                 <div>
                   <button onClick={() => setSource(null)} className="mb-3 text-xs font-semibold text-primary hover:underline">← Back</button>
-                  {source === "upload" ? (
-                    <div className="flex flex-col items-center rounded-[--radius-lg] border-2 border-dashed border-border py-10 hover:border-primary"><span className="text-2xl">📷</span><p className="mt-2 text-sm text-text-secondary">Drop files here or click to browse</p><p className="mt-3 text-xs text-text-muted">Upload not wired yet — use the Materials tab to upload first.</p></div>
+                  {courseUnits.filter((u) => u.files.length > 0).length === 0 ? (
+                    <div className="flex flex-col items-center rounded-[--radius-lg] border-2 border-dashed border-border py-10">
+                      <span className="text-2xl">📚</span>
+                      <p className="mt-2 text-sm text-text-secondary">No documents yet</p>
+                      <p className="mt-1 text-xs text-text-muted">Upload files in the Materials tab first.</p>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       {courseUnits.filter((u) => u.files.length > 0).map((u) => (
@@ -374,7 +378,7 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
             {step === 1 ? "Cancel" : "Back"}
           </button>
           {step < 3 ? (
-            <button onClick={() => setStep((step+1) as Step)} disabled={step === 1 ? (!selectedCourseId || !type || !title.trim()) : !source || (source === "ai_generate" && aiPhase !== "solutions")}
+            <button onClick={() => setStep((step+1) as Step)} disabled={step === 1 ? (!selectedCourseId || !type || !title.trim()) : !source || (source === "ai_generate" && aiPhase !== "solutions") || (source === "library" && selectedFiles.size === 0)}
               className="rounded-[--radius-sm] bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
           ) : (
             <button onClick={handleCreate} disabled={creating || selectedSections.size === 0}
