@@ -71,16 +71,27 @@ Documents to organize:
         )
         suggestions: list[Any] = result.get("suggestions", [])  # type: ignore[assignment]
 
-        # Validate and normalize
-        normalized = []
+        # Validate and normalize — match AI responses back to original filenames
+        # because the LLM may return filenames with subtle differences
+        ai_by_filename: dict[str, dict[str, Any]] = {}
         for s in suggestions:
-            if not isinstance(s, dict) or "filename" not in s:
-                continue
+            if isinstance(s, dict) and "filename" in s:
+                ai_by_filename[s["filename"]] = s
+
+        normalized = []
+        for original_name in filenames:
+            match = ai_by_filename.get(original_name)
+            if not match:
+                # Fuzzy fallback: try case-insensitive match
+                match = next(
+                    (v for k, v in ai_by_filename.items() if k.lower() == original_name.lower()),
+                    None,
+                )
             normalized.append({
-                "filename": s["filename"],
-                "suggested_unit": s.get("suggested_unit", "Uncategorized"),
-                "is_new": bool(s.get("is_new", False)),
-                "confidence": min(1.0, max(0.0, float(s.get("confidence", 0.5)))),
+                "filename": original_name,  # always use the original filename
+                "suggested_unit": match.get("suggested_unit", "Uncategorized") if match else "Uncategorized",
+                "is_new": bool(match.get("is_new", False)) if match else False,
+                "confidence": min(1.0, max(0.0, float(match.get("confidence", 0.5)))) if match else 0.0,
             })
 
         return normalized
