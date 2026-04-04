@@ -69,7 +69,7 @@ Documents to organize:
             model=MODEL_CLASSIFY,
             max_tokens=1024,
         )
-        suggestions = result.get("suggestions", [])
+        suggestions: list[Any] = result.get("suggestions", [])  # type: ignore[assignment]
 
         # Validate and normalize
         normalized = []
