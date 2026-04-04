@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.unit_suggestions import suggest_units
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Document
@@ -155,3 +156,32 @@ async def update_document(
     doc.unit_id = body.unit_id
     await db.commit()
     return {"status": "ok"}
+
+
+class SuggestUnitsRequest(BaseModel):
+    filenames: list[str]
+
+
+@router.post("/courses/{course_id}/suggest-units")
+async def suggest_document_units(
+    course_id: uuid.UUID,
+    body: SuggestUnitsRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    course = await get_teacher_course(db, course_id, current_user.user_id)
+
+    # Get existing unit names
+    units = (await db.execute(
+        select(Unit.name).where(Unit.course_id == course_id).order_by(Unit.position)
+    )).scalars().all()
+
+    suggestions = await suggest_units(
+        filenames=body.filenames,
+        existing_units=list(units),
+        course_name=course.name,
+        course_subject=course.subject,
+        user_id=str(current_user.user_id),
+    )
+
+    return {"suggestions": suggestions}
