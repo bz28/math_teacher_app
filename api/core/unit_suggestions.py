@@ -67,17 +67,23 @@ Documents to organize:
 
     try:
         if images:
-            # Batch images (max 10 per call) to handle large uploads
+            # Batch images (max 10 per call) and run sequentially so each
+            # batch knows about new units suggested by previous batches
             BATCH_SIZE = 10
             all_suggestions: list[Any] = []
+            discovered_units: list[str] = []  # new units from prior batches
+
             for i in range(0, len(images), BATCH_SIZE):
                 batch = images[i:i + BATCH_SIZE]
                 batch_filenames = [img["filename"] for img in batch]
                 batch_files_str = "\n".join(f"- {f}" for f in batch_filenames)
+                # Include units discovered by earlier batches
+                all_units = list(existing_units) + discovered_units
+                batch_units_str = "\n".join(f"- {u}" for u in all_units) if all_units else "(no units yet)"
                 batch_message = f"""Course: {course_name} ({course_subject})
 
 Existing units:
-{units_str}
+{batch_units_str}
 
 Documents to organize:
 {batch_files_str}"""
@@ -99,16 +105,24 @@ Documents to organize:
                 batch_suggestions = result.get("suggestions", [])
                 if isinstance(batch_suggestions, list):
                     all_suggestions.extend(batch_suggestions)
+                    # Track new units so subsequent batches can reference them
+                    for s in batch_suggestions:
+                        if isinstance(s, dict) and s.get("is_new"):
+                            name = s.get("suggested_unit", "")
+                            if name and name not in discovered_units:
+                                discovered_units.append(name)
 
             # Handle any filenames that had no image (PDFs, missing data)
             image_filenames = {img["filename"] for img in images}
             text_only_filenames = [f for f in filenames if f not in image_filenames]
             if text_only_filenames:
                 text_files_str = "\n".join(f"- {f}" for f in text_only_filenames)
+                all_units = list(existing_units) + discovered_units
+                text_units_str = "\n".join(f"- {u}" for u in all_units) if all_units else "(no units yet)"
                 text_message = f"""Course: {course_name} ({course_subject})
 
 Existing units:
-{units_str}
+{text_units_str}
 
 Documents to organize:
 {text_files_str}"""

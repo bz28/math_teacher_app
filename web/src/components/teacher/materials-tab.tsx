@@ -216,6 +216,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadStep, setUploadStep] = useState<"pick" | "suggest">("pick");
   const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   const [aiSuggestions, setAiSuggestions] = useState<{ filename: string; docId: string; suggestedUnit: string; isNew: boolean; accepted: boolean }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -250,6 +251,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       setAiSuggesting(true);
 
       // Upload all files as uncategorized first
+      setUploadProgress(`Uploading ${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""}...`);
       let uploadResults: { filename: string; docId: string }[] = [];
       try {
         uploadResults = await Promise.all(selectedFiles.map(async (f) => {
@@ -270,6 +272,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       }
 
       // Now suggest units with doc IDs so backend can read image content
+      setUploadProgress("AI is reading your documents...");
       try {
         const docIds = uploadResults.map((r) => r.docId);
         const res = await teacher.suggestUnits(courseId, uploadResults.map((r) => r.filename), docIds);
@@ -788,7 +791,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
                   <div className="mt-8 flex flex-col items-center py-8">
                     <div className="flex items-center gap-2 text-sm text-text-secondary">
                       <SparkleIcon />
-                      AI is organizing your files...
+                      {uploadProgress || "AI is organizing your files..."}
                     </div>
                     <div className="mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-border">
                       <motion.div

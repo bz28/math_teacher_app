@@ -766,7 +766,7 @@ export const teacher = {
   suggestUnits(courseId: string, filenames: string[], documentIds?: string[]) {
     return apiFetch<{ suggestions: { filename: string; suggested_unit: string; is_new: boolean; confidence: number }[] }>(
       `/teacher/courses/${courseId}/suggest-units`,
-      { method: "POST", body: JSON.stringify({ filenames, document_ids: documentIds }), timeout: 60_000 },
+      { method: "POST", body: JSON.stringify({ filenames, document_ids: documentIds }), timeout: 120_000 },
     );
   },
   // AI assignment generation
