@@ -14,10 +14,13 @@ export default function AssignmentsPage() {
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [gradingAssignment, setGradingAssignment] = useState<TeacherAssignment | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
+    setError(null);
     teacher.allAssignments()
       .then((d) => setAssignments(d.assignments))
+      .catch((err) => setError((err as Error).message || "Failed to load assignments"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -74,6 +77,14 @@ export default function AssignmentsPage() {
           <option value="draft">Draft</option>
         </select>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mt-4 flex items-center justify-between rounded-[--radius-md] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <span>{error}</span>
+          <button onClick={() => reload()} className="ml-2 font-semibold hover:underline">Retry</button>
+        </div>
+      )}
 
       {/* Assignment list */}
       <div className="mt-5 space-y-3">

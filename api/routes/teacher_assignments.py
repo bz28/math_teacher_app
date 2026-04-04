@@ -29,7 +29,7 @@ class CreateAssignmentRequest(BaseModel):
     late_policy: str = "none"
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
-    unit_id: str | None = None
+    unit_id: uuid.UUID | None = None
 
     @field_validator("title")
     @classmethod
@@ -57,7 +57,7 @@ class UpdateAssignmentRequest(BaseModel):
 
 
 class AssignSectionsRequest(BaseModel):
-    section_ids: list[str]
+    section_ids: list[uuid.UUID]
 
 
 # ── Helpers ──
@@ -149,12 +149,21 @@ async def create_assignment(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid due_at format")
 
+    # Validate unit belongs to this course
+    if body.unit_id is not None:
+        from api.models.unit import Unit
+        unit_check = (await db.execute(
+            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+        )).scalar_one_or_none()
+        if not unit_check:
+            raise HTTPException(status_code=404, detail="Unit not found in this course")
+
     assignment = Assignment(
         course_id=course_id, teacher_id=current_user.user_id,
         title=body.title, type=body.type, source_type=body.source_type,
         due_at=due_at, late_policy=body.late_policy,
         content=body.content, answer_key=body.answer_key,
-        unit_id=uuid.UUID(body.unit_id) if body.unit_id else None,
+        unit_id=body.unit_id,
     )
     db.add(assignment)
     await db.commit()
@@ -273,22 +282,21 @@ async def assign_to_sections(
 
     now = datetime.now(UTC)
     for sid in body.section_ids:
-        section_uuid = uuid.UUID(sid)
         # Verify section belongs to assignment's course
         section = (await db.execute(
-            select(Section).where(Section.id == section_uuid, Section.course_id == a.course_id)
+            select(Section).where(Section.id == sid, Section.course_id == a.course_id)
         )).scalar_one_or_none()
         if not section:
-            raise HTTPException(status_code=404, detail=f"Section {sid} not found in this course")
+            raise HTTPException(status_code=404, detail="Section not found in this course")
 
         # Check if already assigned
         existing = (await db.execute(
             select(AssignmentSection)
-            .where(AssignmentSection.assignment_id == a.id, AssignmentSection.section_id == section_uuid)
+            .where(AssignmentSection.assignment_id == a.id, AssignmentSection.section_id == sid)
         )).scalar_one_or_none()
         if not existing:
             db.add(AssignmentSection(
-                assignment_id=a.id, section_id=section_uuid, published_at=now,
+                assignment_id=a.id, section_id=sid, published_at=now,
             ))
 
     # Auto-publish if still draft
@@ -371,6 +379,8 @@ async def grade_submission(
     now = datetime.now(UTC)
 
     if body.action == "approve":
+        if grade.ai_score is None:
+            raise HTTPException(status_code=400, detail="Cannot approve: no AI score exists yet")
         grade.final_score = grade.ai_score
         grade.reviewed_by = current_user.user_id
         grade.reviewed_at = now

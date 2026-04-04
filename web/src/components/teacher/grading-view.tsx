@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { teacher, type TeacherSubmission } from "@/lib/api";
 
@@ -19,18 +19,21 @@ export function GradingView({ assignmentId, assignmentTitle, onBack }: GradingVi
   const [overrideScore, setOverrideScore] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const initialSelectDone = useRef(false);
+
   const reload = useCallback(() => {
     teacher.submissions(assignmentId)
       .then((d) => {
         setSubmissions(d.submissions);
-        // Auto-select first pending if nothing selected
-        if (!selectedId) {
+        // Auto-select first pending only on initial load
+        if (!initialSelectDone.current) {
+          initialSelectDone.current = true;
           const pending = d.submissions.find((s) => s.status === "ai_graded");
           setSelectedId(pending?.id ?? d.submissions[0]?.id ?? null);
         }
       })
       .finally(() => setLoading(false));
-  }, [assignmentId, selectedId]);
+  }, [assignmentId]);
 
   useEffect(() => { reload(); }, [reload]);
 
