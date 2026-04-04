@@ -27,8 +27,8 @@ class CreateAssignmentRequest(BaseModel):
     source_type: str | None = None
     due_at: str | None = None  # ISO datetime
     late_policy: str = "none"
-    content: dict | None = None
-    answer_key: dict | None = None
+    content: dict[str, Any] | None = None
+    answer_key: dict[str, Any] | None = None
     unit_id: str | None = None
 
     @field_validator("title")
@@ -52,8 +52,8 @@ class UpdateAssignmentRequest(BaseModel):
     status: str | None = None
     due_at: str | None = None
     late_policy: str | None = None
-    content: dict | None = None
-    answer_key: dict | None = None
+    content: dict[str, Any] | None = None
+    answer_key: dict[str, Any] | None = None
 
 
 class AssignSectionsRequest(BaseModel):
@@ -73,14 +73,18 @@ async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, tea
     return assignment
 
 
-async def get_assignment_stats(db: AsyncSession, assignment_id: uuid.UUID) -> dict:
+async def get_assignment_stats(
+    db: AsyncSession, assignment_id: uuid.UUID,
+) -> dict[str, Any]:
     """Get submission/grading stats for an assignment."""
-    total_q = select(func.count()).select_from(
+    enrolled_subq = (
         select(SectionEnrollment.student_id)
         .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
         .where(AssignmentSection.assignment_id == assignment_id)
         .distinct()
+        .subquery()
     )
+    total_q = select(func.count()).select_from(enrolled_subq)
     total = (await db.execute(total_q)).scalar() or 0
 
     submitted = (await db.execute(
@@ -108,7 +112,7 @@ async def get_assignment_stats(db: AsyncSession, assignment_id: uuid.UUID) -> di
     }
 
 
-def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict) -> dict[str, Any]:
+def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(a.id),
         "course_id": str(a.course_id),

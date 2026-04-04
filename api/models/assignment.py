@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
@@ -31,8 +32,8 @@ class Assignment(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     late_policy: Mapped[str] = mapped_column(String(30), nullable=False, default="none")
-    content: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # questions list
-    answer_key: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # solutions
+    content: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # questions list
+    answer_key: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # solutions
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -81,7 +82,7 @@ class SubmissionGrade(Base):
         UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, unique=True, index=True,
     )
     ai_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ai_breakdown: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ai_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     teacher_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     teacher_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_score: Mapped[float | None] = mapped_column(Float, nullable=True)
