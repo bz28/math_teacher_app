@@ -20,6 +20,7 @@ from api.models import (  # noqa: F401
     section_enrollment,
     session,
     teacher_invite,
+    unit,
     user,
     work_submission,
 )
