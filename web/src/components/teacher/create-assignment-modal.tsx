@@ -92,12 +92,14 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
     setAiGenerating(true);
     setError(null);
     try {
+      const docIds = selectedFiles.size > 0 ? Array.from(selectedFiles) : undefined;
       const res = await teacher.generateQuestions({
         course_id: selectedCourseId,
         unit_name: aiUnit,
         difficulty: aiDifficulty,
         count: Math.min(Number(aiQuestionCount), 30),
         subject: selectedCourse?.subject ?? "math",
+        document_ids: docIds,
       });
       if (res.questions.length === 0) {
         setError("No questions generated — try different settings.");
