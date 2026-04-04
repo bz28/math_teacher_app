@@ -249,9 +249,10 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       setUploadStep("suggest");
       setAiSuggesting(true);
 
+      // Upload all files as uncategorized first
+      let uploadResults: { filename: string; docId: string }[] = [];
       try {
-        // Upload all files as uncategorized
-        const uploadResults = await Promise.all(selectedFiles.map(async (f) => {
+        uploadResults = await Promise.all(selectedFiles.map(async (f) => {
           const base64 = await readFileAsBase64(f);
           const res = await teacher.uploadDocument(courseId, {
             image_base64: base64,
@@ -260,8 +261,16 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
           });
           return { filename: f.name, docId: res.id };
         }));
+      } catch {
+        // Upload failed — close modal, reload to show any that did upload
+        setShowUpload(false);
+        setAiSuggesting(false);
+        reload();
+        return;
+      }
 
-        // Now suggest units with doc IDs so backend can read image content
+      // Now suggest units with doc IDs so backend can read image content
+      try {
         const docIds = uploadResults.map((r) => r.docId);
         const res = await teacher.suggestUnits(courseId, uploadResults.map((r) => r.filename), docIds);
         setAiSuggestions(res.suggestions.map((s) => {
@@ -275,10 +284,10 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
           };
         }));
       } catch {
-        // Fallback: all uncategorized (files are already uploaded)
-        setAiSuggestions(selectedFiles.map((f) => ({
-          filename: f.name,
-          docId: "",
+        // Suggest failed — show uploaded files as uncategorized with real doc IDs
+        setAiSuggestions(uploadResults.map((r) => ({
+          filename: r.filename,
+          docId: r.docId,
           suggestedUnit: "Uncategorized",
           isNew: false,
           accepted: true,
