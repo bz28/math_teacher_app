@@ -3,28 +3,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument } from "@/lib/api";
+import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { MaterialsTab } from "@/components/teacher/materials-tab";
 import { SectionMaterials, type VisibilityState } from "@/components/teacher/section-materials";
 import { MOCK_ASSIGNMENTS, type MockAssignment } from "@/components/teacher/assignments-data";
 import { GradingView } from "@/components/teacher/grading-view";
-
-// Mock units/docs for visibility (same seed as materials-tab — shared reference)
-const MOCK_UNITS = [
-  { id: "u1", name: "Unit 1: Linear Equations", position: 0 },
-  { id: "u2", name: "Unit 2: Systems of Equations", position: 1 },
-  { id: "u3", name: "Unit 3: Quadratic Equations", position: 2 },
-];
-const MOCK_DOCS = [
-  { id: "d1", filename: "Chapter 1 Notes.pdf", file_type: "application/pdf", file_size: 2_350_000, unit_id: "u1" },
-  { id: "d2", filename: "Practice Problems Set A.pdf", file_type: "application/pdf", file_size: 1_100_000, unit_id: "u1" },
-  { id: "d3", filename: "Answer Key.pdf", file_type: "application/pdf", file_size: 820_000, unit_id: "u1" },
-  { id: "d4", filename: "Systems Overview.pdf", file_type: "application/pdf", file_size: 1_500_000, unit_id: "u2" },
-  { id: "d5", filename: "Substitution Method HW.pdf", file_type: "application/pdf", file_size: 670_000, unit_id: "u2" },
-  { id: "d6", filename: "Syllabus.pdf", file_type: "application/pdf", file_size: 120_000, unit_id: null },
-  { id: "d7", filename: "Grading Rubric.pdf", file_type: "application/pdf", file_size: 85_000, unit_id: null },
-];
 
 type Tab = "overview" | "sections" | "materials" | "assignments" | "settings";
 
@@ -43,8 +27,10 @@ export default function CourseDetailPage() {
   const [newSectionName, setNewSectionName] = useState("");
   const [addStudentEmail, setAddStudentEmail] = useState("");
 
-  // Documents
+  // Documents + Units (for section visibility)
   const [documents, setDocuments] = useState<TeacherDocument[]>([]);
+  const [realUnits, setRealUnits] = useState<TeacherUnit[]>([]);
+  const [realDocs, setRealDocs] = useState<TeacherDocument[]>([]);
 
   // Settings
   const [editName, setEditName] = useState("");
@@ -102,6 +88,11 @@ export default function CourseDetailPage() {
     }
     if (tab === "overview" || tab === "materials") {
       teacher.documents(id).then((d) => setDocuments(d.documents)).catch(() => {});
+    }
+    // Fetch units + docs for section visibility view
+    if (tab === "sections") {
+      teacher.units(id).then((d) => setRealUnits(d.units)).catch(() => {});
+      teacher.documents(id).then((d) => setRealDocs(d.documents)).catch(() => {});
     }
   }, [tab, id]);
 
@@ -493,8 +484,8 @@ export default function CourseDetailPage() {
                         <SectionMaterials
                           sectionId={s.id}
                           sectionName={s.name}
-                          units={MOCK_UNITS}
-                          documents={MOCK_DOCS}
+                          units={realUnits.map((u) => ({ id: u.id, name: u.name, position: u.position }))}
+                          documents={realDocs.map((d) => ({ id: d.id, filename: d.filename, file_type: d.file_type, file_size: d.file_size, unit_id: d.unit_id }))}
                           visibility={visibility}
                           onToggleUnit={handleToggleUnit}
                           onToggleDoc={handleToggleDoc}
