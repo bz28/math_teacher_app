@@ -39,9 +39,9 @@ async def upload_document(
     try:
         raw = base64.b64decode(body.image_base64)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 data")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 data")
     if len(raw) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB)")
 
     # Detect file type from filename
     ext = body.filename.rsplit(".", 1)[-1].lower() if "." in body.filename else "jpg"
@@ -54,7 +54,7 @@ async def upload_document(
             select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
         )).scalar_one_or_none()
         if not unit:
-            raise HTTPException(status_code=404, detail="Unit not found in this course")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
 
     doc = Document(
         course_id=course_id, teacher_id=current_user.user_id,
@@ -102,7 +102,7 @@ async def get_document(
         select(Document).where(Document.id == document_id, Document.course_id == course_id)
     )).scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return {
         "id": str(doc.id), "filename": doc.filename,
         "file_type": doc.file_type, "file_size": doc.file_size,
@@ -122,7 +122,7 @@ async def delete_document(
         select(Document).where(Document.id == document_id, Document.course_id == course_id)
     )).scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     await db.delete(doc)
     await db.commit()
     return {"status": "ok"}
@@ -143,7 +143,7 @@ async def update_document(
         select(Document).where(Document.id == document_id, Document.course_id == course_id)
     )).scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     # Validate unit belongs to same course
     if body.unit_id is not None:
@@ -151,7 +151,7 @@ async def update_document(
             select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
         )).scalar_one_or_none()
         if not unit:
-            raise HTTPException(status_code=404, detail="Unit not found in this course")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
 
     doc.unit_id = body.unit_id
     await db.commit()

@@ -84,12 +84,12 @@ async def update_unit(
         select(Unit).where(Unit.id == unit_id, Unit.course_id == course_id)
     )).scalar_one_or_none()
     if not unit:
-        raise HTTPException(status_code=404, detail="Unit not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
 
     if body.name is not None:
         name = body.name.strip()
         if not name or len(name) > 200:
-            raise HTTPException(status_code=400, detail="Name must be 1-200 characters")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name must be 1-200 characters")
         unit.name = name
     if body.position is not None:
         unit.position = body.position
@@ -109,7 +109,7 @@ async def delete_unit(
         select(Unit).where(Unit.id == unit_id, Unit.course_id == course_id)
     )).scalar_one_or_none()
     if not unit:
-        raise HTTPException(status_code=404, detail="Unit not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
 
     # Move documents to uncategorized (unit_id = NULL)
     await db.execute(

@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,14 +74,14 @@ async def toggle_visibility(
 
     # Validate target_type
     if body.target_type not in ("unit", "document"):
-        raise HTTPException(status_code=400, detail="target_type must be 'unit' or 'document'")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target_type must be 'unit' or 'document'")
 
     # Validate section belongs to this course
     section = (await db.execute(
         select(Section).where(Section.id == body.section_id, Section.course_id == course_id)
     )).scalar_one_or_none()
     if not section:
-        raise HTTPException(status_code=404, detail="Section not found in this course")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in this course")
 
     # Find existing record
     existing = (await db.execute(
