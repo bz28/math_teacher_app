@@ -23,8 +23,8 @@ def upgrade() -> None:
         sa.Column("key", sa.String(100), primary_key=True),
         sa.Column("value", sa.Integer, nullable=False, server_default="0"),
     )
-    # Seed the deleted accounts counter
-    op.execute("INSERT INTO app_stats (key, value) VALUES ('deleted_accounts', 0)")
+    # Seed the deleted accounts counter (idempotent)
+    op.execute("INSERT INTO app_stats (key, value) VALUES ('deleted_accounts', 0) ON CONFLICT DO NOTHING")
 
 
 def downgrade() -> None:

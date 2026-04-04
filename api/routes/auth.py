@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -37,6 +37,7 @@ from api.core.entitlements import (
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
+from api.models.app_stat import AppStat
 from api.models.course import Course
 from api.models.llm_call import LLMCall
 from api.models.promo import PromoRedemption
@@ -247,13 +248,18 @@ async def delete_account(
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
 
     # Increment lifetime counter (same transaction — rolls back if delete fails)
-    await db.execute(text("UPDATE app_stats SET value = value + 1 WHERE key = 'deleted_accounts'"))
+    await db.execute(
+        update(AppStat).where(AppStat.key == "deleted_accounts").values(value=AppStat.value + 1)
+    )
+
+    # Capture ID before commit expires the ORM object
+    user_id = user.id
 
     # Delete the user row
     await db.delete(user)
     await db.commit()
 
-    logger.info("Account deleted: user=%s", user.id)
+    logger.info("Account deleted: user=%s", user_id)
 
 
 @router.get("/entitlements", response_model=EntitlementsResponse)

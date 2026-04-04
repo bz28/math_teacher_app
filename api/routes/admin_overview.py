@@ -3,11 +3,12 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Date, cast, func, select, text
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.app_stat import AppStat
 from api.models.llm_call import LLMCall
 from api.models.session import Session
 from api.models.user import User
@@ -111,9 +112,9 @@ async def overview(
         .group_by(Session.subject)
     )).all()
 
-    # Deleted accounts (lifetime counter)
+    # Deleted accounts (lifetime counter — not filtered by time range)
     deleted_accounts = (await db.execute(
-        text("SELECT value FROM app_stats WHERE key = 'deleted_accounts'")
+        select(AppStat.value).where(AppStat.key == "deleted_accounts")
     )).scalar() or 0
 
     # Top spenders in period
