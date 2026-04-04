@@ -5,6 +5,7 @@ import {
   Animated as RNAnimated,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,

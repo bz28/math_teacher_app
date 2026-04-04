@@ -138,7 +138,7 @@ async def redeem_promo_code(
         )
         .values(times_redeemed=PromoCode.times_redeemed + 1)
     )
-    if inc_result.rowcount == 0:  # type: ignore[union-attr]
+    if inc_result.rowcount == 0:  # type: ignore[attr-defined]
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This promo code has reached its redemption limit",
