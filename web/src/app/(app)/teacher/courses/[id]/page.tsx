@@ -514,8 +514,7 @@ export default function CourseDetailPage() {
         {/* Materials tab */}
         {tab === "materials" && (
           <MaterialsTab
-            realDocuments={documents}
-            onDeleteDocument={handleDeleteDocument}
+            courseId={id}
             sections={sections.map((s) => ({ id: s.id, name: s.name }))}
             visibility={visibility}
             onToggleUnit={handleToggleUnit}

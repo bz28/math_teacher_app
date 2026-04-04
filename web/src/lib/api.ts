@@ -576,6 +576,14 @@ export interface TeacherDocument {
   filename: string;
   file_type: string;
   file_size: number;
+  unit_id: string | null;
+  created_at: string;
+}
+
+export interface TeacherUnit {
+  id: string;
+  name: string;
+  position: number;
   created_at: string;
 }
 
@@ -637,8 +645,33 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
+  updateDocument(courseId: string, docId: string, data: { unit_id: string | null }) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/documents/${docId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
   deleteDocument(courseId: string, docId: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/documents/${docId}`, { method: "DELETE" });
+  },
+  // Units
+  units(courseId: string) {
+    return apiFetch<{ units: TeacherUnit[] }>(`/teacher/courses/${courseId}/units`);
+  },
+  createUnit(courseId: string, name: string) {
+    return apiFetch<{ id: string; name: string; position: number }>(`/teacher/courses/${courseId}/units`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+  updateUnit(courseId: string, unitId: string, data: { name?: string; position?: number }) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/units/${unitId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+  deleteUnit(courseId: string, unitId: string) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/units/${unitId}`, { method: "DELETE" });
   },
 };
 

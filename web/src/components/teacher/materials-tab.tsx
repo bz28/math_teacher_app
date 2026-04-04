@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import type { TeacherDocument } from "@/lib/api";
+import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 
-// ── Mock data types ──
+// ── Types ──
 
 interface MockUnit {
   id: string;
@@ -17,26 +17,8 @@ interface MockDocument {
   filename: string;
   file_type: string;
   file_size: number;
-  unit_id: string | null; // null = uncategorized
+  unit_id: string | null;
 }
-
-// ── Seed data (disappears on refresh) ──
-
-const SEED_UNITS: MockUnit[] = [
-  { id: "u1", name: "Unit 1: Linear Equations", position: 0 },
-  { id: "u2", name: "Unit 2: Systems of Equations", position: 1 },
-  { id: "u3", name: "Unit 3: Quadratic Equations", position: 2 },
-];
-
-const SEED_DOCS: MockDocument[] = [
-  { id: "d1", filename: "Chapter 1 Notes.pdf", file_type: "application/pdf", file_size: 2_350_000, unit_id: "u1" },
-  { id: "d2", filename: "Practice Problems Set A.pdf", file_type: "application/pdf", file_size: 1_100_000, unit_id: "u1" },
-  { id: "d3", filename: "Answer Key.pdf", file_type: "application/pdf", file_size: 820_000, unit_id: "u1" },
-  { id: "d4", filename: "Systems Overview.pdf", file_type: "application/pdf", file_size: 1_500_000, unit_id: "u2" },
-  { id: "d5", filename: "Substitution Method HW.pdf", file_type: "application/pdf", file_size: 670_000, unit_id: "u2" },
-  { id: "d6", filename: "Syllabus.pdf", file_type: "application/pdf", file_size: 120_000, unit_id: null },
-  { id: "d7", filename: "Grading Rubric.pdf", file_type: "application/pdf", file_size: 85_000, unit_id: null },
-];
 
 // ── Props ──
 
@@ -51,8 +33,7 @@ interface VisibilityState {
 }
 
 interface MaterialsTabProps {
-  realDocuments: TeacherDocument[];
-  onDeleteDocument: (docId: string) => void;
+  courseId: string;
   sections?: SectionInfo[];
   visibility?: VisibilityState;
   onToggleUnit?: (sectionId: string, unitId: string) => void;
@@ -61,11 +42,27 @@ interface MaterialsTabProps {
 
 // ── Component ──
 
-export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], visibility, onToggleUnit, onToggleDoc }: MaterialsTabProps) {
-  // Use mock data (seed), ignore real documents for now
-  const [units, setUnits] = useState<MockUnit[]>(SEED_UNITS);
-  const [documents, setDocuments] = useState<MockDocument[]>(SEED_DOCS);
+export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit, onToggleDoc }: MaterialsTabProps) {
+  const [units, setUnits] = useState<MockUnit[]>([]);
+  const [documents, setDocuments] = useState<MockDocument[]>([]);
+  const [loading, setLoading] = useState(true);
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
+
+  // Fetch real data from API
+  const reload = useCallback(() => {
+    Promise.all([
+      teacher.units(courseId),
+      teacher.documents(courseId),
+    ]).then(([unitsRes, docsRes]) => {
+      setUnits(unitsRes.units.map((u) => ({ id: u.id, name: u.name, position: u.position })));
+      setDocuments(docsRes.documents.map((d) => ({
+        id: d.id, filename: d.filename, file_type: d.file_type,
+        file_size: d.file_size, unit_id: d.unit_id,
+      })));
+    }).finally(() => setLoading(false));
+  }, [courseId]);
+
+  useEffect(() => { reload(); }, [reload]);
 
   // Unit CRUD state
   const [showCreateUnit, setShowCreateUnit] = useState(false);
@@ -74,8 +71,6 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
   const [editUnitName, setEditUnitName] = useState("");
 
   const uncategorized = documents.filter((d) => d.unit_id === null);
-  let nextId = 100; // simple counter for mock IDs
-  function mockId() { return `mock-${nextId++}-${Date.now()}`; }
 
   function toggleCollapse(unitId: string) {
     setCollapsedUnits((prev) => {
@@ -131,27 +126,27 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
 
   // ── Unit CRUD ──
 
-  function handleCreateUnit() {
+  async function handleCreateUnit() {
     const name = newUnitName.trim();
     if (!name) return;
-    const maxPos = units.reduce((max, u) => Math.max(max, u.position), -1);
-    setUnits([...units, { id: mockId(), name, position: maxPos + 1 }]);
+    await teacher.createUnit(courseId, name);
     setNewUnitName("");
     setShowCreateUnit(false);
+    reload();
   }
 
-  function handleRenameUnit(unitId: string) {
+  async function handleRenameUnit(unitId: string) {
     const name = editUnitName.trim();
     if (!name) return;
-    setUnits(units.map((u) => u.id === unitId ? { ...u, name } : u));
+    await teacher.updateUnit(courseId, unitId, { name });
     setEditingUnitId(null);
     setEditUnitName("");
+    reload();
   }
 
-  function handleDeleteUnit(unitId: string) {
-    // Move docs to uncategorized
-    setDocuments(documents.map((d) => d.unit_id === unitId ? { ...d, unit_id: null } : d));
-    setUnits(units.filter((u) => u.id !== unitId));
+  async function handleDeleteUnit(unitId: string) {
+    await teacher.deleteUnit(courseId, unitId);
+    reload();
   }
 
   // ── Document actions ──
@@ -179,14 +174,16 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     return () => document.removeEventListener("click", close);
   }, [openDocMenu]);
 
-  function handleMoveDoc(docId: string, targetUnitId: string | null) {
-    setDocuments(documents.map((d) => d.id === docId ? { ...d, unit_id: targetUnitId } : d));
+  async function handleMoveDoc(docId: string, targetUnitId: string | null) {
+    await teacher.updateDocument(courseId, docId, { unit_id: targetUnitId });
     setOpenDocMenu(null);
+    reload();
   }
 
-  function handleDeleteDoc(docId: string) {
-    setDocuments(documents.filter((d) => d.id !== docId));
+  async function handleDeleteDoc(docId: string) {
+    await teacher.deleteDocument(courseId, docId);
     setOpenDocMenu(null);
+    reload();
   }
 
   // ── Upload modal ──
@@ -212,18 +209,16 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     setSelectedFiles(Array.from(files));
   }
 
-  function handleUpload() {
+  async function handleUpload() {
     if (selectedFiles.length === 0) return;
 
     if (uploadTargetUnit === "top") {
-      // Top-level upload → show AI suggestions
+      // Top-level upload → show AI suggestions (still mock)
       setUploadStep("suggest");
       setAiSuggesting(true);
 
-      // Fake AI delay
       setTimeout(() => {
         const suggestions = selectedFiles.map((f) => {
-          // Simple fake logic: match filename to existing unit names
           const matchedUnit = units.find((u) =>
             u.name.toLowerCase().split(":").some((part) =>
               f.name.toLowerCase().includes(part.trim().split(" ")[0]?.toLowerCase() ?? "")
@@ -240,36 +235,56 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
         setAiSuggesting(false);
       }, 1500);
     } else {
-      // Direct upload to specific unit
-      const newDocs: MockDocument[] = selectedFiles.map((f) => ({
-        id: mockId(),
-        filename: f.name,
-        file_type: f.type || "application/pdf",
-        file_size: f.size,
-        unit_id: uploadTargetUnit,
-      }));
-      setDocuments([...documents, ...newDocs]);
+      // Direct upload to specific unit — use real API
+      for (const f of selectedFiles) {
+        const reader = new FileReader();
+        await new Promise<void>((resolve) => {
+          reader.onload = async () => {
+            const base64 = (reader.result as string).split(",")[1] ?? "";
+            const res = await teacher.uploadDocument(courseId, {
+              image_base64: base64,
+              filename: f.name,
+            });
+            // Move to unit if specified
+            if (uploadTargetUnit && uploadTargetUnit !== "top") {
+              await teacher.updateDocument(courseId, res.id, { unit_id: uploadTargetUnit });
+            }
+            resolve();
+          };
+          reader.readAsDataURL(f);
+        });
+      }
       setShowUpload(false);
+      reload();
     }
   }
 
-  function handleConfirmSuggestions() {
-    const newDocs: MockDocument[] = aiSuggestions.map((s) => {
-      let unitId: string | null = null;
-      if (s.suggestedUnit !== "Uncategorized") {
-        const match = units.find((u) => u.name === s.suggestedUnit);
-        unitId = match?.id ?? null;
-      }
-      return {
-        id: mockId(),
-        filename: s.filename,
-        file_type: "application/pdf",
-        file_size: Math.floor(Math.random() * 2_000_000) + 100_000,
-        unit_id: unitId,
-      };
-    });
-    setDocuments([...documents, ...newDocs]);
+  async function handleConfirmSuggestions() {
+    // Upload files via real API, then move to suggested units
+    for (const s of aiSuggestions) {
+      const file = selectedFiles.find((f) => f.name === s.filename);
+      if (!file) continue;
+      const reader = new FileReader();
+      await new Promise<void>((resolve) => {
+        reader.onload = async () => {
+          const base64 = (reader.result as string).split(",")[1] ?? "";
+          const res = await teacher.uploadDocument(courseId, {
+            image_base64: base64,
+            filename: file.name,
+          });
+          if (s.suggestedUnit !== "Uncategorized") {
+            const match = units.find((u) => u.name === s.suggestedUnit);
+            if (match) {
+              await teacher.updateDocument(courseId, res.id, { unit_id: match.id });
+            }
+          }
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
     setShowUpload(false);
+    reload();
   }
 
   // ── AI auto-organize ──
@@ -303,13 +318,13 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
     }, 1500);
   }
 
-  function handleApplyAutoOrganize() {
+  async function handleApplyAutoOrganize() {
     const updates = autoSuggestions.filter((s) => s.targetUnitId !== null);
-    setDocuments(documents.map((d) => {
-      const suggestion = updates.find((s) => s.docId === d.id);
-      return suggestion ? { ...d, unit_id: suggestion.targetUnitId } : d;
-    }));
+    for (const u of updates) {
+      await teacher.updateDocument(courseId, u.docId, { unit_id: u.targetUnitId });
+    }
     setShowAutoOrganize(false);
+    reload();
   }
 
   return (
@@ -334,10 +349,10 @@ export function MaterialsTab({ realDocuments, onDeleteDocument, sections = [], v
         </div>
       </div>
 
-      {/* Mock data notice */}
-      <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-        Preview mode — using sample data. Changes reset on refresh.
-      </div>
+      {/* Loading */}
+      {loading && (
+        <div className="py-8 text-center text-sm text-text-muted">Loading materials...</div>
+      )}
 
       {/* Create unit form */}
       {showCreateUnit && (
