@@ -1,7 +1,7 @@
 """add app_stats table for lifetime counters
 
-Revision ID: s1000010
-Revises: r1000009
+Revision ID: u1000012
+Revises: t1000011
 Create Date: 2026-04-04 12:00:00.000000
 
 """
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "s1000010"
-down_revision: str | None = "r1000009"
+revision: str = "u1000012"
+down_revision: str | None = "t1000011"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
