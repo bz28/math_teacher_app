@@ -3,7 +3,8 @@
 import logging
 from typing import Any
 
-from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
+from api.core.document_vision import build_vision_content
+from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json, call_claude_vision
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ async def suggest_units(
     course_subject: str,
     *,
     user_id: str | None = None,
+    images: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Suggest which unit each document belongs to.
 
@@ -42,6 +44,9 @@ async def suggest_units(
         course_name: The course name for context.
         course_subject: The course subject (math, physics, etc.).
         user_id: For LLM call logging.
+        images: Optional list of {"filename", "base64", "media_type"} from
+                fetch_document_images. When provided, Claude reads document
+                content instead of guessing from filenames alone.
 
     Returns:
         List of suggestions: [{filename, suggested_unit, is_new, confidence}]
@@ -61,15 +66,89 @@ Documents to organize:
 {files_str}"""
 
     try:
-        result = await call_claude_json(
-            _SUGGEST_UNITS_PROMPT,
-            user_message,
-            mode=LLMMode.SUGGEST_UNITS,
-            user_id=user_id,
-            model=MODEL_CLASSIFY,
-            max_tokens=1024,
-        )
-        suggestions: list[Any] = result.get("suggestions", [])  # type: ignore[assignment]
+        if images:
+            # Batch images (max 10 per call) and run sequentially so each
+            # batch knows about new units suggested by previous batches
+            batch_size = 10
+            all_suggestions: list[Any] = []
+            discovered_units: list[str] = []  # new units from prior batches
+
+            for i in range(0, len(images), batch_size):
+                batch = images[i:i + batch_size]
+                batch_filenames = [img["filename"] for img in batch]
+                batch_files_str = "\n".join(f"- {f}" for f in batch_filenames)
+                # Include units discovered by earlier batches
+                all_units = list(existing_units) + discovered_units
+                batch_units_str = "\n".join(f"- {u}" for u in all_units) if all_units else "(no units yet)"
+                batch_message = f"""Course: {course_name} ({course_subject})
+
+Existing units:
+{batch_units_str}
+
+Documents to organize:
+{batch_files_str}"""
+                vision_prompt = (
+                    f"{_SUGGEST_UNITS_PROMPT}\n\n"
+                    "Document images are attached below. Read the actual content "
+                    "to determine which unit each document belongs to — do not rely "
+                    "solely on the filename.\n\n"
+                    f"{batch_message}"
+                )
+                content = build_vision_content(batch, vision_prompt)
+                result = await call_claude_vision(
+                    content,
+                    mode=LLMMode.SUGGEST_UNITS,
+                    user_id=user_id,
+                    model=MODEL_CLASSIFY,
+                    max_tokens=2048,
+                )
+                batch_suggestions = result.get("suggestions", [])
+                if isinstance(batch_suggestions, list):
+                    all_suggestions.extend(batch_suggestions)
+                    # Track new units so subsequent batches can reference them
+                    for s in batch_suggestions:
+                        if isinstance(s, dict) and s.get("is_new"):
+                            name = s.get("suggested_unit", "")
+                            if name and name not in discovered_units:
+                                discovered_units.append(name)
+
+            # Handle any filenames that had no image (PDFs, missing data)
+            image_filenames = {img["filename"] for img in images}
+            text_only_filenames = [f for f in filenames if f not in image_filenames]
+            if text_only_filenames:
+                text_files_str = "\n".join(f"- {f}" for f in text_only_filenames)
+                all_units = list(existing_units) + discovered_units
+                text_units_str = "\n".join(f"- {u}" for u in all_units) if all_units else "(no units yet)"
+                text_message = f"""Course: {course_name} ({course_subject})
+
+Existing units:
+{text_units_str}
+
+Documents to organize:
+{text_files_str}"""
+                text_result = await call_claude_json(
+                    _SUGGEST_UNITS_PROMPT,
+                    text_message,
+                    mode=LLMMode.SUGGEST_UNITS,
+                    user_id=user_id,
+                    model=MODEL_CLASSIFY,
+                    max_tokens=1024,
+                )
+                text_suggestions = text_result.get("suggestions", [])
+                if isinstance(text_suggestions, list):
+                    all_suggestions.extend(text_suggestions)
+
+            suggestions: list[Any] = all_suggestions
+        else:
+            result = await call_claude_json(
+                _SUGGEST_UNITS_PROMPT,
+                user_message,
+                mode=LLMMode.SUGGEST_UNITS,
+                user_id=user_id,
+                model=MODEL_CLASSIFY,
+                max_tokens=1024,
+            )
+            suggestions = result.get("suggestions", [])  # type: ignore[assignment]
 
         # Validate and normalize — match AI responses back to original filenames
         # because the LLM may return filenames with subtle differences

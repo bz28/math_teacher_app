@@ -4,7 +4,8 @@ import asyncio
 import logging
 from typing import Any
 
-from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.document_vision import build_vision_content
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 
@@ -47,8 +48,14 @@ async def generate_questions(
     course_name: str = "",
     subject: str = Subject.MATH,
     user_id: str | None = None,
+    images: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """Generate assignment questions for a given topic.
+
+    Args:
+        images: Optional list of {"filename", "base64", "media_type"} from
+                fetch_document_images. When provided, Claude reads the actual
+                document content to generate more relevant questions.
 
     Returns list of {"text": "...", "difficulty": "..."}.
     """
@@ -61,6 +68,7 @@ async def generate_questions(
         else "Mix difficulties: roughly 20% easy, 50% medium, 30% hard."
     )
 
+    system_prompt = _build_generate_prompt(subject)
     user_message = (
         f"Course: {course_name}\n"
         f"Topic: {unit_name}\n"
@@ -68,15 +76,34 @@ async def generate_questions(
         f"{difficulty_instruction}"
     )
 
-    try:
-        result = await call_claude_json(
-            _build_generate_prompt(subject),
-            user_message,
-            mode=LLMMode.GENERATE_QUESTIONS,
-            user_id=user_id,
-            model=MODEL_REASON,
-            max_tokens=4096,
+    if images:
+        user_message = (
+            f"{system_prompt}\n\n"
+            "The teacher has attached documents from this unit. "
+            "Read them carefully and generate questions based on the actual content, "
+            "notation style, and difficulty level shown in the materials.\n\n"
+            f"{user_message}"
         )
+
+    try:
+        if images:
+            content = build_vision_content(images, user_message)
+            result = await call_claude_vision(
+                content,
+                mode=LLMMode.GENERATE_QUESTIONS,
+                user_id=user_id,
+                model=MODEL_REASON,
+                max_tokens=4096,
+            )
+        else:
+            result = await call_claude_json(
+                system_prompt,
+                user_message,
+                mode=LLMMode.GENERATE_QUESTIONS,
+                user_id=user_id,
+                model=MODEL_REASON,
+                max_tokens=4096,
+            )
         questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
 
         normalized = []

@@ -160,6 +160,7 @@ async def update_document(
 
 class SuggestUnitsRequest(BaseModel):
     filenames: list[str]
+    document_ids: list[uuid.UUID] | None = None
 
 
 @router.post("/courses/{course_id}/suggest-units")
@@ -176,12 +177,19 @@ async def suggest_document_units(
         select(Unit.name).where(Unit.course_id == course_id).order_by(Unit.position)
     )).scalars().all()
 
+    # Fetch document images if IDs provided
+    images = None
+    if body.document_ids:
+        from api.core.document_vision import fetch_document_images
+        images = await fetch_document_images(db, body.document_ids, course_id)
+
     suggestions = await suggest_units(
         filenames=body.filenames,
         existing_units=list(units),
         course_name=course.name,
         course_subject=course.subject,
         user_id=str(current_user.user_id),
+        images=images or None,
     )
 
     return {"suggestions": suggestions}

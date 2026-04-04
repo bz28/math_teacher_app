@@ -427,6 +427,7 @@ class GenerateQuestionsRequest(BaseModel):
     difficulty: str = "medium"
     count: int = 10
     subject: str = "math"
+    document_ids: list[uuid.UUID] | None = None
 
 
 class GenerateSolutionsRequest(BaseModel):
@@ -442,6 +443,12 @@ async def generate_assignment_questions(
 ) -> dict[str, Any]:
     course = await get_teacher_course(db, body.course_id, current_user.user_id)
 
+    # Fetch document images if provided
+    images = None
+    if body.document_ids:
+        from api.core.document_vision import MAX_VISION_IMAGES, fetch_document_images
+        images = await fetch_document_images(db, body.document_ids, body.course_id, max_images=MAX_VISION_IMAGES)
+
     questions = await generate_questions(
         unit_name=body.unit_name,
         difficulty=body.difficulty,
@@ -449,6 +456,7 @@ async def generate_assignment_questions(
         course_name=course.name,
         subject=body.subject,
         user_id=str(current_user.user_id),
+        images=images or None,
     )
 
     if not questions:
