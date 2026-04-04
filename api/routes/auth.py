@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -245,6 +245,9 @@ async def delete_account(
     await db.execute(delete(WorkSubmission).where(WorkSubmission.user_id == user.id))
     await db.execute(delete(SectionEnrollment).where(SectionEnrollment.student_id == user.id))
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+
+    # Increment lifetime counter (same transaction — rolls back if delete fails)
+    await db.execute(text("UPDATE app_stats SET value = value + 1 WHERE key = 'deleted_accounts'"))
 
     # Delete the user row
     await db.delete(user)

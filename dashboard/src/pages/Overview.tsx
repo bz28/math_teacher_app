@@ -97,6 +97,11 @@ export default function Overview() {
         <StatCard label="Total Cost" value={`$${data.total_cost.toFixed(2)}`} />
         <StatCard label="Active Users" value={data.active_users} />
         <StatCard label="New Users" value={data.new_users} />
+        <StatCard
+          label="Deleted Accounts"
+          value={data.deleted_accounts}
+          sub="all time"
+        />
         <StatCard label="Avg Latency" value={latencyStr} />
         <StatCard
           label="Error Rate"

@@ -10,6 +10,7 @@ from api.database import Base
 
 # Import all models here so Alembic can detect them
 from api.models import (  # noqa: F401
+    app_stat,
     assignment,
     contact_lead,
     course,
