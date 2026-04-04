@@ -749,6 +749,18 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
+  // Visibility
+  getVisibility(courseId: string) {
+    return apiFetch<{ hidden_units: Record<string, string[]>; hidden_docs: Record<string, string[]> }>(
+      `/teacher/courses/${courseId}/visibility`,
+    );
+  },
+  toggleVisibility(courseId: string, data: { section_id: string; target_type: string; target_id: string }) {
+    return apiFetch<{ is_hidden: boolean }>(`/teacher/courses/${courseId}/visibility/toggle`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 // ── Contact endpoints ──

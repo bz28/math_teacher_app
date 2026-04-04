@@ -44,13 +44,28 @@ export default function CourseDetailPage() {
   const [courseAssignments, setCourseAssignments] = useState<TeacherAssignment[]>([]);
   const [showCreateAssignment, setShowCreateAssignment] = useState(false);
 
-  // Visibility state (mock — shared between Sections and Materials tabs)
+  // Visibility state (persisted via API)
   const [visibility, setVisibility] = useState<VisibilityState>({
     hiddenUnits: {},
     hiddenDocs: {},
   });
 
+  function loadVisibility() {
+    teacher.getVisibility(id).then((data) => {
+      const hiddenUnits: Record<string, Set<string>> = {};
+      const hiddenDocs: Record<string, Set<string>> = {};
+      for (const [sid, uids] of Object.entries(data.hidden_units)) {
+        hiddenUnits[sid] = new Set(uids);
+      }
+      for (const [sid, dids] of Object.entries(data.hidden_docs)) {
+        hiddenDocs[sid] = new Set(dids);
+      }
+      setVisibility({ hiddenUnits, hiddenDocs });
+    }).catch(() => {});
+  }
+
   function handleToggleUnit(sectionId: string, unitId: string) {
+    // Optimistic update
     setVisibility((prev) => {
       const next = { ...prev, hiddenUnits: { ...prev.hiddenUnits } };
       const set = new Set(next.hiddenUnits[sectionId] ?? []);
@@ -59,9 +74,12 @@ export default function CourseDetailPage() {
       next.hiddenUnits[sectionId] = set;
       return next;
     });
+    teacher.toggleVisibility(id, { section_id: sectionId, target_type: "unit", target_id: unitId })
+      .catch(() => loadVisibility()); // revert on failure
   }
 
   function handleToggleDoc(sectionId: string, docId: string) {
+    // Optimistic update
     setVisibility((prev) => {
       const next = { ...prev, hiddenDocs: { ...prev.hiddenDocs } };
       const set = new Set(next.hiddenDocs[sectionId] ?? []);
@@ -70,6 +88,8 @@ export default function CourseDetailPage() {
       next.hiddenDocs[sectionId] = set;
       return next;
     });
+    teacher.toggleVisibility(id, { section_id: sectionId, target_type: "document", target_id: docId })
+      .catch(() => loadVisibility()); // revert on failure
   }
 
   useEffect(() => {
@@ -92,10 +112,11 @@ export default function CourseDetailPage() {
     if (tab === "overview" || tab === "materials") {
       teacher.documents(id).then((d) => setDocuments(d.documents)).catch(() => {});
     }
-    // Fetch units + docs for section visibility view
-    if (tab === "sections") {
+    // Fetch units + docs + visibility for section visibility view
+    if (tab === "sections" || tab === "materials") {
       teacher.units(id).then((d) => setRealUnits(d.units)).catch(() => {});
       teacher.documents(id).then((d) => setRealDocs(d.documents)).catch(() => {});
+      loadVisibility();
     }
     // Fetch assignments for this course
     if (tab === "assignments") {
