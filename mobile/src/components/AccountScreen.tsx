@@ -5,7 +5,6 @@ import {
   Animated as RNAnimated,
   Linking,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,13 +27,15 @@ interface AccountScreenProps {
   onAccountDeleted?: () => void;
 }
 
-function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: string }) {
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+
+function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: IoniconsName }) {
   const pct = limit > 0 ? used / limit : 0;
   const barColor = pct >= 1 ? colors.error : pct >= 0.8 ? colors.warningDark : colors.primary;
   return (
     <View style={styles.usageRow}>
       <View style={styles.usageLabel}>
-        <Ionicons name={icon as any} size={16} color={colors.textSecondary} />
+        <Ionicons name={icon} size={16} color={colors.textSecondary} />
         <Text style={styles.usageLabelText}>{label}</Text>
       </View>
       <View style={styles.usageRight}>

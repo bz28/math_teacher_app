@@ -68,7 +68,7 @@ export function ImageUpload({
         setResult(res);
         // Attach original image when single problem has a diagram (bracket description).
         // The original photo IS the diagram — cheaper than generating SVG during extraction.
-        const hasDiagram = res.problems.length === 1 && res.problems[0].includes("[");
+        const hasDiagram = res.problems.length === 1 && /\[.+\]/.test(res.problems[0]);
         setCropImages(new Array(res.problems.length).fill(hasDiagram ? base64 : undefined));
         setSelected(new Array(res.problems.length).fill(true));
         setPhase("upload");
