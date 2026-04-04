@@ -14,6 +14,7 @@ import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
+import DOMPurify from "dompurify";
 import { PracticeSummary } from "./_components/practice-summary";
 
 export default function PracticePage() {
@@ -188,7 +189,7 @@ export default function PracticePage() {
                         {isWrong ? "\u2717" : String.fromCharCode(65 + i)}
                       </span>
                       {isSvg ? (
-                        <div className="rounded bg-white p-2" dangerouslySetInnerHTML={{ __html: choice }} />
+                        <div className="rounded bg-white p-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(choice, { USE_PROFILES: { svg: true } }) }} />
                       ) : (
                         <MathText text={choice} />
                       )}
