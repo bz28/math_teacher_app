@@ -80,7 +80,7 @@ Documents to organize:
                 mode=LLMMode.SUGGEST_UNITS,
                 user_id=user_id,
                 model=MODEL_CLASSIFY,
-                max_tokens=1024,
+                max_tokens=2048,
             )
         else:
             result = await call_claude_json(
