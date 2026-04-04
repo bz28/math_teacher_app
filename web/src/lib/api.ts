@@ -761,6 +761,13 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
+  // AI suggestions
+  suggestUnits(courseId: string, filenames: string[]) {
+    return apiFetch<{ suggestions: { filename: string; suggested_unit: string; is_new: boolean; confidence: number }[] }>(
+      `/teacher/courses/${courseId}/suggest-units`,
+      { method: "POST", body: JSON.stringify({ filenames }) },
+    );
+  },
 };
 
 // ── Contact endpoints ──

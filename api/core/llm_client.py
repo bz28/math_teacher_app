@@ -39,6 +39,7 @@ class LLMMode:
     IMAGE_EXTRACT = "image_extract"
     DIAGNOSE_WORK = "diagnose_work"
     JUDGE = "judge"
+    SUGGEST_UNITS = "suggest_units"
 
 _client: anthropic.AsyncAnthropic | None = None
 
