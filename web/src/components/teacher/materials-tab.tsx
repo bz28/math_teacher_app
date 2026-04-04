@@ -287,17 +287,29 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
 
   async function handleConfirmSuggestions() {
     await withErrorHandling(async () => {
+      // Create any new units that AI suggested before uploading docs
+      const newUnitNames = [...new Set(
+        aiSuggestions
+          .filter((s) => s.accepted && s.isNew && s.suggestedUnit !== "Uncategorized")
+          .map((s) => s.suggestedUnit),
+      )];
+      const createdUnits: Record<string, string> = {};
+      for (const name of newUnitNames) {
+        const res = await teacher.createUnit(courseId, name);
+        createdUnits[name] = res.id;
+      }
+
       await Promise.all(aiSuggestions.map(async (s) => {
         const file = selectedFiles.find((f) => f.name === s.filename);
         if (!file) return;
         const base64 = await readFileAsBase64(file);
-        const unitMatch = s.suggestedUnit !== "Uncategorized"
-          ? units.find((u) => u.name === s.suggestedUnit)
+        const unitId = s.suggestedUnit !== "Uncategorized"
+          ? (units.find((u) => u.name === s.suggestedUnit)?.id ?? createdUnits[s.suggestedUnit] ?? null)
           : null;
         await teacher.uploadDocument(courseId, {
           image_base64: base64,
           filename: file.name,
-          unit_id: unitMatch?.id ?? null,
+          unit_id: unitId,
         });
       }));
       setShowUpload(false);
@@ -319,17 +331,31 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       const filenames = uncategorized.map((d) => d.filename);
       const res = await teacher.suggestUnits(courseId, filenames);
 
+      // Create any new units AI suggested
+      const newUnitNames = [...new Set(
+        res.suggestions
+          .filter((s) => s.is_new && s.suggested_unit !== "Uncategorized")
+          .map((s) => s.suggested_unit),
+      )];
+      const createdUnits: Record<string, { id: string; name: string }> = {};
+      for (const name of newUnitNames) {
+        const created = await teacher.createUnit(courseId, name);
+        createdUnits[name] = { id: created.id, name: created.name };
+      }
+
       const suggestions = uncategorized.map((doc) => {
         const match = res.suggestions.find((s) => s.filename === doc.filename);
         const suggestedName = match?.suggested_unit ?? "Keep Uncategorized";
-        const matchedUnit = suggestedName !== "Uncategorized" && suggestedName !== "Keep Uncategorized"
-          ? units.find((u) => u.name === suggestedName)
-          : null;
+        if (suggestedName === "Uncategorized" || suggestedName === "Keep Uncategorized") {
+          return { docId: doc.id, filename: doc.filename, targetUnit: "Keep Uncategorized", targetUnitId: null };
+        }
+        const existingUnit = units.find((u) => u.name === suggestedName);
+        const createdUnit = createdUnits[suggestedName];
         return {
           docId: doc.id,
           filename: doc.filename,
-          targetUnit: matchedUnit?.name ?? "Keep Uncategorized",
-          targetUnitId: matchedUnit?.id ?? null,
+          targetUnit: existingUnit?.name ?? createdUnit?.name ?? "Keep Uncategorized",
+          targetUnitId: existingUnit?.id ?? createdUnit?.id ?? null,
         };
       });
       setAutoSuggestions(suggestions);
