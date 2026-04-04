@@ -12,6 +12,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Course, Document
 from api.models.section import Section
+from api.models.unit import Unit
 
 router = APIRouter()
 
@@ -78,12 +79,18 @@ async def list_courses(
         select(Document.course_id, func.count().label("c"))
         .group_by(Document.course_id).subquery()
     )
+    unit_count = (
+        select(Unit.course_id, func.count().label("c"))
+        .group_by(Unit.course_id).subquery()
+    )
     rows = (await db.execute(
         select(Course,
                func.coalesce(section_count.c.c, 0).label("section_count"),
-               func.coalesce(doc_count.c.c, 0).label("doc_count"))
+               func.coalesce(doc_count.c.c, 0).label("doc_count"),
+               func.coalesce(unit_count.c.c, 0).label("unit_count"))
         .outerjoin(section_count, section_count.c.course_id == Course.id)
         .outerjoin(doc_count, doc_count.c.course_id == Course.id)
+        .outerjoin(unit_count, unit_count.c.course_id == Course.id)
         .where(Course.teacher_id == current_user.user_id)
         .order_by(Course.created_at.desc())
     )).all()
@@ -92,6 +99,7 @@ async def list_courses(
         "id": str(r.Course.id), "name": r.Course.name, "subject": r.Course.subject,
         "grade_level": r.Course.grade_level, "status": r.Course.status,
         "section_count": r.section_count, "doc_count": r.doc_count,
+        "unit_count": r.unit_count,
         "created_at": r.Course.created_at.isoformat(),
     } for r in rows]}
 
