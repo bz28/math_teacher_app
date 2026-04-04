@@ -5,13 +5,13 @@ import { motion } from "framer-motion";
 
 // ── Types (shared with materials-tab) ──
 
-export interface MockUnit {
+export interface MaterialUnit {
   id: string;
   name: string;
   position: number;
 }
 
-export interface MockDocument {
+export interface MaterialDocument {
   id: string;
   filename: string;
   file_type: string;
@@ -30,8 +30,8 @@ export interface VisibilityState {
 interface SectionMaterialsProps {
   sectionId: string;
   sectionName: string;
-  units: MockUnit[];
-  documents: MockDocument[];
+  units: MaterialUnit[];
+  documents: MaterialDocument[];
   visibility: VisibilityState;
   onToggleUnit: (sectionId: string, unitId: string) => void;
   onToggleDoc: (sectionId: string, docId: string) => void;
