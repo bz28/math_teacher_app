@@ -23,6 +23,7 @@ from api.models import (  # noqa: F401
     teacher_invite,
     unit,
     user,
+    visibility,
     work_submission,
 )
 
