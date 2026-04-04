@@ -576,7 +576,48 @@ export interface TeacherDocument {
   filename: string;
   file_type: string;
   file_size: number;
+  unit_id: string | null;
   created_at: string;
+}
+
+export interface TeacherUnit {
+  id: string;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
+export interface TeacherAssignment {
+  id: string;
+  course_id: string;
+  unit_id: string | null;
+  title: string;
+  type: string;
+  source_type: string | null;
+  status: string;
+  due_at: string | null;
+  late_policy: string;
+  section_names: string[];
+  total_students: number;
+  submitted: number;
+  graded: number;
+  avg_score: number | null;
+  created_at: string;
+}
+
+export interface TeacherSubmission {
+  id: string;
+  student_name: string;
+  student_email: string;
+  status: string;
+  submitted_at: string | null;
+  is_late: boolean;
+  ai_score: number | null;
+  ai_breakdown: { problem: string; score: number; max_score: number; note: string; flagged: boolean }[] | null;
+  teacher_score: number | null;
+  teacher_notes: string | null;
+  final_score: number | null;
+  reviewed_at: string | null;
 }
 
 export const teacher = {
@@ -631,14 +672,82 @@ export const teacher = {
   documents(courseId: string) {
     return apiFetch<{ documents: TeacherDocument[] }>(`/teacher/courses/${courseId}/documents`);
   },
-  uploadDocument(courseId: string, data: { image_base64: string; filename: string }) {
+  uploadDocument(courseId: string, data: { image_base64: string; filename: string; unit_id?: string | null }) {
     return apiFetch<{ id: string }>(`/teacher/courses/${courseId}/documents`, {
       method: "POST",
       body: JSON.stringify(data),
     });
   },
+  updateDocument(courseId: string, docId: string, data: { unit_id: string | null }) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/documents/${docId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
   deleteDocument(courseId: string, docId: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/documents/${docId}`, { method: "DELETE" });
+  },
+  // Units
+  units(courseId: string) {
+    return apiFetch<{ units: TeacherUnit[] }>(`/teacher/courses/${courseId}/units`);
+  },
+  createUnit(courseId: string, name: string) {
+    return apiFetch<{ id: string; name: string; position: number }>(`/teacher/courses/${courseId}/units`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+  updateUnit(courseId: string, unitId: string, data: { name?: string; position?: number }) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/units/${unitId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+  deleteUnit(courseId: string, unitId: string) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/units/${unitId}`, { method: "DELETE" });
+  },
+  // Assignments
+  assignments(courseId: string) {
+    return apiFetch<{ assignments: TeacherAssignment[] }>(`/teacher/courses/${courseId}/assignments`);
+  },
+  allAssignments() {
+    return apiFetch<{ assignments: TeacherAssignment[] }>("/teacher/assignments");
+  },
+  assignment(assignmentId: string) {
+    return apiFetch<TeacherAssignment & { content: unknown; answer_key: unknown }>(`/teacher/assignments/${assignmentId}`);
+  },
+  createAssignment(courseId: string, data: {
+    title: string; type: string; source_type?: string; due_at?: string;
+    late_policy?: string; content?: unknown; answer_key?: unknown; unit_id?: string;
+  }) {
+    return apiFetch<{ id: string; title: string; status: string }>(`/teacher/courses/${courseId}/assignments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  updateAssignment(assignmentId: string, data: Record<string, unknown>) {
+    return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+  deleteAssignment(assignmentId: string) {
+    return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}`, { method: "DELETE" });
+  },
+  assignToSections(assignmentId: string, sectionIds: string[]) {
+    return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}/sections`, {
+      method: "POST",
+      body: JSON.stringify({ section_ids: sectionIds }),
+    });
+  },
+  submissions(assignmentId: string) {
+    return apiFetch<{ submissions: TeacherSubmission[] }>(`/teacher/assignments/${assignmentId}/submissions`);
+  },
+  gradeSubmission(submissionId: string, data: { action: string; teacher_score?: number; teacher_notes?: string }) {
+    return apiFetch<{ status: string }>(`/teacher/submissions/${submissionId}/grade`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
   },
 };
 

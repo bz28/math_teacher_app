@@ -3,28 +3,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument } from "@/lib/api";
+import { teacher, type TeacherCourse, type TeacherSection, type TeacherSectionDetail, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { MaterialsTab } from "@/components/teacher/materials-tab";
 import { SectionMaterials, type VisibilityState } from "@/components/teacher/section-materials";
-import { MOCK_ASSIGNMENTS, type MockAssignment } from "@/components/teacher/assignments-data";
 import { GradingView } from "@/components/teacher/grading-view";
-
-// Mock units/docs for visibility (same seed as materials-tab — shared reference)
-const MOCK_UNITS = [
-  { id: "u1", name: "Unit 1: Linear Equations", position: 0 },
-  { id: "u2", name: "Unit 2: Systems of Equations", position: 1 },
-  { id: "u3", name: "Unit 3: Quadratic Equations", position: 2 },
-];
-const MOCK_DOCS = [
-  { id: "d1", filename: "Chapter 1 Notes.pdf", file_type: "application/pdf", file_size: 2_350_000, unit_id: "u1" },
-  { id: "d2", filename: "Practice Problems Set A.pdf", file_type: "application/pdf", file_size: 1_100_000, unit_id: "u1" },
-  { id: "d3", filename: "Answer Key.pdf", file_type: "application/pdf", file_size: 820_000, unit_id: "u1" },
-  { id: "d4", filename: "Systems Overview.pdf", file_type: "application/pdf", file_size: 1_500_000, unit_id: "u2" },
-  { id: "d5", filename: "Substitution Method HW.pdf", file_type: "application/pdf", file_size: 670_000, unit_id: "u2" },
-  { id: "d6", filename: "Syllabus.pdf", file_type: "application/pdf", file_size: 120_000, unit_id: null },
-  { id: "d7", filename: "Grading Rubric.pdf", file_type: "application/pdf", file_size: 85_000, unit_id: null },
-];
+import type { TeacherAssignment } from "@/lib/api";
 
 type Tab = "overview" | "sections" | "materials" | "assignments" | "settings";
 
@@ -43,8 +27,10 @@ export default function CourseDetailPage() {
   const [newSectionName, setNewSectionName] = useState("");
   const [addStudentEmail, setAddStudentEmail] = useState("");
 
-  // Documents
+  // Documents + Units (for section visibility)
   const [documents, setDocuments] = useState<TeacherDocument[]>([]);
+  const [realUnits, setRealUnits] = useState<TeacherUnit[]>([]);
+  const [realDocs, setRealDocs] = useState<TeacherDocument[]>([]);
 
   // Settings
   const [editName, setEditName] = useState("");
@@ -53,7 +39,8 @@ export default function CourseDetailPage() {
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [sectionSubTab, setSectionSubTab] = useState<"students" | "materials">("students");
-  const [gradingAssignment, setGradingAssignment] = useState<MockAssignment | null>(null);
+  const [gradingAssignment, setGradingAssignment] = useState<TeacherAssignment | null>(null);
+  const [courseAssignments, setCourseAssignments] = useState<TeacherAssignment[]>([]);
 
   // Visibility state (mock — shared between Sections and Materials tabs)
   const [visibility, setVisibility] = useState<VisibilityState>({
@@ -102,6 +89,15 @@ export default function CourseDetailPage() {
     }
     if (tab === "overview" || tab === "materials") {
       teacher.documents(id).then((d) => setDocuments(d.documents)).catch(() => {});
+    }
+    // Fetch units + docs for section visibility view
+    if (tab === "sections") {
+      teacher.units(id).then((d) => setRealUnits(d.units)).catch(() => {});
+      teacher.documents(id).then((d) => setRealDocs(d.documents)).catch(() => {});
+    }
+    // Fetch assignments for this course
+    if (tab === "assignments") {
+      teacher.assignments(id).then((d) => setCourseAssignments(d.assignments)).catch(() => {});
     }
   }, [tab, id]);
 
@@ -493,8 +489,8 @@ export default function CourseDetailPage() {
                         <SectionMaterials
                           sectionId={s.id}
                           sectionName={s.name}
-                          units={MOCK_UNITS}
-                          documents={MOCK_DOCS}
+                          units={realUnits.map((u) => ({ id: u.id, name: u.name, position: u.position }))}
+                          documents={realDocs.map((d) => ({ id: d.id, filename: d.filename, file_type: d.file_type, file_size: d.file_size, unit_id: d.unit_id }))}
                           visibility={visibility}
                           onToggleUnit={handleToggleUnit}
                           onToggleDoc={handleToggleDoc}
@@ -514,8 +510,7 @@ export default function CourseDetailPage() {
         {/* Materials tab */}
         {tab === "materials" && (
           <MaterialsTab
-            realDocuments={documents}
-            onDeleteDocument={handleDeleteDocument}
+            courseId={id}
             sections={sections.map((s) => ({ id: s.id, name: s.name }))}
             visibility={visibility}
             onToggleUnit={handleToggleUnit}
@@ -526,28 +521,24 @@ export default function CourseDetailPage() {
         {/* Assignments tab */}
         {tab === "assignments" && (
           gradingAssignment ? (
-            <GradingView assignment={gradingAssignment} onBack={() => setGradingAssignment(null)} />
+            <GradingView
+              assignmentId={gradingAssignment.id}
+              assignmentTitle={gradingAssignment.title}
+              onBack={() => { setGradingAssignment(null); teacher.assignments(id).then((d) => setCourseAssignments(d.assignments)).catch(() => {}); }}
+            />
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold text-text-primary">Assignments</h2>
               </div>
-              <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-                Preview mode — showing sample assignments for this course.
-              </div>
-              {(() => {
-                // Mock: show Algebra I assignments for any course (real backend would filter by actual course ID)
-                const courseAssignments = MOCK_ASSIGNMENTS.filter((a) => a.courseName === course?.name || a.courseId === "c1");
-                if (courseAssignments.length === 0) {
-                  return (
-                    <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
-                      <p className="text-sm font-semibold text-text-primary">No assignments yet</p>
-                      <p className="mt-1 text-xs text-text-muted">Create assignments from the Assignments page.</p>
-                    </div>
-                  );
-                }
-                return courseAssignments.map((a) => {
-                  const progressPct = a.totalStudents > 0 ? Math.round((a.submitted / a.totalStudents) * 100) : 0;
+              {courseAssignments.length === 0 ? (
+                <div className="rounded-[--radius-xl] border border-dashed border-border bg-surface p-10 text-center">
+                  <p className="text-sm font-semibold text-text-primary">No assignments yet</p>
+                  <p className="mt-1 text-xs text-text-muted">Create assignments from the Assignments page.</p>
+                </div>
+              ) : (
+                courseAssignments.map((a) => {
+                  const progressPct = a.total_students > 0 ? Math.round((a.submitted / a.total_students) * 100) : 0;
                   const pending = a.submitted - a.graded;
                   const typeIcon = a.type === "test" || a.type === "quiz" ? "📋" : "📝";
                   const statusColors: Record<string, string> = {
@@ -573,7 +564,7 @@ export default function CourseDetailPage() {
                         </span>
                       </div>
                       <div className="mt-1 text-xs text-text-muted">
-                        {a.sectionNames.join(", ")} · {a.type}{a.dueAt ? ` · Due ${a.dueAt}` : ""}
+                        {a.section_names.join(", ") || "No sections"} · {a.type}{a.due_at ? ` · Due ${a.due_at.split("T")[0]}` : ""}
                       </div>
                       {a.status !== "scheduled" && a.status !== "draft" && (
                         <div className="mt-2">
@@ -581,7 +572,7 @@ export default function CourseDetailPage() {
                             <div className="h-full rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
                           </div>
                           <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
-                            <span>{a.submitted}/{a.totalStudents} submitted</span>
+                            <span>{a.submitted}/{a.total_students} submitted</span>
                             <span>{a.graded} graded</span>
                             {pending > 0 && <span className="font-semibold text-amber-600">{pending} pending</span>}
                           </div>
@@ -589,8 +580,8 @@ export default function CourseDetailPage() {
                       )}
                     </div>
                   );
-                });
-              })()}
+                })
+              )}
             </div>
           )
         )}
