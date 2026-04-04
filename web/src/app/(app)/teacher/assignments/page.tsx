@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { teacher, type TeacherAssignment } from "@/lib/api";
 import { GradingView } from "@/components/teacher/grading-view";
+import { CreateAssignmentModal } from "@/components/teacher/create-assignment-modal";
 
 type FilterType = "all" | "homework" | "quiz" | "test";
 type FilterStatus = "all" | "published" | "grading" | "completed" | "scheduled" | "draft";
@@ -14,6 +15,7 @@ export default function AssignmentsPage() {
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [gradingAssignment, setGradingAssignment] = useState<TeacherAssignment | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reload() {
@@ -52,6 +54,9 @@ export default function AssignmentsPage() {
           <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">Assignments</h1>
           <p className="mt-0.5 text-sm text-text-muted">Homework, quizzes, and tests across all courses.</p>
         </div>
+        <button onClick={() => setShowCreate(true)} className="rounded-[--radius-sm] bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-dark">
+          + New Assignment
+        </button>
       </div>
 
       {/* Filters */}
@@ -116,6 +121,13 @@ export default function AssignmentsPage() {
           ))
         )}
       </div>
+
+      {showCreate && (
+        <CreateAssignmentModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => { setShowCreate(false); reload(); }}
+        />
+      )}
     </div>
   );
 }
