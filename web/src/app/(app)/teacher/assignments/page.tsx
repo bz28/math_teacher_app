@@ -16,15 +16,17 @@ export default function AssignmentsPage() {
   const [gradingAssignment, setGradingAssignment] = useState<TeacherAssignment | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(() => {
+  function reload() {
     setError(null);
+    setLoading(true);
     teacher.allAssignments()
       .then((d) => setAssignments(d.assignments))
       .catch((err) => setError((err as Error).message || "Failed to load assignments"))
       .finally(() => setLoading(false));
-  }, []);
+  }
 
-  useEffect(() => { reload(); }, [reload]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { reload(); }, []);
 
   const filtered = assignments.filter((a) => {
     if (filterType !== "all" && a.type !== filterType) return false;
