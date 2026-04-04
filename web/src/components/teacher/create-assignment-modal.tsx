@@ -26,7 +26,7 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
   const [error, setError] = useState<string | null>(null);
 
   // Course picker
-  const [courses, setCourses] = useState<{ id: string; name: string }[]>([]);
+  const [courses, setCourses] = useState<{ id: string; name: string; subject: string }[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState(preselectedCourseId ?? "");
   const [courseSections, setCourseSections] = useState<{ id: string; name: string; student_count: number }[]>([]);
   const [courseUnits, setCourseUnits] = useState<UnitWithFiles[]>([]);
@@ -44,7 +44,7 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiPhase, setAiPhase] = useState<"config" | "questions" | "generating_solutions" | "solutions">("config");
   const [questions, setQuestions] = useState<{ id: number; text: string; difficulty: string }[]>([]);
-  const [solutions, setSolutions] = useState<{ questionId: number; text: string }[]>([]);
+  const [solutions, setSolutions] = useState<{ questionId: number; text: string; steps?: { title: string; description: string }[]; finalAnswer?: string }[]>([]);
   const [editingQ, setEditingQ] = useState<number | null>(null);
   const [editingS, setEditingS] = useState<number | null>(null);
 
@@ -55,7 +55,7 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
 
   // Fetch courses on mount
   useEffect(() => {
-    teacher.courses().then((d) => setCourses(d.courses.map((c) => ({ id: c.id, name: c.name }))));
+    teacher.courses().then((d) => setCourses(d.courses.map((c) => ({ id: c.id, name: c.name, subject: c.subject }))));
   }, []);
 
   // Fetch sections + units when course changes
@@ -85,26 +85,52 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
     setSelectedSections((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
 
-  // AI Generate (still fake)
-  const SAMPLE_Q = ["Solve: 2x + 5 = 13","Factor: x² - 9","Simplify: 3(2x - 4) + 7","Find x: 4x/3 = 8","Graph: y = 2x + 1","Solve: x + y = 7, x - y = 3","Expand: (x + 3)²","Slope through (2,5) and (4,11)","Solve: |2x - 1| = 5","Simplify: √48 + √27"];
-  const SAMPLE_S = ["2x=8 → x=4","(x+3)(x-3)","6x - 5","x = 6","slope=2, y-int=1","x=5, y=2","x²+6x+9","slope=3","x=3 or x=-2","7√3"];
+  // AI Generate
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
 
-  function handleGenerate() {
+  async function handleGenerate() {
     setAiGenerating(true);
-    setTimeout(() => {
-      const count = Math.min(Number(aiQuestionCount), 10);
-      setQuestions(Array.from({ length: count }, (_, i) => ({ id: i, text: SAMPLE_Q[i % 10], difficulty: aiDifficulty === "mixed" ? ["easy","medium","hard"][i%3] : aiDifficulty })));
-      setAiGenerating(false);
+    setError(null);
+    try {
+      const res = await teacher.generateQuestions({
+        course_id: selectedCourseId,
+        unit_name: aiUnit,
+        difficulty: aiDifficulty,
+        count: Math.min(Number(aiQuestionCount), 30),
+        subject: selectedCourse?.subject ?? "math",
+      });
+      if (res.questions.length === 0) {
+        setError("No questions generated — try different settings.");
+        setAiGenerating(false);
+        return;
+      }
+      setQuestions(res.questions.map((q, i) => ({ id: i, text: q.text, difficulty: q.difficulty })));
       setAiPhase("questions");
-    }, 2000);
+    } catch (err) {
+      setError((err as Error).message || "Failed to generate questions");
+    }
+    setAiGenerating(false);
   }
 
-  function handleConfirmQuestions() {
+  async function handleConfirmQuestions() {
     setAiPhase("generating_solutions");
-    setTimeout(() => {
-      setSolutions(questions.map((q) => ({ questionId: q.id, text: SAMPLE_S[q.id % 10] })));
+    setError(null);
+    try {
+      const res = await teacher.generateSolutions({
+        questions: questions.map((q) => ({ text: q.text, difficulty: q.difficulty })),
+        subject: selectedCourse?.subject ?? "math",
+      });
+      setSolutions(res.solutions.map((s, i) => ({
+        questionId: i,
+        text: s.final_answer,
+        steps: s.steps,
+        finalAnswer: s.final_answer,
+      })));
       setAiPhase("solutions");
-    }, 1500);
+    } catch (err) {
+      setError((err as Error).message || "Failed to generate solutions");
+      setAiPhase("questions"); // let them retry
+    }
   }
 
   // Real API create
@@ -114,7 +140,10 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
     setError(null);
     try {
       const content = questions.length > 0 ? { questions: questions.map((q) => ({ text: q.text, difficulty: q.difficulty })) } : undefined;
-      const answerKey = solutions.length > 0 ? { solutions: solutions.map((s) => ({ question_id: s.questionId, text: s.text })) } : undefined;
+      const answerKey = solutions.length > 0 ? { solutions: solutions.map((s) => ({
+        question_id: s.questionId, text: s.text,
+        steps: s.steps ?? [], final_answer: s.finalAnswer ?? s.text,
+      })) } : undefined;
       const documentIds = source === "library" && selectedFiles.size > 0 ? Array.from(selectedFiles) : undefined;
 
       const res = await teacher.createAssignment(selectedCourseId, {
@@ -289,7 +318,20 @@ export function CreateAssignmentModal({ onClose, onCreated, preselectedCourseId 
                                 <span className="text-xs font-semibold text-text-primary">Q{q.id+1}: {q.text}</span>
                                 <button onClick={() => setEditingS(editingS === q.id ? null : q.id)} className="text-[10px] font-semibold text-primary hover:underline">{editingS === q.id ? "Done" : "Edit"}</button>
                               </div>
-                              {editingS === q.id ? <textarea value={sol?.text ?? ""} onChange={(e) => setSolutions(solutions.map((s) => s.questionId === q.id ? {...s,text:e.target.value} : s))} className="mt-2 w-full rounded-[--radius-sm] border border-primary bg-input-bg px-2 py-1.5 text-xs text-text-primary outline-none" rows={2} autoFocus /> : <div className="mt-2 rounded-[--radius-sm] bg-green-50/50 px-2 py-1.5 text-xs text-green-700 dark:bg-green-500/5 dark:text-green-400"><b>Solution:</b> {sol?.text}</div>}
+                              {editingS === q.id ? (
+                                <textarea value={sol?.finalAnswer ?? sol?.text ?? ""} onChange={(e) => setSolutions(solutions.map((s) => s.questionId === q.id ? {...s,text:e.target.value,finalAnswer:e.target.value} : s))} className="mt-2 w-full rounded-[--radius-sm] border border-primary bg-input-bg px-2 py-1.5 text-xs text-text-primary outline-none" rows={2} autoFocus />
+                              ) : (
+                                <div className="mt-2 rounded-[--radius-sm] bg-green-50/50 px-2 py-1.5 text-xs text-green-700 dark:bg-green-500/5 dark:text-green-400">
+                                  {sol?.steps && sol.steps.length > 0 && (
+                                    <div className="mb-1.5 space-y-1">
+                                      {sol.steps.map((step, si) => (
+                                        <div key={si}><b>Step {si+1}:</b> {step.description}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <b>Answer:</b> {sol?.finalAnswer ?? sol?.text}
+                                </div>
+                              )}
                             </div>
                           );
                         })}

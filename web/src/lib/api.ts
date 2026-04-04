@@ -769,6 +769,19 @@ export const teacher = {
       { method: "POST", body: JSON.stringify({ filenames }) },
     );
   },
+  // AI assignment generation
+  generateQuestions(data: { course_id: string; unit_name: string; difficulty: string; count: number; subject?: string }) {
+    return apiFetch<{ questions: { text: string; difficulty: string }[] }>(
+      "/teacher/assignments/generate-questions",
+      { method: "POST", body: JSON.stringify(data), timeout: 60_000 },
+    );
+  },
+  generateSolutions(data: { questions: { text: string; difficulty: string }[]; subject?: string }) {
+    return apiFetch<{ solutions: { question_text: string; steps: { title: string; description: string }[]; final_answer: string }[] }>(
+      "/teacher/assignments/generate-solutions",
+      { method: "POST", body: JSON.stringify(data), timeout: 90_000 },
+    );
+  },
 };
 
 // ── Contact endpoints ──
