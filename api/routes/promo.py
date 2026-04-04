@@ -128,12 +128,21 @@ async def redeem_promo_code(
     )
     db.add(redemption)
 
-    # Atomic increment to prevent race conditions
-    await db.execute(
+    # Atomic conditional increment — belt-and-suspenders with FOR UPDATE lock.
+    # Even if the lock were removed, this UPDATE only succeeds when under the limit.
+    inc_result = await db.execute(
         update(PromoCode)
-        .where(PromoCode.id == promo.id)
+        .where(
+            PromoCode.id == promo.id,
+            PromoCode.times_redeemed < PromoCode.max_redemptions,
+        )
         .values(times_redeemed=PromoCode.times_redeemed + 1)
     )
+    if inc_result.rowcount == 0:  # type: ignore[union-attr]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This promo code has reached its redemption limit",
+        )
 
     await db.commit()
 
