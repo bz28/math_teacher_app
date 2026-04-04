@@ -164,12 +164,12 @@ async def create_assignment(
     doc_id_strings: list[str] | None = None
     if body.document_ids:
         from api.models.course import Document
-        for doc_id in body.document_ids:
-            doc_check = (await db.execute(
-                select(Document).where(Document.id == doc_id, Document.course_id == course_id)
-            )).scalar_one_or_none()
-            if not doc_check:
-                raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in this course")
+        found = set((await db.execute(
+            select(Document.id).where(Document.id.in_(body.document_ids), Document.course_id == course_id)
+        )).scalars().all())
+        if len(found) != len(body.document_ids):
+            missing = set(body.document_ids) - found
+            raise HTTPException(status_code=404, detail=f"Documents not found in this course: {missing}")
         doc_id_strings = [str(d) for d in body.document_ids]
 
     assignment = Assignment(

@@ -299,7 +299,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
         createdUnits[name] = res.id;
       }
 
-      await Promise.all(aiSuggestions.map(async (s) => {
+      await Promise.all(aiSuggestions.filter((s) => s.accepted).map(async (s) => {
         const file = selectedFiles.find((f) => f.name === s.filename);
         if (!file) return;
         const base64 = await readFileAsBase64(file);
@@ -321,7 +321,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
 
   const [showAutoOrganize, setShowAutoOrganize] = useState(false);
   const [autoOrganizing, setAutoOrganizing] = useState(false);
-  const [autoSuggestions, setAutoSuggestions] = useState<{ docId: string; filename: string; targetUnit: string; targetUnitId: string | null }[]>([]);
+  const [autoSuggestions, setAutoSuggestions] = useState<{ docId: string; filename: string; targetUnit: string; targetUnitId: string | null; isNew: boolean }[]>([]);
 
   async function handleAutoOrganize() {
     setShowAutoOrganize(true);
@@ -331,31 +331,19 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       const filenames = uncategorized.map((d) => d.filename);
       const res = await teacher.suggestUnits(courseId, filenames);
 
-      // Create any new units AI suggested
-      const newUnitNames = [...new Set(
-        res.suggestions
-          .filter((s) => s.is_new && s.suggested_unit !== "Uncategorized")
-          .map((s) => s.suggested_unit),
-      )];
-      const createdUnits: Record<string, { id: string; name: string }> = {};
-      for (const name of newUnitNames) {
-        const created = await teacher.createUnit(courseId, name);
-        createdUnits[name] = { id: created.id, name: created.name };
-      }
-
       const suggestions = uncategorized.map((doc) => {
         const match = res.suggestions.find((s) => s.filename === doc.filename);
         const suggestedName = match?.suggested_unit ?? "Keep Uncategorized";
         if (suggestedName === "Uncategorized" || suggestedName === "Keep Uncategorized") {
-          return { docId: doc.id, filename: doc.filename, targetUnit: "Keep Uncategorized", targetUnitId: null };
+          return { docId: doc.id, filename: doc.filename, targetUnit: "Keep Uncategorized", targetUnitId: null, isNew: false };
         }
         const existingUnit = units.find((u) => u.name === suggestedName);
-        const createdUnit = createdUnits[suggestedName];
         return {
           docId: doc.id,
           filename: doc.filename,
-          targetUnit: existingUnit?.name ?? createdUnit?.name ?? "Keep Uncategorized",
-          targetUnitId: existingUnit?.id ?? createdUnit?.id ?? null,
+          targetUnit: existingUnit?.name ?? suggestedName,
+          targetUnitId: existingUnit?.id ?? null,
+          isNew: !existingUnit && (match?.is_new ?? false),
         };
       });
       setAutoSuggestions(suggestions);
@@ -363,7 +351,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       // Fallback: keep everything uncategorized
       setAutoSuggestions(uncategorized.map((d) => ({
         docId: d.id, filename: d.filename,
-        targetUnit: "Keep Uncategorized", targetUnitId: null,
+        targetUnit: "Keep Uncategorized", targetUnitId: null, isNew: false,
       })));
     }
     setAutoOrganizing(false);
@@ -371,9 +359,20 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
 
   async function handleApplyAutoOrganize() {
     await withErrorHandling(async () => {
-      const updates = autoSuggestions.filter((s) => s.targetUnitId !== null);
+      // Create new units first
+      const newUnitNames = [...new Set(
+        autoSuggestions.filter((s) => s.isNew).map((s) => s.targetUnit),
+      )];
+      const createdUnits: Record<string, string> = {};
+      for (const name of newUnitNames) {
+        const created = await teacher.createUnit(courseId, name);
+        createdUnits[name] = created.id;
+      }
+
+      // Move docs to their target units
+      const updates = autoSuggestions.filter((s) => s.targetUnitId !== null || createdUnits[s.targetUnit]);
       await Promise.all(updates.map((u) =>
-        teacher.updateDocument(courseId, u.docId, { unit_id: u.targetUnitId })
+        teacher.updateDocument(courseId, u.docId, { unit_id: u.targetUnitId ?? createdUnits[u.targetUnit] })
       ));
       setShowAutoOrganize(false);
       reload();
