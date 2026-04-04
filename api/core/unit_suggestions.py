@@ -3,7 +3,8 @@
 import logging
 from typing import Any
 
-from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
+from api.core.document_vision import build_vision_content
+from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json, call_claude_vision
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ async def suggest_units(
     course_subject: str,
     *,
     user_id: str | None = None,
+    images: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Suggest which unit each document belongs to.
 
@@ -42,6 +44,9 @@ async def suggest_units(
         course_name: The course name for context.
         course_subject: The course subject (math, physics, etc.).
         user_id: For LLM call logging.
+        images: Optional list of {"filename", "base64", "media_type"} from
+                fetch_document_images. When provided, Claude reads document
+                content instead of guessing from filenames alone.
 
     Returns:
         List of suggestions: [{filename, suggested_unit, is_new, confidence}]
@@ -61,14 +66,31 @@ Documents to organize:
 {files_str}"""
 
     try:
-        result = await call_claude_json(
-            _SUGGEST_UNITS_PROMPT,
-            user_message,
-            mode=LLMMode.SUGGEST_UNITS,
-            user_id=user_id,
-            model=MODEL_CLASSIFY,
-            max_tokens=1024,
-        )
+        if images:
+            vision_prompt = (
+                f"{_SUGGEST_UNITS_PROMPT}\n\n"
+                "Document images are attached below. Read the actual content "
+                "to determine which unit each document belongs to — do not rely "
+                "solely on the filename.\n\n"
+                f"{user_message}"
+            )
+            content = build_vision_content(images, vision_prompt)
+            result = await call_claude_vision(
+                content,
+                mode=LLMMode.SUGGEST_UNITS,
+                user_id=user_id,
+                model=MODEL_CLASSIFY,
+                max_tokens=1024,
+            )
+        else:
+            result = await call_claude_json(
+                _SUGGEST_UNITS_PROMPT,
+                user_message,
+                mode=LLMMode.SUGGEST_UNITS,
+                user_id=user_id,
+                model=MODEL_CLASSIFY,
+                max_tokens=1024,
+            )
         suggestions: list[Any] = result.get("suggestions", [])  # type: ignore[assignment]
 
         # Validate and normalize — match AI responses back to original filenames
