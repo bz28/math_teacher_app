@@ -9,6 +9,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.assignment_generation import generate_questions, generate_solutions
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -415,6 +416,62 @@ async def grade_submission(
 
     await db.commit()
     return {"status": "ok"}
+
+
+# ── AI Generation endpoints ──
+
+
+class GenerateQuestionsRequest(BaseModel):
+    course_id: uuid.UUID
+    unit_name: str
+    difficulty: str = "medium"
+    count: int = 10
+    subject: str = "math"
+
+
+class GenerateSolutionsRequest(BaseModel):
+    questions: list[dict[str, str]]
+    subject: str = "math"
+
+
+@router.post("/assignments/generate-questions")
+async def generate_assignment_questions(
+    body: GenerateQuestionsRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    course = await get_teacher_course(db, body.course_id, current_user.user_id)
+
+    questions = await generate_questions(
+        unit_name=body.unit_name,
+        difficulty=body.difficulty,
+        count=min(body.count, 30),  # cap at 30
+        course_name=course.name,
+        subject=body.subject,
+        user_id=str(current_user.user_id),
+    )
+
+    if not questions:
+        raise HTTPException(status_code=500, detail="Failed to generate questions")
+
+    return {"questions": questions}
+
+
+@router.post("/assignments/generate-solutions")
+async def generate_assignment_solutions(
+    body: GenerateSolutionsRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+) -> dict[str, Any]:
+    if not body.questions or len(body.questions) > 30:
+        raise HTTPException(status_code=400, detail="Provide 1-30 questions")
+
+    solutions = await generate_solutions(
+        questions=body.questions,
+        subject=body.subject,
+        user_id=str(current_user.user_id),
+    )
+
+    return {"solutions": solutions}
 
 
 # ── Private helpers ──

@@ -6,13 +6,13 @@ import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 
 // ── Types ──
 
-interface MockUnit {
+interface MaterialUnit {
   id: string;
   name: string;
   position: number;
 }
 
-interface MockDocument {
+interface MaterialDocument {
   id: string;
   filename: string;
   file_type: string;
@@ -43,8 +43,8 @@ interface MaterialsTabProps {
 // ── Component ──
 
 export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit, onToggleDoc }: MaterialsTabProps) {
-  const [units, setUnits] = useState<MockUnit[]>([]);
-  const [documents, setDocuments] = useState<MockDocument[]>([]);
+  const [units, setUnits] = useState<MaterialUnit[]>([]);
+  const [documents, setDocuments] = useState<MaterialDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
 
@@ -923,8 +923,8 @@ function DocRow({
   visibility,
   onToggleDoc,
 }: {
-  doc: MockDocument;
-  units: MockUnit[];
+  doc: MaterialDocument;
+  units: MaterialUnit[];
   formatSize: (bytes: number) => string;
   openDocMenu: string | null;
   docMenuPos: { top?: number; bottom?: number; right: number };
