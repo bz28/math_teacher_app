@@ -446,8 +446,7 @@ async def generate_assignment_questions(
     # Fetch document images if provided
     images = None
     if body.document_ids:
-        from api.core.document_vision import fetch_document_images
-        from api.core.document_vision import MAX_VISION_IMAGES
+        from api.core.document_vision import MAX_VISION_IMAGES, fetch_document_images
         images = await fetch_document_images(db, body.document_ids, body.course_id, max_images=MAX_VISION_IMAGES)
 
     questions = await generate_questions(

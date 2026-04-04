@@ -69,11 +69,11 @@ Documents to organize:
         if images:
             # Batch images (max 10 per call) and run sequentially so each
             # batch knows about new units suggested by previous batches
-            BATCH_SIZE = 10
+            batch_size = 10
             all_suggestions: list[Any] = []
             discovered_units: list[str] = []  # new units from prior batches
 
-            for i in range(0, len(images), BATCH_SIZE):
+            for i in range(0, len(images), batch_size):
                 batch = images[i:i + BATCH_SIZE]
                 batch_filenames = [img["filename"] for img in batch]
                 batch_files_str = "\n".join(f"- {f}" for f in batch_filenames)
