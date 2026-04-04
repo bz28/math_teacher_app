@@ -245,27 +245,28 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
     if (selectedFiles.length === 0) return;
 
     if (uploadTargetUnit === "top") {
-      // Top-level upload → show AI suggestions (still mock)
+      // Top-level upload → get AI suggestions from backend
       setUploadStep("suggest");
       setAiSuggesting(true);
 
-      setTimeout(() => {
-        const suggestions = selectedFiles.map((f) => {
-          const matchedUnit = units.find((u) =>
-            u.name.toLowerCase().split(":").some((part) =>
-              f.name.toLowerCase().includes(part.trim().split(" ")[0]?.toLowerCase() ?? "")
-            )
-          );
-          return {
-            filename: f.name,
-            suggestedUnit: matchedUnit?.name ?? "Uncategorized",
-            isNew: false,
-            accepted: true,
-          };
-        });
-        setAiSuggestions(suggestions);
-        setAiSuggesting(false);
-      }, 1500);
+      try {
+        const res = await teacher.suggestUnits(courseId, selectedFiles.map((f) => f.name));
+        setAiSuggestions(res.suggestions.map((s) => ({
+          filename: s.filename,
+          suggestedUnit: s.suggested_unit,
+          isNew: s.is_new,
+          accepted: true,
+        })));
+      } catch {
+        // Fallback: all uncategorized
+        setAiSuggestions(selectedFiles.map((f) => ({
+          filename: f.name,
+          suggestedUnit: "Uncategorized",
+          isNew: false,
+          accepted: true,
+        })));
+      }
+      setAiSuggesting(false);
     } else {
       // Direct upload to specific unit — parallel, single API call each
       await withErrorHandling(async () => {
@@ -310,29 +311,36 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
   const [autoOrganizing, setAutoOrganizing] = useState(false);
   const [autoSuggestions, setAutoSuggestions] = useState<{ docId: string; filename: string; targetUnit: string; targetUnitId: string | null }[]>([]);
 
-  function handleAutoOrganize() {
+  async function handleAutoOrganize() {
     setShowAutoOrganize(true);
     setAutoOrganizing(true);
 
-    // Fake AI: assign uncategorized docs to units based on simple keyword matching
-    setTimeout(() => {
+    try {
+      const filenames = uncategorized.map((d) => d.filename);
+      const res = await teacher.suggestUnits(courseId, filenames);
+
       const suggestions = uncategorized.map((doc) => {
-        const name = doc.filename.toLowerCase();
-        // Try to match to existing units
-        const matched = units.find((u) => {
-          const keywords = u.name.toLowerCase().replace(/unit \d+:?\s*/i, "").split(/\s+/);
-          return keywords.some((kw) => kw.length > 3 && name.includes(kw));
-        });
+        const match = res.suggestions.find((s) => s.filename === doc.filename);
+        const suggestedName = match?.suggested_unit ?? "Keep Uncategorized";
+        const matchedUnit = suggestedName !== "Uncategorized" && suggestedName !== "Keep Uncategorized"
+          ? units.find((u) => u.name === suggestedName)
+          : null;
         return {
           docId: doc.id,
           filename: doc.filename,
-          targetUnit: matched?.name ?? "Keep Uncategorized",
-          targetUnitId: matched?.id ?? null,
+          targetUnit: matchedUnit?.name ?? "Keep Uncategorized",
+          targetUnitId: matchedUnit?.id ?? null,
         };
       });
       setAutoSuggestions(suggestions);
-      setAutoOrganizing(false);
-    }, 1500);
+    } catch {
+      // Fallback: keep everything uncategorized
+      setAutoSuggestions(uncategorized.map((d) => ({
+        docId: d.id, filename: d.filename,
+        targetUnit: "Keep Uncategorized", targetUnitId: null,
+      })));
+    }
+    setAutoOrganizing(false);
   }
 
   async function handleApplyAutoOrganize() {
