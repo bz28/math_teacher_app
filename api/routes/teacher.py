@@ -5,9 +5,11 @@ from fastapi import APIRouter
 from api.routes.teacher_courses import router as courses_router
 from api.routes.teacher_documents import router as documents_router
 from api.routes.teacher_sections import router as sections_router
+from api.routes.teacher_units import router as units_router
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 
 router.include_router(courses_router)
 router.include_router(sections_router)
 router.include_router(documents_router)
+router.include_router(units_router)
