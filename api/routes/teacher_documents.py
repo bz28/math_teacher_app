@@ -23,6 +23,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 class UploadDocumentRequest(BaseModel):
     image_base64: str
     filename: str = "upload.jpg"
+    unit_id: uuid.UUID | None = None
 
 
 @router.post("/courses/{course_id}/documents", status_code=status.HTTP_201_CREATED)
@@ -46,10 +47,19 @@ async def upload_document(
     type_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "pdf": "application/pdf"}
     file_type = type_map.get(ext, "image/jpeg")
 
+    # Validate unit belongs to same course if specified
+    if body.unit_id is not None:
+        unit = (await db.execute(
+            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+        )).scalar_one_or_none()
+        if not unit:
+            raise HTTPException(status_code=404, detail="Unit not found in this course")
+
     doc = Document(
         course_id=course_id, teacher_id=current_user.user_id,
         filename=body.filename, file_type=file_type,
         file_size=len(raw), image_data=body.image_base64,
+        unit_id=body.unit_id,
     )
     db.add(doc)
     await db.commit()

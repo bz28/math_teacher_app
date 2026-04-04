@@ -639,7 +639,7 @@ export const teacher = {
   documents(courseId: string) {
     return apiFetch<{ documents: TeacherDocument[] }>(`/teacher/courses/${courseId}/documents`);
   },
-  uploadDocument(courseId: string, data: { image_base64: string; filename: string }) {
+  uploadDocument(courseId: string, data: { image_base64: string; filename: string; unit_id?: string | null }) {
     return apiFetch<{ id: string }>(`/teacher/courses/${courseId}/documents`, {
       method: "POST",
       body: JSON.stringify(data),

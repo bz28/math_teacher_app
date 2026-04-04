@@ -124,29 +124,48 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
     return { text: `Hidden from: ${hiddenFrom.map((s) => s.name).join(", ")}`, color: "yellow" };
   }
 
+  // ── Error handling ──
+
+  const [error, setError] = useState<string | null>(null);
+
+  async function withErrorHandling(fn: () => Promise<void>) {
+    try {
+      setError(null);
+      await fn();
+    } catch (err) {
+      setError((err as Error).message || "Something went wrong");
+    }
+  }
+
   // ── Unit CRUD ──
 
   async function handleCreateUnit() {
     const name = newUnitName.trim();
     if (!name) return;
-    await teacher.createUnit(courseId, name);
-    setNewUnitName("");
-    setShowCreateUnit(false);
-    reload();
+    await withErrorHandling(async () => {
+      await teacher.createUnit(courseId, name);
+      setNewUnitName("");
+      setShowCreateUnit(false);
+      reload();
+    });
   }
 
   async function handleRenameUnit(unitId: string) {
     const name = editUnitName.trim();
     if (!name) return;
-    await teacher.updateUnit(courseId, unitId, { name });
-    setEditingUnitId(null);
-    setEditUnitName("");
-    reload();
+    await withErrorHandling(async () => {
+      await teacher.updateUnit(courseId, unitId, { name });
+      setEditingUnitId(null);
+      setEditUnitName("");
+      reload();
+    });
   }
 
   async function handleDeleteUnit(unitId: string) {
-    await teacher.deleteUnit(courseId, unitId);
-    reload();
+    await withErrorHandling(async () => {
+      await teacher.deleteUnit(courseId, unitId);
+      reload();
+    });
   }
 
   // ── Document actions ──
@@ -175,15 +194,19 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
   }, [openDocMenu]);
 
   async function handleMoveDoc(docId: string, targetUnitId: string | null) {
-    await teacher.updateDocument(courseId, docId, { unit_id: targetUnitId });
-    setOpenDocMenu(null);
-    reload();
+    await withErrorHandling(async () => {
+      await teacher.updateDocument(courseId, docId, { unit_id: targetUnitId });
+      setOpenDocMenu(null);
+      reload();
+    });
   }
 
   async function handleDeleteDoc(docId: string) {
-    await teacher.deleteDocument(courseId, docId);
-    setOpenDocMenu(null);
-    reload();
+    await withErrorHandling(async () => {
+      await teacher.deleteDocument(courseId, docId);
+      setOpenDocMenu(null);
+      reload();
+    });
   }
 
   // ── Upload modal ──
@@ -207,6 +230,15 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
   function handleFilesSelected(files: FileList | null) {
     if (!files) return;
     setSelectedFiles(Array.from(files));
+  }
+
+  function readFileAsBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+      reader.readAsDataURL(file);
+    });
   }
 
   async function handleUpload() {
@@ -235,56 +267,41 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
         setAiSuggesting(false);
       }, 1500);
     } else {
-      // Direct upload to specific unit — use real API
-      for (const f of selectedFiles) {
-        const reader = new FileReader();
-        await new Promise<void>((resolve) => {
-          reader.onload = async () => {
-            const base64 = (reader.result as string).split(",")[1] ?? "";
-            const res = await teacher.uploadDocument(courseId, {
-              image_base64: base64,
-              filename: f.name,
-            });
-            // Move to unit if specified
-            if (uploadTargetUnit && uploadTargetUnit !== "top") {
-              await teacher.updateDocument(courseId, res.id, { unit_id: uploadTargetUnit });
-            }
-            resolve();
-          };
-          reader.readAsDataURL(f);
-        });
-      }
-      setShowUpload(false);
-      reload();
+      // Direct upload to specific unit — parallel, single API call each
+      await withErrorHandling(async () => {
+        const unitId = uploadTargetUnit !== "top" ? uploadTargetUnit : null;
+        await Promise.all(selectedFiles.map(async (f) => {
+          const base64 = await readFileAsBase64(f);
+          await teacher.uploadDocument(courseId, {
+            image_base64: base64,
+            filename: f.name,
+            unit_id: unitId,
+          });
+        }));
+        setShowUpload(false);
+        reload();
+      });
     }
   }
 
   async function handleConfirmSuggestions() {
-    // Upload files via real API, then move to suggested units
-    for (const s of aiSuggestions) {
-      const file = selectedFiles.find((f) => f.name === s.filename);
-      if (!file) continue;
-      const reader = new FileReader();
-      await new Promise<void>((resolve) => {
-        reader.onload = async () => {
-          const base64 = (reader.result as string).split(",")[1] ?? "";
-          const res = await teacher.uploadDocument(courseId, {
-            image_base64: base64,
-            filename: file.name,
-          });
-          if (s.suggestedUnit !== "Uncategorized") {
-            const match = units.find((u) => u.name === s.suggestedUnit);
-            if (match) {
-              await teacher.updateDocument(courseId, res.id, { unit_id: match.id });
-            }
-          }
-          resolve();
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-    setShowUpload(false);
-    reload();
+    await withErrorHandling(async () => {
+      await Promise.all(aiSuggestions.map(async (s) => {
+        const file = selectedFiles.find((f) => f.name === s.filename);
+        if (!file) return;
+        const base64 = await readFileAsBase64(file);
+        const unitMatch = s.suggestedUnit !== "Uncategorized"
+          ? units.find((u) => u.name === s.suggestedUnit)
+          : null;
+        await teacher.uploadDocument(courseId, {
+          image_base64: base64,
+          filename: file.name,
+          unit_id: unitMatch?.id ?? null,
+        });
+      }));
+      setShowUpload(false);
+      reload();
+    });
   }
 
   // ── AI auto-organize ──
@@ -319,12 +336,14 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
   }
 
   async function handleApplyAutoOrganize() {
-    const updates = autoSuggestions.filter((s) => s.targetUnitId !== null);
-    for (const u of updates) {
-      await teacher.updateDocument(courseId, u.docId, { unit_id: u.targetUnitId });
-    }
-    setShowAutoOrganize(false);
-    reload();
+    await withErrorHandling(async () => {
+      const updates = autoSuggestions.filter((s) => s.targetUnitId !== null);
+      await Promise.all(updates.map((u) =>
+        teacher.updateDocument(courseId, u.docId, { unit_id: u.targetUnitId })
+      ));
+      setShowAutoOrganize(false);
+      reload();
+    });
   }
 
   return (
@@ -352,6 +371,14 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       {/* Loading */}
       {loading && (
         <div className="py-8 text-center text-sm text-text-muted">Loading materials...</div>
+      )}
+
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center justify-between rounded-[--radius-md] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-2 font-semibold hover:underline">Dismiss</button>
+        </div>
       )}
 
       {/* Create unit form */}
