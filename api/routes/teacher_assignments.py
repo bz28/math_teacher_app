@@ -30,6 +30,7 @@ class CreateAssignmentRequest(BaseModel):
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
     unit_id: uuid.UUID | None = None
+    document_ids: list[uuid.UUID] | None = None
 
     @field_validator("title")
     @classmethod
@@ -123,6 +124,7 @@ def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str,
         "status": a.status,
         "due_at": a.due_at.isoformat() if a.due_at else None,
         "late_policy": a.late_policy,
+        "document_ids": a.document_ids,
         "section_names": section_names,
         "total_students": stats["total_students"],
         "submitted": stats["submitted"],
@@ -158,12 +160,24 @@ async def create_assignment(
         if not unit_check:
             raise HTTPException(status_code=404, detail="Unit not found in this course")
 
+    # Validate document_ids belong to this course
+    doc_id_strings: list[str] | None = None
+    if body.document_ids:
+        from api.models.course import Document
+        for doc_id in body.document_ids:
+            doc_check = (await db.execute(
+                select(Document).where(Document.id == doc_id, Document.course_id == course_id)
+            )).scalar_one_or_none()
+            if not doc_check:
+                raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in this course")
+        doc_id_strings = [str(d) for d in body.document_ids]
+
     assignment = Assignment(
         course_id=course_id, teacher_id=current_user.user_id,
         title=body.title, type=body.type, source_type=body.source_type,
         due_at=due_at, late_policy=body.late_policy,
         content=body.content, answer_key=body.answer_key,
-        unit_id=body.unit_id,
+        unit_id=body.unit_id, document_ids=doc_id_strings,
     )
     db.add(assignment)
     await db.commit()
