@@ -1,7 +1,7 @@
 """Teacher assignment management — CRUD + section assignment."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -267,7 +267,7 @@ async def assign_to_sections(
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for sid in body.section_ids:
         section_uuid = uuid.UUID(sid)
         # Verify section belongs to assignment's course
@@ -354,7 +354,7 @@ async def grade_submission(
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    a = await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+    await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
     # Get or create grade record
     grade = (await db.execute(
@@ -364,7 +364,7 @@ async def grade_submission(
         grade = SubmissionGrade(submission_id=sub.id)
         db.add(grade)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if body.action == "approve":
         grade.final_score = grade.ai_score

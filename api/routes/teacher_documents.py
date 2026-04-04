@@ -75,7 +75,10 @@ async def list_documents(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
     docs = (await db.execute(
-        select(Document.id, Document.filename, Document.file_type, Document.file_size, Document.unit_id, Document.created_at)
+        select(
+            Document.id, Document.filename, Document.file_type,
+            Document.file_size, Document.unit_id, Document.created_at,
+        )
         .where(Document.course_id == course_id)
         .order_by(Document.created_at.desc())
     )).all()

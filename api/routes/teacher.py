@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter
 
+from api.routes.teacher_assignments import router as assignments_router
 from api.routes.teacher_courses import router as courses_router
 from api.routes.teacher_documents import router as documents_router
 from api.routes.teacher_sections import router as sections_router
 from api.routes.teacher_units import router as units_router
-from api.routes.teacher_assignments import router as assignments_router
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 

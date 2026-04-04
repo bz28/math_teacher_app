@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,7 +25,9 @@ class Assignment(Base):
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # homework | quiz | test
-    source_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # upload | ai_generated | library | manual
+    source_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True,
+    )  # upload | ai_generated | library | manual
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     late_policy: Mapped[str] = mapped_column(String(30), nullable=False, default="none")
