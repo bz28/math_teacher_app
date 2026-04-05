@@ -43,7 +43,16 @@ export function Navbar() {
     <nav className="sticky top-0 z-40 border-b border-border-light/50 bg-surface/80 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link
+          href="/"
+          onClick={(e) => {
+            if (pathname === "/") {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          }}
+          className="flex items-center gap-2.5"
+        >
           <LogoMark size={32} />
           <span className="text-lg font-bold tracking-tight text-text-primary">
             Veradic AI
