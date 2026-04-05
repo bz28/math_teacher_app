@@ -142,23 +142,25 @@ export function StickyShowcase({
     }, autoScrollDelay);
   }, [autoScrollDelay, startAutoScroll, stopAutoScroll, scrollYProgress]);
 
-  // Listen for user scroll / touch / wheel to reset idle timer
+  // Listen for intentional user input to reset idle timer.
+  // Only wheel/touch/keydown count — NOT the scroll event itself,
+  // because our programmatic scrollBy also fires scroll events.
   useEffect(() => {
-    function onUserScroll() {
+    function onUserInput() {
       if (isAutoScrolling.current) {
-        // User took over — stop and restart idle timer
         stopAutoScroll();
       }
       resetIdleTimer();
     }
-    // Use wheel and touchmove to detect intentional user scrolling
-    window.addEventListener("wheel", onUserScroll, { passive: true });
-    window.addEventListener("touchmove", onUserScroll, { passive: true });
+    window.addEventListener("wheel", onUserInput, { passive: true });
+    window.addEventListener("touchstart", onUserInput, { passive: true });
+    window.addEventListener("keydown", onUserInput, { passive: true });
     // Also start the idle timer when component mounts
     resetIdleTimer();
     return () => {
-      window.removeEventListener("wheel", onUserScroll);
-      window.removeEventListener("touchmove", onUserScroll);
+      window.removeEventListener("wheel", onUserInput);
+      window.removeEventListener("touchstart", onUserInput);
+      window.removeEventListener("keydown", onUserInput);
       stopAutoScroll();
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
