@@ -185,10 +185,8 @@ body {
   color: var(--color-text);
 }
 
-/* ── Smooth scrolling ── */
-html {
-  scroll-behavior: smooth;
-}
+/* Scroll behavior is handled per-interaction via jumpTo() in lib/utils.ts.
+   No global smooth scroll — it interferes with page navigations. */
 
 /* ── Focus ring utility ── */
 *:focus-visible {
