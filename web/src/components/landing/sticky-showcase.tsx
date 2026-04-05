@@ -24,6 +24,8 @@ export interface ShowcaseFeature {
   substepCount: number;
   /** Render the demo for this feature given how many substeps are visible (1-based) */
   render: (visibleCount: number) => ReactNode;
+  /** Optional anchor ID for deep-linking (e.g. "step-by-step") */
+  anchorId?: string;
 }
 
 interface StickyShowcaseProps {
@@ -77,12 +79,34 @@ export function StickyShowcase({
     if (localCount !== localStep) setLocalStep(localCount);
   });
 
+  // Calculate the scroll offset (as %) where each feature starts
+  const featureOffsets: number[] = [];
+  {
+    let cumulative = 0;
+    for (const f of features) {
+      featureOffsets.push(totalSubsteps > 0 ? (cumulative / totalSubsteps) * 100 : 0);
+      cumulative += f.substepCount;
+    }
+  }
+
   return (
     <div
       ref={containerRef}
       style={{ height: `${totalSubsteps * vhPerStep}vh` }}
       className="relative"
     >
+      {/* Invisible anchor divs at the scroll offset where each feature begins */}
+      {features.map((f, i) =>
+        f.anchorId ? (
+          <div
+            key={f.anchorId}
+            id={f.anchorId}
+            className="absolute left-0"
+            style={{ top: `${featureOffsets[i]}%` }}
+          />
+        ) : null
+      )}
+
       <div className="sticky top-0 flex min-h-screen items-center overflow-hidden px-6">
         <div className="mx-auto w-full max-w-5xl py-12">
           {/* Section heading */}
