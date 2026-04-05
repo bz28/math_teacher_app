@@ -63,6 +63,7 @@ export function ScrollingTopics({ subject = "all" }: ScrollingTopicsProps) {
         <div className="animate-scroll-down">
           <TopicList items={rightItems} align="right" />
           <TopicList items={rightItems} align="right" />
+          <TopicList items={rightItems} align="right" />
         </div>
       </div>
     </div>
