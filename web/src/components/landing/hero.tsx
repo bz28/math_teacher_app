@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6 pb-12 pt-14 md:pb-16 md:pt-20">
+    <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6">
       {/* Subtle radial glow */}
       <div className="pointer-events-none absolute left-1/2 top-1/3 hidden h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/8 to-transparent blur-3xl md:block" />
 
