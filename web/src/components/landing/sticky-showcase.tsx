@@ -46,7 +46,7 @@ export function StickyShowcase({
   features,
   vhPerStep = 80,
   autoScrollDelay = 2000,
-  autoScrollSpeed = 3,
+  autoScrollSpeed = 7.5,
 }: StickyShowcaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const totalSubsteps = features.reduce((sum, f) => sum + f.substepCount, 0);

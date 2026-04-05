@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BrowserFrame, LearnSessionMockup } from "./product-mockup";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6 pb-20 pt-14 md:pb-28 md:pt-20">
+    <section className="relative overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6 pb-12 pt-14 md:pb-16 md:pt-20">
       {/* Subtle radial glow */}
       <div className="pointer-events-none absolute left-1/2 top-1/3 hidden h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/8 to-transparent blur-3xl md:block" />
 
@@ -50,18 +49,6 @@ export function Hero() {
               See how it works
             </a>
           </div>
-        </motion.div>
-
-        {/* Product mockup — centered below CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="mt-14 md:mt-16"
-        >
-          <BrowserFrame>
-            <LearnSessionMockup />
-          </BrowserFrame>
         </motion.div>
       </div>
     </section>
