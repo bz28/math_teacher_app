@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from api.core.constants import DECOMPOSITION_CACHE_MAX_SIZE, DECOMPOSITION_CACHE_TTL_SECONDS
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
+from api.core.llm_schemas import DECOMPOSITION_SCHEMA
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -54,31 +55,22 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "Do NOT include any mention of approaches that are not the final/optimal "
     "solution. Those will only confuse the student.\n\n"
 
-    "Given a {domain} problem, produce a JSON object with:\n"
-    '- "steps": an array of objects. EACH step MUST be an object with exactly two keys:\n'
-    '  - "title": a short 2-5 word heading (e.g., "Isolate the Variable")\n'
-    '  - "description": the full explanation of the step.\n'
-    "  Formatting rules for descriptions:\n"
-    "  - Do NOT use HTML tags like <br> — use plain newlines (\\n) for line breaks\n"
-    "  - Use LaTeX with $ delimiters for ALL math, even simple expressions like $2 \\times 3$ or $n = 5$\n"
-    "  - Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
-    "  - Use **double asterisks** for emphasis on key terms\n"
-    "  - For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
-    "  - For diagrams, use structured @@{{...}}@@ notation:\n"
-    "    - Chemistry: @@{{\"diagram_type\": \"smiles\",\n"
-    "      \"smiles\": \"SMILES_STRING\", \"label\": \"desc\"}}@@\n"
-    "    - Math graphs: @@{{\"diagram_type\": \"graph\",\n"
-    "      \"functions\": [{{\"fn\": \"x^2-4\"}}],\n"
-    "      \"xRange\": [-5,5], \"yRange\": [-5,10]}}@@\n"
-    "    - Physics/other: use <svg> blocks as before\n"
-    '  Do NOT use plain strings for steps — every step must be\n'
-    '  {{"title": "...", "description": "..."}}.\n'
-    '- "final_answer": the final simplified answer\n'
-    '- "answer_type": "text" or "diagram"\n'
-    "  If diagram for chemistry, use @@{{...smiles...}}@@\n"
-    "  If diagram for math, use @@{{...graph...}}@@\n\n"
-    "Respond with ONLY valid JSON — no markdown, no explanation:\n"
-    '{{"steps": [...], "final_answer": "...", "answer_type": "text"}}'
+    "Given a {domain} problem, solve it step-by-step.\n\n"
+    "Each step needs a short title (2-5 words) and a full description.\n"
+    "Formatting rules for descriptions:\n"
+    "- Do NOT use HTML tags like <br> — use plain newlines (\\n) for line breaks\n"
+    "- Use LaTeX with $ delimiters for ALL math, even simple expressions like $2 \\times 3$ or $n = 5$\n"
+    "- Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
+    "- Use **double asterisks** for emphasis on key terms\n"
+    "- For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
+    "- For diagrams, use structured @@{{...}}@@ notation:\n"
+    "  - Chemistry: @@{{\"diagram_type\": \"smiles\",\n"
+    "    \"smiles\": \"SMILES_STRING\", \"label\": \"desc\"}}@@\n"
+    "  - Math graphs: @@{{\"diagram_type\": \"graph\",\n"
+    "    \"functions\": [{{\"fn\": \"x^2-4\"}}],\n"
+    "    \"xRange\": [-5,5], \"yRange\": [-5,10]}}@@\n"
+    "  - Physics/other: use <svg> blocks as before\n\n"
+    "For answer_type, use \"diagram\" with @@{{...}}@@ notation for chemistry/graph answers."
 )
 
 
@@ -200,6 +192,7 @@ async def decompose_problem(
         data = await call_claude_vision(
             user_content,
             mode=llm_mode,
+            tool_schema=DECOMPOSITION_SCHEMA,
             model=MODEL_REASON,
             max_tokens=4096,
             user_id=user_id,
@@ -209,6 +202,7 @@ async def decompose_problem(
             _build_system_prompt(subject),
             prompt,
             mode=llm_mode,
+            tool_schema=DECOMPOSITION_SCHEMA,
             model=MODEL_REASON,
             max_tokens=4096,
             user_id=user_id,

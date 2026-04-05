@@ -6,6 +6,7 @@ from typing import Any
 
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
+from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 
@@ -19,9 +20,6 @@ You are a {professor_role} creating assignment questions for a teacher.
 
 The teacher wants questions about a specific topic for their students.
 Generate original problems that test understanding of the topic.
-
-Respond with ONLY valid JSON:
-{{"questions": [{{"text": "problem text", "difficulty": "easy|medium|hard"}}]}}
 
 Rules:
 - Generate exactly the requested number of questions
@@ -91,6 +89,7 @@ async def generate_questions(
             result = await call_claude_vision(
                 content,
                 mode=LLMMode.GENERATE_QUESTIONS,
+                tool_schema=GENERATE_QUESTIONS_SCHEMA,
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=4096,
@@ -100,6 +99,7 @@ async def generate_questions(
                 system_prompt,
                 user_message,
                 mode=LLMMode.GENERATE_QUESTIONS,
+                tool_schema=GENERATE_QUESTIONS_SCHEMA,
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=4096,

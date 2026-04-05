@@ -1,12 +1,12 @@
 """Practice mode: generate similar problems and check answers."""
 
 import asyncio
-import json
 import logging
 
 import anthropic
 
 from api.core.llm_client import MODEL_HAIKU, MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_schemas import DISTRACTOR_SCHEMA, PRACTICE_GENERATE_SCHEMA
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 from api.core.tutor import check_answer_equivalence
@@ -22,9 +22,6 @@ _GENERATE_QUESTIONS_TEMPLATE = """You are a {professor_role} generating practice
 
 Given one or more {problems_noun}, generate similar problems that test the SAME
 concepts and require the SAME approach to solve.
-
-Respond with ONLY valid JSON:
-{{"problems": ["problem 1 text", "problem 2 text", ...]}}
 
 Rules:
 - Identify the concept and solving approach from the problem text alone
@@ -58,8 +55,7 @@ charges, wrong connectivity)
 - If the correct answer contains @@{{"diagram_type": "graph", ...}}@@, generate 3 WRONG \
 graph definitions (wrong functions, shifted curves, etc.)
 
-Respond with ONLY valid JSON:
-{{"distractors": ["wrong answer 1", "wrong answer 2", "wrong answer 3"]}}"""
+"""
 
 
 async def generate_distractors(
@@ -87,6 +83,7 @@ async def generate_distractors(
             system_prompt,
             user_msg,
             mode=LLMMode.PRACTICE_EVAL,
+            tool_schema=DISTRACTOR_SCHEMA,
             user_id=user_id,
             model=model,
             max_tokens=max_tokens,
@@ -144,6 +141,7 @@ async def generate_practice_problems(
             _build_generate_prompt(subject),
             user_msg,
             mode=LLMMode.PRACTICE_GENERATE,
+            tool_schema=PRACTICE_GENERATE_SCHEMA,
             user_id=user_id,
             model=MODEL_REASON,
             max_tokens=4096 if has_diagram else 2048,
@@ -155,7 +153,7 @@ async def generate_practice_problems(
         questions = [str(p) for p in raw_problems if isinstance(p, str) and p.strip()]
         if not questions:
             raise RuntimeError("No valid questions generated")
-    except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
+    except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
         logger.exception("Failed to generate practice problems")
         raise RuntimeError("Failed to generate practice problems")
 

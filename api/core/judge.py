@@ -5,6 +5,7 @@ import logging
 import uuid
 
 from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
+from api.core.llm_schemas import JUDGE_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +18,7 @@ JUDGE_PROMPT = (
     "- clarity: Are the steps easy to follow? Is the reasoning explained before the math?\n"
     "- flow: Does each step logically lead to the next? No confusing jumps?\n\n"
     "Also set passed=true only if ALL scores are >= 4.\n"
-    "If any score is below 4, explain the issues briefly in the issues field.\n\n"
-    "Respond with ONLY valid JSON:\n"
-    '{"correctness": 5, "optimality": 4, "clarity": 5, "flow": 4, '
-    '"passed": true, "issues": null}'
+    "If any score is below 4, explain the issues briefly in the issues field."
 )
 
 # Keep background tasks alive until done
@@ -52,6 +50,7 @@ async def _evaluate_and_persist(
             JUDGE_PROMPT,
             user_message,
             mode=LLMMode.JUDGE,
+            tool_schema=JUDGE_SCHEMA,
             model=MODEL_CLASSIFY,
             max_tokens=256,
             session_id=session_id,
