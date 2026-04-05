@@ -48,7 +48,7 @@ export function Navbar() {
           onClick={(e) => {
             if (pathname === "/") {
               e.preventDefault();
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              window.scrollTo({ top: 0 });
             }
           }}
           className="flex items-center gap-2.5"
