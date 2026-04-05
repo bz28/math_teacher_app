@@ -417,24 +417,6 @@ export default function LearnSessionPage() {
             </motion.div>
           )}
 
-          {/* Final step: "I understand" to complete */}
-          {isFinalStep && !isCompleted && (
-            <motion.div
-              key={`complete-${stepIndex}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Button
-                gradient
-                className="w-full"
-                onClick={() => advanceStep()}
-                disabled={isThinking}
-              >
-                I understand — mark as complete
-              </Button>
-            </motion.div>
-          )}
 
           {/* ── Inline chat: question bubbles + tutor responses ── */}
           {messages.map((msg, i) => (
@@ -487,7 +469,7 @@ export default function LearnSessionPage() {
           )}
 
           {/* ── Chat input + I Understand / Ask button ── */}
-          {!isFinalStep && (
+          {!isCompleted && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-text-muted">Have a question about this step?</p>

@@ -59,7 +59,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const confettiRef = useRef<ConfettiOverlayRef>(null);
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
-  const [selectedChoice, setSelectedChoice] = useState<{ index: number; correct: boolean; pending: boolean } | null>(null);
+
   const {
     session,
     phase,
@@ -97,15 +97,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }, [lastResponse]);
-
-  // Reset choice selection on step transitions
-  const prevStep = useRef(session?.current_step);
-  useEffect(() => {
-    if (session && session.current_step !== prevStep.current) {
-      setSelectedChoice(null);
-      prevStep.current = session.current_step;
-    }
-  }, [session?.current_step]);
 
   // Auto-scroll to bottom when new response arrives or phase changes
   useEffect(() => {
@@ -158,7 +149,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const isPractice = session.mode === "practice";
   const isLearn = !isPractice;
   const completedSteps = session.steps.slice(0, session.current_step);
-  const isFinalStep = session.current_step >= session.total_steps - 1;
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -248,87 +238,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Learn mode: show current step (non-final) */}
-        {isLearn && !isCompleted && !isFinalStep && currentStep && (
+        {/* Learn mode: show current step */}
+        {isLearn && !isCompleted && currentStep && (
           <View style={[styles.stepDescCard, shadows.sm]}>
             <Text style={styles.stepDescLabel}>
               Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
             </Text>
             <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
-          </View>
-        )}
-
-        {/* Learn mode: final step — multiple choice answer */}
-        {isLearn && !isCompleted && isFinalStep && currentStep && (
-          <View>
-            <View style={[styles.stepDescCard, shadows.sm]}>
-              <Text style={styles.stepDescLabel}>
-                Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
-              </Text>
-              <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
-            </View>
-            <Text style={styles.promptText}>
-              What is the result?
-            </Text>
-            {currentStep.choices && (
-              <View style={styles.choicesContainer}>
-                {currentStep.choices.map((choice, i) => {
-                  const isSelected = selectedChoice?.index === i;
-                  const isPending = selectedChoice?.pending ?? false;
-                  const showCorrect = !isPending && selectedChoice?.correct && isSelected;
-                  const showWrong = !isPending && isSelected && selectedChoice && !selectedChoice.correct;
-
-                  return (
-                    <AnimatedPressable
-                      key={`choice-${i}-${choice}`}
-                      style={[
-                        styles.choiceButton,
-                        shadows.sm,
-                        !!selectedChoice && styles.buttonDisabled,
-                        showCorrect && styles.choiceCorrect,
-                        showWrong && styles.choiceWrong,
-                      ]}
-                      onPress={async () => {
-                        if (selectedChoice) return;
-                        setSelectedChoice({ index: i, correct: false, pending: true });
-                        await submitAnswer(choice);
-                        const { lastResponse: resp } = useSessionStore.getState();
-                        const isCorrect = resp?.is_correct ?? false;
-                        setSelectedChoice({ index: i, correct: isCorrect, pending: false });
-                        Haptics.notificationAsync(
-                          isCorrect ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
-                        );
-                        if (!isCorrect) {
-                          setTimeout(() => setSelectedChoice(null), 1200);
-                        }
-                      }}
-                      disabled={!!selectedChoice}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Choice ${String.fromCharCode(65 + i)}: ${choice}`}
-                    >
-                      <View style={[
-                        styles.choiceLetter,
-                        showCorrect && styles.choiceLetterCorrect,
-                        showWrong && styles.choiceLetterWrong,
-                      ]}>
-                        {showCorrect ? (
-                          <Ionicons name="checkmark" size={14} color={colors.success} />
-                        ) : showWrong ? (
-                          <Ionicons name="close" size={14} color={colors.error} />
-                        ) : (
-                          <Text style={styles.choiceLetterText}>{String.fromCharCode(65 + i)}</Text>
-                        )}
-                      </View>
-                      <Text style={[
-                        styles.choiceText,
-                        showCorrect && { color: colors.success },
-                        showWrong && { color: colors.error },
-                      ]}>{choice}</Text>
-                    </AnimatedPressable>
-                  );
-                })}
-              </View>
-            )}
           </View>
         )}
 
@@ -430,8 +346,8 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {/* Input area */}
         {!isCompleted && session.status !== "completed" && (
           <>
-            {/* Learn mode non-final: chat input for questions */}
-            {isLearn && !isFinalStep && (
+            {/* Learn mode: chat input for questions */}
+            {isLearn && (
               <>
                 <View>
                   <View style={styles.inputLabelRow}>
