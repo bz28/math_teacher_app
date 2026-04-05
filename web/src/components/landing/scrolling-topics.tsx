@@ -39,8 +39,8 @@ export function ScrollingTopics({ subject = "all" }: ScrollingTopicsProps) {
   let rightItems: string[];
 
   if (subject === "all") {
-    leftItems = ["Math", "Physics", "Chemistry", "Algebra", "Mechanics", "Stoichiometry", "Calculus", "Waves", "Reactions", "Geometry", "Optics", "Molarity", "Trigonometry", "Energy", "Gas Laws"];
-    rightItems = ["Derivatives", "Kinematics", "Bonding", "Integrals", "Circuits", "Equilibrium", "Matrices", "Momentum", "Acids & Bases", "Logarithms", "Gravity", "Organic Chemistry", "Statistics", "Thermodynamics", "Electrochemistry"];
+    leftItems = ["Algebra", "Mechanics", "Stoichiometry", "Calculus", "Waves", "Reactions", "Geometry", "Optics", "Molarity", "Trigonometry", "Energy", "Gas Laws", "Derivatives", "Kinematics", "Bonding"];
+    rightItems = ["Integrals", "Circuits", "Equilibrium", "Matrices", "Momentum", "Acids & Bases", "Logarithms", "Gravity", "Organic Chemistry", "Statistics", "Thermodynamics", "Electrochemistry", "Probability", "Free Fall", "Periodic Table"];
   } else {
     const topics = ALL_TOPICS[subject];
     const mid = Math.ceil(topics.length / 2);
