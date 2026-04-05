@@ -48,7 +48,10 @@ export function Navbar() {
           onClick={(e) => {
             if (pathname === "/") {
               e.preventDefault();
+              // Override CSS scroll-behavior: smooth for instant jump
+              document.documentElement.style.scrollBehavior = "auto";
               window.scrollTo({ top: 0 });
+              document.documentElement.style.scrollBehavior = "";
             }
           }}
           className="flex items-center gap-2.5"
