@@ -49,6 +49,7 @@ export function StickyShowcase({
   autoScrollSpeed = 7.5,
 }: StickyShowcaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
   const totalSubsteps = features.reduce((sum, f) => sum + f.substepCount, 0);
 
   const { scrollYProgress } = useScroll({
@@ -117,9 +118,11 @@ export function StickyShowcase({
     }, autoScrollDelay);
   }, [autoScrollDelay, clearIdle, startAutoScroll, scrollYProgress]);
 
-  // Start/stop auto-scroll when section enters/leaves viewport
+  // Start/stop auto-scroll when the sticky viewport enters/leaves view
+  // (observe the sticky div, not the tall scroll container, so it only
+  // triggers when the actual content is on screen)
   useEffect(() => {
-    const el = containerRef.current;
+    const el = stickyRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -130,7 +133,7 @@ export function StickyShowcase({
           stopAutoScroll();
         }
       },
-      { threshold: 0.1 },
+      { threshold: 0.5 },
     );
     observer.observe(el);
     return () => { observer.disconnect(); clearIdle(); stopAutoScroll(); };
@@ -180,7 +183,7 @@ export function StickyShowcase({
         ) : null
       )}
 
-      <div className="sticky top-0 flex min-h-screen items-center overflow-hidden px-6">
+      <div ref={stickyRef} className="sticky top-0 flex min-h-screen items-center overflow-hidden px-6">
         <div className="mx-auto w-full max-w-5xl py-12">
           {/* Section heading */}
           <div className="mb-10 text-center md:mb-14">
