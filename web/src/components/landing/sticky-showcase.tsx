@@ -86,85 +86,71 @@ export function StickyShowcase({
   const isAutoScrolling = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafId = useRef<number>(0);
-  const isInView = useRef(false);
 
-  // Track whether the container is in the viewport
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { isInView.current = entry.isIntersecting; },
-      { threshold: 0.1 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+  const clearIdle = useCallback(() => {
+    if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
   }, []);
 
   const stopAutoScroll = useCallback(() => {
     isAutoScrolling.current = false;
-    if (rafId.current) {
-      cancelAnimationFrame(rafId.current);
-      rafId.current = 0;
-    }
+    if (rafId.current) { cancelAnimationFrame(rafId.current); rafId.current = 0; }
   }, []);
 
   const startAutoScroll = useCallback(() => {
     if (isAutoScrolling.current) return;
     isAutoScrolling.current = true;
-
     function tick() {
-      if (!isAutoScrolling.current || !isInView.current) {
-        isAutoScrolling.current = false;
-        return;
-      }
-      // Stop if we've scrolled past the container
-      const progress = scrollYProgress.get();
-      if (progress >= 0.99) {
-        isAutoScrolling.current = false;
-        return;
-      }
+      if (!isAutoScrolling.current) return;
+      const p = scrollYProgress.get();
+      if (p >= 0.99) { isAutoScrolling.current = false; return; }
       window.scrollBy(0, autoScrollSpeed);
       rafId.current = requestAnimationFrame(tick);
     }
     rafId.current = requestAnimationFrame(tick);
   }, [autoScrollSpeed, scrollYProgress]);
 
-  const resetIdleTimer = useCallback(() => {
-    stopAutoScroll();
-    if (idleTimer.current) clearTimeout(idleTimer.current);
+  const scheduleAutoScroll = useCallback(() => {
+    clearIdle();
     idleTimer.current = setTimeout(() => {
-      if (isInView.current) {
-        const progress = scrollYProgress.get();
-        if (progress > 0 && progress < 0.99) {
-          startAutoScroll();
-        }
-      }
+      const p = scrollYProgress.get();
+      if (p < 0.99) startAutoScroll();
     }, autoScrollDelay);
-  }, [autoScrollDelay, startAutoScroll, stopAutoScroll, scrollYProgress]);
+  }, [autoScrollDelay, clearIdle, startAutoScroll, scrollYProgress]);
 
-  // Listen for intentional user input to reset idle timer.
-  // Only wheel/touch/keydown count — NOT the scroll event itself,
-  // because our programmatic scrollBy also fires scroll events.
+  // Start/stop auto-scroll when section enters/leaves viewport
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          scheduleAutoScroll();
+        } else {
+          clearIdle();
+          stopAutoScroll();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => { observer.disconnect(); clearIdle(); stopAutoScroll(); };
+  }, [scheduleAutoScroll, clearIdle, stopAutoScroll]);
+
+  // User input pauses auto-scroll and restarts the idle timer
   useEffect(() => {
     function onUserInput() {
-      if (isAutoScrolling.current) {
-        stopAutoScroll();
-      }
-      resetIdleTimer();
+      stopAutoScroll();
+      scheduleAutoScroll();
     }
     window.addEventListener("wheel", onUserInput, { passive: true });
     window.addEventListener("touchstart", onUserInput, { passive: true });
     window.addEventListener("keydown", onUserInput, { passive: true });
-    // Also start the idle timer when component mounts
-    resetIdleTimer();
     return () => {
       window.removeEventListener("wheel", onUserInput);
       window.removeEventListener("touchstart", onUserInput);
       window.removeEventListener("keydown", onUserInput);
-      stopAutoScroll();
-      if (idleTimer.current) clearTimeout(idleTimer.current);
     };
-  }, [resetIdleTimer, stopAutoScroll]);
+  }, [stopAutoScroll, scheduleAutoScroll]);
 
   // Calculate the scroll offset (as %) where each feature starts
   const featureOffsets: number[] = [];
