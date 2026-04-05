@@ -12,6 +12,7 @@ import {
 } from "@/components/landing/animated-demo";
 import { StickyShowcase } from "@/components/landing/sticky-showcase";
 import { contact } from "@/lib/api";
+import { jumpTo } from "@/lib/utils";
 
 const PAIN_POINTS = [
   "Wishing you could give every student 1-on-1 time, but there's only one of you",
@@ -116,6 +117,7 @@ export default function TeachersPage() {
             >
               <a
                 href="#contact"
+                onClick={(e) => { e.preventDefault(); jumpTo("#contact"); }}
                 className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] bg-primary px-8 text-base font-bold text-white transition-colors hover:bg-primary-dark"
               >
                 Request a Demo
@@ -125,6 +127,7 @@ export default function TeachersPage() {
               </a>
               <a
                 href="#outcomes"
+                onClick={(e) => { e.preventDefault(); jumpTo("#outcomes"); }}
                 className="inline-flex h-12 items-center gap-2 rounded-[--radius-pill] border border-border bg-surface px-8 text-base font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
               >
                 See How It Helps

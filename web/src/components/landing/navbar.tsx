@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogoMark } from "@/components/shared/logo-mark";
+import { jumpTo } from "@/lib/utils";
 
 const featureLinks = [
   { label: "Step-by-Step Learning", href: "#step-by-step" },
@@ -17,6 +18,12 @@ const teacherNavLinks = [
   { label: "How It Helps", href: "#outcomes" },
   { label: "Contact", href: "#contact" },
 ];
+
+function jumpToTop() {
+  document.documentElement.style.scrollBehavior = "auto";
+  window.scrollTo({ top: 0 });
+  document.documentElement.style.scrollBehavior = "";
+}
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -48,10 +55,7 @@ export function Navbar() {
           onClick={(e) => {
             if (pathname === "/") {
               e.preventDefault();
-              // Override CSS scroll-behavior: smooth for instant jump
-              document.documentElement.style.scrollBehavior = "auto";
-              window.scrollTo({ top: 0 });
-              document.documentElement.style.scrollBehavior = "";
+              jumpToTop();
             }
           }}
           className="flex items-center gap-2.5"
@@ -70,6 +74,7 @@ export function Navbar() {
                 <a
                   key={link.href}
                   href={link.href}
+                  onClick={(e) => { e.preventDefault(); jumpTo(link.href); }}
                   className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
                 >
                   {link.label}
@@ -116,7 +121,7 @@ export function Navbar() {
                         <a
                           key={link.href}
                           href={link.href}
-                          onClick={() => setFeaturesOpen(false)}
+                          onClick={(e) => { e.preventDefault(); setFeaturesOpen(false); jumpTo(link.href); }}
                           className="block px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-primary-bg hover:text-primary"
                         >
                           {link.label}
@@ -148,6 +153,7 @@ export function Navbar() {
           {isTeacherPage ? (
             <a
               href={ctaHref}
+              onClick={(e) => { e.preventDefault(); jumpTo(ctaHref); }}
               className="rounded-[--radius-pill] bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark"
             >
               {ctaLabel}
@@ -195,7 +201,7 @@ export function Navbar() {
                     <a
                       key={link.href}
                       href={link.href}
-                      onClick={() => setMobileOpen(false)}
+                      onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo(link.href); }}
                       className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
                     >
                       {link.label}
@@ -218,7 +224,7 @@ export function Navbar() {
                     <a
                       key={link.href}
                       href={link.href}
-                      onClick={() => setMobileOpen(false)}
+                      onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo(link.href); }}
                       className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
                     >
                       {link.label}
@@ -243,7 +249,7 @@ export function Navbar() {
               {isTeacherPage ? (
                 <a
                   href={ctaHref}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo(ctaHref); }}
                   className="mt-1 rounded-[--radius-pill] bg-primary px-5 py-2.5 text-center text-sm font-bold text-white"
                 >
                   {ctaLabel}

@@ -33,6 +33,15 @@ export function formatRelativeDate(date: string | Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/** Instantly jump to an anchor, bypassing CSS scroll-behavior: smooth. */
+export function jumpTo(hash: string) {
+  const el = document.querySelector(hash);
+  if (!el) return;
+  document.documentElement.style.scrollBehavior = "auto";
+  el.scrollIntoView({ behavior: "auto", block: "start" });
+  document.documentElement.style.scrollBehavior = "";
+}
+
 /** Truncate text to a max length with ellipsis. */
 export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { jumpTo } from "@/lib/utils";
 
 export function Hero() {
   return (
@@ -44,6 +45,7 @@ export function Hero() {
             </Link>
             <a
               href="#features"
+              onClick={(e) => { e.preventDefault(); jumpTo("#features"); }}
               className="inline-flex h-12 items-center justify-center gap-2 rounded-[--radius-pill] border border-border bg-surface px-7 text-base font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
             >
               See how it works
