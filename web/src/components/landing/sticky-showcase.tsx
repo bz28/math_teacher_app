@@ -100,10 +100,10 @@ export function StickyShowcase({
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeFeature}
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -16 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
                 >
                   <h3 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
                     {features[activeFeature].title}
@@ -136,10 +136,10 @@ export function StickyShowcase({
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeFeature}
-                  initial={{ opacity: 0, x: 20 }}
+                  initial={{ opacity: 0, x: 24 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, x: -24 }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
                 >
                   <BrowserFrame>
                     {features[activeFeature].render(localStep)}

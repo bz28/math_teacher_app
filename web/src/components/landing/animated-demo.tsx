@@ -1,6 +1,16 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef } from "react";
+
+/** Scrolls a container to the bottom when `dep` changes */
+function useScrollToBottom(dep: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
+  }, [dep]);
+  return ref;
+}
 
 /* ================================================================
    Subject-specific learn demo data
@@ -218,33 +228,39 @@ export function AnimatedLearnDemo({
   const steps = scenario.steps;
   const clamped = Math.max(1, Math.min(visibleCount, steps.length));
   const progress = (clamped / steps.length) * 100;
+  const scrollRef = useScrollToBottom(clamped);
 
   return (
-    <div className="space-y-3.5">
-      {/* Problem */}
-      <div>
-        <p className="text-[10px] font-medium text-text-muted">Problem</p>
-        <p className="mt-0.5 text-sm font-semibold leading-snug text-text-primary">
-          {scenario.problem}
-        </p>
-      </div>
-
-      {/* Progress bar */}
-      <div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
-          <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          />
+    <div className="flex max-h-[420px] flex-col">
+      {/* Problem — fixed at top */}
+      <div className="shrink-0 space-y-3.5 pb-2">
+        <div>
+          <p className="text-[10px] font-medium text-text-muted">Problem</p>
+          <p className="mt-0.5 text-sm font-semibold leading-snug text-text-primary">
+            {scenario.problem}
+          </p>
         </div>
-        <p className="mt-1 text-[10px] text-text-muted">
-          Step {clamped} of {steps.length}
-        </p>
+
+        {/* Progress bar */}
+        <div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] text-text-muted">
+            Step {clamped} of {steps.length}
+          </p>
+        </div>
       </div>
 
-      {/* Steps */}
-      <div className="space-y-2.5">
+      {/* Steps — scrollable area */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-2.5 overflow-y-auto scroll-smooth"
+      >
         <AnimatePresence mode="popLayout">
           {steps.slice(0, clamped).map((step, i) => {
             const isActive = i === clamped - 1;
@@ -253,9 +269,9 @@ export function AnimatedLearnDemo({
             return (
               <motion.div
                 key={`${subject}-${step.num}`}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
                 className={`rounded-[--radius-md] p-3 ${
                   isActive
                     ? "border border-primary/20 bg-primary-bg/20 shadow-sm"
@@ -291,7 +307,7 @@ export function AnimatedLearnDemo({
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ duration: 0.6, delay: 0.15 }}
+                      transition={{ duration: 0.6, delay: 0.2 }}
                     >
                       <p className="mt-1 text-[11px] leading-relaxed text-text-primary">
                         {step.content}
@@ -310,13 +326,15 @@ export function AnimatedLearnDemo({
         </AnimatePresence>
       </div>
 
-      {/* Input area */}
-      <div className="flex gap-2">
-        <div className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-3 py-1.5 text-[10px] text-text-muted">
-          Ask a question...
-        </div>
-        <div className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-[10px] font-bold text-white">
-          I Understand
+      {/* Input area — fixed at bottom */}
+      <div className="shrink-0 pt-3">
+        <div className="flex gap-2">
+          <div className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-3 py-1.5 text-[10px] text-text-muted">
+            Ask a question...
+          </div>
+          <div className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-[10px] font-bold text-white">
+            I Understand
+          </div>
         </div>
       </div>
     </div>
@@ -338,83 +356,93 @@ export function AnimatedChatDemo({
     (subject && CHAT_SCENARIOS[subject.toLowerCase()]) || DEFAULT_CHAT;
   const messages = scenario.messages;
   const clamped = Math.max(0, Math.min(visibleCount, messages.length));
+  const scrollRef = useScrollToBottom(clamped);
 
   return (
-    <div className="space-y-3">
-      {/* Step context — always visible */}
-      <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg/20 p-3 shadow-sm">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-[10px] font-bold text-white">
-            2
-          </span>
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold text-primary">
-              {scenario.stepTitle}
-            </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-text-primary">
-              {scenario.contextContent}
-            </p>
+    <div className="flex max-h-[420px] flex-col">
+      {/* Step context — fixed at top */}
+      <div className="shrink-0 pb-2">
+        <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg/20 p-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-[10px] font-bold text-white">
+              2
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-primary">
+                {scenario.stepTitle}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-text-primary">
+                {scenario.contextContent}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Chat messages */}
-      <AnimatePresence mode="popLayout">
-        {messages.slice(0, clamped).map((msg, i) => (
-          <motion.div
-            key={`${subject}-chat-${i}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-          >
-            {msg.role === "user" ? (
-              <div className="flex justify-end">
-                <div className="max-w-[80%] rounded-[--radius-md] bg-primary-bg px-3 py-2 text-xs text-primary">
-                  {msg.content}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-[--radius-md] border border-primary/15 bg-card p-3">
-                <div className="flex items-start gap-2">
-                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <svg
-                      className="h-3 w-3"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
-                      <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-primary">
-                      Tutor
-                    </p>
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.5, delay: 0.1 }}
-                      className="mt-0.5 text-xs leading-relaxed text-text-primary"
-                    >
-                      {msg.content}
-                    </motion.p>
+      {/* Chat messages — scrollable area */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto scroll-smooth"
+      >
+        <AnimatePresence mode="popLayout">
+          {messages.slice(0, clamped).map((msg, i) => (
+            <motion.div
+              key={`${subject}-chat-${i}`}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            >
+              {msg.role === "user" ? (
+                <div className="flex justify-end">
+                  <div className="max-w-[80%] rounded-[--radius-md] bg-primary-bg px-3 py-2 text-xs text-primary">
+                    {msg.content}
                   </div>
                 </div>
-              </div>
-            )}
-          </motion.div>
-        ))}
-      </AnimatePresence>
+              ) : (
+                <div className="rounded-[--radius-md] border border-primary/15 bg-card p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+                        <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold text-primary">
+                        Tutor
+                      </p>
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.6, delay: 0.15 }}
+                        className="mt-0.5 text-xs leading-relaxed text-text-primary"
+                      >
+                        {msg.content}
+                      </motion.p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
-      {/* Input */}
-      <div className="flex gap-2">
-        <div className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-3 py-1.5 text-[10px] text-text-muted">
-          Ask a question...
-        </div>
-        <div className="rounded-[--radius-md] bg-border px-3 py-1.5 text-[10px] font-semibold text-text-secondary">
-          I Understand
+      {/* Input — fixed at bottom */}
+      <div className="shrink-0 pt-3">
+        <div className="flex gap-2">
+          <div className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-3 py-1.5 text-[10px] text-text-muted">
+            Ask a question...
+          </div>
+          <div className="rounded-[--radius-md] bg-border px-3 py-1.5 text-[10px] font-semibold text-text-secondary">
+            I Understand
+          </div>
         </div>
       </div>
     </div>
