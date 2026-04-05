@@ -248,9 +248,9 @@ body {
 }
 
 .animate-scroll-up {
-  animation: scroll-up 40s linear infinite;
+  animation: scroll-up 90s linear infinite;
 }
 
 .animate-scroll-down {
-  animation: scroll-down 40s linear infinite;
+  animation: scroll-down 90s linear infinite;
 }
