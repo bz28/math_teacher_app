@@ -2,83 +2,35 @@
 
 /* ================================================================
    Decorative scrolling topic columns on the left and right edges.
-   Topics scroll in opposite directions for visual interest.
-   Hidden on mobile — only visible on large screens.
+   Positioned absolute — must be placed inside a relative container
+   (e.g. the hero section). Only visible on xl+ screens.
    ================================================================ */
 
 const ALL_TOPICS = {
   math: [
-    "Algebra",
-    "Calculus",
-    "Geometry",
-    "Trigonometry",
-    "Statistics",
-    "Linear Algebra",
-    "Pre-Algebra",
-    "Word Problems",
-    "Quadratic Equations",
-    "Derivatives",
-    "Integrals",
-    "Probability",
-    "Matrices",
-    "Polynomials",
-    "Logarithms",
+    "Algebra", "Calculus", "Geometry", "Trigonometry", "Statistics",
+    "Linear Algebra", "Pre-Algebra", "Word Problems", "Quadratic Equations",
+    "Derivatives", "Integrals", "Probability", "Matrices", "Polynomials", "Logarithms",
   ],
   physics: [
-    "Mechanics",
-    "Kinematics",
-    "Thermodynamics",
-    "Waves",
-    "Optics",
-    "Electricity",
-    "Magnetism",
-    "Energy",
-    "Momentum",
-    "Projectile Motion",
-    "Circuits",
-    "Free Fall",
-    "Newton's Laws",
-    "Work & Power",
-    "Gravity",
+    "Mechanics", "Kinematics", "Thermodynamics", "Waves", "Optics",
+    "Electricity", "Magnetism", "Energy", "Momentum", "Projectile Motion",
+    "Circuits", "Free Fall", "Newton's Laws", "Work & Power", "Gravity",
   ],
   chemistry: [
-    "Stoichiometry",
-    "Balancing Equations",
-    "Acids & Bases",
-    "Organic Chemistry",
-    "Thermochemistry",
-    "Molarity",
-    "Gas Laws",
-    "Electrochemistry",
-    "Reactions",
-    "Molar Mass",
-    "Bonding",
-    "Periodic Table",
-    "Oxidation",
-    "Solutions",
-    "Equilibrium",
+    "Stoichiometry", "Balancing Equations", "Acids & Bases", "Organic Chemistry",
+    "Thermochemistry", "Molarity", "Gas Laws", "Electrochemistry", "Reactions",
+    "Molar Mass", "Bonding", "Periodic Table", "Oxidation", "Solutions", "Equilibrium",
   ],
   teacher: [
-    "Auto-Grading",
-    "Class Analytics",
-    "Test Generator",
-    "Student Progress",
-    "Step-by-Step",
-    "AI Tutoring",
-    "Assignments",
-    "Course Management",
-    "Practice Sets",
-    "Differentiation",
-    "Real-Time Data",
-    "Answer Keys",
-    "Student Reports",
-    "Curriculum",
-    "Homework",
+    "Auto-Grading", "Class Analytics", "Test Generator", "Student Progress",
+    "Step-by-Step", "AI Tutoring", "Assignments", "Course Management",
+    "Practice Sets", "Differentiation", "Real-Time Data", "Answer Keys",
+    "Student Reports", "Curriculum", "Homework",
   ],
 };
 
 interface ScrollingTopicsProps {
-  /** Which subjects to show. "all" shows everything, or pass a specific subject */
   subject?: "all" | "math" | "physics" | "chemistry" | "teacher";
 }
 
@@ -87,7 +39,6 @@ export function ScrollingTopics({ subject = "all" }: ScrollingTopicsProps) {
   let rightItems: string[];
 
   if (subject === "all") {
-    // Main page: mix subjects on left, subtopics on right
     leftItems = ["Math", "Physics", "Chemistry", "Algebra", "Mechanics", "Stoichiometry", "Calculus", "Waves", "Reactions", "Geometry", "Optics", "Molarity", "Trigonometry", "Energy", "Gas Laws"];
     rightItems = ["Derivatives", "Kinematics", "Bonding", "Integrals", "Circuits", "Equilibrium", "Matrices", "Momentum", "Acids & Bases", "Logarithms", "Gravity", "Organic Chemistry", "Statistics", "Thermodynamics", "Electrochemistry"];
   } else {
@@ -98,33 +49,35 @@ export function ScrollingTopics({ subject = "all" }: ScrollingTopicsProps) {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-0 hidden overflow-hidden xl:block" aria-hidden="true">
-      {/* Left column — scrolls up */}
-      <div className="absolute left-3 top-0 flex w-28 flex-col items-end 2xl:left-6 2xl:w-36">
+    <div className="pointer-events-none absolute inset-0 z-0 hidden overflow-hidden xl:block" aria-hidden="true">
+      {/* Left column — scrolls up, left-aligned */}
+      <div className="absolute left-4 top-0 w-28 2xl:left-8 2xl:w-36">
         <div className="animate-scroll-up">
-          <TopicList items={leftItems} />
-          <TopicList items={leftItems} />
+          <TopicList items={leftItems} align="left" />
+          <TopicList items={leftItems} align="left" />
         </div>
       </div>
 
-      {/* Right column — scrolls down */}
-      <div className="absolute right-3 top-0 flex w-28 flex-col items-start 2xl:right-6 2xl:w-36">
+      {/* Right column — scrolls down, right-aligned */}
+      <div className="absolute right-4 top-0 w-28 2xl:right-8 2xl:w-36">
         <div className="animate-scroll-down">
-          <TopicList items={rightItems} />
-          <TopicList items={rightItems} />
+          <TopicList items={rightItems} align="right" />
+          <TopicList items={rightItems} align="right" />
         </div>
       </div>
     </div>
   );
 }
 
-function TopicList({ items }: { items: string[] }) {
+function TopicList({ items, align }: { items: string[]; align: "left" | "right" }) {
   return (
     <div className="flex flex-col gap-6 py-4">
       {items.map((item, i) => (
         <span
           key={`${item}-${i}`}
-          className="block text-right text-xs font-medium text-text-muted/30 2xl:text-sm"
+          className={`block text-xs font-medium text-text-muted/30 2xl:text-sm ${
+            align === "right" ? "text-right" : "text-left"
+          }`}
         >
           {item}
         </span>

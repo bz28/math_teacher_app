@@ -71,11 +71,11 @@ export default function TeachersPage() {
 
   return (
     <>
-      <ScrollingTopics subject="teacher" />
       <Navbar />
       <main>
         {/* ── Hero ── */}
         <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6">
+          <ScrollingTopics subject="teacher" />
           <div className="relative mx-auto max-w-4xl text-center">
             <motion.div
               initial={{ opacity: 0, y: 10 }}

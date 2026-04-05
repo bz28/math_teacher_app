@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { ScrollingTopics } from "@/components/landing/scrolling-topics";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -76,7 +75,6 @@ const features = [
 export default function MathPage() {
   return (
     <>
-      <ScrollingTopics subject="math" />
       <SubjectPage
         name="Math"
         slug="math"

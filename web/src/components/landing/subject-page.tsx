@@ -4,6 +4,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
+import { ScrollingTopics } from "./scrolling-topics";
 import {
   AnimatedLearnDemo,
   AnimatedChatDemo,
@@ -111,7 +112,8 @@ export function SubjectPage({
       />
 
       {/* Hero */}
-      <section ref={heroRef} className="relative overflow-hidden px-6 pt-32 pb-20 md:pt-40 md:pb-28">
+      <section ref={heroRef} className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden px-6">
+        <ScrollingTopics subject={slug as "math" | "physics" | "chemistry"} />
         <div
           className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-[0.04]`}
         />
