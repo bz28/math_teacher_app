@@ -269,7 +269,7 @@ export function SubjectPage({
                 </p>
               </div>
               <BrowserFrame>
-                <AnimatedLearnDemo />
+                <AnimatedLearnDemo subject={name} />
               </BrowserFrame>
             </motion.div>
 
@@ -292,7 +292,7 @@ export function SubjectPage({
               </div>
               <div className="md:order-1">
                 <BrowserFrame>
-                  <AnimatedChatDemo />
+                  <AnimatedChatDemo subject={name} />
                 </BrowserFrame>
               </div>
             </motion.div>
