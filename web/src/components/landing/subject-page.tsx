@@ -147,7 +147,7 @@ export function SubjectPage({
             initial={{ opacity: 0, y: 24 }}
             animate={heroInView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.1, duration: 0.5 }}
-            className="text-4xl font-extrabold tracking-tight text-text-primary md:text-6xl"
+            className="text-4xl font-black leading-[1.1] tracking-tight text-text-primary sm:text-5xl md:text-6xl"
           >
             {tagline}
           </motion.h1>
@@ -155,7 +155,7 @@ export function SubjectPage({
             initial={{ opacity: 0, y: 20 }}
             animate={heroInView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary md:text-xl"
+            className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-text-secondary"
           >
             {description}
           </motion.p>
@@ -263,7 +263,7 @@ export function SubjectPage({
       <section className="bg-bg-secondary px-6 py-20 md:py-28">
         <div className="mx-auto max-w-4xl">
           <div className="mb-10 text-center">
-            <h2 className="text-2xl font-extrabold tracking-tight text-text-primary md:text-3xl">
+            <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
               Explore Other Subjects
             </h2>
           </div>

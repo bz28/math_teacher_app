@@ -138,7 +138,7 @@ export default function TeachersPage() {
               <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
                 You became a teacher to teach.
               </h2>
-              <p className="mt-2 text-2xl font-extrabold tracking-tight text-text-muted md:text-3xl">
+              <p className="mt-2 text-2xl font-bold tracking-tight text-text-muted md:text-3xl">
                 Not to drown in paperwork.
               </p>
             </motion.div>
