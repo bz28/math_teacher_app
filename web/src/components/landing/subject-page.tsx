@@ -4,6 +4,8 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
+import { BrowserFrame } from "./product-mockup";
+import { AnimatedLearnDemo, AnimatedChatDemo } from "./animated-demo";
 
 const ALL_SUBJECTS = [
   {
@@ -85,6 +87,8 @@ export function SubjectPage({
   const heroInView = useInView(heroRef, { once: true });
   const examplesRef = useRef<HTMLElement>(null);
   const examplesInView = useInView(examplesRef, { once: true, margin: "-80px" });
+  const showcaseRef = useRef<HTMLElement>(null);
+  const showcaseInView = useInView(showcaseRef, { once: true, margin: "-80px" });
   const featuresRef = useRef<HTMLElement>(null);
   const featuresInView = useInView(featuresRef, { once: true, margin: "-80px" });
 
@@ -229,8 +233,75 @@ export function SubjectPage({
         </div>
       </section>
 
+      {/* See It In Action — animated product demos */}
+      <section ref={showcaseRef} className="px-6 py-20 md:py-28">
+        <div className="mx-auto max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={showcaseInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.5 }}
+            className="mb-16 text-center"
+          >
+            <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
+              See It In Action
+            </h2>
+            <p className="mt-3 text-lg text-text-secondary">
+              Watch how Veradic guides you through real {name.toLowerCase()} problems
+            </p>
+          </motion.div>
+
+          <div className="space-y-20 md:space-y-28">
+            {/* Row 1: Step-by-step learning */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={showcaseInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="grid items-center gap-10 md:grid-cols-2 md:gap-14"
+            >
+              <div>
+                <h3 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
+                  Step-by-Step Guidance
+                </h3>
+                <p className="mt-4 leading-relaxed text-text-secondary">
+                  Every problem is broken into clear steps. The answer stays
+                  hidden until you&apos;ve worked through each one — building
+                  real understanding, not just copying solutions.
+                </p>
+              </div>
+              <BrowserFrame>
+                <AnimatedLearnDemo />
+              </BrowserFrame>
+            </motion.div>
+
+            {/* Row 2: Chat with tutor (reversed) */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={showcaseInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="grid items-center gap-10 md:grid-cols-2 md:gap-14"
+            >
+              <div className="md:order-2">
+                <h3 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
+                  Ask Questions Anytime
+                </h3>
+                <p className="mt-4 leading-relaxed text-text-secondary">
+                  Stuck on a step? Ask your AI tutor and get a clear,
+                  personalized explanation — without revealing future steps
+                  or giving away the answer.
+                </p>
+              </div>
+              <div className="md:order-1">
+                <BrowserFrame>
+                  <AnimatedChatDemo />
+                </BrowserFrame>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
-      <section ref={featuresRef} className="px-6 py-20 md:py-28">
+      <section ref={featuresRef} className="bg-bg-secondary px-6 py-20 md:py-28">
         <div className="mx-auto max-w-4xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
