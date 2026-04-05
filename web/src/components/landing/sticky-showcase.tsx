@@ -87,6 +87,7 @@ export function StickyShowcase({
   const isAutoScrolling = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafId = useRef<number>(0);
+  const isVisible = useRef(false);
 
   const clearIdle = useCallback(() => {
     if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
@@ -126,6 +127,7 @@ export function StickyShowcase({
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
+        isVisible.current = entry.isIntersecting;
         if (entry.isIntersecting) {
           scheduleAutoScroll();
         } else {
@@ -140,8 +142,10 @@ export function StickyShowcase({
   }, [scheduleAutoScroll, clearIdle, stopAutoScroll]);
 
   // User input pauses auto-scroll and restarts the idle timer
+  // (only when the showcase is actually visible on screen)
   useEffect(() => {
     function onUserInput() {
+      if (!isVisible.current) return;
       stopAutoScroll();
       scheduleAutoScroll();
     }

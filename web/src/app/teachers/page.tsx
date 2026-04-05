@@ -73,7 +73,7 @@ export default function TeachersPage() {
       <Navbar />
       <main>
         {/* ── Hero ── */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6 pb-20 pt-14 md:pb-28 md:pt-20">
+        <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6">
           <div className="relative mx-auto max-w-4xl text-center">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
