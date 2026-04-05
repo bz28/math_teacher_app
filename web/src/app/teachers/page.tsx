@@ -4,7 +4,12 @@ import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
-import { AnimatedLearnDemo, AnimatedGradingDemo } from "@/components/landing/animated-demo";
+import {
+  AnimatedLearnDemo,
+  AnimatedGradingDemo,
+  getLearnSubstepCount,
+  GRADING_SUBSTEP_COUNT,
+} from "@/components/landing/animated-demo";
 import { StickyShowcase } from "@/components/landing/sticky-showcase";
 import { contact } from "@/lib/api";
 
@@ -219,18 +224,20 @@ export default function TeachersPage() {
         <StickyShowcase
           heading="See What Your Students Experience"
           subheading="Every student gets a personal AI tutor that adapts to their pace"
-          items={[
+          features={[
             {
               title: "Step-by-Step Guidance",
               description:
                 "Students work through problems one step at a time. The answer stays hidden until they've built real understanding — no shortcuts, no copying.",
-              demo: <AnimatedLearnDemo />,
+              substepCount: getLearnSubstepCount(),
+              render: (n) => <AnimatedLearnDemo visibleCount={n} />,
             },
             {
               title: "Automatic Grading",
               description:
                 "Students photograph their work, AI grades each step individually. You see exactly where mistakes happen — review, override, and move on.",
-              demo: <AnimatedGradingDemo />,
+              substepCount: GRADING_SUBSTEP_COUNT,
+              render: (n) => <AnimatedGradingDemo visibleCount={n} />,
             },
           ]}
         />

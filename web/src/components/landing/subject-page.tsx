@@ -4,7 +4,12 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
-import { AnimatedLearnDemo, AnimatedChatDemo } from "./animated-demo";
+import {
+  AnimatedLearnDemo,
+  AnimatedChatDemo,
+  getLearnSubstepCount,
+  getChatSubstepCount,
+} from "./animated-demo";
 import { StickyShowcase } from "./sticky-showcase";
 
 const ALL_SUBJECTS = [
@@ -235,18 +240,20 @@ export function SubjectPage({
       <StickyShowcase
         heading="See It In Action"
         subheading={`Watch how Veradic guides you through real ${name.toLowerCase()} problems`}
-        items={[
+        features={[
           {
             title: "Step-by-Step Guidance",
             description:
               "Every problem is broken into clear steps. The answer stays hidden until you've worked through each one — building real understanding, not just copying solutions.",
-            demo: <AnimatedLearnDemo subject={name} />,
+            substepCount: getLearnSubstepCount(name),
+            render: (n) => <AnimatedLearnDemo subject={name} visibleCount={n} />,
           },
           {
             title: "Ask Questions Anytime",
             description:
               "Stuck on a step? Ask your AI tutor and get a clear, personalized explanation — without revealing future steps or giving away the answer.",
-            demo: <AnimatedChatDemo subject={name} />,
+            substepCount: getChatSubstepCount(name),
+            render: (n) => <AnimatedChatDemo subject={name} visibleCount={n} />,
           },
         ]}
       />
