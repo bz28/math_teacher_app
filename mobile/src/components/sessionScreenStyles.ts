@@ -73,53 +73,6 @@ export const sessionScreenStyles = StyleSheet.create({
     marginBottom: spacing.md,
     textAlign: "center",
   },
-  choicesContainer: {
-    gap: 10,
-    marginBottom: spacing.lg,
-  },
-  choiceButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radii.md,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.xl,
-  },
-  choiceLetter: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.primaryBg,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: spacing.md,
-  },
-  choiceLetterText: {
-    ...typography.bodyBold,
-    fontSize: 14,
-    color: colors.primary,
-  },
-  choiceText: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: colors.primary,
-  },
-  choiceCorrect: {
-    borderColor: colors.success,
-    backgroundColor: colors.successLight,
-  },
-  choiceWrong: {
-    borderColor: colors.error,
-    backgroundColor: colors.errorLight,
-  },
-  choiceLetterCorrect: {
-    backgroundColor: colors.successLight,
-  },
-  choiceLetterWrong: {
-    backgroundColor: colors.errorLight,
-  },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -232,7 +185,6 @@ export const sessionScreenStyles = StyleSheet.create({
   button: { paddingHorizontal: spacing.xxl, paddingVertical: 14, borderRadius: radii.md },
   submitButton: { flex: 1, alignItems: "center" },
   submitText: { color: colors.white, ...typography.button },
-  buttonDisabled: { opacity: 0.4 },
   questionsButton: {
     flexDirection: "row",
     justifyContent: "center",
