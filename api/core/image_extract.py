@@ -4,6 +4,7 @@ import logging
 
 from api.core.image_utils import validate_and_decode_image
 from api.core.llm_client import LLMMode, call_claude_vision
+from api.core.llm_schemas import IMAGE_EXTRACT_SCHEMA
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,6 @@ Rules:
   Right angle marker at B.]"
 - For graphs, describe the axes, scale, and any plotted points or curves in detail
 - If you cannot read something clearly, skip it rather than guessing
-
-Return valid JSON in this exact format:
-{{"problems": ["problem 1", "problem 2", ...], "confidence": "high"}}
 
 Set confidence to:
 - "high" if the image is clear and you're confident in all extractions
@@ -71,7 +69,10 @@ async def extract_problems_from_image(
         },
     ]
 
-    result = await call_claude_vision(user_content, mode=LLMMode.IMAGE_EXTRACT, user_id=user_id)
+    result = await call_claude_vision(
+        user_content, mode=LLMMode.IMAGE_EXTRACT,
+        tool_schema=IMAGE_EXTRACT_SCHEMA, user_id=user_id,
+    )
 
     problems = result.get("problems", [])
     confidence = result.get("confidence", "medium")

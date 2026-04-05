@@ -9,7 +9,6 @@ Cost optimizations:
 - Trimmed conversation history (last 6 exchanges instead of 10)
 """
 
-import json
 import logging
 from dataclasses import dataclass
 
@@ -17,6 +16,7 @@ import anthropic
 
 from api.core.constants import LLM_HISTORY_LIMIT
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from api.core.llm_schemas import ANSWER_EQUIVALENCE_SCHEMA, FEEDBACK_SCHEMA
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -38,11 +38,6 @@ You will receive:
 Your job is to help the student understand THIS SPECIFIC STEP only.
 Do NOT reveal future steps or the final answer.
 
-Respond with ONLY valid JSON:
-{{
-  "feedback": "Your helpful response to the student's question"
-}}
-
 Rules:
 - Answer questions about WHY this step is done and HOW it works
 - Use concrete examples and analogies if helpful
@@ -61,9 +56,6 @@ You will receive:
 - The conversation history
 - The student's question
 
-Respond with ONLY valid JSON:
-{{"feedback": "Your helpful response"}}
-
 Rules:
 - Answer clearly and concisely (1-3 sentences)
 - You may freely reference any step or the final answer since the problem is solved
@@ -78,8 +70,7 @@ final answer. Allow differences in formatting or notation (e.g., "x=3" vs
 Be STRICT:
 {equivalence_examples}
 
-Respond with ONLY valid JSON:
-{{"is_correct": <true/false>}}"""
+"""
 
 
 def _build_step_chat_prompt(subject: str) -> str:
@@ -137,6 +128,7 @@ async def step_chat(
     )
     data = await call_claude_json(
         _build_step_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
+        tool_schema=FEEDBACK_SCHEMA,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
@@ -169,6 +161,7 @@ async def completed_chat(
     )
     data = await call_claude_json(
         _build_completed_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
+        tool_schema=FEEDBACK_SCHEMA,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
@@ -192,9 +185,10 @@ async def check_answer_equivalence(
     try:
         result = await call_claude_json(
             _build_equivalence_prompt(subject), user_msg,
-            mode=LLMMode.PRACTICE_EVAL, session_id=session_id, user_id=user_id,
+            mode=LLMMode.PRACTICE_EVAL, tool_schema=ANSWER_EQUIVALENCE_SCHEMA,
+            session_id=session_id, user_id=user_id,
         )
         return bool(result.get("is_correct", False))
-    except (anthropic.APIError, anthropic.APITimeoutError, json.JSONDecodeError, RuntimeError):
+    except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
         logger.exception("Answer equivalence check failed")
         return False

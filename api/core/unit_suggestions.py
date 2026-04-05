@@ -5,6 +5,7 @@ from typing import Any
 
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json, call_claude_vision
+from api.core.llm_schemas import UNIT_SUGGESTIONS_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,6 @@ You are an expert teaching assistant helping a teacher organize course materials
 
 Given a list of document filenames and the existing units (chapters/topics) in a course,
 suggest which unit each document belongs to.
-
-Respond with ONLY valid JSON:
-{{"suggestions": [{{"filename": "...", "suggested_unit": "...", "is_new": false, "confidence": 0.9}}]}}
 
 Rules:
 - Match each document to the BEST existing unit based on filename, topic, and context
@@ -98,6 +96,7 @@ Documents to organize:
                 result = await call_claude_vision(
                     content,
                     mode=LLMMode.SUGGEST_UNITS,
+                    tool_schema=UNIT_SUGGESTIONS_SCHEMA,
                     user_id=user_id,
                     model=MODEL_CLASSIFY,
                     max_tokens=2048,
@@ -130,6 +129,7 @@ Documents to organize:
                     _SUGGEST_UNITS_PROMPT,
                     text_message,
                     mode=LLMMode.SUGGEST_UNITS,
+                    tool_schema=UNIT_SUGGESTIONS_SCHEMA,
                     user_id=user_id,
                     model=MODEL_CLASSIFY,
                     max_tokens=1024,
@@ -144,6 +144,7 @@ Documents to organize:
                 _SUGGEST_UNITS_PROMPT,
                 user_message,
                 mode=LLMMode.SUGGEST_UNITS,
+                tool_schema=UNIT_SUGGESTIONS_SCHEMA,
                 user_id=user_id,
                 model=MODEL_CLASSIFY,
                 max_tokens=1024,

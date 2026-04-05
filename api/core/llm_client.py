@@ -19,11 +19,12 @@ from enum import Enum
 from typing import Any
 
 import anthropic
+from anthropic.types import ToolChoiceToolParam, ToolParam
 
 from api.config import settings
 from api.core.cost_tracker import cost_tracker
 from api.core.llm_logging import fire_and_forget_persist
-from api.core.llm_utils import strip_markdown_fencing
+from api.core.llm_schemas import ToolSchema
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,17 @@ def _system_with_cache(
     ]
 
 
+def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceToolParam]:
+    """Convert a ToolSchema dict to typed SDK params."""
+    tool: ToolParam = {
+        "name": schema["name"],
+        "input_schema": schema["input_schema"],
+        "description": schema.get("description", ""),
+    }
+    choice: ToolChoiceToolParam = {"type": "tool", "name": schema["name"]}
+    return [tool], choice
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -190,22 +202,28 @@ async def call_claude_json(
     user_message: str,
     mode: str,
     *,
+    tool_schema: ToolSchema,
     session_id: str | None = None,
     user_id: str | None = None,
     model: str | None = None,
     max_tokens: int = 512,
     max_retries: int = MAX_RETRIES,
 ) -> dict[str, object]:
-    """Call Claude and parse the JSON response.
+    """Call Claude and return a structured JSON dict via tool use.
 
     All LLM JSON calls across the backend should use this function.
     It provides circuit breaker, cost limiting, retry with exponential
     backoff, prompt caching, timeout, and cost/call logging.
 
+    Uses Anthropic tool use — the API returns properly serialized JSON
+    with no parsing issues (no LaTeX backslash escaping, no markdown
+    fencing, no manual JSON parsing needed).
+
     Args:
         system_prompt: The system prompt.
         user_message: The user message text.
         mode: Label for logging/persistence (e.g. "decompose", "converse").
+        tool_schema: Anthropic tool definition for structured output.
         session_id: Optional session ID for logging.
         user_id: Optional user ID for logging.
         model: Claude model to use. Defaults to MODEL_CLASSIFY (Haiku).
@@ -219,6 +237,7 @@ async def call_claude_json(
     use_model = model or MODEL_CLASSIFY
     client = get_client()
     last_error: Exception | None = None
+    tools, tool_choice = _to_tool_params(tool_schema)
 
     for attempt in range(max_retries):
         start = time.monotonic()
@@ -228,13 +247,21 @@ async def call_claude_json(
                 max_tokens=max_tokens,
                 system=_system_with_cache(system_prompt),
                 messages=[{"role": "user", "content": user_message}],
+                tools=tools,
+                tool_choice=tool_choice,
                 timeout=90.0,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
-            first_block = response.content[0]
-            if not hasattr(first_block, "text"):
-                raise ValueError("Unexpected response type from Claude")
-            resp_text = first_block.text
+
+            # Tool use can be truncated if the response hits max_tokens
+            if response.stop_reason == "end_turn":
+                result, resp_text = _extract_tool_result(response)
+            else:
+                raise ValueError(
+                    f"Unexpected stop_reason '{response.stop_reason}' "
+                    f"(expected 'end_turn', may be truncated at {max_tokens} tokens)"
+                )
+
             await _log_and_persist(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
@@ -243,16 +270,6 @@ async def call_claude_json(
                 input_text=user_message, output_text=resp_text,
             )
             _circuit.record_success()
-
-            # If response was truncated, don't retry — a longer response
-            # will just hit the same token limit
-            if response.stop_reason == "max_tokens":
-                raise RuntimeError(
-                    f"Response truncated (hit {max_tokens} token limit)"
-                )
-
-            text = strip_markdown_fencing(resp_text)
-            result: dict[str, object] = json.loads(text)
             return result
 
         except (anthropic.APITimeoutError, anthropic.APIError) as e:
@@ -265,16 +282,16 @@ async def call_claude_json(
                 success=False, retry_count=attempt,
                 input_text=user_message, output_text=str(e),
             )
-        except json.JSONDecodeError as e:
+        except ValueError as e:
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = e
-            logger.warning("JSON parse error (attempt %d): %s", attempt + 1, e)
-            # Log actual tokens — the API call succeeded, tokens were consumed
+            logger.warning("Tool use extraction error (attempt %d): %s", attempt + 1, e)
             await _log_and_persist(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
                 latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
-                input_text=user_message, output_text=resp_text,
+                input_text=user_message, output_text=str(e),
             )
 
         if attempt < max_retries - 1:
@@ -283,16 +300,29 @@ async def call_claude_json(
     raise RuntimeError(f"Claude JSON call failed after {max_retries} retries: {last_error}")
 
 
+def _extract_tool_result(response: anthropic.types.Message) -> tuple[dict[str, object], str]:
+    """Extract the tool_use result from a response.
+
+    Returns (parsed_dict, text_for_logging).
+    """
+    for block in response.content:
+        if block.type == "tool_use":
+            result = block.input
+            return result, json.dumps(result, ensure_ascii=False)
+    raise ValueError("No tool_use block in response")
+
+
 async def call_claude_vision(
     user_content: list[Any],
     mode: str,
     *,
+    tool_schema: ToolSchema,
     session_id: str | None = None,
     user_id: str | None = None,
     model: str | None = None,
     max_tokens: int = 1024,
 ) -> dict[str, object]:
-    """Call Claude with image content (Vision) and parse JSON response.
+    """Call Claude with image content (Vision) and return structured JSON via tool use.
 
     Single-attempt (no retry) — the user can retry from the UI.
     Still gets circuit breaker, cost limiting, timeout, and logging.
@@ -303,6 +333,7 @@ async def call_claude_vision(
 
     use_model = model or MODEL_REASON
     client = get_client()
+    tools, tool_choice = _to_tool_params(tool_schema)
 
     start = time.monotonic()
     try:
@@ -310,13 +341,18 @@ async def call_claude_vision(
             model=use_model,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": user_content}],
+            tools=tools,
+            tool_choice=tool_choice,
             timeout=90.0,
         )
         latency_ms = round((time.monotonic() - start) * 1000, 2)
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            raise ValueError("Unexpected response type from Claude")
-        resp_text = first_block.text
+
+        if response.stop_reason != "end_turn":
+            raise ValueError(
+                f"Unexpected stop_reason '{response.stop_reason}' "
+                f"(expected 'end_turn', may be truncated at {max_tokens} tokens)"
+            )
+        result, resp_text = _extract_tool_result(response)
 
         # Build a text summary of the input for logging (images replaced with placeholder)
         input_parts: list[str] = []
@@ -338,9 +374,6 @@ async def call_claude_vision(
             input_text=input_summary, output_text=resp_text,
         )
         _circuit.record_success()
-
-        text = strip_markdown_fencing(resp_text)
-        result: dict[str, object] = json.loads(text)
         return result
 
     except (anthropic.APITimeoutError, anthropic.APIError) as e:
@@ -351,5 +384,5 @@ async def call_claude_vision(
             session_id=session_id, user_id=user_id, success=False,
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
-    except (json.JSONDecodeError, ValueError) as e:
+    except ValueError as e:
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e

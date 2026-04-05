@@ -5,6 +5,7 @@ from typing import Any
 
 from api.core.image_utils import validate_and_decode_image
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_vision
+from api.core.llm_schemas import WORK_DIAGNOSIS_SCHEMA
 from api.core.subjects import Subject
 
 logger = logging.getLogger(__name__)
@@ -53,13 +54,7 @@ Look at the student's handwritten work in the image and for each reference step:
    mentally — mark as "correct", not "skipped"
 4. If their approach is valid but less optimal (less elegant, less generalizable, brute force), note this
 5. If their work is illegible for a step, mark it as "unclear"
-
-Return ONLY valid JSON:
-{{"steps": [{{"step_description": "...", "status": "correct|error|skipped|suboptimal|unclear",
-"student_work": "what they wrote", "feedback": "..."}}],
-"summary": "One-line teaser for summary screen",
-"has_issues": true/false,
-"overall_feedback": "Brief overall assessment"}}"""
+"""
 
 
 async def diagnose_work(
@@ -123,6 +118,7 @@ async def diagnose_work(
     result = await call_claude_vision(
         user_content,
         mode=LLMMode.DIAGNOSE_WORK,
+        tool_schema=WORK_DIAGNOSIS_SCHEMA,
         session_id=session_id,
         user_id=user_id,
         model=MODEL_REASON,
