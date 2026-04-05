@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BrowserFrame } from "./product-mockup";
-import { AnimatedLearnDemo } from "./animated-demo";
+import { BrowserFrame, LearnSessionMockup } from "./product-mockup";
 
 export function Hero() {
   return (
@@ -61,7 +60,7 @@ export function Hero() {
           className="mt-14 md:mt-16"
         >
           <BrowserFrame>
-            <AnimatedLearnDemo />
+            <LearnSessionMockup />
           </BrowserFrame>
         </motion.div>
       </div>
