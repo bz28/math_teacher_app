@@ -2,39 +2,16 @@
 
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import { StickyShowcase } from "./sticky-showcase";
 import {
-  BrowserFrame,
-  StepTimelineMockup,
-  ChatMockup,
-  PracticeMockup,
-} from "./product-mockup";
+  AnimatedLearnDemo,
+  AnimatedChatDemo,
+  getLearnSubstepCount,
+  getChatSubstepCount,
+} from "./animated-demo";
+import { PracticeMockup } from "./product-mockup";
 
-/* ── Main feature rows ── */
-const rows = [
-  {
-    id: "step-by-step",
-    title: "Step-by-Step Learning",
-    description:
-      "Every problem is broken into clear, guided steps. The final answer stays hidden until you've worked through each one — building real understanding, not just copying answers.",
-    Mockup: StepTimelineMockup,
-  },
-  {
-    id: "chat-tutor",
-    title: "Chat With Your Tutor",
-    description:
-      "Stuck on a step? Ask a question and get a personalized explanation — without revealing future steps or answers. Like having a tutor who meets you exactly where you are.",
-    Mockup: ChatMockup,
-  },
-  {
-    id: "practice",
-    title: "Unlimited Practice",
-    description:
-      "Generate unlimited similar problems with instant feedback on every answer. Track your progress, review what you got wrong, and keep practicing until it clicks.",
-    Mockup: PracticeMockup,
-  },
-];
-
-/* ── Secondary features ── */
+/* ── Secondary features (non-sticky, shown below) ── */
 const secondary = [
   {
     icon: DiagnosisIcon,
@@ -54,41 +31,39 @@ const secondary = [
 ];
 
 export function Features() {
-  const ref = useRef<HTMLElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
-
   return (
-    <section id="features" ref={ref} className="px-6 py-24 md:py-32">
-      <div className="mx-auto max-w-6xl">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.5 }}
-          className="mb-20 text-center"
-        >
-          <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-            Everything You Need to Master Any Topic
-          </h2>
-          <p className="mt-3 text-lg text-text-secondary">
-            Six tools that make Veradic your ultimate study partner
-          </p>
-        </motion.div>
+    <section id="features">
+      {/* Sticky scroll showcase */}
+      <StickyShowcase
+        heading="Everything You Need to Master Any Topic"
+        subheading="Six tools that make Veradic your ultimate study partner"
+        features={[
+          {
+            title: "Step-by-Step Learning",
+            description:
+              "Every problem is broken into clear, guided steps. The final answer stays hidden until you've worked through each one — building real understanding, not just copying answers.",
+            substepCount: getLearnSubstepCount("physics"),
+            render: (n) => <AnimatedLearnDemo subject="physics" visibleCount={n} />,
+          },
+          {
+            title: "Chat With Your Tutor",
+            description:
+              "Stuck on a step? Ask a question and get a personalized explanation — without revealing future steps or answers. Like having a tutor who meets you exactly where you are.",
+            substepCount: getChatSubstepCount("chemistry"),
+            render: (n) => <AnimatedChatDemo subject="chemistry" visibleCount={n} />,
+          },
+          {
+            title: "Unlimited Practice",
+            description:
+              "Generate unlimited similar problems with instant feedback on every answer. Track your progress, review what you got wrong, and keep practicing until it clicks.",
+            substepCount: 1,
+            render: () => <PracticeMockup />,
+          },
+        ]}
+      />
 
-        {/* Alternating rows */}
-        <div className="space-y-24 md:space-y-32">
-          {rows.map((row, i) => (
-            <FeatureRow
-              key={row.title}
-              id={row.id}
-              title={row.title}
-              description={row.description}
-              Mockup={row.Mockup}
-              reverse={i % 2 === 1}
-            />
-          ))}
-        </div>
-
-        {/* Secondary features strip */}
+      {/* Secondary features strip */}
+      <div className="px-6 pb-24 pt-12 md:pb-32">
         <SecondaryStrip />
       </div>
     </section>
@@ -106,7 +81,7 @@ function SecondaryStrip() {
       initial={{ opacity: 0, y: 16 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.5 }}
-      className="mt-24 pt-12"
+      className="mx-auto max-w-6xl"
     >
       <p className="mb-8 text-center text-lg font-bold text-text-primary">
         And more
@@ -120,58 +95,12 @@ function SecondaryStrip() {
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
               <item.icon />
             </div>
-            <p className="text-sm font-bold text-text-primary">
-              {item.label}
+            <p className="text-sm font-bold text-text-primary">{item.label}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+              {item.desc}
             </p>
-            <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{item.desc}</p>
           </div>
         ))}
-      </div>
-    </motion.div>
-  );
-}
-
-/* ── Feature Row ── */
-function FeatureRow({
-  id,
-  title,
-  description,
-  Mockup,
-  reverse,
-}: {
-  id: string;
-  title: string;
-  description: string;
-  Mockup: React.ComponentType;
-  reverse: boolean;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-60px" });
-
-  return (
-    <motion.div
-      id={id}
-      ref={ref}
-      initial={{ opacity: 0, y: 24 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay: 0.1 }}
-      className="scroll-mt-24 grid items-center gap-10 md:grid-cols-2 md:gap-16"
-    >
-      {/* Text */}
-      <div className={reverse ? "md:order-2" : ""}>
-        <h3 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
-          {title}
-        </h3>
-        <p className="mt-4 leading-relaxed text-text-secondary">
-          {description}
-        </p>
-      </div>
-
-      {/* Mockup */}
-      <div className={reverse ? "md:order-1" : ""}>
-        <BrowserFrame>
-          <Mockup />
-        </BrowserFrame>
       </div>
     </motion.div>
   );
