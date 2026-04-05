@@ -45,7 +45,7 @@ export function StickyShowcase({
   subheading,
   features,
   vhPerStep = 80,
-  autoScrollDelay = 3000,
+  autoScrollDelay = 2000,
   autoScrollSpeed = 1.2,
 }: StickyShowcaseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
