@@ -5,10 +5,12 @@ import { Subjects } from "@/components/landing/subjects";
 import { FAQ } from "@/components/landing/faq";
 import { CTA } from "@/components/landing/cta";
 import { Footer } from "@/components/landing/footer";
+import { ScrollingTopics } from "@/components/landing/scrolling-topics";
 
 export default function Home() {
   return (
     <>
+      <ScrollingTopics subject="all" />
       <Navbar />
       <main>
         <Hero />

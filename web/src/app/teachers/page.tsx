@@ -13,6 +13,7 @@ import {
 import { StickyShowcase } from "@/components/landing/sticky-showcase";
 import { contact } from "@/lib/api";
 import { jumpTo } from "@/lib/utils";
+import { ScrollingTopics } from "@/components/landing/scrolling-topics";
 
 const PAIN_POINTS = [
   "Wishing you could give every student 1-on-1 time, but there's only one of you",
@@ -70,6 +71,7 @@ export default function TeachersPage() {
 
   return (
     <>
+      <ScrollingTopics subject="teacher" />
       <Navbar />
       <main>
         {/* ── Hero ── */}
