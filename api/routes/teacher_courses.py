@@ -44,9 +44,9 @@ async def get_teacher_course(db: AsyncSession, course_id: uuid.UUID, teacher_id:
     """Fetch a course and verify ownership. Reused by other teacher route modules."""
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
     if course.teacher_id != teacher_id:
-        raise HTTPException(status_code=403, detail="Not your course")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your course")
     return course
 
 

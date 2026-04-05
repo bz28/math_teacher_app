@@ -20,6 +20,7 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(false);
 
   const fetchPage = useCallback(async (offset: number) => {
     const res = await getSessionHistory(subject, PAGE_SIZE, offset);
@@ -32,8 +33,9 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
         const res = await fetchPage(0);
         setItems(res.items);
         setHasMore(res.has_more);
+        setError(false);
       } catch {
-        // Silently fail
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -69,6 +71,14 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
 
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />
+      ) : error ? (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={40} color={colors.textMuted} />
+          <Text style={styles.emptyText}>Couldn't load history</Text>
+          <AnimatedPressable onPress={() => { setLoading(true); setError(false); fetchPage(0).then((res) => { setItems(res.items); setHasMore(res.has_more); }).catch(() => setError(true)).finally(() => setLoading(false)); }}>
+            <Text style={{ color: colors.primary, ...typography.bodyBold, fontSize: 14 }}>Try Again</Text>
+          </AnimatedPressable>
+        </View>
       ) : items.length === 0 ? (
         <View style={styles.centered}>
           <Ionicons name="book-outline" size={40} color={colors.textMuted} />

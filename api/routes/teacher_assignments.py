@@ -69,9 +69,9 @@ async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, tea
         select(Assignment).where(Assignment.id == assignment_id)
     )).scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
     if assignment.teacher_id != teacher_id:
-        raise HTTPException(status_code=403, detail="Not your assignment")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your assignment")
     return assignment
 
 
@@ -150,7 +150,7 @@ async def create_assignment(
         try:
             due_at = datetime.fromisoformat(body.due_at)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid due_at format")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
 
     # Validate unit belongs to this course
     if body.unit_id is not None:
@@ -159,7 +159,7 @@ async def create_assignment(
             select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
         )).scalar_one_or_none()
         if not unit_check:
-            raise HTTPException(status_code=404, detail="Unit not found in this course")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
 
     # Validate document_ids belong to this course
     doc_id_strings: list[str] | None = None
@@ -170,7 +170,10 @@ async def create_assignment(
         )).scalars().all())
         if len(found) != len(body.document_ids):
             missing = set(body.document_ids) - found
-            raise HTTPException(status_code=404, detail=f"Documents not found in this course: {missing}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Documents not found in this course: {missing}",
+            )
         doc_id_strings = [str(d) for d in body.document_ids]
 
     assignment = Assignment(
@@ -255,7 +258,7 @@ async def update_assignment(
     if body.title is not None:
         title = body.title.strip()
         if not title or len(title) > 300:
-            raise HTTPException(status_code=400, detail="Title must be 1-300 characters")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title must be 1-300 characters")
         a.title = title
     if body.status is not None:
         a.status = body.status
@@ -263,7 +266,7 @@ async def update_assignment(
         try:
             a.due_at = datetime.fromisoformat(body.due_at)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid due_at format")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
     if body.late_policy is not None:
         a.late_policy = body.late_policy
     if body.content is not None:
@@ -302,7 +305,7 @@ async def assign_to_sections(
             select(Section).where(Section.id == sid, Section.course_id == a.course_id)
         )).scalar_one_or_none()
         if not section:
-            raise HTTPException(status_code=404, detail="Section not found in this course")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in this course")
 
         # Check if already assigned
         existing = (await db.execute(
@@ -379,7 +382,7 @@ async def grade_submission(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
     if not sub:
-        raise HTTPException(status_code=404, detail="Submission not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
 
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
@@ -395,21 +398,24 @@ async def grade_submission(
 
     if body.action == "approve":
         if grade.ai_score is None:
-            raise HTTPException(status_code=400, detail="Cannot approve: no AI score exists yet")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot approve: no AI score exists yet",
+            )
         grade.final_score = grade.ai_score
         grade.reviewed_by = current_user.user_id
         grade.reviewed_at = now
         sub.status = "teacher_reviewed"
     elif body.action == "override":
         if body.teacher_score is None:
-            raise HTTPException(status_code=400, detail="teacher_score required for override")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="teacher_score required for override")
         grade.teacher_score = body.teacher_score
         grade.final_score = body.teacher_score
         grade.reviewed_by = current_user.user_id
         grade.reviewed_at = now
         sub.status = "teacher_reviewed"
     else:
-        raise HTTPException(status_code=400, detail="action must be 'approve' or 'override'")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action must be 'approve' or 'override'")
 
     if body.teacher_notes is not None:
         grade.teacher_notes = body.teacher_notes
@@ -460,7 +466,7 @@ async def generate_assignment_questions(
     )
 
     if not questions:
-        raise HTTPException(status_code=500, detail="Failed to generate questions")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate questions")
 
     return {"questions": questions}
 
@@ -471,7 +477,7 @@ async def generate_assignment_solutions(
     current_user: CurrentUser = Depends(require_teacher),
 ) -> dict[str, Any]:
     if not body.questions or len(body.questions) > 30:
-        raise HTTPException(status_code=400, detail="Provide 1-30 questions")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide 1-30 questions")
 
     solutions = await generate_solutions(
         questions=body.questions,

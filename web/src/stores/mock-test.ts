@@ -149,7 +149,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         set({ phase: "mock_test_active" });
 
         // Remaining questions continue resolving in background
-        Promise.allSettled(promises.slice(1)).catch(() => {});
+        Promise.allSettled(promises.slice(1));
       }
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
@@ -203,9 +203,11 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
       const answersResolved = mockTest.questions.every((q) => q.answer !== "");
       if (!answersResolved) {
         await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => { unsub(); resolve(); }, 30_000);
           const unsub = store.subscribe((state) => {
-            if (!state.mockTest) { unsub(); resolve(); return; }
+            if (!state.mockTest) { clearTimeout(timeout); unsub(); resolve(); return; }
             if (state.mockTest.questions.every((q) => q.answer !== "")) {
+              clearTimeout(timeout);
               unsub();
               resolve();
             }

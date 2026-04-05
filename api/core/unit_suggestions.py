@@ -152,20 +152,26 @@ Documents to organize:
 
         # Validate and normalize — match AI responses back to original filenames
         # because the LLM may return filenames with subtle differences
+        # (e.g. macOS uses U+202F narrow no-break space before AM/PM in
+        # screenshot filenames, but LLMs typically return regular spaces).
+        def _normalize_ws(s: str) -> str:
+            """Collapse all Unicode whitespace variants into regular ASCII spaces."""
+            import re
+            return re.sub(r"\s+", " ", s).strip()
+
         ai_by_filename: dict[str, dict[str, Any]] = {}
+        ai_by_normalized: dict[str, dict[str, Any]] = {}
         for s in suggestions:
             if isinstance(s, dict) and "filename" in s:
                 ai_by_filename[s["filename"]] = s
+                ai_by_normalized[_normalize_ws(s["filename"]).lower()] = s
 
         normalized = []
         for original_name in filenames:
             match = ai_by_filename.get(original_name)
             if not match:
-                # Fuzzy fallback: try case-insensitive match
-                match = next(
-                    (v for k, v in ai_by_filename.items() if k.lower() == original_name.lower()),
-                    None,
-                )
+                # Fuzzy fallback: normalize whitespace + case-insensitive
+                match = ai_by_normalized.get(_normalize_ws(original_name).lower())
             normalized.append({
                 "filename": original_name,  # always use the original filename
                 "suggested_unit": match.get("suggested_unit", "Uncategorized") if match else "Uncategorized",

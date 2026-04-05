@@ -25,22 +25,96 @@ export interface MathGraphProps {
   yRange?: [number, number];
 }
 
-// Simple math expression evaluator
-function evalFn(expr: string): (x: number) => number {
-  const jsExpr = expr
-    .replace(/\^/g, "**")
-    .replace(/sin/g, "Math.sin")
-    .replace(/cos/g, "Math.cos")
-    .replace(/tan/g, "Math.tan")
-    .replace(/sqrt/g, "Math.sqrt")
-    .replace(/abs/g, "Math.abs")
-    .replace(/ln/g, "Math.log")
-    .replace(/log/g, "Math.log10")
-    .replace(/pi/g, "Math.PI")
-    .replace(/e(?![a-z])/g, "Math.E");
+/**
+ * Safe math expression evaluator — whitelist-only tokenizer + recursive-descent
+ * parser. No eval/Function needed. Supports: +, -, *, /, ^, unary minus,
+ * parentheses, x, numeric literals, pi, e, and common math functions.
+ */
+const MATH_FNS: Record<string, (v: number) => number> = {
+  sin: Math.sin, cos: Math.cos, tan: Math.tan,
+  sqrt: Math.sqrt, abs: Math.abs, ln: Math.log, log: Math.log10,
+};
 
-  // eslint-disable-next-line no-new-func
-  return new Function("x", `try { return ${jsExpr}; } catch { return NaN; }`) as (x: number) => number;
+const CONSTANTS: Record<string, number> = { pi: Math.PI, e: Math.E };
+
+// Allowed token pattern: numbers, identifiers, operators, parens
+const TOKEN_RE = /\d+(?:\.\d+)?|[a-z]+|[+\-*/^(),]|\S/gi;
+
+function evalFn(expr: string): (x: number) => number {
+  return (x: number): number => {
+    const tokens = expr.match(TOKEN_RE) ?? [];
+    let pos = 0;
+
+    function peek() { return tokens[pos] ?? ""; }
+    function consume() { return tokens[pos++]; }
+
+    function parseExpr(): number {
+      let left = parseTerm();
+      while (peek() === "+" || peek() === "-") {
+        const op = consume();
+        const right = parseTerm();
+        left = op === "+" ? left + right : left - right;
+      }
+      return left;
+    }
+
+    function parseTerm(): number {
+      let left = parsePower();
+      while (peek() === "*" || peek() === "/") {
+        const op = consume();
+        const right = parsePower();
+        left = op === "*" ? left * right : left / right;
+      }
+      return left;
+    }
+
+    function parsePower(): number {
+      const base = parseUnary();
+      if (peek() === "^") { consume(); return Math.pow(base, parsePower()); }
+      return base;
+    }
+
+    function parseUnary(): number {
+      if (peek() === "-") { consume(); return -parseUnary(); }
+      if (peek() === "+") { consume(); return parseUnary(); }
+      return parseAtom();
+    }
+
+    function parseAtom(): number {
+      const tok = peek();
+
+      // Number literal
+      if (/^\d/.test(tok)) { consume(); return parseFloat(tok); }
+
+      // Variable x
+      if (tok === "x") { consume(); return x; }
+
+      // Constants
+      if (tok in CONSTANTS) { consume(); return CONSTANTS[tok]; }
+
+      // Functions: name(expr)
+      if (tok in MATH_FNS) {
+        const fn = MATH_FNS[consume()];
+        if (peek() !== "(") return NaN;
+        consume(); // (
+        const arg = parseExpr();
+        if (peek() === ")") consume();
+        return fn(arg);
+      }
+
+      // Parenthesised group
+      if (tok === "(") {
+        consume();
+        const val = parseExpr();
+        if (peek() === ")") consume();
+        return val;
+      }
+
+      return NaN;
+    }
+
+    try { return parseExpr(); } catch { return NaN; }
+  };
 }
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];

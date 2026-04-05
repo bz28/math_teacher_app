@@ -126,13 +126,13 @@ async def add_student(
     await _get_section(db, section_id, course_id)
     student = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if not student:
-        raise HTTPException(status_code=404, detail="No user found with that email")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No user found with that email")
     existing = (await db.execute(
         select(SectionEnrollment).where(
             SectionEnrollment.section_id == section_id, SectionEnrollment.student_id == student.id)
     )).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=409, detail="Student already in section")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student already in section")
     db.add(SectionEnrollment(section_id=section_id, student_id=student.id))
     await db.commit()
     return {"status": "ok", "student_id": str(student.id)}
@@ -150,7 +150,7 @@ async def remove_student(
             SectionEnrollment.section_id == section_id, SectionEnrollment.student_id == student_id)
     )
     if result.rowcount == 0:  # type: ignore[attr-defined]
-        raise HTTPException(status_code=404, detail="Student not in section")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not in section")
     await db.commit()
     return {"status": "ok"}
 
@@ -171,7 +171,7 @@ async def generate_join_code(
         if not (await db.execute(select(Section.id).where(Section.join_code == code))).scalar_one_or_none():
             break
     else:
-        raise HTTPException(status_code=500, detail="Could not generate unique code")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not generate unique code")
     section.join_code = code
     section.join_code_expires_at = datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS)
     await db.commit()
@@ -188,15 +188,15 @@ async def join_section(
     code = body.join_code.strip().upper()
     section = (await db.execute(select(Section).where(Section.join_code == code))).scalar_one_or_none()
     if not section:
-        raise HTTPException(status_code=404, detail="Invalid join code")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid join code")
     if section.join_code_expires_at and section.join_code_expires_at < datetime.now(UTC):
-        raise HTTPException(status_code=410, detail="Join code expired")
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Join code expired")
     existing = (await db.execute(
         select(SectionEnrollment).where(
             SectionEnrollment.section_id == section.id, SectionEnrollment.student_id == current_user.user_id)
     )).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=409, detail="Already in this section")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already in this section")
     db.add(SectionEnrollment(section_id=section.id, student_id=current_user.user_id))
     await db.commit()
     return {"status": "ok", "section_id": str(section.id)}
@@ -210,5 +210,5 @@ async def _get_section(db: AsyncSession, section_id: uuid.UUID, course_id: uuid.
         select(Section).where(Section.id == section_id, Section.course_id == course_id)
     )).scalar_one_or_none()
     if not section:
-        raise HTTPException(status_code=404, detail="Section not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found")
     return section

@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,12 +49,12 @@ async def revenuecat_webhook(
 ) -> dict[str, str]:
     """Handle RevenueCat subscription lifecycle events.
 
-    Always returns 200 to prevent RevenueCat from retrying.
+    Returns 403 on auth failure (RevenueCat only retries on 5xx, not 4xx).
     """
     try:
         _verify_webhook_secret(authorization)
     except ValueError:
-        return {"status": "ok"}
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     body = await request.json()
     event = body.get("event", {})

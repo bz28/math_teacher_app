@@ -1,11 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/v1";
 
-let _token: string | null = localStorage.getItem("admin_token");
+let _token: string | null = sessionStorage.getItem("admin_token");
 
 export function setToken(token: string | null) {
   _token = token;
-  if (token) localStorage.setItem("admin_token", token);
-  else localStorage.removeItem("admin_token");
+  if (token) sessionStorage.setItem("admin_token", token);
+  else sessionStorage.removeItem("admin_token");
 }
 
 export function getToken() {
