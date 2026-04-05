@@ -8,9 +8,9 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogoMark } from "@/components/shared/logo-mark";
 
 const featureLinks = [
-  { label: "Step-by-Step Learning", href: "#step-by-step" },
-  { label: "Chat With Your Tutor", href: "#chat-tutor" },
-  { label: "Unlimited Practice", href: "#practice" },
+  { label: "Step-by-Step Learning", href: "#features" },
+  { label: "Chat With Your Tutor", href: "#features" },
+  { label: "Unlimited Practice", href: "#features" },
 ];
 
 const teacherNavLinks = [
