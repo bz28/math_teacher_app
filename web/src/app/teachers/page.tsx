@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
+import { BrowserFrame } from "@/components/landing/product-mockup";
+import { AnimatedLearnDemo, AnimatedGradingDemo } from "@/components/landing/animated-demo";
 import { contact } from "@/lib/api";
 
 const PAIN_POINTS = [
@@ -209,6 +211,73 @@ export default function TeachersPage() {
                   </p>
                 </motion.div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Product Showcase ── */}
+        <section className="px-6 py-20 md:py-24">
+          <div className="mx-auto max-w-5xl">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mb-16 text-center"
+            >
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
+                See What Your Students Experience
+              </h2>
+              <p className="mt-3 text-lg text-text-secondary">
+                Every student gets a personal AI tutor that adapts to their pace
+              </p>
+            </motion.div>
+
+            <div className="space-y-20 md:space-y-28">
+              {/* Row 1: Student learning experience */}
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="grid items-center gap-10 md:grid-cols-2 md:gap-14"
+              >
+                <div>
+                  <h3 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
+                    Step-by-Step Guidance
+                  </h3>
+                  <p className="mt-4 leading-relaxed text-text-secondary">
+                    Students work through problems one step at a time. The
+                    answer stays hidden until they&apos;ve built real
+                    understanding — no shortcuts, no copying.
+                  </p>
+                </div>
+                <BrowserFrame>
+                  <AnimatedLearnDemo />
+                </BrowserFrame>
+              </motion.div>
+
+              {/* Row 2: Auto-grading (reversed) */}
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="grid items-center gap-10 md:grid-cols-2 md:gap-14"
+              >
+                <div className="md:order-2">
+                  <h3 className="text-2xl font-bold tracking-tight text-text-primary md:text-3xl">
+                    Automatic Grading
+                  </h3>
+                  <p className="mt-4 leading-relaxed text-text-secondary">
+                    Students photograph their work, AI grades each step
+                    individually. You see exactly where mistakes happen — review,
+                    override, and move on.
+                  </p>
+                </div>
+                <div className="md:order-1">
+                  <BrowserFrame>
+                    <AnimatedGradingDemo />
+                  </BrowserFrame>
+                </div>
+              </motion.div>
             </div>
           </div>
         </section>
