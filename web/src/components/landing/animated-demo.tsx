@@ -219,7 +219,7 @@ export function AnimatedLearnDemo({ subject }: { subject?: string }) {
   const progress = (visibleCount / steps.length) * 100;
 
   return (
-    <div className="min-h-[340px]">
+    <div className="h-[380px] overflow-hidden">
       <div className="space-y-3.5">
         {/* Problem */}
         <div>
@@ -351,7 +351,7 @@ export function AnimatedChatDemo({ subject }: { subject?: string }) {
   }, [messages.length]);
 
   return (
-    <div className="min-h-[300px]">
+    <div className="h-[340px] overflow-hidden">
       <div className="space-y-3">
         {/* Step context — always visible */}
         <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg/20 p-3 shadow-sm">
@@ -490,7 +490,7 @@ export function AnimatedGradingDemo() {
   const correctCount = GRADING_STEPS.filter((s) => s.correct).length;
 
   return (
-    <div className="min-h-[280px]">
+    <div className="h-[320px] overflow-hidden">
       <div className="space-y-3.5">
         {/* Header */}
         <div className="flex items-center justify-between">
