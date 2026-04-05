@@ -5,17 +5,15 @@ import { motion } from "framer-motion";
 import {
   BrowserFrame,
   LearnSessionMockup,
-  FloatingMockup,
 } from "./product-mockup";
 
 export function Hero() {
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6 pb-20 pt-14 md:pb-28 md:pt-20">
-      {/* Subtle radial glow behind mockup */}
-      <div className="pointer-events-none absolute right-0 top-1/4 hidden h-[600px] w-[600px] rounded-full bg-gradient-to-br from-primary/8 to-transparent blur-3xl md:block" />
+      {/* Subtle radial glow */}
+      <div className="pointer-events-none absolute left-1/2 top-1/3 hidden h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/8 to-transparent blur-3xl md:block" />
 
-      <div className="relative mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-2 md:gap-16">
-        {/* Left — text */}
+      <div className="relative mx-auto max-w-4xl text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -33,12 +31,12 @@ export function Hero() {
             </span>
           </h1>
 
-          <p className="mt-5 max-w-lg text-lg leading-relaxed text-text-secondary">
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-text-secondary">
             Veradic — your personal AI tutor that breaks any math or science
             problem into steps you actually understand.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link
               href="/register"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-[--radius-pill] bg-primary px-7 text-base font-bold text-white transition-colors hover:bg-primary-dark"
@@ -55,33 +53,18 @@ export function Hero() {
               See how it works
             </a>
           </div>
-
         </motion.div>
 
-        {/* Right — product mockup */}
+        {/* Product mockup — centered below CTA */}
         <motion.div
-          initial={{ opacity: 0, x: 30 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="hidden md:block"
-        >
-          <FloatingMockup>
-            <BrowserFrame>
-              <LearnSessionMockup />
-            </BrowserFrame>
-          </FloatingMockup>
-        </motion.div>
-
-        {/* Mobile — simplified mockup (no browser chrome) */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="md:hidden"
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="mt-14 md:mt-16"
         >
-          <div className="rounded-[--radius-xl] border border-border-light bg-surface p-4 shadow-md">
+          <BrowserFrame>
             <LearnSessionMockup />
-          </div>
+          </BrowserFrame>
         </motion.div>
       </div>
     </section>
