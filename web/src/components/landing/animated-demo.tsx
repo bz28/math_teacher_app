@@ -215,6 +215,7 @@ export function getChatSubstepCount(subject?: string): number {
 }
 
 export const GRADING_SUBSTEP_COUNT = 5; // 4 steps + 1 grade reveal
+export const PRACTICE_SUBSTEP_COUNT = 5; // 3 problems + select answer + results
 
 /* ================================================================
    AnimatedLearnDemo — scroll-driven, controlled by visibleCount
@@ -598,6 +599,178 @@ export function AnimatedGradingDemo({
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white">
               {Math.round((correctCount / GRADING_STEPS.length) * 100)}%
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ================================================================
+   AnimatedPracticeDemo — shows the real practice flow:
+   AI generates similar problems, student picks MC answers,
+   tracks progress toward mastery.
+
+   visibleCount 1 = first problem shown
+   visibleCount 2 = answer selected (correct)
+   visibleCount 3 = second problem shown
+   visibleCount 4 = answer selected (wrong, then correct)
+   visibleCount 5 = results summary
+   ================================================================ */
+
+const PRACTICE_PROBLEMS = [
+  {
+    question: "Solve for x: 3x² − 12 = 0",
+    choices: ["x = ±4", "x = ±2", "x = ±3", "x = 4"],
+    correctIdx: 1,
+  },
+  {
+    question: "Solve for x: x² + 6x + 9 = 0",
+    choices: ["x = 3", "x = −3", "x = ±3", "x = −9"],
+    correctIdx: 1,
+  },
+  {
+    question: "Solve for x: 5x² − 20x = 0",
+    choices: ["x = 4", "x = 0 and x = 4", "x = 0 and x = −4", "x = 5"],
+    correctIdx: 1,
+  },
+];
+
+export function AnimatedPracticeDemo({
+  visibleCount,
+}: {
+  visibleCount: number;
+}) {
+  // Map visibleCount to practice state
+  const showAnswer1 = visibleCount >= 2;
+  const showProblem2 = visibleCount >= 3;
+  const showAnswer2 = visibleCount >= 4;
+  const showResults = visibleCount >= 5;
+
+  const currentProblem = showProblem2 ? 1 : 0;
+  const answeredCount = (showAnswer1 ? 1 : 0) + (showAnswer2 ? 1 : 0);
+  const totalProblems = PRACTICE_PROBLEMS.length;
+  const progress = showResults ? 100 : ((currentProblem + (showAnswer1 && !showProblem2 ? 1 : 0)) / totalProblems) * 100;
+
+  if (showResults) {
+    return (
+      <div className="space-y-3.5">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="space-y-3.5"
+        >
+          <div className="text-center">
+            <p className="text-[10px] font-medium text-text-muted">Practice Complete</p>
+            <p className="mt-1 text-sm font-bold text-text-primary">
+              {answeredCount}/{totalProblems} problems mastered
+            </p>
+          </div>
+
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
+            <div className="h-full w-full rounded-full bg-gradient-to-r from-success to-[#55EFC4]" />
+          </div>
+
+          {PRACTICE_PROBLEMS.map((p, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-[--radius-md] border border-success/30 bg-success-light p-2.5">
+              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success">
+                <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="text-[11px] text-text-primary">{p.question}</p>
+            </div>
+          ))}
+
+          <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 p-3 text-center">
+            <p className="text-[10px] font-medium text-text-muted">Ready to master more?</p>
+            <div className="mt-2 rounded-[--radius-md] bg-primary px-4 py-1.5 text-[10px] font-bold text-white">
+              Generate More Problems
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const problem = PRACTICE_PROBLEMS[currentProblem];
+  const showingAnswer = currentProblem === 0 ? showAnswer1 : showAnswer2;
+
+  return (
+    <div className="space-y-3.5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-medium text-text-muted">Similar Problem</p>
+          <p className="mt-0.5 text-[10px] text-text-muted">
+            Problem {currentProblem + 1} of {totalProblems}
+          </p>
+        </div>
+        <div className="rounded-[--radius-sm] bg-primary-bg px-2.5 py-1 text-[10px] font-semibold text-primary">
+          Practice Mode
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
+        <motion.div
+          className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+      </div>
+
+      {/* Problem */}
+      <div className="rounded-[--radius-md] border border-border-light bg-surface p-3">
+        <p className="text-xs font-medium text-text-primary">{problem.question}</p>
+      </div>
+
+      {/* Choices */}
+      <div className="grid grid-cols-2 gap-2">
+        {problem.choices.map((choice, i) => {
+          const isCorrect = i === problem.correctIdx;
+          const isSelected = showingAnswer && isCorrect;
+
+          return (
+            <motion.div
+              key={`${currentProblem}-${i}`}
+              animate={isSelected ? { scale: [1, 1.02, 1] } : {}}
+              transition={{ duration: 0.3 }}
+              className={`flex items-center gap-2 rounded-[--radius-md] border p-2.5 ${
+                isSelected
+                  ? "border-success bg-success-light"
+                  : "border-border-light bg-surface"
+              }`}
+            >
+              <span
+                className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  isSelected ? "bg-success text-white" : "bg-border-light text-text-muted"
+                }`}
+              >
+                {String.fromCharCode(65 + i)}
+              </span>
+              <span className={`text-xs font-medium ${isSelected ? "text-success" : "text-text-primary"}`}>
+                {choice}
+              </span>
+              {isSelected && (
+                <svg className="ml-auto h-3.5 w-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Feedback */}
+      <AnimatePresence>
+        {showingAnswer && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-[--radius-md] border border-success/30 bg-success-light p-2.5 text-center"
+          >
+            <p className="text-xs font-semibold text-success">Correct!</p>
           </motion.div>
         )}
       </AnimatePresence>

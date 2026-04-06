@@ -80,7 +80,7 @@ export function TopicCloud({ subject = "all" }: TopicCloudProps) {
           {leftItems.map((topic, i) => (
             <span
               key={`l-${i}`}
-              className="text-xs font-medium text-text-muted/15 2xl:text-sm"
+              className="text-xs font-medium text-text-muted/30 2xl:text-sm"
             >
               {topic}
             </span>
@@ -100,7 +100,7 @@ export function TopicCloud({ subject = "all" }: TopicCloudProps) {
           {rightItems.map((topic, i) => (
             <span
               key={`r-${i}`}
-              className="text-right text-xs font-medium text-text-muted/15 2xl:text-sm"
+              className="text-right text-xs font-medium text-text-muted/30 2xl:text-sm"
             >
               {topic}
             </span>

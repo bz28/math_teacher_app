@@ -6,10 +6,11 @@ import { TabbedShowcase } from "./tabbed-showcase";
 import {
   AnimatedLearnDemo,
   AnimatedChatDemo,
+  AnimatedPracticeDemo,
   getLearnSubstepCount,
   getChatSubstepCount,
+  PRACTICE_SUBSTEP_COUNT,
 } from "./animated-demo";
-import { PracticeMockup } from "./product-mockup";
 
 /* ── Secondary features (non-sticky, shown below) ── */
 const secondary = [
@@ -53,11 +54,11 @@ export function Features() {
             render: (n) => <AnimatedChatDemo subject="chemistry" visibleCount={n} />,
           },
           {
-            title: "Unlimited Practice",
+            title: "Practice Until You Master It",
             description:
-              "Generate unlimited similar problems with instant feedback on every answer. Track your progress, review what you got wrong, and keep practicing until it clicks.",
-            substepCount: 1,
-            render: () => <PracticeMockup />,
+              "After learning a problem, AI generates similar ones so you can practice the same concept until it sticks. Work through as many as you need — every problem is new, every answer is checked.",
+            substepCount: PRACTICE_SUBSTEP_COUNT,
+            render: (n) => <AnimatedPracticeDemo visibleCount={n} />,
           },
         ]}
       />

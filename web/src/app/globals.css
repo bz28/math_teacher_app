@@ -26,11 +26,12 @@
   /* Text */
   --color-text: #2D3436;
   --color-text-secondary: #636E72;
-  --color-text-muted: #B2BEC3;
+  --color-text-muted: #95A5A6;
   --color-text-on-primary: #FFFFFF;
 
   /* Backgrounds */
   --color-bg: #FAFAFE;
+  --color-bg-secondary: #F5F4FB;
   --color-card: #F8F7FF;
   --color-input-bg: #F5F4FB;
 
@@ -98,6 +99,7 @@
   --color-text-on-primary: #FFFFFF;
 
   --color-bg: #0D0C14;
+  --color-bg-secondary: #121120;
   --color-card: #16152A;
   --color-input-bg: #1C1B30;
   --color-surface: #1A1926;
@@ -158,6 +160,7 @@
   --color-text-on-primary: var(--color-text-on-primary);
 
   --color-bg: var(--color-bg);
+  --color-bg-secondary: var(--color-bg-secondary);
   --color-card: var(--color-card);
   --color-input-bg: var(--color-input-bg);
 

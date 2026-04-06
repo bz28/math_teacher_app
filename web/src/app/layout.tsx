@@ -138,10 +138,11 @@ export default function RootLayout({
             __html: JSON.stringify(faqJsonLd()),
           }}
         />
-        <Script
-          id="theme-hydration"
-          strategy="beforeInteractive"
-        >{`(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`}</Script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col font-sans">
         <ToastProvider>

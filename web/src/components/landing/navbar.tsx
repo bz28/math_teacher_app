@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,14 +21,22 @@ function jumpToTop() {
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
-  const isTeacherPage = pathname === "/teachers";
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Until mounted, render the default (home) nav to avoid hydration mismatch.
+  // usePathname() can differ between server and client for shared layout components.
+  const isTeacherPage = mounted && pathname === "/teachers";
 
   const ctaLabel = isTeacherPage ? "Request a Demo" : "Get Started";
   const ctaHref = isTeacherPage ? "#contact" : "/register";
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-border-light/50 bg-surface/80 backdrop-blur-lg" suppressHydrationWarning>
+    <nav className="sticky top-0 z-40 border-b border-border-light/50 bg-surface/80 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
         <Link
