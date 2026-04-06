@@ -174,10 +174,10 @@ export function ImageUpload({
     e.target.value = "";
   }
 
-  function closeResultModal() {
+  const closeResultModal = useCallback(() => {
     setResult(null);
     setEditingIndex(null);
-  }
+  }, []);
 
   function handleConfirm() {
     if (!result) return;
@@ -331,17 +331,22 @@ export function ImageUpload({
                             onChange={() => toggleSelected(i)}
                             className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
                           />
-                          <textarea
-                            value={problem}
-                            onChange={(e) => updateProblemText(i, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") setEditingIndex(null);
-                            }}
-                            rows={Math.max(2, problem.split("\n").length)}
-                            autoFocus
-                            className="min-w-0 flex-1 resize-y rounded-[--radius-sm] border border-border bg-input-bg px-2.5 py-2 text-sm text-text-primary outline-none focus:border-primary"
-                            spellCheck={false}
-                          />
+                          <div className="min-w-0 flex-1">
+                            <textarea
+                              value={problem}
+                              onChange={(e) => updateProblemText(i, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") setEditingIndex(null);
+                              }}
+                              rows={Math.max(4, problem.split("\n").length + 1)}
+                              autoFocus
+                              className="w-full resize-y rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2.5 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-primary"
+                              spellCheck={false}
+                            />
+                            <p className="mt-1 text-[11px] text-text-muted">
+                              Edit the LaTeX directly. Press <kbd className="rounded bg-card px-1 font-mono">Esc</kbd> to cancel.
+                            </p>
+                          </div>
                         </>
                       ) : (
                         <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
