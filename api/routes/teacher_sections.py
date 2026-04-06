@@ -36,10 +36,6 @@ class JoinSectionRequest(BaseModel):
     join_code: str
 
 
-# --- Section CRUD ---
-
-
-@router.post("/courses/{course_id}/sections", status_code=status.HTTP_201_CREATED)
 async def _generate_unique_join_code(db: AsyncSession) -> str:
     for _ in range(5):
         code = "".join(secrets.choice(JOIN_CODE_CHARS) for _ in range(JOIN_CODE_LENGTH))
@@ -48,6 +44,10 @@ async def _generate_unique_join_code(db: AsyncSession) -> str:
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not generate unique code")
 
 
+# --- Section CRUD ---
+
+
+@router.post("/courses/{course_id}/sections", status_code=status.HTTP_201_CREATED)
 async def create_section(
     course_id: uuid.UUID, body: CreateSectionRequest,
     current_user: CurrentUser = Depends(require_teacher),
