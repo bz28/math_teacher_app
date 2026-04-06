@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   teacher,
@@ -9,6 +10,8 @@ import {
   type TeacherSection,
   type TeacherSectionDetail,
 } from "@/lib/api";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type TabKey = "sections" | "materials" | "bank" | "homework" | "tests" | "settings";
 
@@ -164,6 +167,11 @@ function SectionsTab({ courseId, onChanged }: { courseId: string; onChanged: () 
               section={s}
               expanded={openRoster === s.id}
               onToggle={() => setOpenRoster(openRoster === s.id ? null : s.id)}
+              onDeleted={() => {
+                setOpenRoster(null);
+                reload();
+                onChanged();
+              }}
               onChanged={() => {
                 reload();
                 onChanged();
@@ -194,18 +202,21 @@ function SectionCard({
   expanded,
   onToggle,
   onChanged,
+  onDeleted,
 }: {
   courseId: string;
   section: TeacherSection;
   expanded: boolean;
   onToggle: () => void;
   onChanged: () => void;
+  onDeleted: () => void;
 }) {
   const [detail, setDetail] = useState<TeacherSectionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [studentEmail, setStudentEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!expanded) return;
@@ -221,40 +232,63 @@ function SectionCard({
     setDetail(await teacher.section(courseId, section.id));
   };
 
-  const addStudent = async () => {
-    if (!studentEmail.trim()) return;
+  const wrap = async (fn: () => Promise<void>, fallback: string) => {
     setBusy(true);
     setError(null);
     try {
-      await teacher.addStudent(courseId, section.id, studentEmail.trim());
-      setStudentEmail("");
-      await reloadDetail();
-      onChanged();
+      await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add student");
+      setError(e instanceof Error ? e.message : fallback);
     } finally {
       setBusy(false);
     }
   };
 
-  const removeStudent = async (studentId: string) => {
-    if (!confirm("Remove this student from the section?")) return;
-    await teacher.removeStudent(courseId, section.id, studentId);
-    await reloadDetail();
-    onChanged();
-  };
+  const addStudent = () =>
+    wrap(async () => {
+      const email = studentEmail.trim();
+      if (!email) return;
+      if (!EMAIL_RE.test(email)) {
+        setError("Please enter a valid email address");
+        return;
+      }
+      await teacher.addStudent(courseId, section.id, email);
+      setStudentEmail("");
+      await reloadDetail();
+      onChanged();
+    }, "Failed to add student");
 
-  const regenerateCode = async () => {
-    if (!confirm("Generate a new join code? The old one will stop working.")) return;
-    await teacher.generateJoinCode(courseId, section.id);
-    await reloadDetail();
-    onChanged();
-  };
+  const removeStudent = (studentId: string) =>
+    wrap(async () => {
+      if (!confirm("Remove this student from the section?")) return;
+      await teacher.removeStudent(courseId, section.id, studentId);
+      await reloadDetail();
+      onChanged();
+    }, "Failed to remove student");
 
-  const deleteSection = async () => {
-    if (!confirm(`Delete section "${section.name}"? Students will be unenrolled.`)) return;
-    await teacher.deleteSection(courseId, section.id);
-    onChanged();
+  const regenerateCode = () =>
+    wrap(async () => {
+      if (!confirm("Generate a new join code? The old one will stop working.")) return;
+      await teacher.generateJoinCode(courseId, section.id);
+      await reloadDetail();
+      onChanged();
+    }, "Failed to regenerate join code");
+
+  const deleteSection = () =>
+    wrap(async () => {
+      if (!confirm(`Delete section "${section.name}"? Students will be unenrolled.`)) return;
+      await teacher.deleteSection(courseId, section.id);
+      onDeleted();
+    }, "Failed to delete section");
+
+  const copyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("Could not copy to clipboard");
+    }
   };
 
   const code = detail?.join_code ?? section.join_code;
@@ -271,11 +305,15 @@ function SectionCard({
         <div className="flex items-center gap-2">
           {code && (
             <button
-              onClick={() => navigator.clipboard.writeText(code)}
+              onClick={() => copyCode(code)}
               title="Click to copy"
-              className="rounded-[--radius-pill] bg-primary-bg px-2 py-0.5 font-mono text-xs font-bold text-primary hover:bg-primary/20"
+              className={`rounded-[--radius-pill] px-2 py-0.5 font-mono text-xs font-bold transition-colors ${
+                copied
+                  ? "bg-green-100 text-green-700 dark:bg-green-500/20"
+                  : "bg-primary-bg text-primary hover:bg-primary/20"
+              }`}
             >
-              {code}
+              {copied ? "Copied!" : code}
             </button>
           )}
           <button
@@ -296,13 +334,15 @@ function SectionCard({
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
                   onClick={regenerateCode}
-                  className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                  disabled={busy}
+                  className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
                 >
                   Regenerate join code
                 </button>
                 <button
                   onClick={deleteSection}
-                  className="rounded-[--radius-sm] border border-red-300 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50"
+                  disabled={busy}
+                  className="rounded-[--radius-sm] border border-red-300 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
                 >
                   Delete section
                 </button>
@@ -335,22 +375,29 @@ function SectionCard({
                   ))}
                 </div>
 
-                <div className="mt-4 flex gap-2">
+                <form
+                  className="mt-4 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addStudent();
+                  }}
+                >
                   <input
                     type="email"
                     value={studentEmail}
                     onChange={(e) => setStudentEmail(e.target.value)}
+                    maxLength={255}
                     placeholder="student@email.com"
                     className="flex-1 rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
                   />
                   <button
-                    onClick={addStudent}
+                    type="submit"
                     disabled={busy}
                     className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
                   >
                     Add
                   </button>
-                </div>
+                </form>
               </div>
             </>
           )}
@@ -391,9 +438,13 @@ function NewSectionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
+      <form
         className="w-full max-w-sm rounded-[--radius-xl] bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
       >
         <h2 className="text-lg font-bold text-text-primary">New Section</h2>
         <p className="mt-1 text-xs text-text-muted">e.g. &ldquo;Period 1&rdquo; or &ldquo;Block A&rdquo;</p>
@@ -402,12 +453,14 @@ function NewSectionModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoFocus
+          maxLength={100}
           placeholder="Section name"
           className="mt-4 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
         />
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         <div className="mt-6 flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             disabled={submitting}
             className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
@@ -415,14 +468,14 @@ function NewSectionModal({
             Cancel
           </button>
           <button
-            onClick={submit}
+            type="submit"
             disabled={submitting}
             className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create"}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
@@ -430,12 +483,13 @@ function NewSectionModal({
 // ───────── Settings tab ─────────
 
 function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: () => void }) {
+  const router = useRouter();
   const [name, setName] = useState(course.name);
   const [subject, setSubject] = useState(course.subject);
   const [gradeLevel, setGradeLevel] = useState(course.grade_level?.toString() ?? "");
   const [description, setDescription] = useState(course.description ?? "");
   const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dirty =
@@ -445,6 +499,17 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
     description !== (course.description ?? "");
 
   const save = async () => {
+    if (!name.trim()) {
+      setError("Course name is required");
+      return;
+    }
+    if (gradeLevel) {
+      const g = Number(gradeLevel);
+      if (!Number.isInteger(g) || g < 1 || g > 12) {
+        setError("Grade level must be between 1 and 12");
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -454,7 +519,8 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
         grade_level: gradeLevel ? Number(gradeLevel) : null,
         description: description.trim() || null,
       });
-      setSavedAt(Date.now());
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
@@ -465,8 +531,12 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
 
   const deleteCourse = async () => {
     if (!confirm(`Delete "${course.name}"? This deletes all sections, materials, and student data.`)) return;
-    await teacher.deleteCourse(course.id);
-    window.location.href = "/school/teacher";
+    try {
+      await teacher.deleteCourse(course.id);
+      router.push("/school/teacher");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete course");
+    }
   };
 
   return (
@@ -479,6 +549,7 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            maxLength={200}
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </Field>
@@ -508,6 +579,7 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
+            maxLength={1000}
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </Field>
@@ -516,7 +588,7 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
 
         <div className="flex items-center justify-between">
           <span className="text-xs text-text-muted">
-            {savedAt && !dirty ? "Saved" : dirty ? "Unsaved changes" : ""}
+            {dirty ? "Unsaved changes" : justSaved ? "Saved" : ""}
           </span>
           <button
             onClick={save}

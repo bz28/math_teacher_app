@@ -79,6 +79,7 @@ export default function SchoolTeacherDashboard() {
         </div>
       )}
 
+      {courses.length > 0 && (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -123,6 +124,7 @@ export default function SchoolTeacherDashboard() {
           );
         })}
       </motion.div>
+      )}
 
       {showNewCourse && (
         <NewCourseModal
@@ -159,6 +161,13 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
       setError("Name is required");
       return;
     }
+    if (gradeLevel) {
+      const g = Number(gradeLevel);
+      if (!Number.isInteger(g) || g < 1 || g > 12) {
+        setError("Grade level must be between 1 and 12");
+        return;
+      }
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -177,9 +186,13 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
+      <form
         className="w-full max-w-md rounded-[--radius-xl] bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
       >
         <h2 className="text-lg font-bold text-text-primary">New Course</h2>
 
@@ -189,6 +202,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              maxLength={200}
               placeholder="e.g. Algebra 1"
               className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
               autoFocus
@@ -224,6 +238,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
+              maxLength={1000}
               className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
             />
           </Field>
@@ -233,6 +248,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
         <div className="mt-6 flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             disabled={submitting}
             className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
@@ -240,14 +256,14 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
             Cancel
           </button>
           <button
-            onClick={submit}
+            type="submit"
             disabled={submitting}
             className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create Course"}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

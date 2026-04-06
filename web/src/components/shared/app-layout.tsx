@@ -22,7 +22,7 @@ const teacherNavItems = [
   { label: "Courses", href: "/teacher/courses", icon: CoursesIcon },
   { label: "Assignments", href: "/teacher/assignments", icon: AssignmentsIcon },
   { label: "Analytics", href: "/teacher/analytics", icon: AnalyticsIcon },
-  { label: "New (beta)", href: "/school/teacher", icon: CoursesIcon },
+  { label: "New (beta)", href: "/school/teacher", icon: BetaIcon },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -348,6 +348,14 @@ function AnalyticsIcon({ active }: { active: boolean }) {
   return (
     <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18 20V10M12 20V4M6 20v-6" />
+    </svg>
+  );
+}
+
+function BetaIcon({ active }: { active: boolean }) {
+  return (
+    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8 5.8 21.3l2.4-7.4L2 9.4h7.6z" />
     </svg>
   );
 }
