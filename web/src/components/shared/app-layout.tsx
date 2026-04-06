@@ -22,6 +22,7 @@ const teacherNavItems = [
   { label: "Courses", href: "/teacher/courses", icon: CoursesIcon },
   { label: "Assignments", href: "/teacher/assignments", icon: AssignmentsIcon },
   { label: "Analytics", href: "/teacher/analytics", icon: AnalyticsIcon },
+  { label: "New (beta)", href: "/school/teacher", icon: CoursesIcon },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
