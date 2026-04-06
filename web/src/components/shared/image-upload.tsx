@@ -299,7 +299,11 @@ export function ImageUpload({
       )}
 
       {/* Extraction results modal */}
-      <Modal open={!!result} onClose={closeResultModal}>
+      <Modal
+        open={!!result}
+        onClose={closeResultModal}
+        dismissible={editingIndex === null}
+      >
         {result && (
           <div className="space-y-4">
             <div>
@@ -336,10 +340,7 @@ export function ImageUpload({
                               value={problem}
                               onChange={(e) => updateProblemText(i, e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key === "Escape") {
-                                  e.stopPropagation();
-                                  setEditingIndex(null);
-                                }
+                                if (e.key === "Escape") setEditingIndex(null);
                               }}
                               rows={Math.max(4, problem.split("\n").length + 1)}
                               autoFocus
