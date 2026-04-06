@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogoMark } from "@/components/shared/logo-mark";
 import { jumpTo } from "@/lib/utils";
-
-const featureLinks = [
-  { label: "Step-by-Step Learning", href: "#step-by-step" },
-  { label: "Chat With Your Tutor", href: "#chat-tutor" },
-  { label: "Unlimited Practice", href: "#practice" },
-];
 
 const teacherNavLinks = [
   { label: "How It Helps", href: "#outcomes" },
@@ -27,24 +21,11 @@ function jumpToTop() {
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [featuresOpen, setFeaturesOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const isTeacherPage = pathname === "/teachers";
 
   const ctaLabel = isTeacherPage ? "Request a Demo" : "Get Started";
   const ctaHref = isTeacherPage ? "#contact" : "/register";
-
-  // Close dropdown on click outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setFeaturesOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
 
   return (
     <nav className="sticky top-0 z-40 border-b border-border-light/50 bg-surface/80 backdrop-blur-lg">
@@ -69,68 +50,25 @@ export function Navbar() {
         {/* Desktop links */}
         <div className="hidden items-center gap-8 md:flex">
           {isTeacherPage ? (
-            teacherNavLinks.map((link) =>
-              link.href.startsWith("#") ? (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  onClick={(e) => { e.preventDefault(); jumpTo(link.href); }}
-                  className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
-                >
-                  {link.label}
-                </a>
-              ) : (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
-                >
-                  {link.label}
-                </Link>
-              )
-            )
+            teacherNavLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={(e) => { e.preventDefault(); jumpTo(link.href); }}
+                className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+              >
+                {link.label}
+              </a>
+            ))
           ) : (
             <>
-              {/* Features dropdown */}
-              <div ref={dropdownRef} className="relative">
-                <button
-                  onClick={() => setFeaturesOpen((o) => !o)}
-                  className="flex items-center gap-1 text-sm font-medium text-text-secondary transition-colors hover:text-primary focus:outline-none"
-                >
-                  Features
-                  <svg
-                    className={`h-3.5 w-3.5 transition-transform ${featuresOpen ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                <AnimatePresence>
-                  {featuresOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute left-0 top-full mt-2 w-56 rounded-[--radius-md] border border-border-light bg-surface py-2 shadow-lg"
-                    >
-                      {featureLinks.map((link) => (
-                        <a
-                          key={link.href}
-                          href={link.href}
-                          onClick={(e) => { e.preventDefault(); setFeaturesOpen(false); jumpTo(link.href); }}
-                          className="block px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-primary-bg hover:text-primary"
-                        >
-                          {link.label}
-                        </a>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              <a
+                href="#features"
+                onClick={(e) => { e.preventDefault(); jumpTo("#features"); }}
+                className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+              >
+                Features
+              </a>
               <Link
                 href="/teachers"
                 className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
@@ -196,40 +134,25 @@ export function Navbar() {
           >
             <div className="flex flex-col gap-1 px-6 py-4">
               {isTeacherPage ? (
-                teacherNavLinks.map((link) =>
-                  link.href.startsWith("#") ? (
-                    <a
-                      key={link.href}
-                      href={link.href}
-                      onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo(link.href); }}
-                      className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
-                    >
-                      {link.label}
-                    </a>
-                  ) : (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      onClick={() => setMobileOpen(false)}
-                      className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
-                    >
-                      {link.label}
-                    </Link>
-                  )
-                )
+                teacherNavLinks.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo(link.href); }}
+                    className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                  >
+                    {link.label}
+                  </a>
+                ))
               ) : (
                 <>
-                  <p className="px-3 py-1 text-xs font-semibold text-text-muted">Features</p>
-                  {featureLinks.map((link) => (
-                    <a
-                      key={link.href}
-                      href={link.href}
-                      onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo(link.href); }}
-                      className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
-                    >
-                      {link.label}
-                    </a>
-                  ))}
+                  <a
+                    href="#features"
+                    onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo("#features"); }}
+                    className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                  >
+                    Features
+                  </a>
                   <Link
                     href="/teachers"
                     onClick={() => setMobileOpen(false)}
