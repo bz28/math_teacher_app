@@ -18,7 +18,7 @@ from api.routes.teacher_courses import get_teacher_course
 
 router = APIRouter()
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
 class UploadDocumentRequest(BaseModel):
@@ -41,7 +41,7 @@ async def upload_document(
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 data")
     if len(raw) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB)")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 25MB)")
 
     # Detect file type from filename
     ext = body.filename.rsplit(".", 1)[-1].lower() if "." in body.filename else "jpg"

@@ -143,7 +143,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
     const name = newUnitName.trim();
     if (!name) return;
     await withErrorHandling(async () => {
-      await teacher.createUnit(courseId, name);
+      await teacher.createUnit(courseId, { name });
       setNewUnitName("");
       setShowCreateUnit(false);
       reload();
@@ -325,7 +325,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       )];
       const createdUnits: Record<string, string> = {};
       for (const name of newUnitNames) {
-        const res = await teacher.createUnit(courseId, name);
+        const res = await teacher.createUnit(courseId, { name });
         createdUnits[name] = res.id;
       }
 
@@ -392,7 +392,7 @@ export function MaterialsTab({ courseId, sections = [], visibility, onToggleUnit
       )];
       const createdUnits: Record<string, string> = {};
       for (const name of newUnitNames) {
-        const created = await teacher.createUnit(courseId, name);
+        const created = await teacher.createUnit(courseId, { name });
         createdUnits[name] = created.id;
       }
 

@@ -36,6 +36,14 @@ class JoinSectionRequest(BaseModel):
     join_code: str
 
 
+async def _generate_unique_join_code(db: AsyncSession) -> str:
+    for _ in range(5):
+        code = "".join(secrets.choice(JOIN_CODE_CHARS) for _ in range(JOIN_CODE_LENGTH))
+        if not (await db.execute(select(Section.id).where(Section.join_code == code))).scalar_one_or_none():
+            return code
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not generate unique code")
+
+
 # --- Section CRUD ---
 
 
@@ -46,11 +54,16 @@ async def create_section(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    section = Section(course_id=course_id, name=body.name.strip())
+    section = Section(
+        course_id=course_id,
+        name=body.name.strip(),
+        join_code=await _generate_unique_join_code(db),
+        join_code_expires_at=datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS),
+    )
     db.add(section)
     await db.commit()
     await db.refresh(section)
-    return {"id": str(section.id), "name": section.name}
+    return {"id": str(section.id), "name": section.name, "join_code": section.join_code}
 
 
 @router.get("/courses/{course_id}/sections")
@@ -166,16 +179,10 @@ async def generate_join_code(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
     section = await _get_section(db, section_id, course_id)
-    for _ in range(5):
-        code = "".join(secrets.choice(JOIN_CODE_CHARS) for _ in range(JOIN_CODE_LENGTH))
-        if not (await db.execute(select(Section.id).where(Section.join_code == code))).scalar_one_or_none():
-            break
-    else:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not generate unique code")
-    section.join_code = code
+    section.join_code = await _generate_unique_join_code(db)
     section.join_code_expires_at = datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS)
     await db.commit()
-    return {"join_code": code, "expires_at": section.join_code_expires_at.isoformat()}
+    return {"join_code": section.join_code, "expires_at": section.join_code_expires_at.isoformat()}
 
 
 @router.post("/join")

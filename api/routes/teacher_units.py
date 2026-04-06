@@ -1,4 +1,8 @@
-"""Teacher unit management — CRUD for organizing documents into units."""
+"""Teacher unit management — CRUD for organizing documents into units.
+
+Units form a 2-level tree: top-level units (parent_unit_id IS NULL) and
+optional subfolders one level deep. The depth limit is enforced here in
+the route layer; the schema is permissive."""
 
 import uuid
 from typing import Any
@@ -19,6 +23,7 @@ router = APIRouter()
 
 class CreateUnitRequest(BaseModel):
     name: str
+    parent_id: uuid.UUID | None = None
 
     @field_validator("name")
     @classmethod
@@ -32,6 +37,17 @@ class CreateUnitRequest(BaseModel):
 class UpdateUnitRequest(BaseModel):
     name: str | None = None
     position: int | None = None
+    parent_id: uuid.UUID | None = None
+    clear_parent: bool = False  # Set to True to move a subfolder back to top level
+
+
+async def _get_unit_in_course(db: AsyncSession, unit_id: uuid.UUID, course_id: uuid.UUID) -> Unit:
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == unit_id, Unit.course_id == course_id)
+    )).scalar_one_or_none()
+    if not unit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
+    return unit
 
 
 @router.get("/courses/{course_id}/units")
@@ -42,13 +58,15 @@ async def list_units(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
     units = (await db.execute(
-        select(Unit.id, Unit.name, Unit.position, Unit.created_at)
+        select(Unit.id, Unit.name, Unit.position, Unit.parent_unit_id, Unit.created_at)
         .where(Unit.course_id == course_id)
         .order_by(Unit.position, Unit.created_at)
     )).all()
     return {"units": [{
         "id": str(u.id), "name": u.name,
-        "position": u.position, "created_at": u.created_at.isoformat(),
+        "position": u.position,
+        "parent_id": str(u.parent_unit_id) if u.parent_unit_id else None,
+        "created_at": u.created_at.isoformat(),
     } for u in units]}
 
 
@@ -60,17 +78,38 @@ async def create_unit(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
 
-    # Auto-assign position as max + 1
+    # If a parent is specified, it must exist in the same course AND be a top-level unit.
+    # We allow only 2 levels: parent (top-level) -> child (subfolder).
+    if body.parent_id is not None:
+        parent = await _get_unit_in_course(db, body.parent_id, course_id)
+        if parent.parent_unit_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Subfolders cannot contain subfolders (max 2 levels)",
+            )
+
+    # Position is auto-assigned among siblings (same parent in same course)
     max_pos = (await db.execute(
-        select(Unit.position).where(Unit.course_id == course_id).order_by(Unit.position.desc()).limit(1)
+        select(Unit.position)
+        .where(Unit.course_id == course_id, Unit.parent_unit_id == body.parent_id)
+        .order_by(Unit.position.desc()).limit(1)
     )).scalar_one_or_none()
     next_pos = (max_pos or 0) + 1
 
-    unit = Unit(course_id=course_id, name=body.name, position=next_pos)
+    unit = Unit(
+        course_id=course_id,
+        parent_unit_id=body.parent_id,
+        name=body.name,
+        position=next_pos,
+    )
     db.add(unit)
     await db.commit()
     await db.refresh(unit)
-    return {"id": str(unit.id), "name": unit.name, "position": unit.position}
+    return {
+        "id": str(unit.id), "name": unit.name,
+        "position": unit.position,
+        "parent_id": str(unit.parent_unit_id) if unit.parent_unit_id else None,
+    }
 
 
 @router.patch("/courses/{course_id}/units/{unit_id}")
@@ -80,19 +119,48 @@ async def update_unit(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    unit = (await db.execute(
-        select(Unit).where(Unit.id == unit_id, Unit.course_id == course_id)
-    )).scalar_one_or_none()
-    if not unit:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
+    unit = await _get_unit_in_course(db, unit_id, course_id)
 
     if body.name is not None:
         name = body.name.strip()
         if not name or len(name) > 200:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name must be 1-200 characters")
         unit.name = name
+
     if body.position is not None:
         unit.position = body.position
+
+    # Handle move (parent change)
+    if body.clear_parent:
+        # Moving back to top level — only allowed if this unit has no children itself
+        child_count = (await db.execute(
+            select(Unit.id).where(Unit.parent_unit_id == unit_id).limit(1)
+        )).scalar_one_or_none()
+        if child_count is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot move a folder with subfolders",
+            )
+        unit.parent_unit_id = None
+    elif body.parent_id is not None:
+        if body.parent_id == unit_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A unit cannot be its own parent")
+        parent = await _get_unit_in_course(db, body.parent_id, course_id)
+        if parent.parent_unit_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Subfolders cannot contain subfolders (max 2 levels)",
+            )
+        # Block moving a parent (which has children) into another folder — would exceed depth
+        child_count = (await db.execute(
+            select(Unit.id).where(Unit.parent_unit_id == unit_id).limit(1)
+        )).scalar_one_or_none()
+        if child_count is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot move a folder with subfolders into another folder",
+            )
+        unit.parent_unit_id = body.parent_id
 
     await db.commit()
     return {"status": "ok"}
@@ -105,15 +173,18 @@ async def delete_unit(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    unit = (await db.execute(
-        select(Unit).where(Unit.id == unit_id, Unit.course_id == course_id)
-    )).scalar_one_or_none()
-    if not unit:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
+    unit = await _get_unit_in_course(db, unit_id, course_id)
 
-    # Move documents to uncategorized (unit_id = NULL)
+    # Move documents in this unit and its subfolders to uncategorized.
+    # Subfolders themselves are removed via ON DELETE CASCADE on parent_unit_id.
+    subfolder_ids = [
+        r[0] for r in (await db.execute(
+            select(Unit.id).where(Unit.parent_unit_id == unit_id)
+        )).all()
+    ]
+    affected_unit_ids = [unit_id, *subfolder_ids]
     await db.execute(
-        update(Document).where(Document.unit_id == unit_id).values(unit_id=None)
+        update(Document).where(Document.unit_id.in_(affected_unit_ids)).values(unit_id=None)
     )
     await db.delete(unit)
     await db.commit()

@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
-from api.models.course import Course, Document
+from api.models.course import Course, CourseTeacher, Document
 from api.models.section import Section
 from api.models.unit import Unit
+from api.models.user import User
 
 router = APIRouter()
 
@@ -41,11 +42,16 @@ class UpdateCourseRequest(BaseModel):
 
 
 async def get_teacher_course(db: AsyncSession, course_id: uuid.UUID, teacher_id: uuid.UUID) -> Course:
-    """Fetch a course and verify ownership. Reused by other teacher route modules."""
+    """Fetch a course and verify the teacher is on it. Reused by other teacher route modules."""
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
-    if course.teacher_id != teacher_id:
+    is_teacher = (await db.execute(
+        select(CourseTeacher).where(
+            CourseTeacher.course_id == course_id, CourseTeacher.teacher_id == teacher_id,
+        )
+    )).scalar_one_or_none()
+    if not is_teacher:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your course")
     return course
 
@@ -56,11 +62,15 @@ async def create_course(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    # Inherit the teacher's school so the course is school-scoped from creation.
+    teacher = (await db.execute(select(User).where(User.id == current_user.user_id))).scalar_one()
     course = Course(
-        teacher_id=current_user.user_id, name=body.name,
+        school_id=teacher.school_id, name=body.name,
         subject=body.subject, grade_level=body.grade_level, description=body.description,
     )
     db.add(course)
+    await db.flush()
+    db.add(CourseTeacher(course_id=course.id, teacher_id=current_user.user_id, role="owner"))
     await db.commit()
     await db.refresh(course)
     return {"id": str(course.id), "name": course.name, "status": course.status}
@@ -91,7 +101,8 @@ async def list_courses(
         .outerjoin(section_count, section_count.c.course_id == Course.id)
         .outerjoin(doc_count, doc_count.c.course_id == Course.id)
         .outerjoin(unit_count, unit_count.c.course_id == Course.id)
-        .where(Course.teacher_id == current_user.user_id)
+        .join(CourseTeacher, CourseTeacher.course_id == Course.id)
+        .where(CourseTeacher.teacher_id == current_user.user_id)
         .order_by(Course.created_at.desc())
     )).all()
 

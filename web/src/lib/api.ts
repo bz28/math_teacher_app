@@ -584,6 +584,7 @@ export interface TeacherUnit {
   id: string;
   name: string;
   position: number;
+  parent_id: string | null;
   created_at: string;
 }
 
@@ -691,13 +692,17 @@ export const teacher = {
   units(courseId: string) {
     return apiFetch<{ units: TeacherUnit[] }>(`/teacher/courses/${courseId}/units`);
   },
-  createUnit(courseId: string, name: string) {
-    return apiFetch<{ id: string; name: string; position: number }>(`/teacher/courses/${courseId}/units`, {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    });
+  createUnit(courseId: string, data: { name: string; parent_id?: string | null }) {
+    return apiFetch<{ id: string; name: string; position: number; parent_id: string | null }>(
+      `/teacher/courses/${courseId}/units`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
   },
-  updateUnit(courseId: string, unitId: string, data: { name?: string; position?: number }) {
+  updateUnit(
+    courseId: string,
+    unitId: string,
+    data: { name?: string; position?: number; parent_id?: string | null; clear_parent?: boolean },
+  ) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/units/${unitId}`, {
       method: "PATCH",
       body: JSON.stringify(data),

@@ -38,7 +38,7 @@ from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
-from api.models.course import Course
+from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
 from api.models.promo import PromoRedemption
 from api.models.school import School
@@ -229,7 +229,7 @@ async def delete_account(
     # Block teachers with active courses
     if user.role == "teacher":
         course_count = (await db.execute(
-            select(func.count()).select_from(Course).where(Course.teacher_id == user.id)
+            select(func.count()).select_from(CourseTeacher).where(CourseTeacher.teacher_id == user.id)
         )).scalar() or 0
         if course_count > 0:
             raise HTTPException(
@@ -313,7 +313,8 @@ async def enrolled_courses(
         )
         .join(Section, Section.course_id == Course.id)
         .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
-        .join(User, User.id == Course.teacher_id)
+        .join(CourseTeacher, CourseTeacher.course_id == Course.id)
+        .join(User, User.id == CourseTeacher.teacher_id)
         .join(School, School.id == User.school_id)
         .where(
             SectionEnrollment.student_id == user.id,

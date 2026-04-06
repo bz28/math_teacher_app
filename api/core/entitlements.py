@@ -60,7 +60,6 @@ async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
     from api.models.school import School
     from api.models.section import Section
     from api.models.section_enrollment import SectionEnrollment
-    from api.models.user import User
 
     # Fast path: check if user has ANY enrollment (single-table, indexed)
     has_any = (await db.execute(
@@ -71,13 +70,13 @@ async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
     if has_any is None:
         return False
 
-    # Slow path: verify at least one enrollment is in an active school
+    # Slow path: verify at least one enrollment is in an active school.
+    # Course has school_id directly now, so we can skip the user/teacher hop.
     result = await db.execute(
         select(SectionEnrollment.id)
         .join(Section, Section.id == SectionEnrollment.section_id)
         .join(Course, Course.id == Section.course_id)
-        .join(User, User.id == Course.teacher_id)
-        .join(School, School.id == User.school_id)
+        .join(School, School.id == Course.school_id)
         .where(
             SectionEnrollment.student_id == user_id,
             School.is_active.is_(True),
