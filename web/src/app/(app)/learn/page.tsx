@@ -8,6 +8,7 @@ import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
+import { EditProblemTextarea } from "@/components/shared/edit-problem-textarea";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
@@ -35,6 +36,7 @@ function LearnPageContent() {
     problemQueue,
     setProblemQueue,
     addToQueue,
+    updateInQueue,
     removeFromQueue,
     startLearnQueue,
     startSession,
@@ -47,6 +49,7 @@ function LearnPageContent() {
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
+  const [editingQueueIndex, setEditingQueueIndex] = useState<number | null>(null);
 
   // Mock test config
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
@@ -107,6 +110,7 @@ function LearnPageContent() {
     }
     setQuotaConfirm(false);
     setStarting(true);
+    setEditingQueueIndex(null);
 
     const problems =
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
@@ -353,44 +357,90 @@ function LearnPageContent() {
               {problemQueue.length}/10
             </span>
           </div>
-          {problemQueue.map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * i }}
-              className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
-            >
-              <div className="flex items-start gap-3 p-4">
-                <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
-                  {i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium leading-relaxed text-text-primary line-clamp-2">
-                    <MathText text={item.text} />
-                  </div>
-                  {item.image && (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={`data:image/jpeg;base64,${item.image}`}
-                      alt=""
-                      className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
-                    />
+          {problemQueue.map((item, i) => {
+            const isEditing = editingQueueIndex === i;
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * i }}
+                className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
+              >
+                <div className="flex items-start gap-3 p-4">
+                  <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
+                    {i + 1}
+                  </span>
+                  {isEditing ? (
+                    <div className="flex-1 min-w-0">
+                      <EditProblemTextarea
+                        value={item.text}
+                        onChange={(text) => updateInQueue(i, text)}
+                        onDone={() => setEditingQueueIndex(null)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium leading-relaxed text-text-primary">
+                        <MathText text={item.text} />
+                      </div>
+                      {item.image && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`data:image/jpeg;base64,${item.image}`}
+                          alt=""
+                          className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
+                        />
+                      )}
+                    </div>
                   )}
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingQueueIndex(isEditing ? null : i)}
+                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-primary-bg hover:text-primary"
+                      aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
+                    >
+                      {isEditing ? (
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Adjust the editing index when deleting shifts indices.
+                        // - Deleting the edited row: close the editor.
+                        // - Deleting a row BEFORE the edited row: shift index down by 1.
+                        // - Deleting a row AFTER the edited row: no change.
+                        if (editingQueueIndex !== null) {
+                          if (editingQueueIndex === i) {
+                            setEditingQueueIndex(null);
+                          } else if (editingQueueIndex > i) {
+                            setEditingQueueIndex(editingQueueIndex - 1);
+                          }
+                        }
+                        removeFromQueue(i);
+                      }}
+                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error"
+                      aria-label="Remove problem"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => removeFromQueue(i)}
-                  className="flex-shrink-0 rounded-full p-1.5 text-text-muted opacity-0 transition-all hover:bg-error-light hover:text-error group-hover:opacity-100"
-                  aria-label="Remove problem"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
-                </button>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
 
           {/* Start button — full width */}
           {quotaConfirm ? (

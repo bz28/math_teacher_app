@@ -68,6 +68,7 @@ interface SessionState {
   setSectionId: (sectionId: string | null) => void;
   setProblemQueue: (queue: { text: string; image?: string }[]) => void;
   addToQueue: (problem: string, image?: string) => void;
+  updateInQueue: (index: number, text: string) => void;
   removeFromQueue: (index: number) => void;
 
   // Learn actions
@@ -129,6 +130,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (problemQueue.length < 10) {
       set({ problemQueue: [...problemQueue, { text: problem, image }] });
     }
+  },
+
+  updateInQueue(index, text) {
+    const { problemQueue } = get();
+    set({
+      problemQueue: problemQueue.map((p, i) => (i === index ? { ...p, text } : p)),
+    });
   },
 
   removeFromQueue(index) {

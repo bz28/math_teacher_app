@@ -5,6 +5,7 @@ import { image as imageApi, type ImageExtractResponse } from "@/lib/api";
 import { Button, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { cropImage } from "@/lib/crop-image";
+import { EditProblemTextarea } from "./edit-problem-textarea";
 import { MathText } from "./math-text";
 import { RectangleSelector, type Rectangle } from "./rectangle-selector";
 
@@ -43,6 +44,7 @@ export function ImageUpload({
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
   const [cropImages, setCropImages] = useState<(string | undefined)[]>([]);
   const [selected, setSelected] = useState<boolean[]>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +88,7 @@ export function ImageUpload({
     (file: File) => {
       setError(null);
       setManualMode(false);
+      setEditingIndex(null);
 
       if (!file.type.startsWith("image/")) {
         setError("Please upload an image file.");
@@ -172,6 +175,15 @@ export function ImageUpload({
     e.target.value = "";
   }
 
+  // useCallback so the Modal's onClose ref is stable across renders.
+  // Without this, every keystroke in the edit textarea recreates the
+  // function reference → Modal's useEffect re-runs → focus is stolen
+  // by the modal's first focusable element.
+  const closeResultModal = useCallback(() => {
+    setResult(null);
+    setEditingIndex(null);
+  }, []);
+
   function handleConfirm() {
     if (!result) return;
     const items = result.problems
@@ -179,13 +191,24 @@ export function ImageUpload({
       .filter((_, i) => selected[i])
       .slice(0, remaining);
     onProblemsExtracted(items);
-    setResult(null);
     setCropImages([]);
     setSelected([]);
+    closeResultModal();
   }
 
   function toggleSelected(index: number) {
     setSelected((prev) => prev.map((s, i) => (i === index ? !s : s)));
+  }
+
+  function updateProblemText(index: number, text: string) {
+    setResult((prev) =>
+      prev
+        ? {
+            ...prev,
+            problems: prev.problems.map((p, i) => (i === index ? text : p)),
+          }
+        : prev,
+    );
   }
 
   // Rectangle selection phase (manual fallback)
@@ -281,7 +304,11 @@ export function ImageUpload({
       )}
 
       {/* Extraction results modal */}
-      <Modal open={!!result} onClose={() => setResult(null)}>
+      <Modal
+        open={!!result}
+        onClose={closeResultModal}
+        dismissible={editingIndex === null}
+      >
         {result && (
           <div className="space-y-4">
             <div>
@@ -289,35 +316,67 @@ export function ImageUpload({
                 Extracted Problems
               </h2>
               <p className="text-sm text-text-secondary">
-                {result.problems.length} problem{result.problems.length !== 1 && "s"} found
-                (confidence: {result.confidence})
+                {result.problems.length} problem{result.problems.length !== 1 && "s"} found — review and edit before adding
               </p>
             </div>
 
-            <div className="max-h-64 space-y-2 overflow-y-auto">
-              {result.problems.map((problem, i) => (
-                <label
-                  key={i}
-                  className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-[--radius-md] border p-3 transition-colors",
-                    selected[i]
-                      ? "border-primary bg-primary-bg/50"
-                      : "border-border-light",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected[i]}
-                    onChange={() => toggleSelected(i)}
-                    className="mt-0.5 h-4 w-4 accent-primary"
-                  />
-                  <span className="text-sm text-text-primary"><MathText text={problem} /></span>
-                </label>
-              ))}
+            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {result.problems.map((problem, i) => {
+                const isEditing = editingIndex === i;
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "rounded-[--radius-md] border p-3 transition-colors",
+                      selected[i] ? "border-primary bg-primary-bg/50" : "border-border-light",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      {isEditing ? (
+                        <>
+                          <input
+                            type="checkbox"
+                            checked={selected[i]}
+                            onChange={() => toggleSelected(i)}
+                            className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <EditProblemTextarea
+                              value={problem}
+                              onChange={(text) => updateProblemText(i, text)}
+                              onDone={() => setEditingIndex(null)}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selected[i]}
+                            onChange={() => toggleSelected(i)}
+                            className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
+                          />
+                          <span className="min-w-0 flex-1 text-sm text-text-primary">
+                            <MathText text={problem} />
+                          </span>
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditingIndex(isEditing ? null : i)}
+                        aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
+                        className="flex-shrink-0 rounded-[--radius-sm] px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-primary-bg hover:text-primary"
+                      >
+                        {isEditing ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => setResult(null)}>
+              <Button variant="ghost" onClick={closeResultModal}>
                 Cancel
               </Button>
               <Button
