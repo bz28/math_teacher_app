@@ -336,7 +336,10 @@ export function ImageUpload({
                               value={problem}
                               onChange={(e) => updateProblemText(i, e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key === "Escape") setEditingIndex(null);
+                                if (e.key === "Escape") {
+                                  e.stopPropagation();
+                                  setEditingIndex(null);
+                                }
                               }}
                               rows={Math.max(4, problem.split("\n").length + 1)}
                               autoFocus
