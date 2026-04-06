@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import MAX_VISION_IMAGES, fetch_document_images
-from api.core.subjects import Subject
 from api.database import get_session_factory
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
@@ -108,25 +107,34 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         difficulty=job.difficulty,
         count=job.requested_count,
         course_name=course.name,
-        subject=course.subject or Subject.MATH,
+        subject=course.subject,
         user_id=str(job.created_by_id),
         images=images or None,
         extra_instructions=job.constraint,
     )
 
     if not question_dicts:
-        raise RuntimeError("Claude returned no questions")
+        raise RuntimeError(
+            "The AI didn't return any questions. Try adjusting your instructions or selecting different source documents."
+        )
+
+    # Update progress: questions written, now solving
+    job.produced_count = 0
+    job.updated_at = datetime.now(timezone.utc)
+    await db.commit()
 
     # 2. Solve each question in parallel (capped concurrency inside)
     solved = await generate_solutions(
         question_dicts,
-        subject=course.subject or Subject.MATH,
+        subject=course.subject,
         user_id=str(job.created_by_id),
     )
 
-    # 3. Persist as bank items (status = pending)
+    # 3. Persist as bank items (status = pending). Commit in batches so the
+    # frontend's polling banner shows real progress instead of jumping from
+    # 0 to N at the end.
     source_doc_id_strs = [str(d) for d in doc_ids] if doc_ids else None
-    for q, s in zip(question_dicts, solved):
+    for idx, (q, s) in enumerate(zip(question_dicts, solved), start=1):
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
@@ -140,9 +148,11 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             created_by_id=job.created_by_id,
         )
         db.add(item)
+        job.produced_count = idx
+        job.updated_at = datetime.now(timezone.utc)
+        await db.commit()
 
     job.status = "done"
-    job.produced_count = len(question_dicts)
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
     logger.info("Generation job %s produced %d questions", job.id, len(question_dicts))
@@ -191,7 +201,7 @@ async def regenerate_one(
         difficulty=item.difficulty,
         count=1,
         course_name=course.name,
-        subject=course.subject or Subject.MATH,
+        subject=course.subject,
         user_id=str(user_id),
         images=images or None,
         extra_instructions=extra,
@@ -200,7 +210,7 @@ async def regenerate_one(
         raise RuntimeError("Regeneration returned no questions")
 
     solved = await generate_solutions(
-        new_qs[:1], subject=course.subject or Subject.MATH, user_id=str(user_id),
+        new_qs[:1], subject=course.subject, user_id=str(user_id),
     )
 
     item.question = new_qs[0]["text"]

@@ -1128,10 +1128,23 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, statusFilter]);
 
-  // Poll active job until done/failed, then refresh the bank
+  // Poll active job until done/failed, then refresh the bank.
+  // Hard cap at 5 minutes — if the backend process died after the row was
+  // created but before the asyncio task ran, the job stays "queued" forever.
+  // The cap prevents the banner from polling indefinitely.
+  const POLL_LIMIT_MS = 5 * 60 * 1000;
   useEffect(() => {
     if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
+    const startedAt = Date.now();
     const interval = setInterval(async () => {
+      if (Date.now() - startedAt > POLL_LIMIT_MS) {
+        setActiveJob({
+          ...activeJob,
+          status: "failed",
+          error_message: "Generation timed out — try again or refresh the page.",
+        });
+        return;
+      }
       try {
         const updated = await teacher.bankJob(courseId, activeJob.id);
         setActiveJob(updated);
@@ -1184,7 +1197,11 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
           }`}
         >
           {activeJob.status === "queued" && "🟡 Generation queued…"}
-          {activeJob.status === "running" && `🔄 Generating ${activeJob.requested_count} questions…`}
+          {activeJob.status === "running" && (
+            activeJob.produced_count > 0
+              ? `🔄 Generating questions… ${activeJob.produced_count}/${activeJob.requested_count}`
+              : `🔄 Generating ${activeJob.requested_count} questions…`
+          )}
           {activeJob.status === "done" &&
             `✅ Generated ${activeJob.produced_count}/${activeJob.requested_count} questions. Refreshing…`}
           {activeJob.status === "failed" && `❌ Generation failed: ${activeJob.error_message ?? "unknown error"}`}
@@ -1532,9 +1549,20 @@ function GenerateQuestionsModal({
   const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
   const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
 
+  // A doc counts as "AI-readable" if it's not a PDF (Vision is image-only)
+  const readableSelectedCount = Array.from(selectedDocs).filter((id) => {
+    const d = docs.find((x) => x.id === id);
+    return d && d.file_type !== "application/pdf";
+  }).length;
+
   const submit = async () => {
     if (count < 1 || count > 50) {
       setError("Count must be between 1 and 50");
+      return;
+    }
+    // If the teacher selected only PDFs, Claude has zero context — block.
+    if (selectedDocs.size > 0 && readableSelectedCount === 0) {
+      setError("Selected documents are all PDFs (skipped). Pick at least one image, or unselect all to generate from the unit name only.");
       return;
     }
     setSubmitting(true);
@@ -1580,7 +1608,9 @@ function GenerateQuestionsModal({
                 Source documents
               </label>
               <p className="mt-1 text-[11px] text-text-muted">
-                Only JPG/PNG documents are AI-readable for now. PDFs are stored but skipped.
+                Pick the materials Claude should read when writing questions. Recommended for
+                grounded, on-curriculum questions — leave empty to generate purely from the
+                unit name. PDFs aren&rsquo;t AI-readable yet.
               </p>
               <div className="mt-2 max-h-48 overflow-y-auto rounded-[--radius-md] border border-border-light bg-bg-base p-2">
                 {docs.length === 0 ? (
@@ -1633,7 +1663,13 @@ function GenerateQuestionsModal({
                 )}
               </div>
               <p className="mt-1 text-[11px] text-text-muted">
-                {selectedDocs.size} document{selectedDocs.size === 1 ? "" : "s"} selected
+                {selectedDocs.size} selected
+                {selectedDocs.size > 0 && selectedDocs.size !== readableSelectedCount && (
+                  <span className="text-amber-600">
+                    {" "}
+                    · {readableSelectedCount} AI-readable
+                  </span>
+                )}
               </p>
             </div>
 

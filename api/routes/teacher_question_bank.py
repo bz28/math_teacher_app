@@ -11,8 +11,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+_VALID_STATUSES = {"pending", "approved", "rejected", "archived"}
+_VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job
 from api.database import get_db
@@ -125,6 +128,11 @@ async def list_bank_items(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
 
+    if status_filter is not None and status_filter not in _VALID_STATUSES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status filter")
+    if difficulty is not None and difficulty not in _VALID_DIFFICULTIES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty filter")
+
     query = select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)
     if status_filter:
         query = query.where(QuestionBankItem.status == status_filter)
@@ -136,16 +144,17 @@ async def list_bank_items(
 
     items = (await db.execute(query)).scalars().all()
 
-    # Counts (always compute, regardless of filter — used by the tab header)
-    counts_query = await db.execute(
-        select(QuestionBankItem.status, QuestionBankItem.id).where(
-            QuestionBankItem.course_id == course_id
-        )
-    )
+    # Counts (always for the full bank, regardless of filter — used by the tab header).
+    # GROUP BY in SQL so we don't pull every row just to count statuses.
+    count_rows = (await db.execute(
+        select(QuestionBankItem.status, func.count().label("c"))
+        .where(QuestionBankItem.course_id == course_id)
+        .group_by(QuestionBankItem.status)
+    )).all()
     counts = {"pending": 0, "approved": 0, "rejected": 0, "archived": 0}
-    for s, _ in counts_query.all():
+    for s, c in count_rows:
         if s in counts:
-            counts[s] += 1
+            counts[s] = c
 
     return {
         "items": [_serialize_item(i) for i in items],
