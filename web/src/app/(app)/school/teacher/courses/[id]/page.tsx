@@ -7,11 +7,14 @@ import { motion } from "framer-motion";
 import {
   teacher,
   type TeacherCourse,
+  type TeacherDocument,
   type TeacherSection,
   type TeacherSectionDetail,
+  type TeacherUnit,
 } from "@/lib/api";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 type TabKey = "sections" | "materials" | "bank" | "homework" | "tests" | "settings";
 
@@ -103,7 +106,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
 
       <div className="mt-6">
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
-        {tab === "materials" && <ComingSoon name="Materials" phase="Phase 3" />}
+        {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "bank" && <ComingSoon name="Question Bank" phase="Phase 4" />}
         {tab === "homework" && <ComingSoon name="Homework" phase="Phase 5" />}
         {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
@@ -614,6 +617,460 @@ function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: 
       </div>
     </div>
   );
+}
+
+// ───────── Materials tab ─────────
+
+function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: () => void }) {
+  const [units, setUnits] = useState<TeacherUnit[]>([]);
+  const [docs, setDocs] = useState<TeacherDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null); // unit id, or null for "Uncategorized"
+  const [showNewUnit, setShowNewUnit] = useState<{ parentId: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [u, d] = await Promise.all([teacher.units(courseId), teacher.documents(courseId)]);
+      setUnits(u.units);
+      setDocs(d.documents);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load materials");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
+
+  const topUnits = units.filter((u) => u.parent_id === null);
+  const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
+  const docsIn = (unitId: string | null) => docs.filter((d) => d.unit_id === unitId);
+
+  // The selected folder may be a top-level unit or a subfolder. null = uncategorized.
+  const selectedUnit = selected ? units.find((u) => u.id === selected) ?? null : null;
+  const selectedDocs = docsIn(selected);
+
+  const wrap = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUpload = (files: FileList | null) =>
+    wrap(async () => {
+      if (!files || files.length === 0) return;
+      for (const file of Array.from(files)) {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          throw new Error(`${file.name} exceeds 25MB`);
+        }
+        const base64 = await fileToBase64(file);
+        await teacher.uploadDocument(courseId, {
+          image_base64: base64,
+          filename: file.name,
+          unit_id: selected,
+        });
+      }
+      await reload();
+      onChanged();
+    });
+
+  const deleteUnit = (unitId: string, name: string) =>
+    wrap(async () => {
+      if (!confirm(`Delete "${name}"? Documents inside move to Uncategorized.`)) return;
+      await teacher.deleteUnit(courseId, unitId);
+      if (selected === unitId) setSelected(null);
+      await reload();
+      onChanged();
+    });
+
+  const renameUnit = (unit: TeacherUnit) =>
+    wrap(async () => {
+      const next = prompt("Rename folder:", unit.name);
+      if (!next || next.trim() === unit.name) return;
+      await teacher.updateUnit(courseId, unit.id, { name: next.trim() });
+      await reload();
+    });
+
+  const moveDocument = (doc: TeacherDocument) =>
+    wrap(async () => {
+      // Build a flat label list of every folder destination
+      const destinations: { id: string | null; label: string }[] = [{ id: null, label: "Uncategorized" }];
+      for (const top of topUnits) {
+        destinations.push({ id: top.id, label: top.name });
+        for (const sub of subfoldersOf(top.id)) {
+          destinations.push({ id: sub.id, label: `${top.name} / ${sub.name}` });
+        }
+      }
+      const labels = destinations.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
+      const choice = prompt(`Move "${doc.filename}" to:\n${labels}\n\nEnter number:`);
+      if (!choice) return;
+      const idx = Number(choice) - 1;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= destinations.length) {
+        throw new Error("Invalid choice");
+      }
+      await teacher.updateDocument(courseId, doc.id, { unit_id: destinations[idx].id });
+      await reload();
+      onChanged();
+    });
+
+  const deleteDocument = (doc: TeacherDocument) =>
+    wrap(async () => {
+      if (!confirm(`Delete "${doc.filename}"?`)) return;
+      await teacher.deleteDocument(courseId, doc.id);
+      await reload();
+      onChanged();
+    });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-text-primary">Materials</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowNewUnit({ parentId: null })}
+            disabled={busy}
+            className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+          >
+            + New Unit
+          </button>
+          <label className="cursor-pointer rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark">
+            + Upload Files
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg"
+              onChange={(e) => handleUpload(e.target.files)}
+              className="hidden"
+              disabled={busy}
+            />
+          </label>
+        </div>
+      </div>
+
+      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+
+      {loading ? (
+        <p className="mt-4 text-sm text-text-muted">Loading…</p>
+      ) : units.length === 0 && docs.length === 0 ? (
+        <EmptyState text="No materials yet. Create a unit or upload files to get started." />
+      ) : (
+        <div className="mt-4 grid gap-4 md:grid-cols-[280px_1fr]">
+          {/* Left: folder tree */}
+          <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3">
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className={`w-full rounded-[--radius-sm] px-2 py-1.5 text-left text-sm transition-colors ${
+                selected === null
+                  ? "bg-primary-bg font-semibold text-primary"
+                  : "text-text-secondary hover:bg-bg-subtle"
+              }`}
+            >
+              📥 Uncategorized
+              <span className="ml-1 text-xs text-text-muted">({docsIn(null).length})</span>
+            </button>
+
+            <div className="my-2 h-px bg-border-light" />
+
+            {topUnits.length === 0 && (
+              <p className="px-2 py-1 text-xs text-text-muted">No units yet.</p>
+            )}
+            <ul className="space-y-0.5">
+              {topUnits.map((u) => (
+                <li key={u.id}>
+                  <FolderRow
+                    unit={u}
+                    selected={selected === u.id}
+                    docCount={docsIn(u.id).length}
+                    onSelect={() => setSelected(u.id)}
+                    onRename={() => renameUnit(u)}
+                    onDelete={() => deleteUnit(u.id, u.name)}
+                    onAddSub={() => setShowNewUnit({ parentId: u.id })}
+                  />
+                  <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border-light pl-2">
+                    {subfoldersOf(u.id).map((sub) => (
+                      <li key={sub.id}>
+                        <FolderRow
+                          unit={sub}
+                          selected={selected === sub.id}
+                          docCount={docsIn(sub.id).length}
+                          onSelect={() => setSelected(sub.id)}
+                          onRename={() => renameUnit(sub)}
+                          onDelete={() => deleteUnit(sub.id, sub.name)}
+                          isSub
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Right: contents */}
+          <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-text-primary">
+                {selectedUnit ? selectedUnit.name : "Uncategorized"}
+              </h3>
+              <span className="text-xs text-text-muted">
+                {selectedDocs.length} file{selectedDocs.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {selectedDocs.length === 0 ? (
+              <p className="mt-6 text-center text-sm text-text-muted">
+                No files in this folder yet.
+              </p>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {selectedDocs.map((d) => (
+                  <DocumentCard
+                    key={d.id}
+                    doc={d}
+                    onMove={() => moveDocument(d)}
+                    onDelete={() => deleteDocument(d)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showNewUnit && (
+        <NewUnitModal
+          courseId={courseId}
+          parentId={showNewUnit.parentId}
+          onClose={() => setShowNewUnit(null)}
+          onCreated={() => {
+            setShowNewUnit(null);
+            reload();
+            onChanged();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function FolderRow({
+  unit,
+  selected,
+  docCount,
+  onSelect,
+  onRename,
+  onDelete,
+  onAddSub,
+  isSub,
+}: {
+  unit: TeacherUnit;
+  selected: boolean;
+  docCount: number;
+  onSelect: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  onAddSub?: () => void;
+  isSub?: boolean;
+}) {
+  return (
+    <div
+      className={`group flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 transition-colors ${
+        selected ? "bg-primary-bg" : "hover:bg-bg-subtle"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`flex flex-1 items-center gap-1 truncate text-left text-sm ${
+          selected ? "font-semibold text-primary" : "text-text-secondary"
+        }`}
+      >
+        <span>{isSub ? "📂" : "📁"}</span>
+        <span className="truncate">{unit.name}</span>
+        <span className="text-xs text-text-muted">({docCount})</span>
+      </button>
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        {onAddSub && (
+          <button
+            type="button"
+            onClick={onAddSub}
+            title="New subfolder"
+            className="rounded p-1 text-xs text-text-muted hover:bg-surface hover:text-text-primary"
+          >
+            +
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRename}
+          title="Rename"
+          className="rounded p-1 text-xs text-text-muted hover:bg-surface hover:text-text-primary"
+        >
+          ✎
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          title="Delete"
+          className="rounded p-1 text-xs text-text-muted hover:bg-surface hover:text-red-600"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DocumentCard({
+  doc,
+  onMove,
+  onDelete,
+}: {
+  doc: TeacherDocument;
+  onMove: () => void;
+  onDelete: () => void;
+}) {
+  const sizeKb = Math.max(1, Math.round(doc.file_size / 1024));
+  const sizeLabel = sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+  return (
+    <div className="group rounded-[--radius-md] border border-border-light bg-bg-subtle p-3 text-xs">
+      <div className="flex items-start gap-2">
+        <span className="text-base">📄</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-text-primary" title={doc.filename}>
+            {doc.filename}
+          </div>
+          <div className="mt-0.5 text-text-muted">{sizeLabel}</div>
+        </div>
+      </div>
+      <div className="mt-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={onMove}
+          className="flex-1 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-bg-base"
+        >
+          Move
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="rounded-[--radius-sm] border border-red-300 bg-surface px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-50"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NewUnitModal({
+  courseId,
+  parentId,
+  onClose,
+  onCreated,
+}: {
+  courseId: string;
+  parentId: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await teacher.createUnit(courseId, { name: name.trim(), parent_id: parentId });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create unit");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <form
+        className="w-full max-w-sm rounded-[--radius-xl] bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <h2 className="text-lg font-bold text-text-primary">
+          {parentId ? "New Subfolder" : "New Unit"}
+        </h2>
+        <p className="mt-1 text-xs text-text-muted">
+          {parentId
+            ? "Subfolders organize files inside a unit."
+            : "e.g. \u201cUnit 1: Linear Equations\u201d"}
+        </p>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+          maxLength={200}
+          placeholder={parentId ? "Subfolder name" : "Unit name"}
+          className="mt-4 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+        />
+        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+          >
+            {submitting ? "Creating…" : "Create"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // strip "data:...;base64," prefix
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 // ───────── Coming soon placeholder ─────────
