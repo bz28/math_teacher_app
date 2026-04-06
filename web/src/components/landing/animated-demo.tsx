@@ -127,6 +127,7 @@ const DEFAULT_SCENARIO = LEARN_SCENARIOS.math;
    ================================================================ */
 
 interface ChatScenario {
+  stepNum: number;
   stepTitle: string;
   contextContent: string;
   messages: { role: "user" | "tutor"; content: string }[];
@@ -134,6 +135,7 @@ interface ChatScenario {
 
 const CHAT_SCENARIOS: Record<string, ChatScenario> = {
   math: {
+    stepNum: 3,
     stepTitle: "Apply the Quadratic Formula",
     contextContent:
       "Use the quadratic formula to solve 2x² + 5x − 3 = 0. Identify a, b, and c, then substitute.",
@@ -153,6 +155,7 @@ const CHAT_SCENARIOS: Record<string, ChatScenario> = {
     ],
   },
   physics: {
+    stepNum: 2,
     stepTitle: "Choose the Right Equation",
     contextContent:
       "Select the kinematic equation that relates initial velocity, displacement, acceleration, and final velocity.",
@@ -172,6 +175,7 @@ const CHAT_SCENARIOS: Record<string, ChatScenario> = {
     ],
   },
   chemistry: {
+    stepNum: 3,
     stepTitle: "Apply the Mole Ratio",
     contextContent:
       "Use the balanced equation CH₄ + 2O₂ → CO₂ + 2H₂O to find how many moles of CO₂ are produced.",
@@ -195,7 +199,7 @@ const CHAT_SCENARIOS: Record<string, ChatScenario> = {
 const DEFAULT_CHAT = CHAT_SCENARIOS.math;
 
 /* ================================================================
-   Helpers to get substep counts (used by StickyShowcase)
+   Helpers to get substep counts (used by TabbedShowcase)
    ================================================================ */
 
 export function getLearnSubstepCount(subject?: string): number {
@@ -365,7 +369,7 @@ export function AnimatedChatDemo({
         <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg/20 p-3 shadow-sm">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-[10px] font-bold text-white">
-              2
+              {scenario.stepNum}
             </span>
             <div className="min-w-0">
               <p className="text-[11px] font-bold text-primary">

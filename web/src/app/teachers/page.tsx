@@ -10,10 +10,10 @@ import {
   getLearnSubstepCount,
   GRADING_SUBSTEP_COUNT,
 } from "@/components/landing/animated-demo";
-import { StickyShowcase } from "@/components/landing/sticky-showcase";
+import { TabbedShowcase } from "@/components/landing/tabbed-showcase";
 import { contact } from "@/lib/api";
 import { jumpTo } from "@/lib/utils";
-import { ScrollingTopics } from "@/components/landing/scrolling-topics";
+import { TopicCloud } from "@/components/landing/scrolling-topics";
 
 const PAIN_POINTS = [
   "Wishing you could give every student 1-on-1 time, but there's only one of you",
@@ -75,7 +75,7 @@ export default function TeachersPage() {
       <main>
         {/* ── Hero ── */}
         <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6">
-          <ScrollingTopics subject="teacher" />
+          <TopicCloud subject="teacher" />
           <div className="relative mx-auto max-w-4xl text-center">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -225,8 +225,8 @@ export default function TeachersPage() {
           </div>
         </section>
 
-        {/* ── Product Showcase — sticky scroll ── */}
-        <StickyShowcase
+        {/* ── Product Showcase — tabbed ── */}
+        <TabbedShowcase
           heading="See What Your Students Experience"
           subheading="Every student gets a personal AI tutor that adapts to their pace"
           features={[

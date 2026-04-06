@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { jumpTo } from "@/lib/utils";
-import { ScrollingTopics } from "./scrolling-topics";
+import { TopicCloud } from "./scrolling-topics";
 
 export function Hero() {
   return (
     <section className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden bg-gradient-to-b from-primary-bg/40 via-transparent to-transparent px-6">
-      <ScrollingTopics subject="all" />
+      <TopicCloud subject="all" />
       {/* Subtle radial glow */}
       <div className="pointer-events-none absolute left-1/2 top-1/3 hidden h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-primary/8 to-transparent blur-3xl md:block" />
 

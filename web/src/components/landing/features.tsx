@@ -2,7 +2,7 @@
 
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
-import { StickyShowcase } from "./sticky-showcase";
+import { TabbedShowcase } from "./tabbed-showcase";
 import {
   AnimatedLearnDemo,
   AnimatedChatDemo,
@@ -33,8 +33,8 @@ const secondary = [
 export function Features() {
   return (
     <section id="features">
-      {/* Sticky scroll showcase */}
-      <StickyShowcase
+      {/* Tabbed showcase */}
+      <TabbedShowcase
         heading="Everything You Need to Master Any Topic"
         subheading="Six tools that make Veradic your ultimate study partner"
         features={[
@@ -44,7 +44,6 @@ export function Features() {
               "Every problem is broken into clear, guided steps. The final answer stays hidden until you've worked through each one — building real understanding, not just copying answers.",
             substepCount: getLearnSubstepCount("physics"),
             render: (n) => <AnimatedLearnDemo subject="physics" visibleCount={n} />,
-            anchorId: "step-by-step",
           },
           {
             title: "Chat With Your Tutor",
@@ -52,7 +51,6 @@ export function Features() {
               "Stuck on a step? Ask a question and get a personalized explanation — without revealing future steps or answers. Like having a tutor who meets you exactly where you are.",
             substepCount: getChatSubstepCount("chemistry"),
             render: (n) => <AnimatedChatDemo subject="chemistry" visibleCount={n} />,
-            anchorId: "chat-tutor",
           },
           {
             title: "Unlimited Practice",
@@ -60,7 +58,6 @@ export function Features() {
               "Generate unlimited similar problems with instant feedback on every answer. Track your progress, review what you got wrong, and keep practicing until it clicks.",
             substepCount: 1,
             render: () => <PracticeMockup />,
-            anchorId: "practice",
           },
         ]}
       />

@@ -4,14 +4,14 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import Link from "next/link";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
-import { ScrollingTopics } from "./scrolling-topics";
+import { TopicCloud } from "./scrolling-topics";
 import {
   AnimatedLearnDemo,
   AnimatedChatDemo,
   getLearnSubstepCount,
   getChatSubstepCount,
 } from "./animated-demo";
-import { StickyShowcase } from "./sticky-showcase";
+import { TabbedShowcase } from "./tabbed-showcase";
 
 const ALL_SUBJECTS = [
   {
@@ -113,7 +113,7 @@ export function SubjectPage({
 
       {/* Hero */}
       <section ref={heroRef} className="relative flex min-h-[calc(100vh-4rem)] items-center overflow-hidden px-6">
-        <ScrollingTopics subject={slug as "math" | "physics" | "chemistry"} />
+        <TopicCloud subject={slug as "math" | "physics" | "chemistry"} />
         <div
           className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-[0.04]`}
         />
@@ -238,8 +238,8 @@ export function SubjectPage({
         </div>
       </section>
 
-      {/* See It In Action — sticky scroll showcase */}
-      <StickyShowcase
+      {/* See It In Action — tabbed showcase */}
+      <TabbedShowcase
         heading="See It In Action"
         subheading={`Watch how Veradic guides you through real ${name.toLowerCase()} problems`}
         features={[
