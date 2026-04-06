@@ -8,6 +8,7 @@ import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
 import { Textarea } from "@/components/ui/input";
+import { EditProblemTextarea } from "@/components/shared/edit-problem-textarea";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
@@ -109,6 +110,7 @@ function LearnPageContent() {
     }
     setQuotaConfirm(false);
     setStarting(true);
+    setEditingQueueIndex(null);
 
     const problems =
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
@@ -369,38 +371,27 @@ function LearnPageContent() {
                   <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
                     {i + 1}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    {isEditing ? (
-                      <>
-                        <textarea
-                          value={item.text}
-                          onChange={(e) => updateInQueue(i, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") setEditingQueueIndex(null);
-                          }}
-                          rows={Math.max(4, item.text.split("\n").length + 1)}
-                          autoFocus
-                          className="w-full resize-y rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2.5 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-primary"
-                          spellCheck={false}
-                        />
-                        <p className="mt-1 text-[11px] text-text-muted">
-                          Edit the LaTeX directly. Press <kbd className="rounded bg-card px-1 font-mono">Esc</kbd> to finish.
-                        </p>
-                      </>
-                    ) : (
+                  {isEditing ? (
+                    <EditProblemTextarea
+                      value={item.text}
+                      onChange={(text) => updateInQueue(i, text)}
+                      onDone={() => setEditingQueueIndex(null)}
+                    />
+                  ) : (
+                    <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium leading-relaxed text-text-primary">
                         <MathText text={item.text} />
                       </div>
-                    )}
-                    {item.image && !isEditing && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={`data:image/jpeg;base64,${item.image}`}
-                        alt=""
-                        className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
-                      />
-                    )}
-                  </div>
+                      {item.image && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`data:image/jpeg;base64,${item.image}`}
+                          alt=""
+                          className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
+                        />
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-shrink-0 items-center gap-1">
                     <button
                       onClick={() => setEditingQueueIndex(isEditing ? null : i)}
@@ -420,7 +411,17 @@ function LearnPageContent() {
                     </button>
                     <button
                       onClick={() => {
-                        if (editingQueueIndex === i) setEditingQueueIndex(null);
+                        // Adjust the editing index when deleting shifts indices.
+                        // - Deleting the edited row: close the editor.
+                        // - Deleting a row BEFORE the edited row: shift index down by 1.
+                        // - Deleting a row AFTER the edited row: no change.
+                        if (editingQueueIndex !== null) {
+                          if (editingQueueIndex === i) {
+                            setEditingQueueIndex(null);
+                          } else if (editingQueueIndex > i) {
+                            setEditingQueueIndex(editingQueueIndex - 1);
+                          }
+                        }
                         removeFromQueue(i);
                       }}
                       className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error md:opacity-0 md:group-hover:opacity-100"

@@ -5,6 +5,7 @@ import { image as imageApi, type ImageExtractResponse } from "@/lib/api";
 import { Button, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { cropImage } from "@/lib/crop-image";
+import { EditProblemTextarea } from "./edit-problem-textarea";
 import { MathText } from "./math-text";
 import { RectangleSelector, type Rectangle } from "./rectangle-selector";
 
@@ -174,6 +175,10 @@ export function ImageUpload({
     e.target.value = "";
   }
 
+  // useCallback so the Modal's onClose ref is stable across renders.
+  // Without this, every keystroke in the edit textarea recreates the
+  // function reference → Modal's useEffect re-runs → focus is stolen
+  // by the modal's first focusable element.
   const closeResultModal = useCallback(() => {
     setResult(null);
     setEditingIndex(null);
@@ -335,22 +340,11 @@ export function ImageUpload({
                             onChange={() => toggleSelected(i)}
                             className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
                           />
-                          <div className="min-w-0 flex-1">
-                            <textarea
-                              value={problem}
-                              onChange={(e) => updateProblemText(i, e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Escape") setEditingIndex(null);
-                              }}
-                              rows={Math.max(4, problem.split("\n").length + 1)}
-                              autoFocus
-                              className="w-full resize-y rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2.5 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-primary"
-                              spellCheck={false}
-                            />
-                            <p className="mt-1 text-[11px] text-text-muted">
-                              Edit the LaTeX directly. Press <kbd className="rounded bg-card px-1 font-mono">Esc</kbd> to cancel.
-                            </p>
-                          </div>
+                          <EditProblemTextarea
+                            value={problem}
+                            onChange={(text) => updateProblemText(i, text)}
+                            onDone={() => setEditingIndex(null)}
+                          />
                         </>
                       ) : (
                         <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
