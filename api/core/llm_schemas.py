@@ -131,7 +131,16 @@ DECOMPOSITION_SCHEMA: ToolSchema = {
                 },
                 "description": "Ordered list of solution steps.",
             },
-            "final_answer": {"type": "string", "description": "The final simplified answer."},
+            "final_answer": {
+                "type": "string",
+                "description": (
+                    "The final simplified answer, formatted as LaTeX using $...$ "
+                    "or $$...$$ delimiters. Use single backslashes for LaTeX "
+                    "commands (e.g. \\begin{pmatrix}, \\frac, \\sqrt) — do NOT "
+                    "double-escape. Example: '$H = \\begin{pmatrix} 1 & 2 \\\\ "
+                    "3 & 4 \\end{pmatrix}$'"
+                ),
+            },
             "answer_type": {
                 "type": "string",
                 "enum": ["text", "diagram"],

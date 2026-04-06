@@ -91,6 +91,45 @@ class Decomposition:
     answer_type: str = "text"
 
 
+_OVER_ESCAPED_MARKERS = (
+    "\\\\begin", "\\\\end", "\\\\frac", "\\\\sqrt", "\\\\sum", "\\\\int",
+    "\\\\alpha", "\\\\beta", "\\\\theta", "\\\\pi", "\\\\sigma", "\\\\phi",
+    "\\\\mathbb", "\\\\mathbf", "\\\\left", "\\\\right",
+)
+
+
+def _normalize_latex(text: str) -> str:
+    """Fix uniform over-escaping in LaTeX strings from the LLM.
+
+    Claude sometimes returns `\\\\begin{...}` (double-escaped) instead of
+    `\\begin{...}` because it treats the JSON tool schema as if it required
+    JSON-encoded backslashes. When this happens, EVERY backslash is doubled
+    uniformly (so `\\begin` → `\\\\begin` AND `\\\\` → `\\\\\\\\`). KaTeX
+    fails because `\\\\begin` is not a valid command.
+
+    Detection: if any known LaTeX command appears with double-backslash prefix
+    (which is invalid LaTeX), assume uniform over-escaping and halve all
+    backslash sequences.
+    """
+    if any(marker in text for marker in _OVER_ESCAPED_MARKERS):
+        # Uniform over-escaping detected — halve all backslash pairs
+        text = text.replace("\\\\", "\\")
+    return text
+
+
+def _ensure_math_delimiters(answer: str) -> str:
+    """Wrap answer in $$...$$ if it contains LaTeX commands but no delimiters."""
+    if not answer.strip():
+        return answer
+    # Already has delimiters
+    if "$" in answer:
+        return answer
+    # Contains a backslash command — likely raw LaTeX without delimiters
+    if "\\" in answer:
+        return f"$${answer}$$"
+    return answer
+
+
 def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, str]:
     """Parse LLM JSON response into steps, final_answer, and answer_type."""
     steps_data = data["steps"]
@@ -103,17 +142,22 @@ def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]],
     steps: list[dict[str, str]] = []
     for s in steps_data:
         if isinstance(s, dict):
-            steps.append({"title": str(s.get("title", "")), "description": str(s.get("description", ""))})
+            title = _normalize_latex(str(s.get("title", "")))
+            description = _normalize_latex(str(s.get("description", "")))
+            steps.append({"title": title, "description": description})
         else:
             # Backward compat: plain string from older prompt format
-            steps.append({"title": "", "description": str(s)})
+            steps.append({"title": "", "description": _normalize_latex(str(s))})
 
     if answer_type not in ("text", "diagram"):
         answer_type = "text"
 
+    final_answer_str = _normalize_latex(str(final_answer))
+    final_answer_str = _ensure_math_delimiters(final_answer_str)
+
     return (
         steps,
-        str(final_answer),
+        final_answer_str,
         answer_type,
     )
 
