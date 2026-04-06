@@ -215,7 +215,7 @@ export function getChatSubstepCount(subject?: string): number {
 }
 
 export const GRADING_SUBSTEP_COUNT = 5; // 4 steps + 1 grade reveal
-export const PRACTICE_SUBSTEP_COUNT = 5; // 3 problems + select answer + results
+export const PRACTICE_SUBSTEP_COUNT = 7; // p1 → correct → p2 → wrong → retry → p3 correct → results
 
 /* ================================================================
    AnimatedLearnDemo — scroll-driven, controlled by visibleCount
@@ -607,15 +607,15 @@ export function AnimatedGradingDemo({
 }
 
 /* ================================================================
-   AnimatedPracticeDemo — shows the real practice flow:
-   AI generates similar problems, student picks MC answers,
-   tracks progress toward mastery.
+   AnimatedPracticeDemo — matches the real practice UI flow:
 
-   visibleCount 1 = first problem shown
-   visibleCount 2 = answer selected (correct)
-   visibleCount 3 = second problem shown
-   visibleCount 4 = answer selected (wrong, then correct)
-   visibleCount 5 = results summary
+   visibleCount 1 = problem 1 shown (MC choices)
+   visibleCount 2 = problem 1 answered correctly
+   visibleCount 3 = problem 2 shown
+   visibleCount 4 = problem 2 wrong answer (red highlight + "Not quite")
+   visibleCount 5 = problem 2 retry correct
+   visibleCount 6 = problem 3 answered correctly
+   visibleCount 7 = results summary (score card, per-problem breakdown)
    ================================================================ */
 
 const PRACTICE_PROBLEMS = [
@@ -623,17 +623,27 @@ const PRACTICE_PROBLEMS = [
     question: "Solve for x: 3x² − 12 = 0",
     choices: ["x = ±4", "x = ±2", "x = ±3", "x = 4"],
     correctIdx: 1,
+    wrongIdx: 0,
   },
   {
     question: "Solve for x: x² + 6x + 9 = 0",
     choices: ["x = 3", "x = −3", "x = ±3", "x = −9"],
     correctIdx: 1,
+    wrongIdx: 2,
   },
   {
     question: "Solve for x: 5x² − 20x = 0",
     choices: ["x = 4", "x = 0 and x = 4", "x = 0 and x = −4", "x = 5"],
     correctIdx: 1,
+    wrongIdx: 3,
   },
+];
+
+// Results for the summary: p1 correct, p2 wrong then correct (flagged), p3 correct
+const RESULTS = [
+  { correct: true, flagged: false },
+  { correct: true, flagged: true }, // got it wrong first
+  { correct: true, flagged: false },
 ];
 
 export function AnimatedPracticeDemo({
@@ -641,73 +651,121 @@ export function AnimatedPracticeDemo({
 }: {
   visibleCount: number;
 }) {
-  // Map visibleCount to practice state
-  const showAnswer1 = visibleCount >= 2;
-  const showProblem2 = visibleCount >= 3;
-  const showAnswer2 = visibleCount >= 4;
-  const showResults = visibleCount >= 5;
-
-  const currentProblem = showProblem2 ? 1 : 0;
-  const answeredCount = (showAnswer1 ? 1 : 0) + (showAnswer2 ? 1 : 0);
   const totalProblems = PRACTICE_PROBLEMS.length;
-  const progress = showResults ? 100 : ((currentProblem + (showAnswer1 && !showProblem2 ? 1 : 0)) / totalProblems) * 100;
 
-  if (showResults) {
+  // Results screen
+  if (visibleCount >= 7) {
+    const correctCount = RESULTS.filter((r) => r.correct).length;
+    const flaggedCount = RESULTS.filter((r) => r.flagged).length;
+    const pct = Math.round((correctCount / totalProblems) * 100);
+
     return (
-      <div className="space-y-3.5">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="space-y-3.5"
-        >
-          <div className="text-center">
-            <p className="text-[10px] font-medium text-text-muted">Practice Complete</p>
-            <p className="mt-1 text-sm font-bold text-text-primary">
-              {answeredCount}/{totalProblems} problems mastered
-            </p>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="space-y-3"
+      >
+        {/* Score card */}
+        <div className="text-center">
+          <p className="text-[10px] font-medium text-text-muted">Results</p>
+          <p className="mt-1 text-3xl font-extrabold text-primary">
+            {correctCount}/{totalProblems}
+          </p>
+          <div className="mx-auto mt-2 h-1.5 w-3/4 overflow-hidden rounded-full bg-border-light">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+              style={{ width: `${pct}%` }}
+            />
           </div>
+          <p className="mt-1.5 text-[10px] font-semibold text-success">
+            Great job!
+          </p>
+        </div>
 
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border-light">
-            <div className="h-full w-full rounded-full bg-gradient-to-r from-success to-[#55EFC4]" />
-          </div>
-
+        {/* Per-problem breakdown */}
+        <div className="space-y-1.5">
           {PRACTICE_PROBLEMS.map((p, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-[--radius-md] border border-success/30 bg-success-light p-2.5">
-              <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success">
-                <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+            <div
+              key={i}
+              className={`flex items-center gap-2.5 rounded-[--radius-md] border p-2 ${
+                RESULTS[i].correct
+                  ? "border-success/30 bg-success-light"
+                  : "border-error/30 bg-error-light"
+              }`}
+            >
+              <div
+                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full ${
+                  RESULTS[i].correct ? "bg-success" : "bg-error"
+                }`}
+              >
+                {RESULTS[i].correct ? (
+                  <svg className="h-2 w-2 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : (
+                  <svg className="h-2 w-2 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                )}
               </div>
-              <p className="text-[11px] text-text-primary">{p.question}</p>
+              <p className="flex-1 text-[10px] text-text-primary">{p.question}</p>
+              {RESULTS[i].flagged && (
+                <svg className="h-3 w-3 flex-shrink-0 text-warning-dark" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                  <line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2" fill="none" />
+                </svg>
+              )}
             </div>
           ))}
+        </div>
 
-          <div className="rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 p-3 text-center">
-            <p className="text-[10px] font-medium text-text-muted">Ready to master more?</p>
-            <div className="mt-2 rounded-[--radius-md] bg-primary px-4 py-1.5 text-[10px] font-bold text-white">
-              Generate More Problems
+        {/* Actions */}
+        <div className="flex gap-2">
+          {flaggedCount > 0 && (
+            <div className="flex-1 rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 py-1.5 text-center text-[10px] font-semibold text-primary">
+              Learn {flaggedCount} Flagged
             </div>
+          )}
+          <div className="flex-1 rounded-[--radius-md] bg-primary py-1.5 text-center text-[10px] font-bold text-white">
+            New Problem
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </motion.div>
     );
   }
 
-  const problem = PRACTICE_PROBLEMS[currentProblem];
-  const showingAnswer = currentProblem === 0 ? showAnswer1 : showAnswer2;
+  // Active practice state machine
+  // vc=1: p1 shown, vc=2: p1 correct, vc=3: p2 shown,
+  // vc=4: p2 wrong, vc=5: p2 retry correct, vc=6: p3 correct
+  let problemIdx: number;
+  let showWrong = false;
+  let showCorrect = false;
+
+  if (visibleCount <= 2) {
+    problemIdx = 0;
+    showCorrect = visibleCount >= 2;
+  } else if (visibleCount <= 5) {
+    problemIdx = 1;
+    showWrong = visibleCount === 4;
+    showCorrect = visibleCount >= 5;
+  } else {
+    problemIdx = 2;
+    showCorrect = true;
+  }
+
+  const problem = PRACTICE_PROBLEMS[problemIdx];
+  const completedCount = problemIdx + (showCorrect ? 1 : 0);
+  const progress = (completedCount / totalProblems) * 100;
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-medium text-text-muted">Similar Problem</p>
-          <p className="mt-0.5 text-[10px] text-text-muted">
-            Problem {currentProblem + 1} of {totalProblems}
-          </p>
-        </div>
+        <p className="text-[10px] font-semibold text-text-muted">
+          Problem {problemIdx + 1} of {totalProblems}
+        </p>
         <div className="rounded-[--radius-sm] bg-primary-bg px-2.5 py-1 text-[10px] font-semibold text-primary">
-          Practice Mode
+          Practice
         </div>
       </div>
 
@@ -728,31 +786,47 @@ export function AnimatedPracticeDemo({
       {/* Choices */}
       <div className="grid grid-cols-2 gap-2">
         {problem.choices.map((choice, i) => {
-          const isCorrect = i === problem.correctIdx;
-          const isSelected = showingAnswer && isCorrect;
+          const isCorrectChoice = i === problem.correctIdx;
+          const isWrongChoice = i === problem.wrongIdx;
+          const selectedCorrect = showCorrect && isCorrectChoice;
+          const selectedWrong = showWrong && isWrongChoice;
 
           return (
             <motion.div
-              key={`${currentProblem}-${i}`}
-              animate={isSelected ? { scale: [1, 1.02, 1] } : {}}
+              key={`${problemIdx}-${i}`}
+              animate={selectedCorrect ? { scale: [1, 1.02, 1] } : {}}
               transition={{ duration: 0.3 }}
               className={`flex items-center gap-2 rounded-[--radius-md] border p-2.5 ${
-                isSelected
+                selectedCorrect
                   ? "border-success bg-success-light"
-                  : "border-border-light bg-surface"
+                  : selectedWrong
+                    ? "border-error bg-error-light"
+                    : "border-border-light bg-surface"
               }`}
             >
               <span
                 className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                  isSelected ? "bg-success text-white" : "bg-border-light text-text-muted"
+                  selectedCorrect
+                    ? "bg-success text-white"
+                    : selectedWrong
+                      ? "bg-error text-white"
+                      : "bg-border-light text-text-muted"
                 }`}
               >
-                {String.fromCharCode(65 + i)}
+                {selectedWrong ? (
+                  <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                ) : (
+                  String.fromCharCode(65 + i)
+                )}
               </span>
-              <span className={`text-xs font-medium ${isSelected ? "text-success" : "text-text-primary"}`}>
+              <span className={`text-xs font-medium ${
+                selectedCorrect ? "text-success" : selectedWrong ? "text-error" : "text-text-primary"
+              }`}>
                 {choice}
               </span>
-              {isSelected && (
+              {selectedCorrect && (
                 <svg className="ml-auto h-3.5 w-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -763,14 +837,27 @@ export function AnimatedPracticeDemo({
       </div>
 
       {/* Feedback */}
-      <AnimatePresence>
-        {showingAnswer && (
+      <AnimatePresence mode="wait">
+        {showCorrect && (
           <motion.div
+            key="correct"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-[--radius-md] border border-success/30 bg-success-light p-2.5 text-center"
+            exit={{ opacity: 0 }}
+            className="rounded-[--radius-md] border border-success/30 bg-success-light p-2 text-center"
           >
             <p className="text-xs font-semibold text-success">Correct!</p>
+          </motion.div>
+        )}
+        {showWrong && (
+          <motion.div
+            key="wrong"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="rounded-[--radius-md] border border-error/30 bg-error-light p-2 text-center"
+          >
+            <p className="text-xs font-semibold text-error">Not quite, try again!</p>
           </motion.div>
         )}
       </AnimatePresence>

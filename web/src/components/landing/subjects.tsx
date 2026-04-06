@@ -74,20 +74,29 @@ export function Subjects() {
             >
               <Link
                 href={subject.href}
-                className="group block rounded-[--radius-lg] border border-border-light bg-surface p-6 transition-all hover:border-primary/20 hover:shadow-lg"
+                className="group relative block overflow-hidden rounded-[--radius-lg] border border-border-light bg-surface p-6 transition-all hover:border-primary/20 hover:shadow-lg"
               >
-                <div
-                  className={`mb-4 flex h-11 w-11 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${subject.gradient} text-white shadow-sm`}
-                  aria-hidden="true"
-                >
-                  {subject.icon}
+                {/* Subtle subject-colored tint */}
+                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${subject.gradient} opacity-[0.04] transition-opacity group-hover:opacity-[0.08]`} />
+                <div className="relative">
+                  <div
+                    className={`mb-4 flex h-14 w-14 items-center justify-center rounded-[--radius-lg] bg-gradient-to-br ${subject.gradient} text-white shadow-sm`}
+                    aria-hidden="true"
+                  >
+                    {subject.icon}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
+                      {subject.name}
+                    </p>
+                    <svg className="h-4 w-4 text-text-muted opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                    {subject.description}
+                  </p>
                 </div>
-                <p className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
-                  {subject.name}
-                </p>
-                <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-                  {subject.description}
-                </p>
               </Link>
             </motion.div>
           ))}

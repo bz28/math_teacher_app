@@ -44,6 +44,7 @@ export function Features() {
             description:
               "Every problem is broken into clear, guided steps. The final answer stays hidden until you've worked through each one — building real understanding, not just copying answers.",
             substepCount: getLearnSubstepCount("physics"),
+            teaser: "Watch Veradic solve a physics problem step by step",
             render: (n) => <AnimatedLearnDemo subject="physics" visibleCount={n} />,
           },
           {
@@ -51,6 +52,7 @@ export function Features() {
             description:
               "Stuck on a step? Ask a question and get a personalized explanation — without revealing future steps or answers. Like having a tutor who meets you exactly where you are.",
             substepCount: getChatSubstepCount("chemistry"),
+            teaser: "See the AI tutor explain a chemistry concept",
             render: (n) => <AnimatedChatDemo subject="chemistry" visibleCount={n} />,
           },
           {
@@ -58,6 +60,7 @@ export function Features() {
             description:
               "After learning a problem, AI generates similar ones so you can practice the same concept until it sticks. Work through as many as you need — every problem is new, every answer is checked.",
             substepCount: PRACTICE_SUBSTEP_COUNT,
+            teaser: "AI generates similar problems for mastery",
             render: (n) => <AnimatedPracticeDemo visibleCount={n} />,
           },
         ]}
@@ -85,16 +88,21 @@ function SecondaryStrip() {
       className="mx-auto max-w-6xl"
     >
       <p className="mb-8 text-center text-lg font-bold text-text-primary">
-        And more
+        More tools to help you succeed
       </p>
       <div className="grid gap-5 sm:grid-cols-3">
-        {secondary.map((item) => (
+        {secondary.map((item, i) => (
           <div
             key={item.label}
-            className="rounded-[--radius-lg] border border-border-light bg-surface p-5 transition-all hover:border-primary/20 hover:shadow-sm"
+            className="rounded-[--radius-lg] border border-border-light bg-surface p-5 transition-all hover:border-primary/20 hover:shadow-sm hover:-translate-y-0.5"
           >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
-              <item.icon />
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
+                <item.icon />
+              </div>
+              <span className="text-xs font-bold text-text-muted/40">
+                {String(i + 1).padStart(2, "0")}
+              </span>
             </div>
             <p className="text-sm font-bold text-text-primary">{item.label}</p>
             <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">

@@ -22,6 +22,8 @@ export interface ShowcaseFeature {
   description: string;
   substepCount: number;
   render: (visibleCount: number) => ReactNode;
+  /** Short teaser shown above the demo inside the browser frame */
+  teaser?: string;
 }
 
 interface TabbedShowcaseProps {
@@ -135,29 +137,45 @@ export function TabbedShowcase({
           <p className="mt-3 text-lg text-text-secondary">{subheading}</p>
         </div>
 
-        {/* Tab pills */}
-        <div className="mb-10 flex justify-center">
-          <div className="flex gap-1.5 overflow-x-auto rounded-[--radius-pill] border border-border-light bg-card/50 p-1">
-            {features.map((f, i) => (
+        {/* Tab pills + progress dots */}
+        <div className="mb-10 space-y-4">
+          <div className="flex justify-center">
+            <div className="flex gap-1.5 overflow-x-auto rounded-[--radius-pill] border border-border-light bg-card/50 p-1">
+              {features.map((f, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleTabChange(i)}
+                  className={`relative whitespace-nowrap rounded-[--radius-pill] px-5 py-2 text-sm font-semibold transition-colors ${
+                    i === activeTab
+                      ? "text-white"
+                      : "text-text-secondary hover:text-primary"
+                  }`}
+                >
+                  {i === activeTab && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute inset-0 rounded-[--radius-pill] bg-primary shadow-sm"
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative z-10">{f.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Progress dots between tabs and content */}
+          <div className="flex items-center justify-center gap-2">
+            {features.map((_, i) => (
               <button
                 key={i}
+                aria-label={`Feature ${i + 1}: ${features[i].title}`}
                 onClick={() => handleTabChange(i)}
-                className={`relative whitespace-nowrap rounded-[--radius-pill] px-5 py-2 text-sm font-semibold transition-colors ${
+                className={`h-2 cursor-pointer rounded-full transition-all duration-300 ${
                   i === activeTab
-                    ? "text-white"
-                    : "text-text-secondary hover:text-primary"
+                    ? "w-6 bg-primary"
+                    : "w-2 bg-border hover:bg-primary/30"
                 }`}
-              >
-                {/* Animated pill background */}
-                {i === activeTab && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute inset-0 rounded-[--radius-pill] bg-primary shadow-sm"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <span className="relative z-10">{f.title}</span>
-              </button>
+              />
             ))}
           </div>
         </div>
@@ -186,33 +204,6 @@ export function TabbedShowcase({
                 </p>
               </motion.div>
             </AnimatePresence>
-
-            {/* Progress bar */}
-            <div className="mt-8">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-border-light">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-                  animate={{
-                    width: `${(visibleCount / feature.substepCount) * 100}%`,
-                  }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
-                />
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                {features.map((_, i) => (
-                  <button
-                    key={i}
-                    aria-label={`Feature ${i + 1}: ${features[i].title}`}
-                    onClick={() => handleTabChange(i)}
-                    className={`h-2 cursor-pointer rounded-full transition-all duration-300 ${
-                      i === activeTab
-                        ? "w-6 bg-primary"
-                        : "w-2 bg-border hover:bg-primary/30"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Right: demo */}
@@ -226,6 +217,11 @@ export function TabbedShowcase({
                 transition={{ duration: 0.25 }}
               >
                 <BrowserFrame>
+                  {feature.teaser && (
+                    <p className="mb-3 text-center text-[10px] font-medium text-text-muted">
+                      {feature.teaser}
+                    </p>
+                  )}
                   {feature.render(visibleCount)}
                 </BrowserFrame>
               </motion.div>

@@ -8,41 +8,34 @@
 
 const TOPIC_POOLS: Record<string, string[]> = {
   math: [
-    "Quadratics", "Derivatives", "Integrals", "Trigonometry", "Linear Algebra",
-    "Probability", "Factoring", "Proofs", "Vectors", "Limits",
-    "Matrices", "Taylor Series", "Geometry", "Eigenvalues", "Statistics",
-    "Calculus", "Set Theory", "Complex Numbers", "Sequences", "Functions",
+    "Quadratics", "Derivatives", "Integrals", "Trigonometry",
+    "Probability", "Factoring", "Vectors", "Limits",
+    "Matrices", "Geometry", "Statistics", "Calculus",
   ],
   physics: [
-    "Kinematics", "Momentum", "Circuits", "Waves", "Optics",
-    "Torque", "Entropy", "Gravity", "Relativity", "Pendulums",
-    "Free Fall", "Capacitance", "Electric Fields", "Quantum Mechanics",
-    "Thermodynamics", "Friction", "Angular Momentum", "Sound Waves",
-    "Magnetism", "Projectile Motion",
+    "Kinematics", "Momentum", "Circuits", "Waves",
+    "Optics", "Torque", "Gravity", "Relativity",
+    "Thermodynamics", "Friction", "Electric Fields", "Magnetism",
   ],
   chemistry: [
-    "Stoichiometry", "Molarity", "pH Scale", "Titration", "Buffers",
-    "Gas Laws", "Redox Reactions", "Catalysts", "Bonding", "Entropy",
-    "Organic Chemistry", "Equilibrium", "Electrochemistry", "Hess's Law",
-    "Functional Groups", "Lewis Structures", "Calorimetry", "Mole Conversions",
-    "Periodic Trends", "Solubility",
+    "Stoichiometry", "Molarity", "pH Scale", "Titration",
+    "Gas Laws", "Redox Reactions", "Bonding", "Entropy",
+    "Equilibrium", "Electrochemistry", "Lewis Structures", "Calorimetry",
   ],
   teacher: [
     "Auto-Grading", "Class Analytics", "Student Progress", "Test Generator",
     "AI Tutoring", "Step-by-Step Help", "Practice Sets", "Assignments",
-    "Real-Time Data", "Progress Tracking", "Rubric Builder", "Answer Keys",
-    "Lesson Planning", "Question Banks", "Adaptive Learning", "Skill Mastery",
-    "Learning Gaps", "Performance Trends", "Error Analysis", "Standards Alignment",
+    "Progress Tracking", "Question Banks", "Adaptive Learning", "Error Analysis",
   ],
 };
 
 const ALL_TOPICS_LEFT = [
-  "Quadratics", "Kinematics", "Stoichiometry", "Derivatives", "Waves",
-  "Molarity", "Trigonometry", "Circuits", "pH Scale", "Integrals",
+  "Quadratics", "Kinematics", "Stoichiometry", "Derivatives",
+  "Trigonometry", "Circuits", "pH Scale", "Integrals",
 ];
 const ALL_TOPICS_RIGHT = [
-  "Momentum", "Redox Reactions", "Linear Algebra", "Optics", "Gas Laws",
-  "Probability", "Torque", "Lewis Structures", "Factoring", "Entropy",
+  "Momentum", "Linear Algebra", "Optics", "Gas Laws",
+  "Probability", "Lewis Structures", "Factoring", "Entropy",
 ];
 
 interface TopicCloudProps {
@@ -73,8 +66,8 @@ export function TopicCloud({ subject = "all" }: TopicCloudProps) {
         <div
           className="flex flex-col gap-4"
           style={{
-            maskImage: "linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)",
-            WebkitMaskImage: "linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)",
+            maskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
           }}
         >
           {leftItems.map((topic, i) => (
@@ -93,8 +86,8 @@ export function TopicCloud({ subject = "all" }: TopicCloudProps) {
         <div
           className="flex flex-col items-end gap-4"
           style={{
-            maskImage: "linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)",
-            WebkitMaskImage: "linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)",
+            maskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
           }}
         >
           {rightItems.map((topic, i) => (

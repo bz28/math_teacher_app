@@ -31,8 +31,9 @@ export function Hero() {
           </h1>
 
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-text-secondary">
-            Veradic — your personal AI tutor that breaks any math or science
-            problem into steps you actually understand.
+            Snap a photo of any math or science problem. Veradic breaks it
+            into guided steps you actually understand — then generates
+            practice until you&apos;ve mastered it.
           </p>
 
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
@@ -51,6 +52,9 @@ export function Hero() {
               className="inline-flex h-12 items-center justify-center gap-2 rounded-[--radius-pill] border border-border bg-surface px-7 text-base font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
             >
               See how it works
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12l7 7 7-7" />
+              </svg>
             </a>
           </div>
         </motion.div>
