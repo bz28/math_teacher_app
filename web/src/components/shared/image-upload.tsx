@@ -43,6 +43,7 @@ export function ImageUpload({
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
   const [cropImages, setCropImages] = useState<(string | undefined)[]>([]);
   const [selected, setSelected] = useState<boolean[]>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -182,10 +183,22 @@ export function ImageUpload({
     setResult(null);
     setCropImages([]);
     setSelected([]);
+    setEditingIndex(null);
   }
 
   function toggleSelected(index: number) {
     setSelected((prev) => prev.map((s, i) => (i === index ? !s : s)));
+  }
+
+  function updateProblemText(index: number, text: string) {
+    setResult((prev) =>
+      prev
+        ? {
+            ...prev,
+            problems: prev.problems.map((p, i) => (i === index ? text : p)),
+          }
+        : prev,
+    );
   }
 
   // Rectangle selection phase (manual fallback)
@@ -281,7 +294,7 @@ export function ImageUpload({
       )}
 
       {/* Extraction results modal */}
-      <Modal open={!!result} onClose={() => setResult(null)}>
+      <Modal open={!!result} onClose={() => { setResult(null); setEditingIndex(null); }}>
         {result && (
           <div className="space-y-4">
             <div>
@@ -289,35 +302,57 @@ export function ImageUpload({
                 Extracted Problems
               </h2>
               <p className="text-sm text-text-secondary">
-                {result.problems.length} problem{result.problems.length !== 1 && "s"} found
-                (confidence: {result.confidence})
+                {result.problems.length} problem{result.problems.length !== 1 && "s"} found — review and edit before adding
               </p>
             </div>
 
-            <div className="max-h-64 space-y-2 overflow-y-auto">
-              {result.problems.map((problem, i) => (
-                <label
-                  key={i}
-                  className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-[--radius-md] border p-3 transition-colors",
-                    selected[i]
-                      ? "border-primary bg-primary-bg/50"
-                      : "border-border-light",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected[i]}
-                    onChange={() => toggleSelected(i)}
-                    className="mt-0.5 h-4 w-4 accent-primary"
-                  />
-                  <span className="text-sm text-text-primary"><MathText text={problem} /></span>
-                </label>
-              ))}
+            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {result.problems.map((problem, i) => {
+                const isEditing = editingIndex === i;
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "rounded-[--radius-md] border p-3 transition-colors",
+                      selected[i] ? "border-primary bg-primary-bg/50" : "border-border-light",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selected[i]}
+                        onChange={() => toggleSelected(i)}
+                        className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
+                      />
+                      <div className="min-w-0 flex-1">
+                        {isEditing ? (
+                          <textarea
+                            value={problem}
+                            onChange={(e) => updateProblemText(i, e.target.value)}
+                            rows={Math.max(2, problem.split("\n").length)}
+                            autoFocus
+                            className="w-full resize-y rounded-[--radius-sm] border border-border bg-input-bg px-2.5 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                            spellCheck={false}
+                          />
+                        ) : (
+                          <span className="text-sm text-text-primary"><MathText text={problem} /></span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingIndex(isEditing ? null : i)}
+                        className="flex-shrink-0 rounded-[--radius-sm] px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-primary-bg hover:text-primary"
+                      >
+                        {isEditing ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => setResult(null)}>
+              <Button variant="ghost" onClick={() => { setResult(null); setEditingIndex(null); }}>
                 Cancel
               </Button>
               <Button
