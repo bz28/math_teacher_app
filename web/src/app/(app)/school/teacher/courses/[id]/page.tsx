@@ -1664,7 +1664,7 @@ function GenerateQuestionsModal({
             </Field>
 
             {/* Target unit */}
-            <Field label="File generated questions under">
+            <Field label="Save to">
               <select
                 value={unitId}
                 onChange={(e) => setUnitId(e.target.value)}
