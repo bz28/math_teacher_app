@@ -110,7 +110,13 @@ export function MathText({ text, className }: MathTextProps) {
           case "text":
             return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{seg.content}</span>;
           case "bold":
-            return <strong key={i}>{seg.content}</strong>;
+            // Recursively parse so math/svg/etc. inside bold (e.g.
+            // **Entry $h_{11}$**) renders correctly instead of as raw text.
+            return (
+              <strong key={i}>
+                <MathText text={seg.content} />
+              </strong>
+            );
           case "math-inline":
             return (
               <span
