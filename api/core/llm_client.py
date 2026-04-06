@@ -329,7 +329,15 @@ def _normalize_arrays(
     result: dict[str, object],
     schema: ToolSchema,
 ) -> dict[str, object]:
-    """Coerce stringified JSON arrays back into actual arrays based on schema."""
+    """Coerce stringified JSON arrays back into actual arrays based on schema.
+
+    Claude's tool use occasionally returns array fields as JSON-encoded strings
+    instead of actual arrays. Two flavors:
+    1. Plain text content: the inner string is valid JSON, parses cleanly.
+    2. LaTeX-heavy content (matrices, fractions, etc.): the inner string has
+       unescaped backslashes like `\\begin{bmatrix}` which are invalid JSON.
+       We retry by doubling every backslash so they become literal backslashes.
+    """
     properties = schema.get("input_schema", {}).get("properties", {})
     for key, prop in properties.items():
         if not isinstance(prop, dict) or prop.get("type") != "array":
@@ -337,13 +345,29 @@ def _normalize_arrays(
         value = result.get(key)
         if not isinstance(value, str):
             continue
+
+        parsed: object = None
+
+        # Strategy 1: parse as-is (works for plain text with valid JSON escapes)
         try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                result[key] = parsed
-        except (json.JSONDecodeError, ValueError):
-            # Leave as-is; downstream validation will catch invalid types
+            candidate = json.loads(value)
+            if isinstance(candidate, list):
+                parsed = candidate
+        except json.JSONDecodeError:
             pass
+
+        # Strategy 2: double all backslashes (works for unescaped LaTeX)
+        if parsed is None:
+            try:
+                escaped = value.replace("\\", "\\\\")
+                candidate = json.loads(escaped)
+                if isinstance(candidate, list):
+                    parsed = candidate
+            except json.JSONDecodeError:
+                pass
+
+        if isinstance(parsed, list):
+            result[key] = parsed
     return result
 
 
