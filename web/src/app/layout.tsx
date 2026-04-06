@@ -140,9 +140,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-sans">
-        <Script id="theme-init" strategy="beforeInteractive">
-          {`(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`}
-        </Script>
+        <Script src="/theme-init.js" strategy="beforeInteractive" />
         <ToastProvider>
           <AuthProvider>{children}</AuthProvider>
         </ToastProvider>
