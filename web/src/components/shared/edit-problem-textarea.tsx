@@ -17,7 +17,7 @@ export function EditProblemTextarea({
   onDone,
 }: EditProblemTextareaProps) {
   return (
-    <div className="min-w-0 flex-1">
+    <div className="w-full">
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}

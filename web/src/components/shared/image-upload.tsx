@@ -340,11 +340,13 @@ export function ImageUpload({
                             onChange={() => toggleSelected(i)}
                             className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
                           />
-                          <EditProblemTextarea
-                            value={problem}
-                            onChange={(text) => updateProblemText(i, text)}
-                            onDone={() => setEditingIndex(null)}
-                          />
+                          <div className="min-w-0 flex-1">
+                            <EditProblemTextarea
+                              value={problem}
+                              onChange={(text) => updateProblemText(i, text)}
+                              onDone={() => setEditingIndex(null)}
+                            />
+                          </div>
                         </>
                       ) : (
                         <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
@@ -362,6 +364,7 @@ export function ImageUpload({
                       <button
                         type="button"
                         onClick={() => setEditingIndex(isEditing ? null : i)}
+                        aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
                         className="flex-shrink-0 rounded-[--radius-sm] px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-primary-bg hover:text-primary"
                       >
                         {isEditing ? "Done" : "Edit"}

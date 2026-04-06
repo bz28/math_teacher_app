@@ -372,11 +372,13 @@ function LearnPageContent() {
                     {i + 1}
                   </span>
                   {isEditing ? (
-                    <EditProblemTextarea
-                      value={item.text}
-                      onChange={(text) => updateInQueue(i, text)}
-                      onDone={() => setEditingQueueIndex(null)}
-                    />
+                    <div className="flex-1 min-w-0">
+                      <EditProblemTextarea
+                        value={item.text}
+                        onChange={(text) => updateInQueue(i, text)}
+                        onDone={() => setEditingQueueIndex(null)}
+                      />
+                    </div>
                   ) : (
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium leading-relaxed text-text-primary">
@@ -394,9 +396,10 @@ function LearnPageContent() {
                   )}
                   <div className="flex flex-shrink-0 items-center gap-1">
                     <button
+                      type="button"
                       onClick={() => setEditingQueueIndex(isEditing ? null : i)}
-                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-primary-bg hover:text-primary md:opacity-0 md:group-hover:opacity-100"
-                      aria-label={isEditing ? "Done editing" : "Edit problem"}
+                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-primary-bg hover:text-primary"
+                      aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
                     >
                       {isEditing ? (
                         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -410,6 +413,7 @@ function LearnPageContent() {
                       )}
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         // Adjust the editing index when deleting shifts indices.
                         // - Deleting the edited row: close the editor.
@@ -424,7 +428,7 @@ function LearnPageContent() {
                         }
                         removeFromQueue(i);
                       }}
-                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error md:opacity-0 md:group-hover:opacity-100"
+                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error"
                       aria-label="Remove problem"
                     >
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
