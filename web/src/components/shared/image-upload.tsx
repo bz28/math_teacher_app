@@ -87,6 +87,7 @@ export function ImageUpload({
     (file: File) => {
       setError(null);
       setManualMode(false);
+      setEditingIndex(null);
 
       if (!file.type.startsWith("image/")) {
         setError("Please upload an image file.");
@@ -173,6 +174,11 @@ export function ImageUpload({
     e.target.value = "";
   }
 
+  function closeResultModal() {
+    setResult(null);
+    setEditingIndex(null);
+  }
+
   function handleConfirm() {
     if (!result) return;
     const items = result.problems
@@ -180,10 +186,9 @@ export function ImageUpload({
       .filter((_, i) => selected[i])
       .slice(0, remaining);
     onProblemsExtracted(items);
-    setResult(null);
     setCropImages([]);
     setSelected([]);
-    setEditingIndex(null);
+    closeResultModal();
   }
 
   function toggleSelected(index: number) {
@@ -294,7 +299,7 @@ export function ImageUpload({
       )}
 
       {/* Extraction results modal */}
-      <Modal open={!!result} onClose={() => { setResult(null); setEditingIndex(null); }}>
+      <Modal open={!!result} onClose={closeResultModal}>
         {result && (
           <div className="space-y-4">
             <div>
@@ -318,26 +323,39 @@ export function ImageUpload({
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selected[i]}
-                        onChange={() => toggleSelected(i)}
-                        className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
-                      />
-                      <div className="min-w-0 flex-1">
-                        {isEditing ? (
+                      {isEditing ? (
+                        <>
+                          <input
+                            type="checkbox"
+                            checked={selected[i]}
+                            onChange={() => toggleSelected(i)}
+                            className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
+                          />
                           <textarea
                             value={problem}
                             onChange={(e) => updateProblemText(i, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setEditingIndex(null);
+                            }}
                             rows={Math.max(2, problem.split("\n").length)}
                             autoFocus
-                            className="w-full resize-y rounded-[--radius-sm] border border-border bg-input-bg px-2.5 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                            className="min-w-0 flex-1 resize-y rounded-[--radius-sm] border border-border bg-input-bg px-2.5 py-2 text-sm text-text-primary outline-none focus:border-primary"
                             spellCheck={false}
                           />
-                        ) : (
-                          <span className="text-sm text-text-primary"><MathText text={problem} /></span>
-                        )}
-                      </div>
+                        </>
+                      ) : (
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selected[i]}
+                            onChange={() => toggleSelected(i)}
+                            className="mt-1 h-4 w-4 flex-shrink-0 accent-primary"
+                          />
+                          <span className="min-w-0 flex-1 text-sm text-text-primary">
+                            <MathText text={problem} />
+                          </span>
+                        </label>
+                      )}
                       <button
                         type="button"
                         onClick={() => setEditingIndex(isEditing ? null : i)}
@@ -352,7 +370,7 @@ export function ImageUpload({
             </div>
 
             <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => { setResult(null); setEditingIndex(null); }}>
+              <Button variant="ghost" onClick={closeResultModal}>
                 Cancel
               </Button>
               <Button
