@@ -253,13 +253,16 @@ async def call_claude_json(
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
 
-            # Tool use can be truncated if the response hits max_tokens
-            if response.stop_reason == "end_turn":
+            # When forcing tool use, the expected stop_reason is "tool_use".
+            # "end_turn" can also occur if the model naturally finishes after
+            # invoking the tool. "max_tokens" means truncation — the tool
+            # input is incomplete and we should retry.
+            if response.stop_reason in ("tool_use", "end_turn"):
                 result, resp_text = _extract_tool_result(response)
             else:
                 raise ValueError(
                     f"Unexpected stop_reason '{response.stop_reason}' "
-                    f"(expected 'end_turn', may be truncated at {max_tokens} tokens)"
+                    f"(expected 'tool_use' or 'end_turn', may be truncated at {max_tokens} tokens)"
                 )
 
             await _log_and_persist(
@@ -347,10 +350,12 @@ async def call_claude_vision(
         )
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
-        if response.stop_reason != "end_turn":
+        # When forcing tool use, expected stop_reason is "tool_use" (or
+        # "end_turn" if the model finishes naturally after the tool call).
+        if response.stop_reason not in ("tool_use", "end_turn"):
             raise ValueError(
                 f"Unexpected stop_reason '{response.stop_reason}' "
-                f"(expected 'end_turn', may be truncated at {max_tokens} tokens)"
+                f"(expected 'tool_use' or 'end_turn', may be truncated at {max_tokens} tokens)"
             )
         result, resp_text = _extract_tool_result(response)
 
