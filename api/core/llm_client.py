@@ -258,7 +258,7 @@ async def call_claude_json(
             # invoking the tool. "max_tokens" means truncation — the tool
             # input is incomplete and we should retry.
             if response.stop_reason in ("tool_use", "end_turn"):
-                result, resp_text = _extract_tool_result(response)
+                result, resp_text = _extract_tool_result(response, tool_schema)
             else:
                 raise ValueError(
                     f"Unexpected stop_reason '{response.stop_reason}' "
@@ -303,16 +303,48 @@ async def call_claude_json(
     raise RuntimeError(f"Claude JSON call failed after {max_retries} retries: {last_error}")
 
 
-def _extract_tool_result(response: anthropic.types.Message) -> tuple[dict[str, object], str]:
+def _extract_tool_result(
+    response: anthropic.types.Message,
+    schema: ToolSchema | None = None,
+) -> tuple[dict[str, object], str]:
     """Extract the tool_use result from a response.
+
+    If a schema is provided, normalize fields whose declared type is "array"
+    but came back as a JSON-encoded string. This works around an Anthropic
+    tool-use quirk where complex content (e.g. LaTeX with heavy escaping)
+    sometimes gets serialized as a string instead of an array.
 
     Returns (parsed_dict, text_for_logging).
     """
     for block in response.content:
         if block.type == "tool_use":
             result = block.input
+            if isinstance(result, dict) and schema is not None:
+                result = _normalize_arrays(result, schema)
             return result, json.dumps(result, ensure_ascii=False)
     raise ValueError("No tool_use block in response")
+
+
+def _normalize_arrays(
+    result: dict[str, object],
+    schema: ToolSchema,
+) -> dict[str, object]:
+    """Coerce stringified JSON arrays back into actual arrays based on schema."""
+    properties = schema.get("input_schema", {}).get("properties", {})
+    for key, prop in properties.items():
+        if not isinstance(prop, dict) or prop.get("type") != "array":
+            continue
+        value = result.get(key)
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                result[key] = parsed
+        except (json.JSONDecodeError, ValueError):
+            # Leave as-is; downstream validation will catch invalid types
+            pass
+    return result
 
 
 async def call_claude_vision(
@@ -357,7 +389,7 @@ async def call_claude_vision(
                 f"Unexpected stop_reason '{response.stop_reason}' "
                 f"(expected 'tool_use' or 'end_turn', may be truncated at {max_tokens} tokens)"
             )
-        result, resp_text = _extract_tool_result(response)
+        result, resp_text = _extract_tool_result(response, tool_schema)
 
         # Build a text summary of the input for logging (images replaced with placeholder)
         input_parts: list[str] = []
