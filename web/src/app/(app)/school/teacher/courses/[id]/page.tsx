@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   teacher,
+  type BankCounts,
+  type BankItem,
+  type BankJob,
   type TeacherCourse,
   type TeacherDocument,
   type TeacherSection,
@@ -107,7 +110,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
       <div className="mt-6">
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
-        {tab === "bank" && <ComingSoon name="Question Bank" phase="Phase 4" />}
+        {tab === "bank" && <QuestionBankTab courseId={course.id} />}
         {tab === "homework" && <ComingSoon name="Homework" phase="Phase 5" />}
         {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
@@ -1071,6 +1074,684 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
+}
+
+// ───────── Question Bank tab ─────────
+
+const STATUS_FILTERS: { key: "all" | "pending" | "approved" | "rejected"; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
+
+const DIFFICULTY_BADGE: Record<string, string> = {
+  easy: "bg-blue-50 text-blue-700 dark:bg-blue-500/10",
+  medium: "bg-purple-50 text-purple-700 dark:bg-purple-500/10",
+  hard: "bg-red-50 text-red-700 dark:bg-red-500/10",
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
+  approved: "bg-green-50 text-green-700 dark:bg-green-500/10",
+  rejected: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+  archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+};
+
+function QuestionBankTab({ courseId }: { courseId: string }) {
+  const [items, setItems] = useState<BankItem[]>([]);
+  const [counts, setCounts] = useState<BankCounts>({ pending: 0, approved: 0, rejected: 0, archived: 0 });
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const reload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const filters = statusFilter === "all" ? undefined : { status: statusFilter };
+      const res = await teacher.bank(courseId, filters);
+      setItems(res.items);
+      setCounts(res.counts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load bank");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, statusFilter]);
+
+  // Poll active job until done/failed, then refresh the bank
+  useEffect(() => {
+    if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
+    const interval = setInterval(async () => {
+      try {
+        const updated = await teacher.bankJob(courseId, activeJob.id);
+        setActiveJob(updated);
+        if (updated.status === "done") {
+          reload();
+        }
+      } catch {
+        // keep polling, transient errors are fine
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.id, activeJob?.status, courseId]);
+
+  // Auto-clear a finished job banner after a few seconds
+  useEffect(() => {
+    if (activeJob?.status === "done") {
+      const t = setTimeout(() => setActiveJob(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [activeJob?.status]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-text-primary">Question Bank</h2>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {counts.approved} approved · {counts.pending} pending · {counts.rejected} rejected
+          </p>
+        </div>
+        <button
+          type="button"
+          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+          onClick={() => setShowGenerate(true)}
+        >
+          + Generate Questions
+        </button>
+      </div>
+
+      {/* Active job banner */}
+      {activeJob && (
+        <div
+          className={`mt-4 rounded-[--radius-lg] border p-3 text-sm ${
+            activeJob.status === "failed"
+              ? "border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10"
+              : activeJob.status === "done"
+                ? "border-green-200 bg-green-50 text-green-800 dark:border-green-500/30 dark:bg-green-500/10"
+                : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10"
+          }`}
+        >
+          {activeJob.status === "queued" && "🟡 Generation queued…"}
+          {activeJob.status === "running" && `🔄 Generating ${activeJob.requested_count} questions…`}
+          {activeJob.status === "done" &&
+            `✅ Generated ${activeJob.produced_count}/${activeJob.requested_count} questions. Refreshing…`}
+          {activeJob.status === "failed" && `❌ Generation failed: ${activeJob.error_message ?? "unknown error"}`}
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+
+      {/* Status filter chips */}
+      <div className="mt-4 flex gap-2">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setStatusFilter(f.key)}
+            className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
+              statusFilter === f.key
+                ? "bg-primary text-white"
+                : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+            }`}
+          >
+            {f.label}
+            {f.key !== "all" && (
+              <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div className="mt-4 space-y-3">
+        {loading ? (
+          <p className="text-sm text-text-muted">Loading…</p>
+        ) : items.length === 0 ? (
+          <EmptyState
+            text={
+              counts.pending + counts.approved + counts.rejected === 0
+                ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
+                : "No questions match this filter."
+            }
+          />
+        ) : (
+          items.map((item) => (
+            <BankItemCard
+              key={item.id}
+              item={item}
+              expanded={expanded === item.id}
+              onToggle={() => setExpanded(expanded === item.id ? null : item.id)}
+              onChanged={reload}
+            />
+          ))
+        )}
+      </div>
+
+      {showGenerate && (
+        <GenerateQuestionsModal
+          courseId={courseId}
+          onClose={() => setShowGenerate(false)}
+          onStarted={(job) => {
+            setShowGenerate(false);
+            setActiveJob(job);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BankItemCard({
+  item,
+  expanded,
+  onToggle,
+  onChanged,
+}: {
+  item: BankItem;
+  expanded: boolean;
+  onToggle: () => void;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showRegen, setShowRegen] = useState(false);
+
+  const wrap = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = () =>
+    wrap(async () => {
+      await teacher.approveBankItem(item.id);
+      onChanged();
+    });
+
+  const reject = () =>
+    wrap(async () => {
+      await teacher.rejectBankItem(item.id);
+      onChanged();
+    });
+
+  const remove = () =>
+    wrap(async () => {
+      if (!confirm("Delete this question permanently?")) return;
+      await teacher.deleteBankItem(item.id);
+      onChanged();
+    });
+
+  const editQuestion = () =>
+    wrap(async () => {
+      const next = prompt("Edit question text:", item.question);
+      if (!next || next.trim() === item.question) return;
+      await teacher.updateBankItem(item.id, { question: next.trim() });
+      onChanged();
+    });
+
+  const regenerate = (instructions?: string) =>
+    wrap(async () => {
+      await teacher.regenerateBankItem(item.id, instructions);
+      setShowRegen(false);
+      onChanged();
+    });
+
+  return (
+    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="flex-1 text-sm text-text-primary">{item.question}</p>
+        <div className="flex shrink-0 gap-1.5">
+          <span
+            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+              DIFFICULTY_BADGE[item.difficulty] ?? ""
+            }`}
+          >
+            {item.difficulty}
+          </span>
+          <span
+            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+              STATUS_BADGE[item.status] ?? ""
+            }`}
+          >
+            {item.status}
+          </span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 rounded-[--radius-md] bg-bg-subtle p-3 text-xs text-text-secondary">
+          {item.solution_steps && item.solution_steps.length > 0 ? (
+            <ol className="space-y-2">
+              {item.solution_steps.map((s, i) => (
+                <li key={i}>
+                  <div className="font-semibold text-text-primary">
+                    {i + 1}. {s.title}
+                  </div>
+                  <div className="mt-0.5">{s.description}</div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="italic text-text-muted">No solution steps recorded.</p>
+          )}
+          {item.final_answer && (
+            <div className="mt-3 border-t border-border-light pt-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                Final answer:
+              </span>{" "}
+              <span className="text-text-primary">{item.final_answer}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {item.status === "pending" && (
+          <>
+            <button
+              onClick={approve}
+              disabled={busy}
+              className="rounded-[--radius-sm] bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              ✓ Approve
+            </button>
+            <button
+              onClick={reject}
+              disabled={busy}
+              className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              ✕ Reject
+            </button>
+          </>
+        )}
+        <button
+          onClick={onToggle}
+          className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+        >
+          {expanded ? "Hide solution" : "View solution"}
+        </button>
+        <button
+          onClick={editQuestion}
+          disabled={busy}
+          className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => setShowRegen(true)}
+          disabled={busy}
+          className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+        >
+          Regenerate
+        </button>
+        <button
+          onClick={remove}
+          disabled={busy}
+          className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+
+      {showRegen && (
+        <RegenerateModal
+          itemQuestion={item.question}
+          onClose={() => setShowRegen(false)}
+          onSubmit={regenerate}
+          busy={busy}
+        />
+      )}
+    </div>
+  );
+}
+
+function RegenerateModal({
+  itemQuestion,
+  onClose,
+  onSubmit,
+  busy,
+}: {
+  itemQuestion: string;
+  onClose: () => void;
+  onSubmit: (instructions?: string) => void;
+  busy: boolean;
+}) {
+  const [instructions, setInstructions] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <form
+        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(instructions.trim() || undefined);
+        }}
+      >
+        <h2 className="text-lg font-bold text-text-primary">Regenerate Question</h2>
+        <p className="mt-1 line-clamp-2 text-xs text-text-muted">{itemQuestion}</p>
+
+        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
+          Instructions (optional)
+        </label>
+        <p className="mt-1 text-[11px] text-text-muted">
+          Tell the AI what to change. Leave blank for a fresh take on the same topic.
+        </p>
+        <textarea
+          value={instructions}
+          onChange={(e) => setInstructions(e.target.value)}
+          rows={3}
+          maxLength={500}
+          autoFocus
+          placeholder="e.g. make the numbers smaller, redo the solution, change to a word problem"
+          className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+        />
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+          >
+            {busy ? "Regenerating…" : "Regenerate"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function GenerateQuestionsModal({
+  courseId,
+  onClose,
+  onStarted,
+}: {
+  courseId: string;
+  onClose: () => void;
+  onStarted: (job: BankJob) => void;
+}) {
+  const [units, setUnits] = useState<TeacherUnit[]>([]);
+  const [docs, setDocs] = useState<TeacherDocument[]>([]);
+  const [unitId, setUnitId] = useState<string>("");
+  const [count, setCount] = useState(20);
+  const [difficulty, setDifficulty] = useState("mixed");
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [constraint, setConstraint] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([teacher.units(courseId), teacher.documents(courseId)])
+      .then(([u, d]) => {
+        setUnits(u.units);
+        setDocs(d.documents);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load materials"))
+      .finally(() => setLoading(false));
+  }, [courseId]);
+
+  const toggleDoc = (id: string) => {
+    setSelectedDocs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Group docs by unit (top-level), with subfolder docs nested under their parent
+  const topUnits = units.filter((u) => u.parent_id === null);
+  const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
+  const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
+
+  const submit = async () => {
+    if (count < 1 || count > 50) {
+      setError("Count must be between 1 and 50");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const job = await teacher.generateBank(courseId, {
+        count,
+        difficulty,
+        unit_id: unitId || null,
+        document_ids: Array.from(selectedDocs),
+        constraint: constraint.trim() || null,
+      });
+      onStarted(job);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start generation");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <form
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[--radius-xl] bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <h2 className="text-lg font-bold text-text-primary">Generate Questions</h2>
+        <p className="mt-1 text-xs text-text-muted">
+          Pick which materials to feed Claude, set quantity and difficulty, and add any
+          natural-language instructions.
+        </p>
+
+        {loading ? (
+          <p className="mt-4 text-sm text-text-muted">Loading materials…</p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {/* Document picker */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted">
+                Source documents
+              </label>
+              <p className="mt-1 text-[11px] text-text-muted">
+                Only JPG/PNG documents are AI-readable for now. PDFs are stored but skipped.
+              </p>
+              <div className="mt-2 max-h-48 overflow-y-auto rounded-[--radius-md] border border-border-light bg-bg-base p-2">
+                {docs.length === 0 ? (
+                  <p className="px-2 py-1 text-xs text-text-muted">
+                    No materials uploaded yet. Add some in the Materials tab.
+                  </p>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {/* Uncategorized */}
+                    {docsIn(null).map((d) => (
+                      <DocCheckbox
+                        key={d.id}
+                        doc={d}
+                        checked={selectedDocs.has(d.id)}
+                        onToggle={() => toggleDoc(d.id)}
+                      />
+                    ))}
+                    {topUnits.map((u) => (
+                      <li key={u.id}>
+                        <div className="mt-2 px-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                          📁 {u.name}
+                        </div>
+                        {docsIn(u.id).map((d) => (
+                          <DocCheckbox
+                            key={d.id}
+                            doc={d}
+                            checked={selectedDocs.has(d.id)}
+                            onToggle={() => toggleDoc(d.id)}
+                          />
+                        ))}
+                        {subfoldersOf(u.id).map((sf) => (
+                          <div key={sf.id}>
+                            <div className="ml-3 mt-1 px-1 text-[10px] font-semibold text-text-muted">
+                              📂 {sf.name}
+                            </div>
+                            {docsIn(sf.id).map((d) => (
+                              <div key={d.id} className="ml-3">
+                                <DocCheckbox
+                                  doc={d}
+                                  checked={selectedDocs.has(d.id)}
+                                  onToggle={() => toggleDoc(d.id)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-text-muted">
+                {selectedDocs.size} document{selectedDocs.size === 1 ? "" : "s"} selected
+              </p>
+            </div>
+
+            {/* Quantity */}
+            <Field label="How many questions">
+              <input
+                type="number"
+                value={count}
+                onChange={(e) => setCount(Number(e.target.value))}
+                min={1}
+                max={50}
+                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              />
+            </Field>
+
+            {/* Difficulty */}
+            <Field label="Difficulty">
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value)}
+                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              >
+                <option value="mixed">Mixed (recommended)</option>
+                <option value="easy">All easy</option>
+                <option value="medium">All medium</option>
+                <option value="hard">All hard</option>
+              </select>
+            </Field>
+
+            {/* Target unit */}
+            <Field label="File generated questions under">
+              <select
+                value={unitId}
+                onChange={(e) => setUnitId(e.target.value)}
+                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              >
+                <option value="">Uncategorized</option>
+                {topUnits.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+                {topUnits.flatMap((u) =>
+                  subfoldersOf(u.id).map((sf) => (
+                    <option key={sf.id} value={sf.id}>
+                      {u.name} / {sf.name}
+                    </option>
+                  )),
+                )}
+              </select>
+            </Field>
+
+            {/* NL constraint */}
+            <Field label="Extra instructions (optional)">
+              <textarea
+                value={constraint}
+                onChange={(e) => setConstraint(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="e.g. only word problems, skip anything with trig, match the textbook style"
+                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              />
+            </Field>
+          </div>
+        )}
+
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting || loading}
+            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+          >
+            {submitting ? "Starting…" : "Generate"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function DocCheckbox({
+  doc,
+  checked,
+  onToggle,
+}: {
+  doc: TeacherDocument;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const isPdf = doc.file_type === "application/pdf";
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-2 rounded-[--radius-sm] px-2 py-1 text-xs ${
+        isPdf ? "opacity-50" : "hover:bg-bg-subtle"
+      }`}
+      title={isPdf ? "PDFs are not yet AI-readable" : undefined}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={isPdf}
+        onChange={onToggle}
+        className="h-3.5 w-3.5"
+      />
+      <span className="truncate text-text-primary">📄 {doc.filename}</span>
+      {isPdf && <span className="ml-auto text-[10px] text-text-muted">PDF (skipped)</span>}
+    </label>
+  );
 }
 
 // ───────── Coming soon placeholder ─────────
