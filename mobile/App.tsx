@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
+import { View, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 import { AccountScreen } from "./src/components/AccountScreen";
 import { AuthScreen } from "./src/components/AuthScreen";
+import { BottomTabBar, type TabKey } from "./src/components/BottomTabBar";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
+import { LibraryScreen } from "./src/components/LibraryScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { SolveScreen } from "./src/components/SolveScreen";
+import { colors } from "./src/theme";
 import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
@@ -17,7 +21,21 @@ import { useSessionStore } from "./src/stores/session";
 
 const ONBOARDING_KEY = "onboarding_completed";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "library";
+
+const TAB_SCREENS: Screen[] = ["solve", "history-list", "library", "account"];
+const SCREEN_TO_TAB: Record<string, TabKey> = {
+  solve: "solve",
+  "history-list": "history",
+  library: "library",
+  account: "account",
+};
+const TAB_TO_SCREEN: Record<TabKey, Screen> = {
+  solve: "solve",
+  history: "history-list",
+  library: "library",
+  account: "account",
+};
 
 function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
@@ -88,25 +106,31 @@ function AppRoot() {
     );
   }
 
-  if (screen === "account") {
-    return (
-      <SafeAreaProvider>
-        <AccountScreen
-          onBack={() => setScreen("solve")}
-          onLogout={async () => {
-            await clearAuth();
-            setFromOnboarding(false);
-            setScreen("auth");
-          }}
-        />
-        <StatusBar style="auto" />
-      </SafeAreaProvider>
+  // Tab screens — wrapped in shared layout with bottom tab bar
+  if (TAB_SCREENS.includes(screen)) {
+    const tabBar = (
+      <BottomTabBar
+        active={SCREEN_TO_TAB[screen]}
+        onChange={(tab) => setScreen(TAB_TO_SCREEN[tab])}
+      />
     );
-  }
 
-  if (screen === "history-list") {
-    return (
-      <SafeAreaProvider>
+    let content: React.ReactNode = null;
+    if (screen === "solve") {
+      content = (
+        <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
+          <SolveScreen
+            subject={subject}
+            onSubjectChange={setSubject}
+            onSessionStart={() => setScreen("session")}
+            onSessionError={() => setScreen("solve")}
+            onAccount={() => setScreen("account")}
+            onHistory={() => setScreen("history-list")}
+          />
+        </ErrorBoundary>
+      );
+    } else if (screen === "history-list") {
+      content = (
         <HistoryListScreen
           subject={subject}
           onBack={() => setScreen("solve")}
@@ -115,6 +139,28 @@ function AppRoot() {
             setScreen("session-review");
           }}
         />
+      );
+    } else if (screen === "library") {
+      content = <LibraryScreen />;
+    } else if (screen === "account") {
+      content = (
+        <AccountScreen
+          onBack={() => setScreen("solve")}
+          onLogout={async () => {
+            await clearAuth();
+            setFromOnboarding(false);
+            setScreen("auth");
+          }}
+        />
+      );
+    }
+
+    return (
+      <SafeAreaProvider>
+        <View style={styles.tabHost}>
+          <View style={styles.tabContent}>{content}</View>
+          {tabBar}
+        </View>
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -162,23 +208,14 @@ function AppRoot() {
     );
   }
 
-  // screen === "solve"
-  return (
-    <SafeAreaProvider>
-      <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
-        <SolveScreen
-          subject={subject}
-          onSubjectChange={setSubject}
-          onSessionStart={() => setScreen("session")}
-          onSessionError={() => setScreen("solve")}
-          onAccount={() => setScreen("account")}
-          onHistory={() => setScreen("history-list")}
-        />
-      </ErrorBoundary>
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
-  );
+  // Fallback (shouldn't hit) — redirect to solve
+  return null;
 }
+
+const styles = StyleSheet.create({
+  tabHost: { flex: 1, backgroundColor: colors.background },
+  tabContent: { flex: 1 },
+});
 
 export default function App() {
   return (
