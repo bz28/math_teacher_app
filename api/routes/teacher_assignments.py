@@ -13,6 +13,7 @@ from api.core.assignment_generation import generate_questions, generate_solution
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.routes.teacher_courses import get_teacher_course
@@ -32,6 +33,11 @@ class CreateAssignmentRequest(BaseModel):
     answer_key: dict[str, Any] | None = None
     unit_id: uuid.UUID | None = None
     document_ids: list[uuid.UUID] | None = None
+    # New: list of approved question bank item IDs to snapshot into the
+    # assignment's `content` column. The snapshot freezes the question
+    # text/solution/answer at create time so future bank edits don't
+    # change a homework that's already out in the world.
+    bank_item_ids: list[uuid.UUID] | None = None
 
     @field_validator("title")
     @classmethod
@@ -56,6 +62,9 @@ class UpdateAssignmentRequest(BaseModel):
     late_policy: str | None = None
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
+    # When provided, re-snapshot the picked bank items into content.
+    # Useful for the "edit problems" flow on a draft homework.
+    bank_item_ids: list[uuid.UUID] | None = None
 
 
 class AssignSectionsRequest(BaseModel):
@@ -63,6 +72,60 @@ class AssignSectionsRequest(BaseModel):
 
 
 # ── Helpers ──
+
+async def snapshot_bank_items(
+    db: AsyncSession,
+    course_id: uuid.UUID,
+    bank_item_ids: list[uuid.UUID],
+) -> dict[str, Any]:
+    """Look up the bank items, verify they belong to the course AND are
+    approved, and return a content dict with a frozen snapshot of each
+    question. Order is preserved per the input list.
+
+    The snapshot lives in assignments.content as:
+        { "problems": [
+            { "bank_item_id", "position", "question",
+              "solution_steps", "final_answer", "difficulty" },
+            ...
+        ] }
+    """
+    if not bank_item_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one question is required",
+        )
+
+    rows = (await db.execute(
+        select(QuestionBankItem).where(
+            QuestionBankItem.id.in_(bank_item_ids),
+            QuestionBankItem.course_id == course_id,
+            QuestionBankItem.status == "approved",
+        )
+    )).scalars().all()
+
+    found = {item.id: item for item in rows}
+    missing = [str(i) for i in bank_item_ids if i not in found]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Some questions aren't approved or don't belong to this course: {missing}"
+            ),
+        )
+
+    problems = []
+    for position, bank_id in enumerate(bank_item_ids, start=1):
+        item = found[bank_id]
+        problems.append({
+            "bank_item_id": str(bank_id),
+            "position": position,
+            "question": item.question,
+            "solution_steps": item.solution_steps,
+            "final_answer": item.final_answer,
+            "difficulty": item.difficulty,
+        })
+    return {"problems": problems}
+
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
     assignment = (await db.execute(
@@ -176,11 +239,18 @@ async def create_assignment(
             )
         doc_id_strings = [str(d) for d in body.document_ids]
 
+    # If the teacher picked bank items, snapshot them into content. The
+    # bank_item_ids path takes precedence over a raw content blob — the
+    # two shouldn't both be present in the new homework flow.
+    content = body.content
+    if body.bank_item_ids:
+        content = await snapshot_bank_items(db, course_id, body.bank_item_ids)
+
     assignment = Assignment(
         course_id=course_id, teacher_id=current_user.user_id,
         title=body.title, type=body.type, source_type=body.source_type,
         due_at=due_at, late_policy=body.late_policy,
-        content=body.content, answer_key=body.answer_key,
+        content=content, answer_key=body.answer_key,
         unit_id=body.unit_id, document_ids=doc_id_strings,
     )
     db.add(assignment)
@@ -269,7 +339,10 @@ async def update_assignment(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
     if body.late_policy is not None:
         a.late_policy = body.late_policy
-    if body.content is not None:
+    # Re-snapshotting bank items takes precedence over a raw content blob.
+    if body.bank_item_ids is not None:
+        a.content = await snapshot_bank_items(db, a.course_id, body.bank_item_ids)
+    elif body.content is not None:
         a.content = body.content
     if body.answer_key is not None:
         a.answer_key = body.answer_key
