@@ -325,6 +325,11 @@ async def update_bank_item(
     elif body.unit_id is not None:
         item.unit_id = body.unit_id
 
+    # Pre-set updated_at so SQLAlchemy doesn't need to lazy-fetch the
+    # server-default value after commit — that lazy fetch trips the
+    # MissingGreenlet error in async sessions. Pattern matches the
+    # chat endpoints which already do this.
+    item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item, await _used_in_for(db, item))
 
