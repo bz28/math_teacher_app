@@ -12,6 +12,7 @@ level (mutations are scoped to the SQLAlchemy session passed in).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
 
@@ -21,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.assignment import Assignment
 from api.models.question_bank import QuestionBankItem
+
+logger = logging.getLogger(__name__)
 
 
 async def snapshot_bank_items(
@@ -79,11 +82,17 @@ async def hydrate_assignment_content(
     if not ids:
         return {"problems": []}
     # Defensive: skip junk IDs rather than 500 the whole assignment view.
+    # Log a warning so corruption is visible in monitoring instead of
+    # silently masked behind a working UI.
     uuid_ids: list[uuid.UUID] = []
     for i in ids:
         try:
             uuid_ids.append(i if isinstance(i, uuid.UUID) else uuid.UUID(str(i)))
         except (ValueError, TypeError):
+            logger.warning(
+                "hydrate_assignment_content: dropping invalid UUID %r in assignment %s.content",
+                i, assignment.id,
+            )
             continue
     if not uuid_ids:
         return {"problems": []}

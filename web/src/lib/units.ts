@@ -30,30 +30,3 @@ export function unitLabel(units: TeacherUnit[], unitId: string | null): string {
   return parent ? `${parent.name} / ${u.name}` : u.name;
 }
 
-/**
- * Yield each unit in display order: top → its subfolders → next top.
- * Each entry includes the resolved breadcrumb label so callers don't
- * have to call unitLabel separately.
- */
-export interface UnitDisplay {
-  id: string;
-  unit: TeacherUnit;
-  label: string;
-  isTop: boolean;
-}
-
-export function iterUnits(units: TeacherUnit[]): UnitDisplay[] {
-  const out: UnitDisplay[] = [];
-  for (const top of topUnits(units)) {
-    out.push({ id: top.id, unit: top, label: top.name, isTop: true });
-    for (const sub of subfoldersOf(units, top.id)) {
-      out.push({
-        id: sub.id,
-        unit: sub,
-        label: `${top.name} / ${sub.name}`,
-        isTop: false,
-      });
-    }
-  }
-  return out;
-}

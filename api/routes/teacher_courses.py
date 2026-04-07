@@ -18,6 +18,37 @@ from api.models.user import User
 router = APIRouter()
 
 
+_VALID_SUBJECTS = {"math", "physics", "chemistry"}
+_VALID_COURSE_STATUSES = {"active", "archived"}
+
+
+def _validate_name(v: str) -> str:
+    v = v.strip()
+    if not v or len(v) > 200:
+        raise ValueError("Name must be 1-200 characters")
+    return v
+
+
+def _validate_subject(v: str) -> str:
+    if v not in _VALID_SUBJECTS:
+        raise ValueError(f"Subject must be one of: {', '.join(sorted(_VALID_SUBJECTS))}")
+    return v
+
+
+def _validate_grade(v: int | None) -> int | None:
+    if v is None:
+        return v
+    if not 1 <= v <= 12:
+        raise ValueError("Grade level must be between 1 and 12")
+    return v
+
+
+def _validate_status(v: str) -> str:
+    if v not in _VALID_COURSE_STATUSES:
+        raise ValueError(f"Status must be one of: {', '.join(sorted(_VALID_COURSE_STATUSES))}")
+    return v
+
+
 class CreateCourseRequest(BaseModel):
     name: str
     subject: str = "math"
@@ -26,11 +57,18 @@ class CreateCourseRequest(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def validate_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v or len(v) > 200:
-            raise ValueError("Name must be 1-200 characters")
-        return v
+    def _v_name(cls, v: str) -> str:
+        return _validate_name(v)
+
+    @field_validator("subject")
+    @classmethod
+    def _v_subject(cls, v: str) -> str:
+        return _validate_subject(v)
+
+    @field_validator("grade_level")
+    @classmethod
+    def _v_grade(cls, v: int | None) -> int | None:
+        return _validate_grade(v)
 
 
 class UpdateCourseRequest(BaseModel):
@@ -39,6 +77,26 @@ class UpdateCourseRequest(BaseModel):
     grade_level: int | None = None
     description: str | None = None
     status: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _v_name(cls, v: str | None) -> str | None:
+        return _validate_name(v) if v is not None else v
+
+    @field_validator("subject")
+    @classmethod
+    def _v_subject(cls, v: str | None) -> str | None:
+        return _validate_subject(v) if v is not None else v
+
+    @field_validator("grade_level")
+    @classmethod
+    def _v_grade(cls, v: int | None) -> int | None:
+        return _validate_grade(v)
+
+    @field_validator("status")
+    @classmethod
+    def _v_status(cls, v: str | None) -> str | None:
+        return _validate_status(v) if v is not None else v
 
 
 async def get_teacher_course(db: AsyncSession, course_id: uuid.UUID, teacher_id: uuid.UUID) -> Course:

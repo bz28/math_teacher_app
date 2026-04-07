@@ -13,16 +13,12 @@ import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 
 /**
- * Teacher's homework list for a course. Replaces the Phase 5
- * placeholder. Minimal scope:
- *   - List existing homework (drafts only for now)
- *   - + New Homework button → create modal
- *   - Click a card → detail modal (read-only problem list + edit/delete)
- *
- * Out of scope for this commit: section assignment, due date, late
- * policy, publish/draft state, student-side anything. The teacher just
- * picks bank questions, names the homework, and saves it as a draft
- * that lives in the bank.
+ * Teacher's homework list for a course. Lists existing homework as
+ * cards (with status pill), opens a detail modal for editing /
+ * picking problems / publishing / unpublishing / deleting. The bank
+ * picker reuses unit grouping from /lib/units. The detail modal is
+ * exported and reused from question-bank-tab so Used-in pills can
+ * open it without navigation.
  */
 export function HomeworkTab({ courseId }: { courseId: string }) {
   const [homeworks, setHomeworks] = useState<TeacherAssignment[]>([]);

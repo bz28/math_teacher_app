@@ -64,6 +64,13 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
       .bankJob(id, stored)
       .then((job) => {
         if (cancelled) return;
+        // Verify the fetched job actually matches the stored id —
+        // defends against future backend rotation/replay where the
+        // server might return a different shape than expected.
+        if (job.id !== stored) {
+          sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY(id));
+          return;
+        }
         // Only restore if the job is still actionable — done bulk jobs
         // would just flash the toast pointlessly, failed ones are noise.
         if (

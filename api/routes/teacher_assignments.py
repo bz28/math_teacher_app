@@ -183,10 +183,11 @@ async def create_assignment(
             select(Document.id).where(Document.id.in_(body.document_ids), Document.course_id == course_id)
         )).scalars().all())
         if len(found) != len(body.document_ids):
-            missing = set(body.document_ids) - found
+            # Generic message — don't echo IDs back, that lets a teacher
+            # enumerate which document_ids exist in *other* courses.
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Documents not found in this course: {missing}",
+                detail="One or more documents do not belong to this course",
             )
         doc_id_strings = [str(d) for d in body.document_ids]
 
