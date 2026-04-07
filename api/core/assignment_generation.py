@@ -40,9 +40,9 @@ def _build_generate_prompt(subject: str) -> str:
 
 async def generate_questions(
     unit_name: str,
-    difficulty: str,
     count: int,
     *,
+    difficulty: str | None = None,
     course_name: str = "",
     subject: str = Subject.MATH,
     user_id: str | None = None,
@@ -58,25 +58,31 @@ async def generate_questions(
         extra_instructions: Optional natural-language constraint from the
                 teacher (e.g. "only word problems", "skip trig"). Layered on
                 top of the system prompt.
+        difficulty: Optional. Legacy assignment flow still passes a value
+                ("easy"/"medium"/"hard"/"mixed"). The question bank workshop
+                doesn't — difficulty is no longer a user-facing concept
+                there, so the prompt skips the difficulty line entirely
+                when this is None. New work should rely on the natural-
+                language constraint instead.
 
     Returns list of {"text": "...", "difficulty": "..."}.
     """
     if count <= 0:
         return []
 
-    difficulty_instruction = (
-        f"All questions should be {difficulty} difficulty."
-        if difficulty != "mixed"
-        else "Mix difficulties: roughly 20% easy, 50% medium, 30% hard."
-    )
-
     system_prompt = _build_generate_prompt(subject)
-    user_message = (
-        f"Course: {course_name}\n"
-        f"Topic: {unit_name}\n"
-        f"Number of questions: {count}\n"
-        f"{difficulty_instruction}"
-    )
+    user_message_parts = [
+        f"Course: {course_name}",
+        f"Topic: {unit_name}",
+        f"Number of questions: {count}",
+    ]
+    if difficulty:
+        user_message_parts.append(
+            f"All questions should be {difficulty} difficulty."
+            if difficulty != "mixed"
+            else "Mix difficulties: roughly 20% easy, 50% medium, 30% hard."
+        )
+    user_message = "\n".join(user_message_parts)
     if extra_instructions:
         user_message += f"\n\nAdditional teacher instructions:\n{extra_instructions.strip()}"
 

@@ -3,7 +3,7 @@ import { useState } from "react";
 /**
  * Standard async-action wrapper used across the school workspace.
  * Replaces the duplicated `wrap()` helper that was inlined into
- * SectionCard, MaterialsTab, BankItemCard, and QuestionDetailModal.
+ * SectionCard, MaterialsTab, BankItemCard, and WorkshopModal.
  *
  * Usage:
  *   const { busy, error, setError, run } = useAsyncAction();

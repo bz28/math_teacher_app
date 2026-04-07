@@ -11,9 +11,8 @@ import {
   type TeacherUnit,
 } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { Field } from "@/components/school/shared/field";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { QuestionDetailModal } from "./question-detail-modal";
+import { WorkshopModal } from "./workshop-modal";
 import { STATUS_BADGE, STATUS_FILTERS } from "./bank-styles";
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
@@ -32,6 +31,19 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [showGenerate, setShowGenerate] = useState(false);
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
+
+  // Open review mode with all currently-pending items in the bank as the
+  // frozen queue. Hits a fresh fetch so we don't accidentally review stale
+  // items if the current filter is hiding pending ones.
+  const startReview = async () => {
+    try {
+      const res = await teacher.bank(courseId, { status: "pending" });
+      setReviewQueue(res.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load pending");
+    }
+  };
 
   const reload = async () => {
     setLoading(true);
@@ -93,20 +105,31 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-text-primary">Question Bank</h2>
           <p className="mt-0.5 text-xs text-text-muted">
             {counts.approved} approved · {counts.pending} pending · {counts.rejected} rejected
           </p>
         </div>
-        <button
-          type="button"
-          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
-          onClick={() => setShowGenerate(true)}
-        >
-          + Generate Questions
-        </button>
+        <div className="flex items-center gap-2">
+          {counts.pending > 0 && (
+            <button
+              type="button"
+              className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+              onClick={startReview}
+            >
+              Review pending ({counts.pending}) →
+            </button>
+          )}
+          <button
+            type="button"
+            className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+            onClick={() => setShowGenerate(true)}
+          >
+            + Generate Questions
+          </button>
+        </div>
       </div>
 
       {/* Active job banner */}
@@ -125,8 +148,20 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             (activeJob.produced_count > 0
               ? `🔄 Generating questions… ${activeJob.produced_count}/${activeJob.requested_count}`
               : `🔄 Generating ${activeJob.requested_count} questions…`)}
-          {activeJob.status === "done" &&
-            `✅ Generated ${activeJob.produced_count}/${activeJob.requested_count} questions. Refreshing…`}
+          {activeJob.status === "done" && (
+            <div className="flex items-center justify-between gap-3">
+              <span>
+                ✅ Generated {activeJob.produced_count}/{activeJob.requested_count} questions
+              </span>
+              <button
+                type="button"
+                onClick={startReview}
+                className="rounded-[--radius-sm] bg-green-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-800"
+              >
+                Review now →
+              </button>
+            </div>
+          )}
           {activeJob.status === "failed" &&
             `❌ Generation failed: ${activeJob.error_message ?? "unknown error"}`}
         </div>
@@ -191,13 +226,24 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
         const openItem = items.find((i) => i.id === openItemId);
         if (!openItem) return null;
         return (
-          <QuestionDetailModal
+          <WorkshopModal
             item={openItem}
             onClose={() => setOpenItemId(null)}
             onChanged={reload}
           />
         );
       })()}
+
+      {reviewQueue && (
+        <WorkshopModal
+          queue={reviewQueue}
+          onClose={() => {
+            setReviewQueue(null);
+            reload();
+          }}
+          onChanged={reload}
+        />
+      )}
     </div>
   );
 }
@@ -213,6 +259,15 @@ function BankItemCard({
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { busy, error, run } = useAsyncAction();
+
+  // Status-driven left-border accent so the teacher can scan the bank
+  // and immediately spot which questions still need attention.
+  const statusBorder =
+    item.status === "pending"
+      ? "border-l-4 border-l-amber-400"
+      : item.status === "approved"
+        ? "border-l-4 border-l-green-500"
+        : "opacity-60";
 
   const approve = () =>
     run(async () => {
@@ -234,7 +289,7 @@ function BankItemCard({
     });
 
   return (
-    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm">
+    <div className={`rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm ${statusBorder}`}>
       <div className="flex items-start justify-between gap-3">
         <button
           type="button"
@@ -310,6 +365,8 @@ function BankItemCard({
   );
 }
 
+const QUANTITY_CHIPS = [5, 10, 20, 50] as const;
+
 function GenerateQuestionsModal({
   courseId,
   onClose,
@@ -321,8 +378,11 @@ function GenerateQuestionsModal({
 }) {
   const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
-  const [unitId, setUnitId] = useState<string>("");
-  const [count, setCount] = useState(20);
+  // Manual override of the auto-defaulted unit. Null until the teacher
+  // explicitly picks. The actual `unitId` value is derived during render
+  // — see `effectiveUnitId` below.
+  const [overrideUnitId, setOverrideUnitId] = useState<string | null | undefined>(undefined);
+  const [count, setCount] = useState<number>(20);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [constraint, setConstraint] = useState("");
   const [loading, setLoading] = useState(true);
@@ -352,17 +412,29 @@ function GenerateQuestionsModal({
   const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
   const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
 
+  // Smart "Save to" default, derived during render. If the teacher hasn't
+  // explicitly picked a target yet AND all selected docs share a unit, use
+  // that unit. Otherwise fall back to the override (or null/Uncategorized).
+  const autoUnitId: string | null = (() => {
+    if (selectedDocs.size === 0) return null;
+    const selected = docs.filter((d) => selectedDocs.has(d.id));
+    const shared = selected[0]?.unit_id ?? null;
+    return selected.every((d) => d.unit_id === shared) ? shared : null;
+  })();
+  const unitId = overrideUnitId === undefined ? autoUnitId : overrideUnitId;
+
   const readableSelectedCount = Array.from(selectedDocs).filter((id) => {
     const d = docs.find((x) => x.id === id);
     return d && d.file_type !== "application/pdf";
   }).length;
+  const onlyPdfsSelected = selectedDocs.size > 0 && readableSelectedCount === 0;
 
   const submit = async () => {
     if (count < 1 || count > 50) {
-      setError("Count must be between 1 and 50");
+      setError("Pick a quantity");
       return;
     }
-    if (selectedDocs.size > 0 && readableSelectedCount === 0) {
+    if (onlyPdfsSelected) {
       setError(
         "Selected documents are all PDFs (skipped). Pick at least one image, or unselect all to generate from the unit name only.",
       );
@@ -373,7 +445,7 @@ function GenerateQuestionsModal({
     try {
       const job = await teacher.generateBank(courseId, {
         count,
-        unit_id: unitId || null,
+        unit_id: unitId,
         document_ids: Array.from(selectedDocs),
         constraint: constraint.trim() || null,
       });
@@ -384,108 +456,144 @@ function GenerateQuestionsModal({
     }
   };
 
+  // Build all the doc-display groups upfront. Each group is a unit (or
+  // "Uncategorized") with its docs. Subfolders are flattened with a
+  // breadcrumb in the header.
+  const docGroups = (() => {
+    const groups: { id: string; label: string; docs: TeacherDocument[] }[] = [];
+    const uncategorized = docsIn(null);
+    if (uncategorized.length > 0) {
+      groups.push({ id: "uncategorized", label: "Uncategorized", docs: uncategorized });
+    }
+    for (const top of topUnits) {
+      const topDocs = docsIn(top.id);
+      if (topDocs.length > 0) {
+        groups.push({ id: top.id, label: top.name, docs: topDocs });
+      }
+      for (const sub of subfoldersOf(top.id)) {
+        const subDocs = docsIn(sub.id);
+        if (subDocs.length > 0) {
+          groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, docs: subDocs });
+        }
+      }
+    }
+    return groups;
+  })();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <form
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[--radius-xl] bg-surface p-6 shadow-xl"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <h2 className="text-lg font-bold text-text-primary">Generate Questions</h2>
-        <p className="mt-1 text-xs text-text-muted">
-          Pick the source materials, how many questions, and any extra instructions
-          (style, difficulty, what to skip — anything in plain English).
-        </p>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border-light px-6 py-3">
+          <h2 className="text-base font-bold text-text-primary">Generate Questions</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
 
-        {loading ? (
-          <p className="mt-4 text-sm text-text-muted">Loading materials…</p>
-        ) : (
-          <div className="mt-4 space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted">
-                Source documents
-              </label>
-              <p className="mt-1 text-[11px] text-text-muted">
-                Pick the materials Claude should read when writing questions. Recommended for
-                grounded, on-curriculum questions — leave empty to generate purely from the
-                unit name. PDFs aren&rsquo;t AI-readable yet.
-              </p>
-              <div className="mt-2 max-h-48 overflow-y-auto rounded-[--radius-md] border border-border-light bg-bg-base p-2">
-                {docs.length === 0 ? (
-                  <p className="px-2 py-1 text-xs text-text-muted">
-                    No materials uploaded yet. Add some in the Materials tab.
-                  </p>
-                ) : (
-                  <ul className="space-y-0.5">
-                    {docsIn(null).map((d) => (
-                      <DocCheckbox
-                        key={d.id}
-                        doc={d}
-                        checked={selectedDocs.has(d.id)}
-                        onToggle={() => toggleDoc(d.id)}
-                      />
-                    ))}
-                    {topUnits.map((u) => (
-                      <li key={u.id}>
-                        <div className="mt-2 px-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                          📁 {u.name}
-                        </div>
-                        {docsIn(u.id).map((d) => (
-                          <DocCheckbox
-                            key={d.id}
-                            doc={d}
-                            checked={selectedDocs.has(d.id)}
-                            onToggle={() => toggleDoc(d.id)}
-                          />
-                        ))}
-                        {subfoldersOf(u.id).map((sf) => (
-                          <div key={sf.id}>
-                            <div className="ml-3 mt-1 px-1 text-[10px] font-semibold text-text-muted">
-                              📂 {sf.name}
-                            </div>
-                            {docsIn(sf.id).map((d) => (
-                              <div key={d.id} className="ml-3">
-                                <DocCheckbox
-                                  doc={d}
-                                  checked={selectedDocs.has(d.id)}
-                                  onToggle={() => toggleDoc(d.id)}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Constraint — the hero */}
+          <label className="block text-sm font-bold text-text-primary">
+            What kind of questions do you want?
+          </label>
+          <textarea
+            value={constraint}
+            onChange={(e) => setConstraint(e.target.value)}
+            rows={4}
+            maxLength={500}
+            autoFocus
+            placeholder='e.g. "Only word problems with friendly numbers, match the textbook style, mostly medium difficulty"'
+            className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+          />
+
+          {/* Source materials — visual grid */}
+          <div className="mt-6">
+            <div className="flex items-baseline justify-between">
+              <label className="text-sm font-bold text-text-primary">Source materials</label>
+              <span className="text-[11px] text-text-muted">
+                optional but recommended
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Pick the materials Claude should read. Without sources, generation falls back to
+              the topic name only. PDFs aren&rsquo;t AI-readable yet.
+            </p>
+
+            {loading ? (
+              <p className="mt-4 text-sm text-text-muted">Loading materials…</p>
+            ) : docGroups.length === 0 ? (
+              <div className="mt-3 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-6 text-center text-xs text-text-muted">
+                No materials uploaded yet. Add some in the Materials tab, or just leave this
+                blank and use instructions only.
               </div>
-              <p className="mt-1 text-[11px] text-text-muted">
-                {selectedDocs.size} selected
-                {selectedDocs.size > 0 && selectedDocs.size !== readableSelectedCount && (
-                  <span className="text-amber-600"> · {readableSelectedCount} AI-readable</span>
-                )}
-              </p>
+            ) : (
+              <div className="mt-3 space-y-4">
+                {docGroups.map((group) => (
+                  <div key={group.id}>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      📁 {group.label}
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {group.docs.map((d) => (
+                        <DocCard
+                          key={d.id}
+                          doc={d}
+                          selected={selectedDocs.has(d.id)}
+                          onToggle={() => toggleDoc(d.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quantity + Save-to footer row */}
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border-light pt-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                How many?
+              </label>
+              <div className="flex gap-1">
+                {QUANTITY_CHIPS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setCount(n)}
+                    className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
+                      count === n
+                        ? "bg-primary text-white"
+                        : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <Field label="How many questions">
-              <input
-                type="number"
-                value={count}
-                onChange={(e) => setCount(Number(e.target.value))}
-                min={1}
-                max={50}
-                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-              />
-            </Field>
-
-            <Field label="Save to">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                Save to
+              </label>
               <select
-                value={unitId}
-                onChange={(e) => setUnitId(e.target.value)}
-                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+                value={unitId ?? ""}
+                onChange={(e) => setOverrideUnitId(e.target.value || null)}
+                className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
               >
                 <option value="">Uncategorized</option>
                 {topUnits.map((u) => (
@@ -501,38 +609,26 @@ function GenerateQuestionsModal({
                   )),
                 )}
               </select>
-            </Field>
-
-            <Field label="Extra instructions (optional)">
-              <textarea
-                value={constraint}
-                onChange={(e) => setConstraint(e.target.value)}
-                rows={3}
-                maxLength={500}
-                placeholder="e.g. only word problems, skip anything with trig, match the textbook style"
-                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-              />
-            </Field>
+            </div>
           </div>
-        )}
 
-        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+          {onlyPdfsSelected && (
+            <p className="mt-3 text-[11px] text-amber-600">
+              Heads up: every selected doc is a PDF, which Claude can&rsquo;t read yet. Pick at
+              least one image or unselect everything.
+            </p>
+          )}
+        </div>
 
-        <div className="mt-6 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-          >
-            Cancel
-          </button>
+        {/* Footer — single primary action */}
+        <div className="flex items-center justify-end border-t border-border-light px-6 py-3">
           <button
             type="submit"
-            disabled={submitting || loading}
+            disabled={submitting || loading || onlyPdfsSelected}
             className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
-            {submitting ? "Starting…" : "Generate"}
+            {submitting ? "Starting…" : "✨ Generate"}
           </button>
         </div>
       </form>
@@ -540,32 +636,44 @@ function GenerateQuestionsModal({
   );
 }
 
-function DocCheckbox({
+function DocCard({
   doc,
-  checked,
+  selected,
   onToggle,
 }: {
   doc: TeacherDocument;
-  checked: boolean;
+  selected: boolean;
   onToggle: () => void;
 }) {
   const isPdf = doc.file_type === "application/pdf";
   return (
-    <label
-      className={`flex cursor-pointer items-center gap-2 rounded-[--radius-sm] px-2 py-1 text-xs ${
-        isPdf ? "opacity-50" : "hover:bg-bg-subtle"
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={isPdf}
+      title={isPdf ? "PDFs are not yet AI-readable" : doc.filename}
+      className={`relative flex items-center gap-2 rounded-[--radius-md] border p-3 text-left text-xs transition-colors ${
+        isPdf
+          ? "cursor-not-allowed border-border-light bg-bg-subtle opacity-50"
+          : selected
+            ? "border-primary bg-primary-bg/40 text-primary"
+            : "border-border-light bg-surface hover:border-primary/40 hover:bg-primary-bg/10"
       }`}
-      title={isPdf ? "PDFs are not yet AI-readable" : undefined}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={isPdf}
-        onChange={onToggle}
-        className="h-3.5 w-3.5"
-      />
-      <span className="truncate text-text-primary">📄 {doc.filename}</span>
-      {isPdf && <span className="ml-auto text-[10px] text-text-muted">PDF (skipped)</span>}
-    </label>
+      <span className="text-base">📄</span>
+      <span className="min-w-0 flex-1 truncate font-semibold text-text-primary">
+        {doc.filename}
+      </span>
+      {selected && !isPdf && (
+        <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
+          ✓
+        </span>
+      )}
+      {isPdf && (
+        <span className="absolute right-1.5 top-1.5 rounded-[--radius-pill] bg-text-muted/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+          skip
+        </span>
+      )}
+    </button>
   );
 }

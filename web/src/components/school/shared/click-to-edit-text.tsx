@@ -39,8 +39,9 @@ export function ClickToEditText({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className={`group ${inline ? "inline" : "block w-full"} cursor-text text-left text-text-primary hover:rounded-[--radius-sm] hover:bg-primary-bg/20 hover:px-1 hover:-mx-1`}
+        className={`group ${inline ? "inline" : "block w-full"} cursor-text rounded-[--radius-sm] text-left text-text-primary decoration-text-muted/30 decoration-dotted underline-offset-4 transition-colors hover:bg-primary-bg/20 hover:underline hover:decoration-primary/40 focus-visible:bg-primary-bg/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
         title="Click to edit"
+        aria-label="Click to edit text"
         disabled={busy}
       >
         <MathText text={value || " "} />
