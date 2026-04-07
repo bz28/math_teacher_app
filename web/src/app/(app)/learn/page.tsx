@@ -1,14 +1,10 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/learn";
-import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { Button, Card } from "@/components/ui";
-import { Textarea } from "@/components/ui/input";
-import { EditProblemTextarea } from "@/components/shared/edit-problem-textarea";
+import { Button } from "@/components/ui";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
@@ -16,15 +12,17 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
 import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
 
-export default function LearnPage() {
+export default function SolvePage() {
   return (
     <Suspense>
-      <LearnPageContent />
+      <SolveContent />
     </Suspense>
   );
 }
 
-function LearnPageContent() {
+const SUBJECTS: Subject[] = ["math", "physics", "chemistry"];
+
+function SolveContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const subject = (searchParams.get("subject") ?? "math") as Subject;
@@ -36,100 +34,95 @@ function LearnPageContent() {
     problemQueue,
     setProblemQueue,
     addToQueue,
-    updateInQueue,
     removeFromQueue,
     startLearnQueue,
     startSession,
     phase,
   } = useSessionStore();
-  const { startMockTest } = useMockTestStore();
-  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } = useEntitlementStore();
+  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } =
+    useEntitlementStore();
   const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
   const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
+  const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
 
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"learn" | "mock-test">("learn");
-  const [editingQueueIndex, setEditingQueueIndex] = useState<number | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [quotaConfirm, setQuotaConfirm] = useState(false);
+  const [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
+  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Mock test config
-  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
-  const [untimed, setUntimed] = useState(true);
-  const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   useEffect(() => {
     setSubject(subject);
     setSectionId(sectionId);
     document.documentElement.setAttribute("data-subject", subject);
     setProblemQueue([]);
-    // Refresh quota counts so remaining is accurate
     fetchEntitlements();
-    return () => { document.documentElement.removeAttribute("data-subject"); };
+    return () => document.documentElement.removeAttribute("data-subject");
   }, [subject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
 
-  const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
+  const isScanning = imagePhase === "select" || imagePhase === "extracting";
+  const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
+  const isLoading = phase === "loading" || starting;
+  const config = SUBJECT_CONFIG[subject];
 
   function handleAddProblem() {
     const trimmed = input.trim();
     if (!trimmed) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
       const msg = problemQueue.length > 0
-        ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
+        ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today.`
         : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
       showUpgrade("create_session", msg);
       return;
     }
     addToQueue(trimmed);
     setInput("");
+    inputRef.current?.focus();
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleAddProblem();
+      if (problemQueue.length > 0) handleAddProblem();
+      else handleSolve();
     }
   }
 
-  const [starting, setStarting] = useState(false);
-  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
-  const [quotaConfirm, setQuotaConfirm] = useState(false);
-  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
-  const isScanning = imagePhase === "select" || imagePhase === "extracting";
-
-  async function handleStart() {
+  async function handleSolve() {
     if (starting) return;
     if (problemQueue.length === 0 && !input.trim()) return;
     if (!isPro && remainingSessions <= 0) {
-      showUpgrade("create_session", `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`);
+      showUpgrade(
+        "create_session",
+        `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`,
+      );
       return;
     }
 
-    const problemCount = problemQueue.length > 0 ? problemQueue.length : 1;
+    const problemCount = problemQueue.length > 0 ? problemQueue.length + (input.trim() ? 1 : 0) : 1;
     if (!isPro && problemCount > 1 && !quotaConfirm) {
       setQuotaConfirm(true);
       return;
     }
     setQuotaConfirm(false);
     setStarting(true);
-    setEditingQueueIndex(null);
 
-    const problems =
-      problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
+    const allProblems =
+      problemQueue.length > 0
+        ? [...problemQueue.map((p) => p.text), ...(input.trim() ? [input.trim()] : [])]
+        : [input.trim()];
     const firstImage = problemQueue.length > 0 ? problemQueue[0].image : undefined;
 
     try {
-      if (mode === "learn") {
-        if (problems.length === 1) {
-          await startSession(problems[0], firstImage);
-        } else {
-          await startLearnQueue(problems);
-        }
-        router.push(`/learn/session?subject=${subject}`);
+      if (allProblems.length === 1) {
+        await startSession(allProblems[0], firstImage);
       } else {
-        const generateCount = examType === "generate_similar" ? problems.length : 0;
-        const timeLimit = untimed ? null : timeLimitMinutes;
-        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, true);
-        router.push(`/mock-test?subject=${subject}`);
+        await startLearnQueue(allProblems);
       }
+      router.push(`/learn/session?subject=${subject}`);
     } catch (err) {
       if (err instanceof EntitlementError) {
         showUpgrade(err.entitlement, err.message);
@@ -138,345 +131,198 @@ function LearnPageContent() {
     }
   }
 
-  const isLoading = phase === "loading";
-  const isLearn = mode === "learn";
-  const canStart = problemQueue.length > 0 || input.trim().length > 0;
+  function pickSubject(s: Subject) {
+    setSubjectMenuOpen(false);
+    if (s === subject) return;
+    router.push(`/learn?subject=${s}`);
+  }
+
+  const solveLabel =
+    totalProblems === 0
+      ? "Solve"
+      : totalProblems === 1
+        ? "Solve"
+        : `Solve ${totalProblems} problems`;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <div className="mb-4 flex items-center justify-between">
+    <div className="mx-auto flex min-h-[calc(100vh-12rem)] max-w-2xl flex-col">
+      {/* Top: subject pill */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="relative">
           <button
-            onClick={() => router.push("/home")}
-            className="flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
+            type="button"
+            onClick={() => setSubjectMenuOpen((o) => !o)}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-md",
+              config?.gradient ?? "from-primary to-primary-light",
+            )}
+            aria-haspopup="listbox"
+            aria-expanded={subjectMenuOpen}
+            aria-label={`Subject: ${config?.name ?? subject}. Click to change.`}
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
+            <span>{config?.icon}</span>
+            <span>{config?.name ?? subject}</span>
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
             </svg>
-            Back
           </button>
-          {SUBJECT_CONFIG[subject] && (
-            <span className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
-              SUBJECT_CONFIG[subject].bg,
-              SUBJECT_CONFIG[subject].color,
-            )}>
-              {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
-            </span>
+          {subjectMenuOpen && (
+            <div
+              className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-[--radius-md] border border-border-light bg-surface shadow-lg"
+              role="listbox"
+            >
+              {SUBJECTS.map((s) => {
+                const sc = SUBJECT_CONFIG[s];
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => pickSubject(s)}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-primary-bg",
+                      s === subject ? "bg-primary-bg text-primary" : "text-text-primary",
+                    )}
+                    role="option"
+                    aria-selected={s === subject}
+                  >
+                    <span>{sc?.icon}</span>
+                    <span>{sc?.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-          {isLearn ? "What do you need help with?" : "Build your exam"}
-        </h1>
-      </motion.div>
-
-      {/* Mode selector — pill toggle */}
-      <div className="relative flex rounded-full border border-border bg-surface p-1">
-        {/* Sliding background indicator */}
-        <motion.div
-          className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-primary"
-          initial={false}
-          animate={{ left: mode === "learn" ? "4px" : "calc(50% + 0px)" }}
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        />
-        {([
-          { id: "learn" as const, label: "Learn" },
-          { id: "mock-test" as const, label: "Mock Test" },
-        ]).map((m) => (
-          <button
-            key={m.id}
-            onClick={() => setMode(m.id)}
-            className={cn(
-              "relative z-10 flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
-              mode === m.id ? "text-white" : "text-text-secondary hover:text-text-primary",
-            )}
-          >
-            {m.label}
-          </button>
-        ))}
       </div>
 
-      {/* Mock test config */}
-      <AnimatePresence initial={false}>
-      {!isLearn && (
-        <motion.div
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="overflow-hidden"
-        >
-        <Card variant="flat">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Questions type — inline pill toggle */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-muted">Questions:</span>
-              <div className="flex rounded-full border border-border bg-surface p-0.5">
-                {([
-                  { id: "use_as_exam" as const, label: "Use mine" },
-                  { id: "generate_similar" as const, label: "Generate similar" },
-                ]).map((opt) => (
-                  <button
-                    key={opt.id}
-                    onClick={() => setExamType(opt.id)}
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                      examType === opt.id
-                        ? "bg-primary text-white"
-                        : "text-text-secondary hover:text-text-primary",
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+      {/* Hero */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
+          What can I help you<br />solve today?
+        </h1>
+      </div>
 
-            {/* Time limit — inline toggle + stepper */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-muted">Time:</span>
-              <div className="flex items-center rounded-full border border-border bg-surface p-0.5">
-                <button
-                  onClick={() => setUntimed(true)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                    untimed ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
-                  )}
-                >
-                  Untimed
-                </button>
-                <button
-                  onClick={() => setUntimed(false)}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                    !untimed ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
-                  )}
-                >
-                  Timed
-                </button>
-              </div>
-              {!untimed && (
-                <div className="flex items-center rounded-full border border-border-light bg-surface">
-                  <button
-                    onClick={() => setTimeLimitMinutes(Math.max(1, timeLimitMinutes - 5))}
-                    disabled={timeLimitMinutes <= 1}
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-primary disabled:opacity-30"
-                  >
-                    -
-                  </button>
-                  <span className="min-w-[40px] text-center text-xs font-semibold text-primary">
-                    {timeLimitMinutes}m
-                  </span>
-                  <button
-                    onClick={() => setTimeLimitMinutes(Math.min(180, timeLimitMinutes + 5))}
-                    disabled={timeLimitMinutes >= 180}
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-primary disabled:opacity-30"
-                  >
-                    +
-                  </button>
-                </div>
-              )}
-            </div>
+      {/* Big snap target — wraps ImageUpload */}
+      <div className="mb-4">
+        <ImageUpload
+          subject={subject}
+          onProblemsExtracted={(problems) => {
+            problems.forEach((p) => addToQueue(p.text, p.image));
+          }}
+          maxProblems={maxQueueSize}
+          currentQueueLength={problemQueue.length}
+          scansRemaining={remainingScans}
+          onScanLimitReached={() =>
+            showUpgrade(
+              "image_scan",
+              `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`,
+            )
+          }
+          onExtractComplete={fetchEntitlements}
+          onPhaseChange={setImagePhase}
+        />
+      </div>
 
-          </div>
-        </Card>
-        </motion.div>
-      )}
-      </AnimatePresence>
-
-      {/* Add problems — image upload + text input */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Image upload */}
-        <Card variant="flat" className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-            Upload a photo
-          </p>
-          <ImageUpload
-            subject={subject}
-            onProblemsExtracted={(problems) => {
-              problems.forEach((p) => addToQueue(p.text, p.image));
-            }}
-            maxProblems={maxQueueSize}
-            currentQueueLength={problemQueue.length}
-            scansRemaining={remainingScans}
-            onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
-            onExtractComplete={fetchEntitlements}
-            onPhaseChange={setImagePhase}
-          />
-        </Card>
-
-        {/* Text input */}
-        <Card variant="flat" className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-            Or type a problem
-          </p>
-          <Textarea
-            placeholder={isScanning ? "Finish scanning first..." : "Enter your problem here... (Shift+Enter for new line)"}
+      {/* Inline text input */}
+      <div className="mb-3">
+        <div className="flex items-stretch gap-2 rounded-[--radius-lg] border-2 border-border bg-surface focus-within:border-primary">
+          <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            placeholder={isScanning ? "Finish scanning first…" : "…or type a problem here"}
             disabled={isScanning}
-            className="min-h-[80px]"
+            rows={1}
+            className="flex-1 resize-none bg-transparent px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
+            aria-label="Type a math problem"
           />
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleAddProblem}
-            disabled={isScanning || !input.trim() || problemQueue.length >= maxQueueSize}
-            className="w-full"
-          >
-            Add to Queue
-          </Button>
-        </Card>
-      </div>
-
-      {/* Start button when queue is empty but input has text */}
-      {problemQueue.length === 0 && input.trim() && (
-        <Button
-          gradient
-          onClick={handleStart}
-          loading={isLoading || starting}
-          className="w-full py-3 text-base"
-        >
-          {isLearn ? "Start Learning" : "Start Exam"}
-        </Button>
-      )}
-
-      {/* Problem queue */}
-      {problemQueue.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text-secondary">
-              Problem Queue
-            </h3>
-            <span className="text-xs font-medium text-text-muted">
-              {problemQueue.length}/10
-            </span>
-          </div>
-          {problemQueue.map((item, i) => {
-            const isEditing = editingQueueIndex === i;
-            return (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 * i }}
-                className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
-              >
-                <div className="flex items-start gap-3 p-4">
-                  <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
-                    {i + 1}
-                  </span>
-                  {isEditing ? (
-                    <div className="flex-1 min-w-0">
-                      <EditProblemTextarea
-                        value={item.text}
-                        onChange={(text) => updateInQueue(i, text)}
-                        onDone={() => setEditingQueueIndex(null)}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium leading-relaxed text-text-primary">
-                        <MathText text={item.text} />
-                      </div>
-                      {item.image && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={`data:image/jpeg;base64,${item.image}`}
-                          alt=""
-                          className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
-                        />
-                      )}
-                    </div>
-                  )}
-                  <div className="flex flex-shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingQueueIndex(isEditing ? null : i)}
-                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-primary-bg hover:text-primary"
-                      aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
-                    >
-                      {isEditing ? (
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      ) : (
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Adjust the editing index when deleting shifts indices.
-                        // - Deleting the edited row: close the editor.
-                        // - Deleting a row BEFORE the edited row: shift index down by 1.
-                        // - Deleting a row AFTER the edited row: no change.
-                        if (editingQueueIndex !== null) {
-                          if (editingQueueIndex === i) {
-                            setEditingQueueIndex(null);
-                          } else if (editingQueueIndex > i) {
-                            setEditingQueueIndex(editingQueueIndex - 1);
-                          }
-                        }
-                        removeFromQueue(i);
-                      }}
-                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error"
-                      aria-label="Remove problem"
-                    >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-
-          {/* Start button — full width */}
-          {quotaConfirm ? (
-            <div className="space-y-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg p-4">
-              <p className="text-sm font-semibold text-warning-dark">
-                This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
-              </p>
-              <div className="flex gap-2">
-                <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
-                  Continue
-                </Button>
-                <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              gradient
-              onClick={handleStart}
-              loading={isLoading || starting}
-              disabled={!canStart}
-              className="w-full py-3 text-base"
+          {input.trim() && problemQueue.length < maxQueueSize && (
+            <button
+              type="button"
+              onClick={handleAddProblem}
+              className="m-2 flex h-8 w-8 flex-shrink-0 items-center justify-center self-end rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark"
+              aria-label="Add to queue"
             >
-              {isLearn
-                ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
-                : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
-            </Button>
-          )}
-          {!isPro && remainingSessions < Infinity && !quotaConfirm && (
-            <p className="text-center text-xs text-text-muted">
-              {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems remaining today
-            </p>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
           )}
         </div>
+      </div>
+
+      {/* Inline queue chips */}
+      {problemQueue.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">
+            {problemQueue.length} queued
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {problemQueue.map((item, i) => (
+              <div
+                key={i}
+                className="flex flex-shrink-0 items-center gap-2 rounded-full bg-primary-bg px-3 py-1.5 text-xs font-semibold text-primary"
+              >
+                <span className="max-w-[180px] truncate">
+                  <MathText text={item.text} />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeFromQueue(i)}
+                  aria-label={`Remove problem ${i + 1}`}
+                  className="rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
+
+      {/* Quota confirm inline */}
+      {quotaConfirm && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[--radius-md] border-l-4 border-warning-dark bg-warning-bg p-3">
+          <p className="flex-1 text-sm text-text-primary">
+            This will use {totalProblems} of your {remainingSessions} remaining problems today.
+          </p>
+          <button
+            type="button"
+            onClick={() => setQuotaConfirm(false)}
+            className="text-xs font-semibold text-text-secondary hover:text-text-primary"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Spacer pushes solve button to bottom */}
+      <div className="flex-1" />
+
+      {/* Sticky-feel solve button */}
+      <div className="sticky bottom-20 mt-6 -mx-4 border-t border-border-light bg-background/95 px-4 py-3 backdrop-blur md:bottom-0 md:-mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0">
+        <Button
+          gradient
+          onClick={handleSolve}
+          loading={isLoading}
+          disabled={totalProblems === 0}
+          className="w-full py-3 text-base"
+          aria-label={solveLabel}
+        >
+          {solveLabel}
+        </Button>
+        {!isPro && remainingSessions < Infinity && (
+          <p className="mt-2 text-center text-xs text-text-muted">
+            {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems left today
+          </p>
+        )}
+      </div>
+
       {UpgradeModal}
     </div>
   );

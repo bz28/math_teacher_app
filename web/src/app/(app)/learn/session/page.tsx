@@ -47,6 +47,7 @@ export default function LearnSessionPage() {
 
   const { fire: fireConfetti } = useConfetti();
   const [input, setInput] = useState("");
+  const [askMode, setAskMode] = useState(false);
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
@@ -172,60 +173,45 @@ export default function LearnSessionPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      {/* Problem header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-text-muted">Problem</p>
-            <div className="mt-1 text-lg font-semibold text-text-primary">
-              <MathText text={session.problem} />
-            </div>
-            {sessionImage && (
-              <details className="mt-3" open>
-                <summary className="cursor-pointer text-xs font-semibold text-text-muted hover:text-text-secondary">
-                  Original photo
-                </summary>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`data:image/jpeg;base64,${sessionImage}`}
-                  alt="Problem"
-                  className="mt-2 max-h-80 rounded-[--radius-md] border border-border object-contain cursor-pointer"
-                  onClick={(e) => {
-                    const img = e.currentTarget;
-                    if (img.classList.contains("max-h-80")) {
-                      img.classList.remove("max-h-80");
-                      img.classList.add("max-h-[80vh]");
-                    } else {
-                      img.classList.remove("max-h-[80vh]");
-                      img.classList.add("max-h-80");
-                    }
-                  }}
-                />
-              </details>
-            )}
-          </div>
-          {learnQueue && (
-            <Badge variant="info">
-              {learnQueue.currentIndex + 1} of {learnQueue.problems.length}
-            </Badge>
+    <div className="mx-auto max-w-3xl pb-32">
+      {/* Slim header — problem pill + step dots */}
+      <div className="mb-6 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.push("/learn")}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-text-secondary hover:bg-primary-bg hover:text-primary"
+          aria-label="Back to Solve"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-primary-bg px-4 py-2 text-xs font-semibold text-primary">
+          <span className="min-w-0 flex-1 truncate">
+            <MathText text={session.problem} />
+          </span>
+          {sessionImage && (
+            <svg className="h-3.5 w-3.5 flex-shrink-0 text-primary/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
           )}
         </div>
-
-        {/* Progress bar */}
-        <div className="mt-4 h-2 w-full rounded-full bg-border-light overflow-hidden">
-          <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-            initial={{ width: 0 }}
-            animate={{
-              width: `${((isCompleted ? totalSteps : stepIndex) / totalSteps) * 100}%`,
-            }}
-            transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          />
+        <div className="flex items-center gap-1">
+          {Array.from({ length: totalSteps }).map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1.5 rounded-full transition-all",
+                i < stepIndex && "w-1.5 bg-success",
+                i === stepIndex && "w-4 bg-primary",
+                i > stepIndex && "w-1.5 bg-border",
+              )}
+            />
+          ))}
         </div>
-        <p className="mt-1 text-xs text-text-muted">
-          Step {currentStep} of {totalSteps}
-        </p>
+        {learnQueue && (
+          <Badge variant="info">
+            {learnQueue.currentIndex + 1}/{learnQueue.problems.length}
+          </Badge>
+        )}
       </div>
 
       {/* ── Completed steps timeline ── */}
@@ -468,52 +454,84 @@ export default function LearnSessionPage() {
             <TypingIndicator />
           )}
 
-          {/* ── Chat input + I Understand / Ask button ── */}
-          {!isCompleted && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-text-muted">Have a question about this step?</p>
-                {!isPro && remainingChats < Infinity && (
-                  <p className="text-xs text-text-muted">{remainingChats} chats remaining</p>
-                )}
-              </div>
-              <div className="flex gap-2">
+        </div>
+      )}
+
+      {/* Sticky bottom action bar — only when actively working a step */}
+      {!isCompleted && session.status !== "completed" && (
+        <div className="fixed bottom-16 left-0 right-0 z-30 border-t border-border-light bg-surface/95 backdrop-blur md:bottom-0">
+          <div className="mx-auto max-w-3xl px-4 py-3">
+            {askMode ? (
+              <div className="flex items-center gap-2 rounded-full border-2 border-primary bg-input-bg px-4 py-1">
                 <input
-                  placeholder="Ask a question..."
+                  autoFocus
+                  placeholder="Ask a question about this step…"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      if (input.trim()) handleAsk();
+                      if (input.trim()) {
+                        handleAsk();
+                        setAskMode(false);
+                      } else setAskMode(false);
+                    } else if (e.key === "Escape") {
+                      setAskMode(false);
+                      setInput("");
                     }
                   }}
                   disabled={isThinking}
-                  className="flex-1 rounded-[--radius-md] border border-border bg-input-bg px-4 py-2.5 text-sm placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                  className="flex-1 bg-transparent py-2 text-sm placeholder:text-text-muted focus:outline-none disabled:opacity-50"
+                  aria-label="Ask a question"
                 />
-                {input.trim() ? (
-                  <Button
-                    size="sm"
-                    onClick={handleAsk}
-                    loading={isThinking}
-                  >
-                    Ask
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={advanceStep}
-                    loading={isThinking}
-                  >
-                    I Understand
-                  </Button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => { setAskMode(false); setInput(""); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-border-light"
+                  aria-label="Cancel question"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { if (input.trim()) { handleAsk(); setAskMode(false); } }}
+                  disabled={!input.trim() || isThinking}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark disabled:opacity-40"
+                  aria-label="Send question"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
+                </button>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="flex gap-3">
+                <Button
+                  gradient
+                  onClick={advanceStep}
+                  loading={isThinking}
+                  className="flex-[2] py-3"
+                  aria-label="I get it, next step"
+                >
+                  I get it →
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setAskMode(true)}
+                  className="flex-1 py-3"
+                  aria-label="Ask a question about this step"
+                >
+                  Ask
+                </Button>
+              </div>
+            )}
+            {askMode && !isPro && remainingChats < Infinity && (
+              <p className="mt-1 text-center text-xs text-text-muted">
+                {remainingChats} chats left today
+              </p>
+            )}
+          </div>
         </div>
       )}
+
       {UpgradeModal}
     </div>
   );
