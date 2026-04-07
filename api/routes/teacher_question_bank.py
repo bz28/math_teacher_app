@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
@@ -543,6 +544,11 @@ async def accept_chat_proposal(
         ):
             m["superseded"] = True
     item.chat_messages = messages
+    # SQLAlchemy doesn't see in-place mutations of dicts inside a JSON
+    # column — and even the outer-list reassignment deep-equals the old
+    # value because the inner dicts are the same references. flag_modified
+    # forces the column to be marked dirty so the commit actually persists.
+    flag_modified(item, "chat_messages")
     item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item, await _used_in_for(db, item))
@@ -569,6 +575,7 @@ async def discard_chat_proposal(
 
     msg["discarded"] = True
     item.chat_messages = messages
+    flag_modified(item, "chat_messages")
     item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item, await _used_in_for(db, item))
