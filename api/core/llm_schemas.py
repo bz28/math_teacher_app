@@ -197,13 +197,23 @@ GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
                 "items": {
                     "type": "object",
                     "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": (
+                                "Short 3-7 word concept label that captures what "
+                                "this question is about, in plain English. e.g. "
+                                "'Basketball arc — find time at 24 ft', 'Vertex "
+                                "form of 2x² − 8x + 5', 'Factoring trinomials'. "
+                                "No LaTeX. Max 80 chars."
+                            ),
+                        },
                         "text": {"type": "string", "description": "The question text."},
                         "difficulty": {
                             "type": "string",
                             "enum": ["easy", "medium", "hard"],
                         },
                     },
-                    "required": ["text", "difficulty"],
+                    "required": ["title", "text", "difficulty"],
                     "additionalProperties": False,
                 },
             },
@@ -284,6 +294,13 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
     "input_schema": {
         "type": "object",
         "properties": {
+            "title": {
+                "type": "string",
+                "description": (
+                    "Short 3-7 word concept label that captures what this "
+                    "question is about, in plain English. No LaTeX. Max 80 chars."
+                ),
+            },
             "question": {
                 "type": "string",
                 "description": "The full question text. Use LaTeX with $ delimiters for math.",
@@ -309,7 +326,7 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
                 ),
             },
         },
-        "required": ["question", "solution_steps", "final_answer"],
+        "required": ["title", "question", "solution_steps", "final_answer"],
         "additionalProperties": False,
     },
 }

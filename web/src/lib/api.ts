@@ -819,6 +819,7 @@ export const teacher = {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/generation-jobs/${jobId}`);
   },
   updateBankItem(itemId: string, data: {
+    title?: string;
     question?: string;
     solution_steps?: { title: string; description: string }[];
     final_answer?: string;
@@ -839,6 +840,12 @@ export const teacher = {
   },
   rejectBankItem(itemId: string) {
     return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/reject`, { method: "POST" });
+  },
+  generateSimilarBank(itemId: string, data: { count: number; constraint?: string | null }) {
+    return apiFetch<BankJob>(`/teacher/question-bank/${itemId}/generate-similar`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   },
   regenerateBankItem(itemId: string, instructions?: string) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/regenerate`, {
@@ -894,6 +901,7 @@ export interface BankItem {
   id: string;
   course_id: string;
   unit_id: string | null;
+  title: string;
   question: string;
   solution_steps: { title: string; description: string }[] | null;
   final_answer: string | null;
@@ -929,6 +937,9 @@ export interface BankJob {
   constraint: string | null;
   produced_count: number;
   error_message: string | null;
+  // Set when this is a "generate similar" job — children inherit
+  // this as their parent_question_id, building the variation tree.
+  parent_question_id: string | null;
   created_at: string;
   updated_at: string;
 }

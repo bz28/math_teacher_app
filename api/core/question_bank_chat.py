@@ -246,10 +246,27 @@ async def chat_with_bank_item(
     if proposal:
         ai_msg["proposal"] = proposal
 
+    # Single-pending invariant: a new reply supersedes any earlier
+    # unresolved proposals. Without this, discarding the most recent
+    # proposal would let a stale older one bubble back as "pending"
+    # and the teacher would think the same suggestion came back.
+    superseded_history = [
+        {**m, "superseded": True}
+        if (
+            m.get("role") == "ai"
+            and m.get("proposal")
+            and not m.get("accepted")
+            and not m.get("discarded")
+            and not m.get("superseded")
+        )
+        else m
+        for m in pending_history
+    ]
+
     # Atomic persist: both the teacher message AND the AI reply land in
     # the same commit. If Claude failed above, neither was persisted, so
     # the frontend can re-submit the original draft cleanly.
-    item.chat_messages = [*pending_history, ai_msg]
+    item.chat_messages = [*superseded_history, ai_msg]
     item.updated_at = datetime.now(UTC)
     await db.commit()
 

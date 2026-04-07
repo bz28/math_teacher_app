@@ -108,6 +108,29 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
     )
 
+    # If this is a "generate similar" job, fetch the seed question and
+    # weave it into the constraint so Claude produces variations of it.
+    constraint_text = job.constraint
+    if job.parent_question_id:
+        parent = (await db.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
+        )).scalar_one_or_none()
+        if not parent:
+            raise RuntimeError(
+                "Parent question was deleted before its variations could be generated"
+            )
+        seed_block = (
+            "Generate questions that are SIMILAR TO but DIFFERENT FROM "
+            "this reference question. Match the same topic, difficulty, "
+            "and pedagogical style, but use different numbers, contexts, "
+            "or framing so each variation is its own problem.\n\n"
+            f"Reference question:\n{parent.question}"
+        )
+        constraint_text = (
+            f"{seed_block}\n\nAdditional constraint: {job.constraint}"
+            if job.constraint else seed_block
+        )
+
     # 1. Generate question texts. The bank flow doesn't use a structured
     # difficulty field — teachers describe what they want in the natural-
     # language constraint instead. The legacy job.difficulty column is
@@ -119,7 +142,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         subject=course.subject,
         user_id=str(job.created_by_id),
         images=images or None,
-        extra_instructions=job.constraint,
+        extra_instructions=constraint_text,
     )
 
     if not question_dicts:
@@ -143,6 +166,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
+            title=q.get("title") or None,
             question=q["text"],
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer"),
@@ -154,6 +178,11 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             source_doc_ids=source_doc_id_strs,
             generation_prompt=job.constraint,
             created_by_id=job.created_by_id,
+            parent_question_id=job.parent_question_id,
+            # Children of a "make similar" job are practice variations.
+            # Bulk-generate jobs leave parent_question_id null and fall
+            # back to the model default of "generated".
+            source="practice" if job.parent_question_id else "generated",
         )
         db.add(item)
         if idx % _PROGRESS_BATCH == 0:
@@ -273,6 +302,7 @@ async def regenerate_one(
     except Exception as e:
         raise RuntimeError(f"AI revision failed: {e}") from e
 
+    new_title = result.get("title")
     new_question = result.get("question")
     new_steps = result.get("solution_steps")
     new_answer = result.get("final_answer")
@@ -280,6 +310,8 @@ async def regenerate_one(
         raise RuntimeError("AI revision returned no question text")
 
     snapshot_history(item)
+    if new_title:
+        item.title = str(new_title)[:120]
     item.question = str(new_question)
     item.solution_steps = new_steps if isinstance(new_steps, list) else None
     item.final_answer = str(new_answer) if new_answer else None

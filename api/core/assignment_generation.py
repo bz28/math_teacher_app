@@ -123,6 +123,7 @@ async def generate_questions(
             if not isinstance(q, dict) or "text" not in q:
                 continue
             normalized.append({
+                "title": str(q.get("title") or "")[:120],
                 "text": str(q["text"]),
                 "difficulty": str(q.get("difficulty", difficulty)),
             })

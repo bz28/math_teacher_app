@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
@@ -67,6 +68,7 @@ class GenerateRequest(BaseModel):
 
 
 class UpdateBankItemRequest(BaseModel):
+    title: str | None = None
     question: str | None = None
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
@@ -77,6 +79,18 @@ class UpdateBankItemRequest(BaseModel):
 
 class RegenerateRequest(BaseModel):
     instructions: str | None = None
+
+
+class GenerateSimilarRequest(BaseModel):
+    count: int
+    constraint: str | None = None
+
+    @field_validator("count")
+    @classmethod
+    def _validate_count(cls, v: int) -> int:
+        if v < 1 or v > 20:
+            raise ValueError("count must be between 1 and 20")
+        return v
 
 
 class ChatMessageRequest(BaseModel):
@@ -121,6 +135,7 @@ def _serialize_item(
         "id": str(item.id),
         "course_id": str(item.course_id),
         "unit_id": str(item.unit_id) if item.unit_id else None,
+        "title": item.title,
         "question": item.question,
         "solution_steps": item.solution_steps,
         "final_answer": item.final_answer,
@@ -151,6 +166,7 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
         "constraint": job.constraint,
         "produced_count": job.produced_count,
         "error_message": job.error_message,
+        "parent_question_id": str(job.parent_question_id) if job.parent_question_id else None,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
     }
@@ -286,6 +302,11 @@ async def update_bank_item(
         _ensure_unlocked(item)
         snapshot_history(item)
 
+    if body.title is not None:
+        t = body.title.strip()[:120]
+        if not t:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title cannot be empty")
+        item.title = t
     if body.question is not None:
         q = body.question.strip()
         if not q:
@@ -304,6 +325,11 @@ async def update_bank_item(
     elif body.unit_id is not None:
         item.unit_id = body.unit_id
 
+    # Pre-set updated_at so SQLAlchemy doesn't need to lazy-fetch the
+    # server-default value after commit — that lazy fetch trips the
+    # MissingGreenlet error in async sessions. Pattern matches the
+    # chat endpoints which already do this.
+    item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item, await _used_in_for(db, item))
 
@@ -385,6 +411,47 @@ async def regenerate_bank_item(
             detail=f"Regeneration failed: {e}",
         ) from e
     return _serialize_item(item, await _used_in_for(db, item))
+
+
+@router.post("/question-bank/{item_id}/generate-similar", status_code=status.HTTP_202_ACCEPTED)
+async def generate_similar_bank_questions(
+    item_id: uuid.UUID,
+    body: GenerateSimilarRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Schedule a generation job seeded from an existing approved bank
+    item. Children inherit unit + source docs from the parent and have
+    parent_question_id set, building the variation tree."""
+    parent = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    if parent.parent_question_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Can only generate similar from a root question, not a variation",
+        )
+    if parent.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Approve the question before generating similar variations",
+        )
+
+    job = QuestionBankGenerationJob(
+        course_id=parent.course_id,
+        unit_id=parent.unit_id,
+        created_by_id=current_user.user_id,
+        status="queued",
+        requested_count=body.count,
+        difficulty="mixed",
+        constraint=body.constraint,
+        source_doc_ids=parent.source_doc_ids,
+        parent_question_id=parent.id,
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    schedule_generation_job(job.id)
+    return _serialize_job(job)
 
 
 @router.delete("/question-bank/{item_id}")
@@ -482,6 +549,11 @@ async def accept_chat_proposal(
         ):
             m["superseded"] = True
     item.chat_messages = messages
+    # SQLAlchemy doesn't see in-place mutations of dicts inside a JSON
+    # column — and even the outer-list reassignment deep-equals the old
+    # value because the inner dicts are the same references. flag_modified
+    # forces the column to be marked dirty so the commit actually persists.
+    flag_modified(item, "chat_messages")
     item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item, await _used_in_for(db, item))
@@ -508,6 +580,7 @@ async def discard_chat_proposal(
 
     msg["discarded"] = True
     item.chat_messages = messages
+    flag_modified(item, "chat_messages")
     item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item, await _used_in_for(db, item))

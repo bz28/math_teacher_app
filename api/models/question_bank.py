@@ -25,6 +25,9 @@ class QuestionBankItem(Base):
         UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True, index=True,
     )
 
+    # Short concept label shown as the primary scan unit in the bank
+    # list. AI-generated alongside the question; teacher-editable.
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     solution_steps: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -91,6 +94,13 @@ class QuestionBankGenerationJob(Base):
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="mixed")
     constraint: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_doc_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # Set when this is a "generate similar" job — children inherit this
+    # value as their parent_question_id, building the variation tree.
+    parent_question_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     produced_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

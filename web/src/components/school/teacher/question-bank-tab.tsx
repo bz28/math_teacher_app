@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
   type BankCounts,
@@ -34,6 +33,62 @@ import { STATUS_FILTERS } from "./bank-styles";
 // is in place so when variations land they slot in automatically.
 type TreeNode = { item: BankItem; children: BankItem[] };
 
+// Concept emoji classifier — keyword-based, no AI cost. Order matters:
+// more specific sport names check first so "baseball" doesn't fall
+// through to a generic ball bucket. Word boundaries (\b) keep
+// "basketball" from matching inside "basket-shaped" or vice versa.
+function conceptEmoji(title: string, question: string): string {
+  const text = (title + " " + question).toLowerCase();
+
+  // Sports — each gets its own emoji, checked specific-to-general
+  if (/\bbaseball\b/.test(text)) return "⚾";
+  if (/\bbasketball\b/.test(text)) return "🏀";
+  if (/\bsoccer\b|\bfootball\b/.test(text)) return "⚽";
+  if (/\btennis\b/.test(text)) return "🎾";
+  if (/\bhockey\b|\bpuck\b/.test(text)) return "🏒";
+  if (/\bfrisbee\b/.test(text)) return "🥏";
+
+  // Physics-flavored launches
+  if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
+  if (/\bball\b|\bthrow(n|ing)?\b|\bkick(ed|ing)?\b/.test(text)) return "🏐";
+
+  // Geometry / measurement
+  if (/\b(triangle|polygon|angle|circle|square|rectangle|geometry|perimeter|area|volume)\b/.test(text)) return "📐";
+
+  // Graphs / functions
+  if (/\b(graph|plot|parabola|curve|axis|coordinate|sketch|function)\b/.test(text)) return "📈";
+
+  // Rates / kinematics
+  if (/\b(distance|speed|velocity|rate|hour|minute|km\/h|mph|seconds?)\b/.test(text)) return "⏱️";
+
+  // Statistics / probability
+  if (/\b(probability|statistic|mean|median|mode|distribution|sample|standard deviation)\b/.test(text)) return "📊";
+
+  // Money
+  if (/\b(money|cost|price|profit|revenue|interest|loan|dollar|salary)\b/.test(text)) return "💰";
+
+  // Real-world catch-all
+  if (/\b(word problem|story|real|scenario|context|practical)\b/.test(text)) return "🌍";
+
+  return "📝";
+}
+
+// Difficulty chip color/label.
+const DIFFICULTY_STYLE: Record<string, { label: string; cls: string }> = {
+  easy: {
+    label: "easy",
+    cls: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300",
+  },
+  medium: {
+    label: "medium",
+    cls: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
+  },
+  hard: {
+    label: "hard",
+    cls: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",
+  },
+};
+
 function buildTree(items: BankItem[]): TreeNode[] {
   const byId = new Map(items.map((i) => [i.id, i]));
   const childrenByParent = new Map<string, BankItem[]>();
@@ -51,9 +106,18 @@ function buildTree(items: BankItem[]): TreeNode[] {
     .map((item) => ({ item, children: childrenByParent.get(item.id) ?? [] }));
 }
 
-const POLL_LIMIT_MS = 5 * 60 * 1000;
-
-export function QuestionBankTab({ courseId }: { courseId: string }) {
+export function QuestionBankTab({
+  courseId,
+  activeJob,
+  setActiveJob,
+}: {
+  courseId: string;
+  // Lifted to the course page so the active job survives tab switches.
+  // Polling + auto-clear also live there. This component just consumes
+  // the state and triggers updates.
+  activeJob: BankJob | null;
+  setActiveJob: (job: BankJob | null) => void;
+}) {
   const [items, setItems] = useState<BankItem[]>([]);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [counts, setCounts] = useState<BankCounts>({
@@ -74,10 +138,36 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
-  const [activeJob, setActiveJob] = useState<BankJob | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
+  // When a make-similar review queue completes, we want to drop the
+  // teacher back at the parent question. We stash the full BankItem
+  // (not just an id) so restoration works regardless of which status
+  // tab the teacher is currently on — the bank list might not contain
+  // the parent if it's in a different status bucket.
+  const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
+
+  // Open a focused review queue containing only the just-generated
+  // pending children of `parent`. Replaces the global pending pool
+  // with the variations the teacher just made.
+  const openVariationReview = async (parent: BankItem) => {
+    try {
+      const res = await teacher.bank(courseId, { status: "pending" });
+      const children = res.items.filter((i) => i.parent_question_id === parent.id);
+      if (children.length === 0) return;
+      setActiveJob(null); // dismiss the strip — its job is done
+      setOpenItemId(null); // close the single-mode workshop
+      setReviewQueueParent(parent);
+      setReviewQueue(children);
+    } catch (e) {
+      // Close the modal so the bank tab's error message is visible —
+      // otherwise the workshop modal keeps the green CTA on screen
+      // hiding the error and the teacher thinks nothing happened.
+      setOpenItemId(null);
+      setError(e instanceof Error ? e.message : "Failed to load variations");
+    }
+  };
 
   // Open review mode with all currently-pending items in the bank as the
   // frozen queue. Hits a fresh fetch so we don't accidentally review stale
@@ -137,43 +227,14 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     }
   }, [loading, counts.pending, counts.approved, statusFilter, defaultedToApproved]);
 
-  // Poll active job until done/failed, then refresh the bank.
-  // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
-  // created but before the asyncio task ran, the job stays "queued" forever.
-  useEffect(() => {
-    if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
-    const startedAt = Date.now();
-    const jobId = activeJob.id;
-    const interval = setInterval(async () => {
-      if (Date.now() - startedAt > POLL_LIMIT_MS) {
-        setActiveJob((prev) =>
-          prev && prev.id === jobId
-            ? { ...prev, status: "failed", error_message: "Generation timed out — try again or refresh the page." }
-            : prev,
-        );
-        return;
-      }
-      try {
-        const updated = await teacher.bankJob(courseId, jobId);
-        setActiveJob((prev) => (prev && prev.id === jobId ? updated : prev));
-        if (updated.status === "done") {
-          reload();
-        }
-      } catch {
-        // keep polling, transient errors are fine
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJob?.id, activeJob?.status, courseId]);
-
-  // Auto-clear a finished job banner after a few seconds
+  // Reload the bank list when the active job (lifted to the page,
+  // polled there) flips to done — pulls in the freshly generated rows.
   useEffect(() => {
     if (activeJob?.status === "done") {
-      const t = setTimeout(() => setActiveJob(null), 4000);
-      return () => clearTimeout(t);
+      reload();
     }
-  }, [activeJob?.status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.status, activeJob?.id]);
 
   return (
     <div>
@@ -204,8 +265,9 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
         </div>
       </div>
 
-      {/* Active job banner */}
-      {activeJob && (
+      {/* Active job banner — hidden for make-similar jobs since those
+          have their own in-modal strip with the "Review them" CTA. */}
+      {activeJob && !activeJob.parent_question_id && (
         <div
           className={`mt-4 rounded-[--radius-lg] border p-3 text-sm ${
             activeJob.status === "failed"
@@ -347,13 +409,25 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
       )}
 
       {openItemId && (() => {
-        const openItem = items.find((i) => i.id === openItemId);
+        // Prefer items.find (so the workshop sees fresh data after a
+        // reload), but fall back to the stashed reviewQueueParent so
+        // restoration works even when the parent isn't in the current
+        // status tab's items list.
+        const openItem =
+          items.find((i) => i.id === openItemId) ??
+          (reviewQueueParent?.id === openItemId ? reviewQueueParent : undefined);
         if (!openItem) return null;
         return (
           <WorkshopModal
             item={openItem}
-            onClose={() => setOpenItemId(null)}
+            onClose={() => {
+              setOpenItemId(null);
+              setReviewQueueParent(null);
+            }}
             onChanged={reload}
+            onJobStarted={setActiveJob}
+            activeJob={activeJob}
+            onReviewVariations={openVariationReview}
           />
         );
       })()}
@@ -363,9 +437,20 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           queue={reviewQueue}
           onClose={() => {
             setReviewQueue(null);
+            // If this queue was a focused variation review, drop the
+            // teacher back on the parent question instead of the bare
+            // bank — keeps the mental thread intact. We rely on the
+            // stashed reviewQueueParent (full BankItem) so restoration
+            // works regardless of the current status tab.
+            if (reviewQueueParent) {
+              setOpenItemId(reviewQueueParent.id);
+              // reviewQueueParent stays set so the openItem fallback
+              // can find it; cleared when the modal closes.
+            }
             reload();
           }}
           onChanged={reload}
+          onJobStarted={setActiveJob}
         />
       )}
 
@@ -582,11 +667,11 @@ function BankRowWithChildren({
           <button
             type="button"
             onClick={() => setVariationsOpen((v) => !v)}
-            className="ml-7 mb-1 flex items-center gap-1 text-[10px] font-semibold text-text-muted hover:text-primary"
+            className="ml-7 mb-1 flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:underline dark:text-purple-400"
           >
             <span>{variationsOpen ? "▾" : "▸"}</span>
             <span>
-              {childrenCount} variation{childrenCount === 1 ? "" : "s"}
+              ✨ {childrenCount} practice variation{childrenCount === 1 ? "" : "s"}
               {pendingChildren > 0 && ` · ${pendingChildren} pending`}
             </span>
           </button>
@@ -757,10 +842,16 @@ function BankRow({
           type="button"
           onClick={onOpen}
           className="block w-full text-left text-text-primary hover:text-primary"
-          title="Open question"
+          title={item.question}
         >
-          <div className="truncate">
-            <MathText text={item.question} />
+          <div className="flex items-center gap-2 truncate">
+            <span className="shrink-0" aria-hidden>
+              {conceptEmoji(item.title, item.question)}
+            </span>
+            {item.source === "practice" && (
+              <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
+            )}
+            <span className="truncate font-semibold">{item.title}</span>
           </div>
         </button>
         {/* Mobile: pills + unit label wrap below the question text on
@@ -797,6 +888,14 @@ function BankRow({
             />
           ))}
         </div>
+      )}
+
+      {DIFFICULTY_STYLE[item.difficulty] && (
+        <span
+          className={`hidden shrink-0 rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider sm:inline ${DIFFICULTY_STYLE[item.difficulty].cls}`}
+        >
+          {DIFFICULTY_STYLE[item.difficulty].label}
+        </span>
       )}
 
       {item.locked && (
@@ -978,7 +1077,7 @@ function KebabMenu({
   );
 }
 
-const QUANTITY_CHIPS = [5, 10, 20, 50] as const;
+const QUANTITY_CHIPS = [1, 5, 10, 20, 50] as const;
 
 function GenerateQuestionsModal({
   courseId,
@@ -1196,6 +1295,18 @@ function GenerateQuestionsModal({
                     {n}
                   </button>
                 ))}
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={count}
+                  onChange={(e) => {
+                    const n = Number.parseInt(e.target.value, 10);
+                    if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
+                  }}
+                  aria-label="Custom quantity"
+                  className="w-14 rounded-[--radius-pill] border border-border-light bg-bg-base px-2 py-1 text-center text-xs font-bold text-text-primary focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
               </div>
             </div>
 
