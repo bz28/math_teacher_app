@@ -43,27 +43,19 @@ export function FolderTree({
   const tops = topUnits(units);
 
   return (
-    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3">
-      <button
-        type="button"
-        onClick={() => onSelect(null)}
-        className={`flex w-full items-center gap-2 rounded-[--radius-sm] px-2 py-1.5 text-left text-sm transition-colors ${
-          selected === null
-            ? "bg-primary-bg font-semibold text-primary"
-            : "text-text-secondary hover:bg-bg-subtle"
-        }`}
-      >
-        <FolderIcon className="h-4 w-4 shrink-0" />
-        <span className="flex-1 truncate">Uncategorized</span>
-        <span className="text-xs text-text-muted">({uncategorizedCount})</span>
-      </button>
+    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-sm">
+      <UncategorizedRow
+        active={selected === null}
+        count={uncategorizedCount}
+        onSelect={() => onSelect(null)}
+      />
 
       <div className="my-2 h-px bg-border-light" />
 
       {tops.length === 0 && (
-        <p className="px-2 py-1 text-xs text-text-muted">No units yet.</p>
+        <p className="px-2 py-2 text-xs text-text-muted">No units yet.</p>
       )}
-      <ul className="space-y-0.5">
+      <ul className="space-y-1">
         {tops.map((u) => (
           <li key={u.id}>
             <FolderRow
@@ -80,7 +72,7 @@ export function FolderTree({
               onAddSub={() => onAddSub(u.id)}
             />
             {subfoldersOf(units, u.id).length > 0 && (
-              <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border-light pl-2">
+              <ul className="ml-4 mt-1 space-y-1 border-l border-border-light pl-2">
                 {subfoldersOf(units, u.id).map((sub) => (
                   <li key={sub.id}>
                     <FolderRow
@@ -152,24 +144,38 @@ function FolderRow({
 
   return (
     <div
-      className={`group/row flex items-center gap-1 rounded-[--radius-sm] px-2 py-1.5 transition-colors ${
+      className={`group/row relative flex items-center gap-1 rounded-[--radius-sm] px-2 py-2 transition-colors duration-150 ease-out ${
         selected ? "bg-primary-bg" : "hover:bg-bg-subtle"
       }`}
     >
+      {selected && (
+        <span
+          aria-hidden
+          className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-primary"
+        />
+      )}
       <button
         type="button"
         onClick={onSelect}
-        className={`flex flex-1 items-center gap-2 truncate text-left text-sm ${
+        className={`flex flex-1 items-center gap-2 truncate text-left text-sm transition-colors duration-150 ease-out focus-visible:outline-none ${
           selected ? "font-semibold text-primary" : "text-text-secondary"
         }`}
       >
         {selected && !isSub ? (
-          <FolderOpenIcon className="h-4 w-4 shrink-0" />
+          <FolderOpenIcon
+            className={`h-4 w-4 shrink-0 transition-colors ${
+              selected ? "text-primary" : "text-text-muted"
+            }`}
+          />
         ) : (
-          <FolderIcon className="h-4 w-4 shrink-0" />
+          <FolderIcon
+            className={`h-4 w-4 shrink-0 transition-colors ${
+              selected ? "text-primary" : "text-text-muted"
+            }`}
+          />
         )}
         <span className="truncate">{unit.name}</span>
-        <span className="text-xs text-text-muted">({docCount})</span>
+        <CountPill active={selected} count={docCount} />
       </button>
       <RowMenu
         onRename={onStartRename}
@@ -178,6 +184,56 @@ function FolderRow({
         disabled={busy}
       />
     </div>
+  );
+}
+
+function UncategorizedRow({
+  active,
+  count,
+  onSelect,
+}: {
+  active: boolean;
+  count: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`relative flex w-full items-center gap-2 rounded-[--radius-sm] px-2 py-2 text-left text-sm transition-colors duration-150 ease-out focus-visible:outline-none ${
+        active
+          ? "bg-primary-bg font-semibold text-primary"
+          : "text-text-secondary hover:bg-bg-subtle"
+      }`}
+    >
+      {active && (
+        <span
+          aria-hidden
+          className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-primary"
+        />
+      )}
+      <FolderIcon
+        className={`h-4 w-4 shrink-0 transition-colors ${
+          active ? "text-primary" : "text-text-muted"
+        }`}
+      />
+      <span className="flex-1 truncate">Uncategorized</span>
+      <CountPill active={active} count={count} />
+    </button>
+  );
+}
+
+function CountPill({ active, count }: { active: boolean; count: number }) {
+  return (
+    <span
+      className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums transition-colors duration-150 ease-out ${
+        active
+          ? "bg-primary text-white"
+          : "bg-bg-subtle text-text-muted group-hover/row:bg-surface"
+      }`}
+    >
+      {count}
+    </span>
   );
 }
 
