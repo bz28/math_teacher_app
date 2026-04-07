@@ -7,7 +7,7 @@ The frontend polls the job row for status.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -448,7 +448,7 @@ async def accept_chat_proposal(
         ):
             m["superseded"] = True
     item.chat_messages = messages
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item)
 
@@ -474,7 +474,7 @@ async def discard_chat_proposal(
 
     msg["discarded"] = True
     item.chat_messages = messages
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item)
 
@@ -488,6 +488,6 @@ async def clear_chat(
     """Wipe the chat history for this item. Question/solution unchanged."""
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     item.chat_messages = []
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now(UTC)
     await db.commit()
     return _serialize_item(item)

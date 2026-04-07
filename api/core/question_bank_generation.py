@@ -13,7 +13,7 @@ the time the task is awaited.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 
 # Track in-flight tasks so they aren't garbage-collected mid-flight.
 _inflight: set[asyncio.Task[None]] = set()
+
+# Commit every N persisted questions during bulk generation so the
+# frontend polling banner ticks visibly without N+1 transactions.
+_PROGRESS_BATCH = 5
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
@@ -71,7 +75,7 @@ async def _run_job(job_id: uuid.UUID) -> None:
             logger.exception("Generation job %s failed", job_id)
             job.status = "failed"
             job.error_message = str(e)[:1000]
-            job.updated_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(UTC)
             await db.commit()
 
 
@@ -81,7 +85,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     Status transitions: queued -> running -> done (or failed via _run_job).
     """
     job.status = "running"
-    job.updated_at = datetime.now(timezone.utc)
+    job.updated_at = datetime.now(UTC)
     await db.commit()
 
     # Course context for the prompt
@@ -118,7 +122,8 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
 
     if not question_dicts:
         raise RuntimeError(
-            "The AI didn't return any questions. Try adjusting your instructions or selecting different source documents."
+            "The AI didn't return any questions. Try adjusting your "
+            "instructions or selecting different source documents."
         )
 
     # 2. Solve each question in parallel (capped concurrency inside)
@@ -129,9 +134,8 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     )
 
     # 3. Persist as bank items (status = pending). Commit in batches of
-    # PROGRESS_BATCH so the frontend's polling banner shows real progress
+    # _PROGRESS_BATCH so the frontend's polling banner shows real progress
     # without N+1 transactions on every single question.
-    PROGRESS_BATCH = 5
     source_doc_id_strs = [str(d) for d in doc_ids] if doc_ids else None
     for idx, (q, s) in enumerate(zip(question_dicts, solved), start=1):
         item = QuestionBankItem(
@@ -147,14 +151,14 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             created_by_id=job.created_by_id,
         )
         db.add(item)
-        if idx % PROGRESS_BATCH == 0:
+        if idx % _PROGRESS_BATCH == 0:
             job.produced_count = idx
-            job.updated_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(UTC)
             await db.commit()
 
     job.status = "done"
     job.produced_count = len(question_dicts)
-    job.updated_at = datetime.now(timezone.utc)
+    job.updated_at = datetime.now(UTC)
     await db.commit()
     logger.info("Generation job %s produced %d questions", job.id, len(question_dicts))
 
@@ -276,5 +280,5 @@ async def regenerate_one(
     item.final_answer = str(new_answer) if new_answer else None
     # Status is preserved (approved stays approved). New rows from /generate
     # already start as pending; this only affects already-curated items.
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now(UTC)
     await db.commit()

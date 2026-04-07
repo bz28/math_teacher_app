@@ -58,11 +58,12 @@ class TestStripInternalFields:
         assert "[Teacher discarded this proposal.]" in out[0]["content"]
 
     def test_full_conversation_alternates_roles(self) -> None:
+        proposal = {"question": "...", "solution_steps": None, "final_answer": None}
         msgs = [
             {"role": "teacher", "text": "harder"},
-            {"role": "ai", "text": "Done.", "proposal": {"question": "...", "solution_steps": None, "final_answer": None}, "accepted": True},
+            {"role": "ai", "text": "Done.", "proposal": proposal, "accepted": True},
             {"role": "teacher", "text": "now smaller numbers"},
-            {"role": "ai", "text": "Here you go.", "proposal": {"question": "...", "solution_steps": None, "final_answer": None}},
+            {"role": "ai", "text": "Here you go.", "proposal": proposal},
         ]
         out = _strip_internal_fields(msgs)
         assert [m["role"] for m in out] == ["user", "assistant", "user", "assistant"]

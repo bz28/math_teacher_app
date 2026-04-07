@@ -10,7 +10,7 @@ plans/question-bank-workshop-v2.md
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -146,7 +146,7 @@ async def chat_with_bank_item(
             f"Chat limit reached ({CHAT_HARD_CAP} messages). Clear the chat or start a new question."
         )
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Build the prompt against the future history (existing + the new
     # teacher message), but DON'T persist it yet — if Claude fails we
@@ -241,7 +241,7 @@ async def chat_with_bank_item(
     ai_msg: dict[str, Any] = {
         "role": "ai",
         "text": reply or "(no reply)",
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
     }
     if proposal:
         ai_msg["proposal"] = proposal
@@ -250,7 +250,7 @@ async def chat_with_bank_item(
     # the same commit. If Claude failed above, neither was persisted, so
     # the frontend can re-submit the original draft cleanly.
     item.chat_messages = [*pending_history, ai_msg]
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now(UTC)
     await db.commit()
 
     return ai_msg
