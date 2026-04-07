@@ -10,6 +10,7 @@ import {
   type BankJob,
   type TeacherUnit,
 } from "@/lib/api";
+import { subfoldersOf, topUnits } from "@/lib/units";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { STATUS_BADGE } from "./bank-styles";
@@ -462,20 +463,16 @@ export function WorkshopModal({
                 title="Move to a different unit"
               >
                 <option value="">Uncategorized</option>
-                {units
-                  .filter((u) => u.parent_id === null)
-                  .flatMap((top) => [
-                    <option key={top.id} value={top.id}>
-                      {top.name}
-                    </option>,
-                    ...units
-                      .filter((sub) => sub.parent_id === top.id)
-                      .map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {top.name} / {sub.name}
-                        </option>
-                      )),
-                  ])}
+                {topUnits(units).flatMap((top) => [
+                  <option key={top.id} value={top.id}>
+                    {top.name}
+                  </option>,
+                  ...subfoldersOf(units, top.id).map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {top.name} / {sub.name}
+                    </option>
+                  )),
+                ])}
               </select>
             </label>
             {showUndo && (

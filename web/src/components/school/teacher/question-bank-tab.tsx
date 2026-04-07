@@ -9,17 +9,8 @@ import {
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
-
-// Build a "Unit 5: Quadratics / Practice" label for any unit_id, or
-// "Uncategorized" when null.
-function buildUnitLabel(units: TeacherUnit[], unitId: string | null): string {
-  if (!unitId) return "Uncategorized";
-  const u = units.find((x) => x.id === unitId);
-  if (!u) return "Unknown";
-  if (!u.parent_id) return u.name;
-  const parent = units.find((x) => x.id === u.parent_id);
-  return parent ? `${parent.name} / ${u.name}` : u.name;
-}
+// Aliased to avoid colliding with the `unitLabel` prop on BankRow.
+import { subfoldersOf, topUnits, unitLabel as labelForUnit } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
@@ -475,11 +466,10 @@ function buildUnitGroups(
 ): { id: string; label: string; items: BankItem[] }[] {
   const groups: { id: string; label: string; items: BankItem[] }[] = [];
   const itemsIn = (uid: string | null) => items.filter((i) => i.unit_id === uid);
-  const topUnits = units.filter((u) => u.parent_id === null);
-  for (const top of topUnits) {
+  for (const top of topUnits(units)) {
     const own = itemsIn(top.id);
     if (own.length > 0) groups.push({ id: top.id, label: top.name, items: own });
-    for (const sub of units.filter((u) => u.parent_id === top.id)) {
+    for (const sub of subfoldersOf(units, top.id)) {
       const subItems = itemsIn(sub.id);
       if (subItems.length > 0) {
         groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, items: subItems });
@@ -656,7 +646,7 @@ function BankRowWithChildren({
     <div>
       <BankRow
         item={node.item}
-        unitLabel={buildUnitLabel(units, node.item.unit_id)}
+        unitLabel={labelForUnit(units,node.item.unit_id)}
         showUnit={false}
         onOpen={() => onOpenItem(node.item.id)}
         onOpenHomework={onOpenHomework}
@@ -681,7 +671,7 @@ function BankRowWithChildren({
                 <BankRow
                   key={child.id}
                   item={child}
-                  unitLabel={buildUnitLabel(units, child.unit_id)}
+                  unitLabel={labelForUnit(units,child.unit_id)}
                   showUnit={false}
                   variation
                   onOpen={() => onOpenItem(child.id)}
@@ -766,7 +756,7 @@ function SimpleUnitGroup({
             <BankRow
               key={item.id}
               item={item}
-              unitLabel={buildUnitLabel(units, item.unit_id)}
+              unitLabel={labelForUnit(units,item.unit_id)}
               showUnit={false}
               onOpen={() => onOpenItem(item.id)}
               onOpenHomework={onOpenHomework}
@@ -1120,8 +1110,6 @@ function GenerateQuestionsModal({
     });
   };
 
-  const topUnits = units.filter((u) => u.parent_id === null);
-  const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
   const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
 
   // Smart "Save to" default, derived during render. If the teacher hasn't
@@ -1177,12 +1165,12 @@ function GenerateQuestionsModal({
     if (uncategorized.length > 0) {
       groups.push({ id: "uncategorized", label: "Uncategorized", docs: uncategorized });
     }
-    for (const top of topUnits) {
+    for (const top of topUnits(units)) {
       const topDocs = docsIn(top.id);
       if (topDocs.length > 0) {
         groups.push({ id: top.id, label: top.name, docs: topDocs });
       }
-      for (const sub of subfoldersOf(top.id)) {
+      for (const sub of subfoldersOf(units, top.id)) {
         const subDocs = docsIn(sub.id);
         if (subDocs.length > 0) {
           groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, docs: subDocs });
@@ -1320,13 +1308,13 @@ function GenerateQuestionsModal({
                 className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
               >
                 <option value="">Uncategorized</option>
-                {topUnits.map((u) => (
+                {topUnits(units).map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
                 ))}
-                {topUnits.flatMap((u) =>
-                  subfoldersOf(u.id).map((sf) => (
+                {topUnits(units).flatMap((u) =>
+                  subfoldersOf(units, u.id).map((sf) => (
                     <option key={sf.id} value={sf.id}>
                       {u.name} / {sf.name}
                     </option>

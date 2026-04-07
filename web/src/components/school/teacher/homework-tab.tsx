@@ -8,6 +8,7 @@ import {
   type TeacherAssignment,
   type TeacherUnit,
 } from "@/lib/api";
+import { subfoldersOf, topUnits } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 
@@ -303,8 +304,7 @@ function BankPicker({
 
   // Group items by unit so the picker is visually scannable. Subfolders
   // get their own group with a breadcrumb header.
-  const topUnits = units.filter((u) => u.parent_id === null);
-  const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
+  const tops = topUnits(units);
   const itemsIn = (uid: string | null) => items.filter((i) => i.unit_id === uid);
 
   // Build the visible groups based on the unit filter.
@@ -316,17 +316,17 @@ function BankPicker({
         groups.push({ id: "uncategorized", label: "Uncategorized", items: uncat });
       }
     }
-    for (const top of topUnits) {
+    for (const top of tops) {
       if (unitFilter !== "all" && unitFilter !== top.id) {
         // If the filter is a specific unit, also include its subfolders
-        const isSubfolderOfFilter = subfoldersOf(unitFilter).some((s) => s.id === top.id);
+        const isSubfolderOfFilter = subfoldersOf(units, unitFilter).some((s) => s.id === top.id);
         if (!isSubfolderOfFilter) continue;
       }
       const topItems = itemsIn(top.id);
       if (topItems.length > 0) {
         groups.push({ id: top.id, label: top.name, items: topItems });
       }
-      for (const sub of subfoldersOf(top.id)) {
+      for (const sub of subfoldersOf(units, top.id)) {
         if (unitFilter !== "all" && unitFilter !== top.id && unitFilter !== sub.id) continue;
         const subItems = itemsIn(sub.id);
         if (subItems.length > 0) {
@@ -354,13 +354,13 @@ function BankPicker({
         >
           <option value="all">All units</option>
           <option value="uncategorized">Uncategorized</option>
-          {topUnits.map((u) => (
+          {tops.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
             </option>
           ))}
-          {topUnits.flatMap((u) =>
-            subfoldersOf(u.id).map((sf) => (
+          {tops.flatMap((u) =>
+            subfoldersOf(units, u.id).map((sf) => (
               <option key={sf.id} value={sf.id}>
                 {u.name} / {sf.name}
               </option>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import { subfoldersOf, topUnits } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 
@@ -38,8 +39,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
-  const topUnits = units.filter((u) => u.parent_id === null);
-  const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
+  const tops = topUnits(units);
   const docsIn = (unitId: string | null) => docs.filter((d) => d.unit_id === unitId);
 
   const selectedUnit = selected ? units.find((u) => u.id === selected) ?? null : null;
@@ -87,9 +87,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   // Build a flat label list of every folder destination, used by the move popover
   const destinations = (() => {
     const out: { id: string | null; label: string }[] = [{ id: null, label: "Uncategorized" }];
-    for (const top of topUnits) {
+    for (const top of tops) {
       out.push({ id: top.id, label: top.name });
-      for (const sub of subfoldersOf(top.id)) {
+      for (const sub of subfoldersOf(units, top.id)) {
         out.push({ id: sub.id, label: `${top.name} / ${sub.name}` });
       }
     }
@@ -164,11 +164,11 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
             <div className="my-2 h-px bg-border-light" />
 
-            {topUnits.length === 0 && (
+            {tops.length === 0 && (
               <p className="px-2 py-1 text-xs text-text-muted">No units yet.</p>
             )}
             <ul className="space-y-0.5">
-              {topUnits.map((u) => (
+              {tops.map((u) => (
                 <li key={u.id}>
                   <FolderRow
                     unit={u}
@@ -186,9 +186,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
                     onCancelDelete={() => setConfirmingDeleteUnit(null)}
                     onAddSub={() => setShowNewUnit({ parentId: u.id })}
                   />
-                  {subfoldersOf(u.id).length > 0 && (
+                  {subfoldersOf(units, u.id).length > 0 && (
                     <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border-light pl-2">
-                      {subfoldersOf(u.id).map((sub) => (
+                      {subfoldersOf(units, u.id).map((sub) => (
                         <li key={sub.id}>
                           <FolderRow
                             unit={sub}
