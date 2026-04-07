@@ -12,12 +12,6 @@ import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { STATUS_BADGE } from "./bank-styles";
 
-const SUGGESTION_CHIPS = [
-  "Make it harder",
-  "Add a step to the solution",
-  "Rewrite as a word problem",
-];
-
 /**
  * Two-panel workshop modal: artifact on the left, persistent chat
  * sidebar on the right. Preview-before-commit — proposals never write
@@ -599,24 +593,6 @@ function ChatPanel({
         {busy && <div className="text-xs italic text-text-muted">AI is thinking…</div>}
       </div>
 
-      {/* Suggestion chips on first open */}
-      {messages.length === 0 && !isProposalPending && (
-        <div className="flex flex-wrap gap-1.5 border-t border-border-light px-4 py-2">
-          {SUGGESTION_CHIPS.map((chip) => (
-            <button
-              key={chip}
-              onClick={() => {
-                void onSend(chip);
-              }}
-              disabled={busy}
-              className="rounded-[--radius-pill] border border-border-light bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:border-primary/30 hover:text-primary disabled:opacity-50"
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-      )}
-
       {atSoftCap && (
         <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
           You&rsquo;ve sent a lot of messages — consider clearing the chat or starting fresh.
@@ -698,7 +674,7 @@ function WelcomeMessage() {
       <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">AI</div>
       Hi! Ask me anything about this question. I can rewrite it, redo the solution,
       change the difficulty, turn it into a word problem, or just answer questions
-      about it. Try one of the suggestions below or type your own.
+      about it.
     </div>
   );
 }
