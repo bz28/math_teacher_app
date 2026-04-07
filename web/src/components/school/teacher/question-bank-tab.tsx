@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   teacher,
-  type BankCounts,
   type BankItem,
   type BankJob,
   type TeacherDocument,
@@ -11,6 +10,7 @@ import {
 } from "@/lib/api";
 // Aliased to avoid colliding with the `unitLabel` prop on BankRow.
 import { subfoldersOf, topUnits, unitLabel as labelForUnit } from "@/lib/units";
+import { useBankData } from "./_hooks/use-bank-data";
 
 // Course subject context — read by BankRow's emoji classifier so we
 // don't have to drill the subject prop through 5 layers of components.
@@ -143,14 +143,6 @@ export function QuestionBankTab({
   activeJob: BankJob | null;
   setActiveJob: (job: BankJob | null) => void;
 }) {
-  const [items, setItems] = useState<BankItem[]>([]);
-  const [units, setUnits] = useState<TeacherUnit[]>([]);
-  const [counts, setCounts] = useState<BankCounts>({
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-    archived: 0,
-  });
   // Default to Pending — the actionable view a teacher lands on most
   // often after generating. We used to auto-flip to Approved when
   // pending was empty, but that caused a visible flicker (render
@@ -160,8 +152,11 @@ export function QuestionBankTab({
   // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
   // status filter so the teacher can narrow on both axes.
   const [unitFilter, setUnitFilter] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Data fetching extracted to a custom hook — items/units/counts/
+  // loading/error/reload all live there.
+  const { items, units, counts, loading, error, reload, setError } = useBankData(
+    courseId, statusFilter, unitFilter,
+  );
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
@@ -205,39 +200,6 @@ export function QuestionBankTab({
       setError(e instanceof Error ? e.message : "Failed to load pending");
     }
   };
-
-  const reload = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const filters: { status?: string; unit_id?: string } = { status: statusFilter };
-      // Note: backend doesn't support uncategorized filter yet, so we
-      // filter in memory below for that case.
-      if (unitFilter !== "all" && unitFilter !== "uncategorized") {
-        filters.unit_id = unitFilter;
-      }
-      const [bankRes, unitsRes] = await Promise.all([
-        teacher.bank(courseId, filters),
-        teacher.units(courseId),
-      ]);
-      let filteredItems = bankRes.items;
-      if (unitFilter === "uncategorized") {
-        filteredItems = bankRes.items.filter((i) => i.unit_id === null);
-      }
-      setItems(filteredItems);
-      setUnits(unitsRes.units);
-      setCounts(bankRes.counts);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load bank");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, statusFilter, unitFilter]);
 
   // Reload the bank list when the active job (lifted to the page,
   // polled there) flips to done — pulls in the freshly generated rows.
