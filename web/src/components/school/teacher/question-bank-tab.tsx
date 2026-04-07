@@ -10,6 +10,17 @@ import {
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
+
+// Build a "Unit 5: Quadratics / Practice" label for any unit_id, or
+// "Uncategorized" when null.
+function buildUnitLabel(units: TeacherUnit[], unitId: string | null): string {
+  if (!unitId) return "Uncategorized";
+  const u = units.find((x) => x.id === unitId);
+  if (!u) return "Unknown";
+  if (!u.parent_id) return u.name;
+  const parent = units.find((x) => x.id === u.parent_id);
+  return parent ? `${parent.name} / ${u.name}` : u.name;
+}
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
@@ -19,6 +30,7 @@ const POLL_LIMIT_MS = 5 * 60 * 1000;
 
 export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [items, setItems] = useState<BankItem[]>([]);
+  const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [counts, setCounts] = useState<BankCounts>({
     pending: 0,
     approved: 0,
@@ -26,6 +38,9 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     archived: 0,
   });
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
+  // status filter so the teacher can narrow on both axes.
+  const [unitFilter, setUnitFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
@@ -49,10 +64,24 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const filters = statusFilter === "all" ? undefined : { status: statusFilter };
-      const res = await teacher.bank(courseId, filters);
-      setItems(res.items);
-      setCounts(res.counts);
+      const filters: { status?: string; unit_id?: string } = {};
+      if (statusFilter !== "all") filters.status = statusFilter;
+      // Note: backend doesn't support uncategorized filter yet, so we
+      // filter in memory below for that case.
+      if (unitFilter !== "all" && unitFilter !== "uncategorized") {
+        filters.unit_id = unitFilter;
+      }
+      const [bankRes, unitsRes] = await Promise.all([
+        teacher.bank(courseId, filters),
+        teacher.units(courseId),
+      ]);
+      let filteredItems = bankRes.items;
+      if (unitFilter === "uncategorized") {
+        filteredItems = bankRes.items.filter((i) => i.unit_id === null);
+      }
+      setItems(filteredItems);
+      setUnits(unitsRes.units);
+      setCounts(bankRes.counts);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load bank");
     } finally {
@@ -63,7 +92,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, statusFilter]);
+  }, [courseId, statusFilter, unitFilter]);
 
   // Poll active job until done/failed, then refresh the bank.
   // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
@@ -169,22 +198,52 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
-      {/* Status filter chips */}
-      <div className="mt-4 flex gap-2">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setStatusFilter(f.key)}
-            className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
-              statusFilter === f.key
-                ? "bg-primary text-white"
-                : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-            }`}
+      {/* Filter row: status chips + unit dropdown */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="flex gap-2">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
+                statusFilter === f.key
+                  ? "bg-primary text-white"
+                  : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+              }`}
+            >
+              {f.label}
+              {f.key !== "all" && <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Unit
+          </label>
+          <select
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value)}
+            className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
           >
-            {f.label}
-            {f.key !== "all" && <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>}
-          </button>
-        ))}
+            <option value="all">All units</option>
+            <option value="uncategorized">Uncategorized</option>
+            {units
+              .filter((u) => u.parent_id === null)
+              .flatMap((top) => [
+                <option key={top.id} value={top.id}>
+                  {top.name}
+                </option>,
+                ...units
+                  .filter((sub) => sub.parent_id === top.id)
+                  .map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      &nbsp;&nbsp;{top.name} / {sub.name}
+                    </option>
+                  )),
+              ])}
+          </select>
+        </div>
       </div>
 
       {/* List */}
@@ -204,6 +263,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             <BankItemCard
               key={item.id}
               item={item}
+              unitLabel={buildUnitLabel(units, item.unit_id)}
               onOpen={() => setOpenItemId(item.id)}
               onChanged={reload}
             />
@@ -250,10 +310,12 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
 
 function BankItemCard({
   item,
+  unitLabel,
   onOpen,
   onChanged,
 }: {
   item: BankItem;
+  unitLabel: string;
   onOpen: () => void;
   onChanged: () => void;
 }) {
@@ -291,14 +353,20 @@ function BankItemCard({
   return (
     <div className={`rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm ${statusBorder}`}>
       <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex-1 cursor-pointer text-left text-sm text-text-primary hover:text-primary"
-          title="Open question"
-        >
-          <MathText text={item.question} />
-        </button>
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="cursor-pointer text-left text-sm text-text-primary hover:text-primary"
+            title="Open question"
+          >
+            <MathText text={item.question} />
+          </button>
+          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-text-muted">
+            <span>📁</span>
+            <span>{unitLabel}</span>
+          </div>
+        </div>
         <span
           className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
             STATUS_BADGE[item.status] ?? ""
