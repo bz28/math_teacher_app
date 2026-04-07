@@ -163,6 +163,7 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
         "constraint": job.constraint,
         "produced_count": job.produced_count,
         "error_message": job.error_message,
+        "parent_question_id": str(job.parent_question_id) if job.parent_question_id else None,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
     }

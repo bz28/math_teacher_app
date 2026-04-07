@@ -78,6 +78,26 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
+  // When a make-similar review queue completes, we want to drop the
+  // teacher back at the parent question instead of the bare bank tab.
+  const [reviewQueueParentId, setReviewQueueParentId] = useState<string | null>(null);
+
+  // Open a focused review queue containing only the just-generated
+  // pending children of `parentId`. Replaces the global pending pool
+  // with the 5 (or N) variations the teacher just made.
+  const openVariationReview = async (parentId: string) => {
+    try {
+      const res = await teacher.bank(courseId, { status: "pending" });
+      const children = res.items.filter((i) => i.parent_question_id === parentId);
+      if (children.length === 0) return;
+      setActiveJob(null); // dismiss the strip — its job is done
+      setOpenItemId(null); // close the single-mode workshop
+      setReviewQueueParentId(parentId);
+      setReviewQueue(children);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load variations");
+    }
+  };
 
   // Open review mode with all currently-pending items in the bank as the
   // frozen queue. Hits a fresh fetch so we don't accidentally review stale
@@ -355,6 +375,8 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             onClose={() => setOpenItemId(null)}
             onChanged={reload}
             onJobStarted={setActiveJob}
+            activeJob={activeJob}
+            onReviewVariations={openVariationReview}
           />
         );
       })()}
@@ -364,6 +386,13 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           queue={reviewQueue}
           onClose={() => {
             setReviewQueue(null);
+            // If this queue was a focused variation review, drop the
+            // teacher back on the parent question instead of the bare
+            // bank — keeps the mental thread intact.
+            if (reviewQueueParentId) {
+              setOpenItemId(reviewQueueParentId);
+              setReviewQueueParentId(null);
+            }
             reload();
           }}
           onChanged={reload}
@@ -584,11 +613,11 @@ function BankRowWithChildren({
           <button
             type="button"
             onClick={() => setVariationsOpen((v) => !v)}
-            className="ml-7 mb-1 flex items-center gap-1 text-[10px] font-semibold text-text-muted hover:text-primary"
+            className="ml-7 mb-1 flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:underline dark:text-purple-400"
           >
             <span>{variationsOpen ? "▾" : "▸"}</span>
             <span>
-              {childrenCount} variation{childrenCount === 1 ? "" : "s"}
+              ✨ {childrenCount} practice variation{childrenCount === 1 ? "" : "s"}
               {pendingChildren > 0 && ` · ${pendingChildren} pending`}
             </span>
           </button>
@@ -762,6 +791,9 @@ function BankRow({
           title="Open question"
         >
           <div className="truncate">
+            {item.source === "practice" && (
+              <span className="mr-1 text-purple-500" title="Practice variation">✨</span>
+            )}
             <MathText text={item.question} />
           </div>
         </button>

@@ -935,6 +935,9 @@ export interface BankJob {
   constraint: string | null;
   produced_count: number;
   error_message: string | null;
+  // Set when this is a "generate similar" job — children inherit
+  // this as their parent_question_id, building the variation tree.
+  parent_question_id: string | null;
   created_at: string;
   updated_at: string;
 }
