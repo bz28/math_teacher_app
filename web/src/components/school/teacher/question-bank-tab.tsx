@@ -699,31 +699,36 @@ function BankRow({
         aria-label={item.status}
       />
 
-      <button
-        type="button"
-        onClick={onOpen}
-        className="min-w-0 flex-1 text-left text-text-primary hover:text-primary"
-        title="Open question"
-      >
-        <div className="truncate">
-          <MathText text={item.question} />
-        </div>
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="block w-full text-left text-text-primary hover:text-primary"
+          title="Open question"
+        >
+          <div className="truncate">
+            <MathText text={item.question} />
+          </div>
+        </button>
         {/* Mobile: pills + unit label wrap below the question text on
-            narrow screens. Desktop renders them on the right. */}
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
-          {showUnit && <span>📁 {unitLabel}</span>}
-          {item.used_in.map((u) => (
-            <UsedInPill
-              key={u.id}
-              entry={u}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenHomework(u.id);
-              }}
-            />
-          ))}
-        </div>
-      </button>
+            narrow screens. Desktop renders them on the right. Lives
+            outside the question button so the nested-button is valid. */}
+        {(showUnit || item.used_in.length > 0) && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
+            {showUnit && <span>📁 {unitLabel}</span>}
+            {item.used_in.map((u) => (
+              <UsedInPill
+                key={u.id}
+                entry={u}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenHomework(u.id);
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Desktop: pills sit to the right of the question text */}
       {item.used_in.length > 0 && (
