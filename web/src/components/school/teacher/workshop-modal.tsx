@@ -65,9 +65,19 @@ export function WorkshopModal({
   const { busy, error, setError, run } = useAsyncAction();
 
   // ── Item sync ────────────────────────────────────────────────────
-  // Reset liveItem whenever we move to a new item (queue advance or
-  // initial load). In single mode, also pick up fresher versions from
-  // the parent's reload.
+  // Reset liveItem whenever the source item identity changes (queue
+  // advance or initial load) or a fresher version arrives from the
+  // parent's reload. Safe from infinite loops because:
+  //   - replaceLiveItem updates queueState[queueIndex] in place,
+  //     which produces a new sourceItem with the same id and the same
+  //     updated_at (we got it from the API response that produced the
+  //     new liveItem). Same id + same timestamp → no setLiveItem call.
+  //   - When the parent calls onChanged(), the bank list reloads but
+  //     the queue snapshot is frozen, so the queue prop never changes
+  //     mid-session.
+  // The eslint-disable is intentional: we deliberately depend only on
+  // the identity + timestamp of the source, not on liveItem itself
+  // (which would loop).
   useEffect(() => {
     if (!sourceItem) return;
     if (!liveItem || sourceItem.id !== liveItem.id) {
@@ -227,26 +237,25 @@ export function WorkshopModal({
     run(async () => {
       if (!liveItem || blockIfPending()) return;
       await teacher.approveBankItem(liveItem.id);
-      const updated = { ...liveItem, status: "approved" };
-      setLiveItem(updated);
+      // Use replaceLiveItem so queueState stays consistent with liveItem.
+      // Even though the stale entry isn't displayed today, keeping the two
+      // stores in sync removes a footgun for any future reader of queueState.
+      replaceLiveItem({ ...liveItem, status: "approved" });
       if (isQueueMode) {
         setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
         advanceQueue();
       }
-      onChanged();
     });
 
   const reject = () =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
       await teacher.rejectBankItem(liveItem.id);
-      const updated = { ...liveItem, status: "rejected" };
-      setLiveItem(updated);
+      replaceLiveItem({ ...liveItem, status: "rejected" });
       if (isQueueMode) {
         setResolved((prev) => ({ ...prev, [queueIndex]: "rejected" }));
         advanceQueue();
       }
-      onChanged();
     });
 
   const skip = () => {
@@ -272,6 +281,16 @@ export function WorkshopModal({
     });
 
   // ── Keyboard shortcuts ───────────────────────────────────────────
+  // The action handlers (approve/reject/skip) are recreated on every
+  // render and capture their own closures over liveItem. We can't put
+  // them in the effect's dep array without re-binding the listener on
+  // every render, so we stash the latest copies in a ref the handler
+  // reads at call time. This guarantees the keyboard handler always
+  // sees the most recent liveItem state, even when liveItem updates
+  // without an id change (e.g. after a manual edit or chat accept).
+  const handlersRef = useRef({ approve, reject, skip });
+  handlersRef.current = { approve, reject, skip };
+
   useEffect(() => {
     if (allResolved) return;
     const handler = (e: KeyboardEvent) => {
@@ -289,14 +308,14 @@ export function WorkshopModal({
 
       if (e.key === "Enter" || e.key === "a" || e.key === "A") {
         e.preventDefault();
-        approve();
+        handlersRef.current.approve();
       } else if (e.key === "x" || e.key === "X") {
         e.preventDefault();
-        reject();
+        handlersRef.current.reject();
       } else if (e.key === "s" || e.key === "S") {
         if (isQueueMode) {
           e.preventDefault();
-          skip();
+          handlersRef.current.skip();
         }
       } else if (e.key === "c" || e.key === "C") {
         e.preventDefault();
@@ -308,8 +327,7 @@ export function WorkshopModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allResolved, busy, isProposalPending, isQueueMode, queueIndex, liveItem?.id]);
+  }, [allResolved, busy, isProposalPending, isQueueMode, onClose]);
 
   // ── Render: empty queue or completion ────────────────────────────
   if (isQueueMode && total === 0) {
@@ -736,7 +754,7 @@ function ModeLineFooter({
           disabled={busy}
           title="Delete question"
           aria-label="Delete question"
-          className="rounded-[--radius-md] border border-red-300 px-2.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+          className="ml-2 rounded-[--radius-md] border border-red-300 px-2.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
         >
           🗑
         </button>
@@ -836,10 +854,10 @@ function ChatPanel({
 
   return (
     <div
-      className={`flex min-h-0 flex-col overflow-hidden border-border-light bg-surface transition-all duration-200 ease-out motion-reduce:transition-none ${
+      className={`flex min-h-0 flex-col overflow-hidden border-border-light bg-surface transition-[max-height,width] duration-200 ease-out motion-reduce:transition-none ${
         visible
           ? "max-h-[60vh] w-full border-t md:max-h-none md:w-96 md:border-l md:border-t-0"
-          : "max-h-0 w-0 border-0"
+          : "max-h-0 w-full border-t-0 md:w-0 md:border-l-0"
       }`}
       aria-hidden={!visible}
     >
@@ -978,9 +996,12 @@ function WelcomeMessage() {
         </span>
       </div>
       <p className="text-text-primary">
-        Hi! I can revise this question, redo the solution, change the difficulty, or just answer questions about it. Try asking:
+        Hi! I can revise this question, redo the solution, change the difficulty, or just answer questions about it.
       </p>
-      <ul className="mt-2 space-y-1 text-[11px] italic text-text-muted">
+      <p className="mt-2 text-[10px] uppercase tracking-wider text-text-muted">
+        Try typing one of these or your own:
+      </p>
+      <ul className="mt-1 space-y-1 text-[11px] italic text-text-muted">
         <li>&ldquo;Make the numbers smaller&rdquo;</li>
         <li>&ldquo;Why did you factor it this way?&rdquo;</li>
         <li>&ldquo;Add a step explaining the discriminant&rdquo;</li>
