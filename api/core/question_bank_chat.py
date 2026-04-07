@@ -267,7 +267,6 @@ async def chat_with_bank_item(
     # the same commit. If Claude failed above, neither was persisted, so
     # the frontend can re-submit the original draft cleanly.
     item.chat_messages = [*superseded_history, ai_msg]
-    item.updated_at = datetime.now(UTC)
     await db.commit()
 
     return ai_msg

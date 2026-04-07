@@ -16,6 +16,12 @@ class QuestionBankItem(Base):
     in homework, tests, and student practice/learn modes once approved."""
 
     __tablename__ = "question_bank_items"
+    # eager_defaults makes SQLAlchemy fetch onupdate/server_default
+    # values inline with the INSERT/UPDATE via RETURNING, instead of
+    # lazy-loading them on next attribute access. The lazy load fails
+    # in async sessions with MissingGreenlet, which is why every
+    # endpoint used to manually pre-stamp item.updated_at before commit.
+    __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id: Mapped[uuid.UUID] = mapped_column(
