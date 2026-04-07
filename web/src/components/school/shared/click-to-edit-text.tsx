@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 
 /**
  * Click-to-edit text. Renders MathText by default, becomes a textarea
  * (multiline) or input (single-line) when clicked. Saves on blur or
  * Enter (single-line) or Cmd/Ctrl+Enter (multiline). Escape cancels.
+ *
+ * The editor sub-components own the draft state internally and are
+ * mounted fresh each time the user enters edit mode (via the
+ * `editing` boolean), so we don't need an effect to sync draft from
+ * props — it's seeded from `value` at mount and lives only as long
+ * as the editor is open.
  */
 export function ClickToEditText({
   value,
@@ -22,11 +28,11 @@ export function ClickToEditText({
   busy: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
 
-  useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [editing, value]);
+  const handleSave = (next: string) => {
+    onSave(next);
+    setEditing(false);
+  };
 
   if (!editing) {
     return (
@@ -42,33 +48,39 @@ export function ClickToEditText({
     );
   }
 
-  const commit = () => {
-    onSave(draft);
-    setEditing(false);
-  };
-
-  const cancel = () => {
-    setDraft(value);
-    setEditing(false);
-  };
+  // Editor is mounted fresh for each edit session, so its draft state is
+  // safely seeded from `value` once at mount with no need for a sync effect.
+  const cancel = () => setEditing(false);
 
   if (multiline) {
-    return <AutoResizingTextarea value={draft} setDraft={setDraft} commit={commit} cancel={cancel} />;
+    return <MultilineEditor initialValue={value} onCommit={handleSave} onCancel={cancel} />;
   }
+  return <SingleLineEditor initialValue={value} onCommit={handleSave} onCancel={cancel} />;
+}
 
+function SingleLineEditor({
+  initialValue,
+  onCommit,
+  onCancel,
+}: {
+  initialValue: string;
+  onCommit: (next: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(initialValue);
   return (
     <input
       type="text"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={() => onCommit(draft)}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
-          cancel();
+          onCancel();
         } else if (e.key === "Enter") {
           e.preventDefault();
-          commit();
+          onCommit(draft);
         }
       }}
       className="w-full rounded-[--radius-sm] border border-primary bg-bg-base px-2 py-0.5 text-sm text-text-primary focus:outline-none"
@@ -82,17 +94,16 @@ export function ClickToEditText({
  * a per-keystroke `\n` count. Avoids rendering jank on long content and
  * matches the behavior of Notion / Linear / GitHub multiline editors.
  */
-function AutoResizingTextarea({
-  value,
-  setDraft,
-  commit,
-  cancel,
+function MultilineEditor({
+  initialValue,
+  onCommit,
+  onCancel,
 }: {
-  value: string;
-  setDraft: (next: string) => void;
-  commit: () => void;
-  cancel: () => void;
+  initialValue: string;
+  onCommit: (next: string) => void;
+  onCancel: () => void;
 }) {
+  const [draft, setDraft] = useState(initialValue);
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
   useLayoutEffect(() => {
@@ -101,21 +112,21 @@ function AutoResizingTextarea({
     el.style.height = "auto";
     // Cap at ~16 lines so a runaway response doesn't take over the screen
     el.style.height = `${Math.min(el.scrollHeight, 384)}px`;
-  }, [value]);
+  }, [draft]);
 
   return (
     <textarea
       ref={ref}
-      value={value}
+      value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={() => onCommit(draft)}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
-          cancel();
+          onCancel();
         } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
-          commit();
+          onCommit(draft);
         }
       }}
       rows={2}

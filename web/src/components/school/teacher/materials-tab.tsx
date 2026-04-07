@@ -303,48 +303,15 @@ function FolderRow({
   onAddSub?: () => void;
   isSub?: boolean;
 }) {
-  const [draft, setDraft] = useState(unit.name);
-
-  useEffect(() => {
-    if (isRenaming) setDraft(unit.name);
-  }, [isRenaming, unit.name]);
-
   if (isRenaming) {
     return (
-      <form
-        className="flex items-center gap-1 rounded-[--radius-sm] bg-primary-bg/40 px-2 py-1"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmitRename(draft);
-        }}
-      >
-        <span>{isSub ? "📂" : "📁"}</span>
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          autoFocus
-          maxLength={200}
-          className="flex-1 rounded-[--radius-sm] border border-border-light bg-bg-base px-1.5 py-0.5 text-sm text-text-primary focus:border-primary focus:outline-none"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") onCancelRename();
-          }}
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded px-1.5 py-0.5 text-xs font-bold text-primary hover:bg-surface disabled:opacity-50"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={onCancelRename}
-          className="rounded px-1.5 py-0.5 text-xs text-text-muted hover:bg-surface"
-        >
-          ✕
-        </button>
-      </form>
+      <FolderRenameForm
+        initialName={unit.name}
+        isSub={isSub}
+        busy={busy}
+        onSubmit={onSubmitRename}
+        onCancel={onCancelRename}
+      />
     );
   }
 
@@ -616,6 +583,60 @@ function NewUnitModal({
         </div>
       </form>
     </div>
+  );
+}
+
+function FolderRenameForm({
+  initialName,
+  isSub,
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  initialName: string;
+  isSub?: boolean;
+  busy: boolean;
+  onSubmit: (next: string) => void;
+  onCancel: () => void;
+}) {
+  // Mounted fresh each time the user enters rename mode (controlled by the
+  // parent's `isRenaming` boolean), so draft state is seeded once at mount.
+  const [draft, setDraft] = useState(initialName);
+  return (
+    <form
+      className="flex items-center gap-1 rounded-[--radius-sm] bg-primary-bg/40 px-2 py-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(draft);
+      }}
+    >
+      <span>{isSub ? "📂" : "📁"}</span>
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        autoFocus
+        maxLength={200}
+        className="flex-1 rounded-[--radius-sm] border border-border-light bg-bg-base px-1.5 py-0.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+      <button
+        type="submit"
+        disabled={busy}
+        className="rounded px-1.5 py-0.5 text-xs font-bold text-primary hover:bg-surface disabled:opacity-50"
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="rounded px-1.5 py-0.5 text-xs text-text-muted hover:bg-surface"
+      >
+        ✕
+      </button>
+    </form>
   );
 }
 
