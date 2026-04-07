@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,7 +16,6 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { BackButton } from "./BackButton";
 import { CompletedCard } from "./CompletedCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { GradientButton } from "./GradientButton";
@@ -59,6 +57,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const confettiRef = useRef<ConfettiOverlayRef>(null);
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
+  const [askMode, setAskMode] = useState(false);
 
   const {
     session,
@@ -185,41 +184,36 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <BackButton onPress={handleBack} />
-          <View style={styles.headerBadge} accessibilityRole="text">
-            <Text style={styles.headerBadgeText}>
-              {isLearnQueue && learnQueue
-                ? `${learnQueue.currentIndex + 1}/${learnQueue.problems.length}`
-                : isPractice ? "Practice" : "Learn"}
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.problemCard, shadows.sm]}>
-          <Text style={styles.cardLabel}>Problem</Text>
-          <Text style={styles.problemText}>{session.problem}</Text>
+      <View style={[readerStyles.slimHeader, { paddingTop: insets.top + spacing.sm }]}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={readerStyles.backIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <View style={readerStyles.problemPill}>
+          <Text style={readerStyles.problemPillText} numberOfLines={1}>
+            {session.problem}
+          </Text>
           {problemImages[session.problem] && (
-            <Image
-              source={{ uri: `data:image/jpeg;base64,${problemImages[session.problem]}` }}
-              style={{ height: 120, marginTop: 8, borderRadius: 8 }}
-              resizeMode="contain"
-            />
+            <Ionicons name="image" size={14} color={colors.textMuted} />
           )}
         </View>
         {isLearn && (
-          <View style={styles.progressRow}>
-            <View style={styles.progressContainer}>
+          <View style={readerStyles.dotsRow}>
+            {Array.from({ length: session.total_steps }).map((_, i) => (
               <View
+                key={i}
                 style={[
-                  styles.progressBar,
-                  { width: `${(session.current_step / session.total_steps) * 100}%` },
+                  readerStyles.dot,
+                  i < session.current_step && readerStyles.dotDone,
+                  i === session.current_step && readerStyles.dotCurrent,
                 ]}
               />
-            </View>
-            <Text style={styles.progressLabel}>
-              Step {session.current_step + 1}/{session.total_steps}
-            </Text>
+            ))}
           </View>
         )}
       </View>
@@ -299,133 +293,121 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {/* Completed */}
         {isCompleted && <CompletedCard onBack={onBack} onHome={onHome} />}
 
-        {/* Continue asking after completion */}
-        {!isCompleted && session.status === "completed" && isLearn && (
+        {/* Practice mode: answer input stays in scroll body */}
+        {!isCompleted && session.status !== "completed" && isPractice && (
           <>
             <View>
-              <View style={styles.inputLabelRow}>
-                <Text style={styles.inputLabel}>Ask a question about the problem</Text>
-                {!isPro && chatsRemaining() < Infinity && (
-                  <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
-                )}
-              </View>
+              <Text style={styles.inputLabel}>Your answer</Text>
               <TextInput
                 ref={inputRef}
                 style={styles.input}
                 value={input}
                 onChangeText={setInput}
-                placeholder="Ask a question..."
+                placeholder="Enter your answer..."
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="go"
-                onSubmitEditing={handleAsk}
+                onSubmitEditing={handleSubmit}
                 inputAccessoryViewID="math-session"
               />
             </View>
-
             <View style={styles.buttons}>
-              {input.trim() ? (
-                <GradientButton
-                  onPress={handleAsk}
-                  label="Ask"
-                  loading={phase === "thinking"}
-                  style={styles.submitButton}
-                />
-              ) : (
-                <GradientButton
-                  onPress={finishAsking}
-                  label="I Understand Now"
-                  style={styles.submitButton}
-                />
-              )}
+              <GradientButton
+                onPress={handleSubmit}
+                label="Answer"
+                loading={phase === "thinking"}
+                disabled={!input.trim()}
+                style={styles.submitButton}
+              />
             </View>
           </>
         )}
-
-        {/* Input area */}
-        {!isCompleted && session.status !== "completed" && (
-          <>
-            {/* Learn mode: chat input for questions */}
-            {isLearn && (
-              <>
-                <View>
-                  <View style={styles.inputLabelRow}>
-                    <Text style={styles.inputLabel}>Have a question about this step?</Text>
-                    {!isPro && chatsRemaining() < Infinity && (
-                      <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
-                    )}
-                  </View>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    value={input}
-                    onChangeText={setInput}
-                    placeholder="Ask a question..."
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="go"
-                    onSubmitEditing={handleAsk}
-                    inputAccessoryViewID="math-session"
-                  />
-                </View>
-
-                <View style={styles.buttons}>
-                  {input.trim() ? (
-                    <GradientButton
-                      onPress={handleAsk}
-                      label="Ask"
-                      loading={phase === "thinking"}
-                      style={styles.submitButton}
-                    />
-                  ) : (
-                    <GradientButton
-                      onPress={advanceStep}
-                      label="I Understand"
-                      loading={phase === "thinking"}
-                      style={styles.submitButton}
-                    />
-                  )}
-                </View>
-              </>
-            )}
-
-            {/* Practice mode: answer input */}
-            {isPractice && (
-              <>
-                <View>
-                  <Text style={styles.inputLabel}>Your answer</Text>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    value={input}
-                    onChangeText={setInput}
-                    placeholder="Enter your answer..."
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="go"
-                    onSubmitEditing={handleSubmit}
-                    inputAccessoryViewID="math-session"
-                  />
-                </View>
-
-                <View style={styles.buttons}>
-                  <GradientButton
-                    onPress={handleSubmit}
-                    label="Answer"
-                    loading={phase === "thinking"}
-                    disabled={!input.trim()}
-                    style={styles.submitButton}
-                  />
-                </View>
-              </>
-            )}
-          </>
-        )}
       </ScrollView>
-      <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
+
+      {/* Sticky bottom action area for Learn mode */}
+      {isLearn && !isCompleted && (
+        <View style={readerStyles.actionBar}>
+          {askMode ? (
+            <View style={readerStyles.askWrap}>
+              <TextInput
+                ref={inputRef}
+                style={readerStyles.askInput}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask a question about this step…"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+                returnKeyType="send"
+                onSubmitEditing={async () => {
+                  if (!input.trim()) { setAskMode(false); return; }
+                  await handleAsk();
+                  setAskMode(false);
+                }}
+                accessibilityLabel="Ask a question"
+              />
+              <TouchableOpacity
+                onPress={() => { setAskMode(false); setInput(""); }}
+                style={readerStyles.askCancel}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel question"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!input.trim()) return;
+                  await handleAsk();
+                  setAskMode(false);
+                }}
+                style={readerStyles.askSend}
+                disabled={!input.trim() || phase === "thinking"}
+                accessibilityRole="button"
+                accessibilityLabel="Send question"
+              >
+                <Ionicons name="arrow-up" size={20} color={colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={readerStyles.actionRow}>
+              <TouchableOpacity
+                onPress={session.status === "completed" ? finishAsking : advanceStep}
+                style={readerStyles.primaryAction}
+                disabled={phase === "thinking"}
+                accessibilityRole="button"
+                accessibilityLabel={session.status === "completed" ? "I understand now" : "I get it, next step"}
+              >
+                <LinearGradient
+                  colors={gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={readerStyles.primaryActionInner}
+                >
+                  <Text style={readerStyles.primaryActionText}>
+                    {phase === "thinking" ? "…" : session.status === "completed" ? "I understand" : "I get it"}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={18} color={colors.white} />
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setAskMode(true)}
+                style={readerStyles.secondaryAction}
+                accessibilityRole="button"
+                accessibilityLabel="Ask about this step"
+              >
+                <Ionicons name="help-circle-outline" size={20} color={colors.primary} />
+                <Text style={readerStyles.secondaryActionText}>Ask</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {!isPro && chatsRemaining() < Infinity && askMode && (
+            <Text style={readerStyles.chatHint}>{chatsRemaining()} chats left today</Text>
+          )}
+        </View>
+      )}
+
+      {!isLearn && <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />}
       {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
       <UpgradePrompt {...promptProps} />
       <PaywallScreen
@@ -468,6 +450,143 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
     </TouchableOpacity>
   );
 }
+
+const readerStyles = StyleSheet.create({
+  // Slim header
+  slimHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    backgroundColor: colors.background,
+  },
+  backIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  problemPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  problemPillText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 12,
+    flex: 1,
+  },
+  dotsRow: {
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "center",
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderLight,
+  },
+  dotDone: {
+    backgroundColor: colors.success,
+  },
+  dotCurrent: {
+    backgroundColor: colors.primary,
+    width: 12,
+  },
+
+  // Sticky bottom action bar
+  actionBar: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.white,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  primaryAction: {
+    flex: 2,
+    borderRadius: radii.md,
+    overflow: "hidden",
+  },
+  primaryActionInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+  },
+  primaryActionText: {
+    ...typography.button,
+    color: colors.white,
+  },
+  secondaryAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.md,
+    paddingVertical: spacing.lg,
+  },
+  secondaryActionText: {
+    ...typography.button,
+    color: colors.primary,
+    fontSize: 14,
+  },
+
+  // Ask mode
+  askWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  askInput: {
+    flex: 1,
+    ...typography.body,
+    fontSize: 14,
+    color: colors.text,
+    paddingVertical: spacing.sm,
+  },
+  askCancel: {
+    padding: spacing.xs,
+  },
+  askSend: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  chatHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.xs,
+  },
+});
 
 const compactStyles = StyleSheet.create({
   historyContainer: {
