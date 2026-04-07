@@ -274,7 +274,9 @@ async def update_bank_item(
 ) -> dict[str, Any]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
 
-    # If any content fields are touched, snapshot the previous state for undo.
+    # Lock policy: only *content* edits are blocked when the item is in a
+    # published homework. Metadata changes (unit move, difficulty tag) stay
+    # allowed because they don't change what students see.
     content_changing = (
         body.question is not None
         or body.solution_steps is not None
@@ -340,6 +342,7 @@ async def approve_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
     item.status = "approved"
     await db.commit()
     return {"status": "ok"}

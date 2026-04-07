@@ -764,7 +764,7 @@ export function HomeworkDetailModal({
                   type="button"
                   onClick={publish}
                   disabled={busy || problems.length === 0}
-                  title={problems.length === 0 ? "Add at least one problem first" : "Publish to students"}
+                  title={problems.length === 0 ? "Add at least one problem first" : "Publish — locks the questions in the bank"}
                   className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
                 >
                   Publish

@@ -128,7 +128,15 @@ async def hydrate_assignment_content(
     ids = content.get("problem_ids") or []
     if not ids:
         return {"problems": []}
-    uuid_ids = [uuid.UUID(i) if isinstance(i, str) else i for i in ids]
+    # Defensive: skip junk IDs rather than 500 the whole assignment view.
+    uuid_ids: list[uuid.UUID] = []
+    for i in ids:
+        try:
+            uuid_ids.append(i if isinstance(i, uuid.UUID) else uuid.UUID(str(i)))
+        except (ValueError, TypeError):
+            continue
+    if not uuid_ids:
+        return {"problems": []}
     rows = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.id.in_(uuid_ids))
     )).scalars().all()
@@ -438,10 +446,8 @@ async def delete_assignment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unpublish before deleting",
         )
-    course_id = a.course_id
+    # Drafts can't have locked any bank items, so no recompute needed.
     await db.delete(a)
-    await db.flush()
-    await recompute_bank_locks(db, course_id)
     await db.commit()
     return {"status": "ok"}
 

@@ -190,7 +190,13 @@ export function WorkshopModal({
 
   const saveUnit = (nextUnitId: string | null) =>
     run(async () => {
-      if (!liveItem || blockIfPending()) return;
+      // Unit moves are intentionally allowed on locked items — moving a
+      // question between folders doesn't change what students see.
+      if (!liveItem) return;
+      if (isProposalPending) {
+        setError("Accept or discard the AI proposal before doing anything else.");
+        return;
+      }
       if (nextUnitId === liveItem.unit_id) {
         setEditingUnit(false);
         return;
@@ -433,7 +439,7 @@ export function WorkshopModal({
             >
               {liveItem.status}
             </span>
-            {editingUnit && !isLocked ? (
+            {editingUnit ? (
               <select
                 autoFocus
                 value={liveItem.unit_id ?? ""}
@@ -461,10 +467,9 @@ export function WorkshopModal({
             ) : (
               <button
                 type="button"
-                onClick={() => !isLocked && setEditingUnit(true)}
-                disabled={isLocked}
-                title={isLocked ? "Unpublish to move" : "Click to move to a different unit"}
-                className="text-xs font-semibold text-text-muted hover:text-primary disabled:cursor-not-allowed disabled:hover:text-text-muted"
+                onClick={() => setEditingUnit(true)}
+                title="Click to move to a different unit"
+                className="text-xs font-semibold text-text-muted hover:text-primary"
               >
                 📁 <span className="underline decoration-dotted underline-offset-2">{unitLabel}</span>
               </button>
