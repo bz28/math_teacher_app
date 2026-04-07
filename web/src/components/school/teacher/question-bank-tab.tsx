@@ -106,9 +106,18 @@ function buildTree(items: BankItem[]): TreeNode[] {
     .map((item) => ({ item, children: childrenByParent.get(item.id) ?? [] }));
 }
 
-const POLL_LIMIT_MS = 5 * 60 * 1000;
-
-export function QuestionBankTab({ courseId }: { courseId: string }) {
+export function QuestionBankTab({
+  courseId,
+  activeJob,
+  setActiveJob,
+}: {
+  courseId: string;
+  // Lifted to the course page so the active job survives tab switches.
+  // Polling + auto-clear also live there. This component just consumes
+  // the state and triggers updates.
+  activeJob: BankJob | null;
+  setActiveJob: (job: BankJob | null) => void;
+}) {
   const [items, setItems] = useState<BankItem[]>([]);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [counts, setCounts] = useState<BankCounts>({
@@ -129,7 +138,6 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
-  const [activeJob, setActiveJob] = useState<BankJob | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
@@ -219,46 +227,14 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     }
   }, [loading, counts.pending, counts.approved, statusFilter, defaultedToApproved]);
 
-  // Poll active job until done/failed, then refresh the bank.
-  // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
-  // created but before the asyncio task ran, the job stays "queued" forever.
+  // Reload the bank list when the active job (lifted to the page,
+  // polled there) flips to done — pulls in the freshly generated rows.
   useEffect(() => {
-    if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
-    const startedAt = Date.now();
-    const jobId = activeJob.id;
-    const interval = setInterval(async () => {
-      if (Date.now() - startedAt > POLL_LIMIT_MS) {
-        setActiveJob((prev) =>
-          prev && prev.id === jobId
-            ? { ...prev, status: "failed", error_message: "Generation timed out — try again or refresh the page." }
-            : prev,
-        );
-        return;
-      }
-      try {
-        const updated = await teacher.bankJob(courseId, jobId);
-        setActiveJob((prev) => (prev && prev.id === jobId ? updated : prev));
-        if (updated.status === "done") {
-          reload();
-        }
-      } catch {
-        // keep polling, transient errors are fine
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJob?.id, activeJob?.status, courseId]);
-
-  // Auto-clear a finished job banner after a few seconds.
-  // Skipped for make-similar jobs — those are an active CTA the
-  // teacher needs to click ("Review them →"), not a passive toast.
-  // Cleared when the teacher clicks Review or starts another job.
-  useEffect(() => {
-    if (activeJob?.status === "done" && !activeJob.parent_question_id) {
-      const t = setTimeout(() => setActiveJob(null), 4000);
-      return () => clearTimeout(t);
+    if (activeJob?.status === "done") {
+      reload();
     }
-  }, [activeJob?.status, activeJob?.parent_question_id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.status, activeJob?.id]);
 
   return (
     <div>

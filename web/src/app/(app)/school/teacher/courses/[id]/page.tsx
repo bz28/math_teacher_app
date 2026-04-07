@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { teacher, type TeacherCourse } from "@/lib/api";
+import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { QuestionBankTab } from "@/components/school/teacher/question-bank-tab";
@@ -21,12 +21,57 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "settings", label: "Settings" },
 ];
 
+const POLL_LIMIT_MS = 5 * 60 * 1000;
+
 export default function CourseWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [course, setCourse] = useState<TeacherCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("sections");
+  // Lifted from QuestionBankTab so the active generation job survives
+  // when the teacher switches tabs. The polling effect lives here too,
+  // so the job keeps ticking in the background and a small indicator
+  // can show on the Question Bank tab label from any view.
+  const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+
+  // Poll the active job from the page level so it survives tab switches.
+  useEffect(() => {
+    if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
+    const startedAt = Date.now();
+    const jobId = activeJob.id;
+    const interval = setInterval(async () => {
+      if (Date.now() - startedAt > POLL_LIMIT_MS) {
+        setActiveJob((prev) =>
+          prev && prev.id === jobId
+            ? { ...prev, status: "failed", error_message: "Generation timed out — try again or refresh the page." }
+            : prev,
+        );
+        return;
+      }
+      try {
+        const updated = await teacher.bankJob(id, jobId);
+        setActiveJob((prev) => (prev && prev.id === jobId ? updated : prev));
+      } catch {
+        // keep polling, transient errors are fine
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeJob?.id, activeJob?.status, id]);
+
+  // Auto-clear bulk-generation toasts after a few seconds. Make-similar
+  // jobs (parent_question_id set) stay until the teacher clicks Review.
+  useEffect(() => {
+    if (activeJob?.status === "done" && !activeJob.parent_question_id) {
+      const t = setTimeout(() => setActiveJob(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [activeJob?.status, activeJob?.parent_question_id]);
+
+  const jobInFlight =
+    activeJob !== null &&
+    activeJob.status !== "failed" &&
+    !(activeJob.status === "done" && !activeJob.parent_question_id);
 
   const reloadCourse = async () => {
     setLoading(true);
@@ -90,7 +135,18 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
               tab === t.key ? "text-primary" : "text-text-muted hover:text-text-primary"
             }`}
           >
-            {t.label}
+            <span className="inline-flex items-center gap-1.5">
+              {t.label}
+              {/* Pulsing dot when generation is in flight — visible
+                  from any tab so the teacher knows something's still
+                  happening in the bank. */}
+              {t.key === "bank" && jobInFlight && (
+                <span className="relative flex h-2 w-2" aria-label="Generation in progress">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+              )}
+            </span>
             {tab === t.key && (
               <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" />
             )}
@@ -101,7 +157,13 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
       <div className="mt-6">
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
-        {tab === "bank" && <QuestionBankTab courseId={course.id} />}
+        {tab === "bank" && (
+          <QuestionBankTab
+            courseId={course.id}
+            activeJob={activeJob}
+            setActiveJob={setActiveJob}
+          />
+        )}
         {tab === "homework" && <HomeworkTab courseId={course.id} />}
         {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
