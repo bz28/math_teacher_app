@@ -37,7 +37,7 @@ export function ImagePreview({
           <AnimatedPressable onPress={onBack} style={styles.backBtn} scaleDown={0.9}>
             <Ionicons name="chevron-back" size={22} color={colors.white} />
           </AnimatedPressable>
-          <Text style={styles.title}>Extract Problems</Text>
+          <Text style={styles.title}>Confirm</Text>
           <View style={styles.backBtn} />
         </View>
 
@@ -62,7 +62,7 @@ export function ImagePreview({
               )}
               <GradientButton
                 onPress={onExtractAll}
-                label="Extract All Problems"
+                label="Looks good — read it"
                 style={styles.mainBtn}
               />
               {hasManualSelect && (
@@ -70,9 +70,11 @@ export function ImagePreview({
                   onPress={onManualSelect}
                   style={styles.secondaryBtn}
                   scaleDown={0.97}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjust crop manually"
                 >
-                  <Ionicons name="crop-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.secondaryText}>Select areas manually</Text>
+                  <Ionicons name="crop-outline" size={16} color={colors.textMuted} />
+                  <Text style={styles.secondaryText}>Adjust crop</Text>
                 </AnimatedPressable>
               )}
             </>
