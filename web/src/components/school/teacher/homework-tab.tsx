@@ -124,7 +124,13 @@ function HomeworkCard({
             Created {new Date(hw.created_at).toLocaleDateString()}
           </p>
         </div>
-        <span className="shrink-0 rounded-[--radius-pill] bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-600 dark:bg-gray-500/10">
+        <span
+          className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+            hw.status === "published"
+              ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
+              : "bg-gray-100 text-gray-600 dark:bg-gray-500/10"
+          }`}
+        >
           {hw.status}
         </span>
       </div>
@@ -488,7 +494,7 @@ interface AssignmentProblem {
   difficulty: string;
 }
 
-function HomeworkDetailModal({
+export function HomeworkDetailModal({
   courseId,
   assignmentId,
   onClose,
@@ -566,6 +572,22 @@ function HomeworkDetailModal({
       onChanged();
     });
 
+  const publish = () =>
+    run(async () => {
+      await teacher.publishAssignment(assignmentId);
+      await reload();
+      onChanged();
+    });
+
+  const unpublish = () =>
+    run(async () => {
+      await teacher.unpublishAssignment(assignmentId);
+      await reload();
+      onChanged();
+    });
+
+  const isPublished = hw?.status === "published";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -577,6 +599,17 @@ function HomeworkDetailModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
+          {hw && (
+            <span
+              className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+                isPublished
+                  ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
+                  : "bg-gray-100 text-gray-600 dark:bg-gray-500/10"
+              }`}
+            >
+              {hw.status}
+            </span>
+          )}
           {editingTitle ? (
             <form
               className="flex flex-1 items-center gap-2"
@@ -615,9 +648,9 @@ function HomeworkDetailModal({
             <button
               type="button"
               onClick={() => setEditingTitle(true)}
-              disabled={loading}
+              disabled={loading || isPublished}
+              title={isPublished ? "Unpublish to edit" : "Click to edit"}
               className="flex-1 cursor-text text-left text-base font-bold text-text-primary hover:text-primary disabled:cursor-default disabled:hover:text-text-primary"
-              title="Click to edit"
             >
               {hw?.title ?? "Loading…"}
             </button>
@@ -635,6 +668,30 @@ function HomeworkDetailModal({
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {loading ? (
             <p className="text-sm text-text-muted">Loading…</p>
+          ) : isPublished ? (
+            <>
+              <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                🔒 This homework is published. Students can see it and the
+                questions inside are locked. Unpublish it to edit.
+              </div>
+              <ol className="mt-4 space-y-3">
+                {problems.map((p) => (
+                  <li
+                    key={`${p.bank_item_id}-${p.position}`}
+                    className="rounded-[--radius-lg] border border-border-light bg-surface p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
+                        {p.position}
+                      </div>
+                      <div className="min-w-0 flex-1 text-sm text-text-primary">
+                        <MathText text={p.question} />
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </>
           ) : editingProblems ? (
             <EditProblemsView
               courseId={courseId}
@@ -652,7 +709,9 @@ function HomeworkDetailModal({
                 <button
                   type="button"
                   onClick={() => setEditingProblems(true)}
-                  className="text-xs font-semibold text-primary hover:underline"
+                  disabled={isPublished}
+                  title={isPublished ? "Unpublish to edit" : ""}
+                  className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
                 >
                   ✏ Edit problems
                 </button>
@@ -689,7 +748,29 @@ function HomeworkDetailModal({
 
         {/* Footer */}
         {!editingProblems && (
-          <div className="flex items-center justify-end border-t border-border-light px-6 py-3">
+          <div className="flex items-center justify-between gap-2 border-t border-border-light px-6 py-3">
+            <div>
+              {isPublished ? (
+                <button
+                  type="button"
+                  onClick={unpublish}
+                  disabled={busy}
+                  className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                >
+                  Unpublish
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={publish}
+                  disabled={busy || problems.length === 0}
+                  title={problems.length === 0 ? "Add at least one problem first" : "Publish to students"}
+                  className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  Publish
+                </button>
+              )}
+            </div>
             {confirmingDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-red-700">
@@ -715,7 +796,9 @@ function HomeworkDetailModal({
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(true)}
-                className="rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"
+                disabled={isPublished}
+                title={isPublished ? "Unpublish before deleting" : ""}
+                className="rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
                 🗑 Delete homework
               </button>

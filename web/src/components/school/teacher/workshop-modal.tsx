@@ -7,6 +7,7 @@ import {
   type BankChatMessage,
   type BankChatProposal,
   type BankItem,
+  type TeacherUnit,
 } from "@/lib/api";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
@@ -54,6 +55,8 @@ export function WorkshopModal({
   const sourceItem: BankItem | undefined = isQueueMode ? queueState[queueIndex] : initialItem;
 
   const [liveItem, setLiveItem] = useState<BankItem | undefined>(sourceItem);
+  const [units, setUnits] = useState<TeacherUnit[]>([]);
+  const [editingUnit, setEditingUnit] = useState(false);
   const [showUndo, setShowUndo] = useState(sourceItem?.has_previous_version ?? false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
@@ -160,8 +163,54 @@ export function WorkshopModal({
       setError("Accept or discard the AI proposal before doing anything else.");
       return true;
     }
+    if (liveItem?.locked) {
+      setError("This question is in a published homework. Unpublish it to make changes.");
+      return true;
+    }
     return false;
   };
+  const isLocked = liveItem?.locked ?? false;
+
+  // Fetch units once per course so the header can show a unit picker.
+  useEffect(() => {
+    if (!liveItem) return;
+    let cancelled = false;
+    teacher
+      .units(liveItem.course_id)
+      .then((u) => {
+        if (!cancelled) setUnits(u.units);
+      })
+      .catch(() => {
+        /* non-fatal — picker just stays empty */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveItem?.course_id]);
+
+  const saveUnit = (nextUnitId: string | null) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      if (nextUnitId === liveItem.unit_id) {
+        setEditingUnit(false);
+        return;
+      }
+      const updated = await teacher.updateBankItem(
+        liveItem.id,
+        nextUnitId === null ? { clear_unit: true } : { unit_id: nextUnitId },
+      );
+      replaceLiveItem(updated);
+      setEditingUnit(false);
+    });
+
+  const unitLabel = (() => {
+    if (!liveItem?.unit_id) return "Uncategorized";
+    const u = units.find((x) => x.id === liveItem.unit_id);
+    if (!u) return "—";
+    if (!u.parent_id) return u.name;
+    const parent = units.find((x) => x.id === u.parent_id);
+    return parent ? `${parent.name} / ${u.name}` : u.name;
+  })();
 
   const saveQuestion = (next: string) =>
     run(async () => {
@@ -193,6 +242,10 @@ export function WorkshopModal({
 
   const sendChat = async (message: string): Promise<boolean> => {
     if (!liveItem) return false;
+    if (liveItem.locked) {
+      setError("Locked — unpublish the homework using this question first.");
+      return false;
+    }
     setError(null);
     let ok = false;
     await run(async () => {
@@ -268,6 +321,10 @@ export function WorkshopModal({
   const remove = () =>
     run(async () => {
       if (!liveItem) return;
+      if (liveItem.locked) {
+        setError("Locked — unpublish the homework using this question first.");
+        return;
+      }
       await teacher.deleteBankItem(liveItem.id);
       if (isQueueMode) {
         // Treat delete like a resolution and advance
@@ -376,6 +433,42 @@ export function WorkshopModal({
             >
               {liveItem.status}
             </span>
+            {editingUnit && !isLocked ? (
+              <select
+                autoFocus
+                value={liveItem.unit_id ?? ""}
+                onChange={(e) => saveUnit(e.target.value || null)}
+                onBlur={() => setEditingUnit(false)}
+                disabled={busy}
+                className="rounded-[--radius-md] border border-primary bg-bg-base px-2 py-0.5 text-xs text-text-primary focus:outline-none"
+              >
+                <option value="">Uncategorized</option>
+                {units
+                  .filter((u) => u.parent_id === null)
+                  .flatMap((top) => [
+                    <option key={top.id} value={top.id}>
+                      {top.name}
+                    </option>,
+                    ...units
+                      .filter((sub) => sub.parent_id === top.id)
+                      .map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {top.name} / {sub.name}
+                        </option>
+                      )),
+                  ])}
+              </select>
+            ) : (
+              <button
+                type="button"
+                onClick={() => !isLocked && setEditingUnit(true)}
+                disabled={isLocked}
+                title={isLocked ? "Unpublish to move" : "Click to move to a different unit"}
+                className="text-xs font-semibold text-text-muted hover:text-primary disabled:cursor-not-allowed disabled:hover:text-text-muted"
+              >
+                📁 <span className="underline decoration-dotted underline-offset-2">{unitLabel}</span>
+              </button>
+            )}
             {showUndo && (
               <button
                 onClick={undo}
@@ -395,6 +488,15 @@ export function WorkshopModal({
             ✕
           </button>
         </div>
+
+        {/* Lock banner */}
+        {isLocked && (
+          <div className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-xs font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+            🔒 This question is in published homework
+            {liveItem.used_in.length > 0 && ` (${liveItem.used_in.map((u) => u.title).join(", ")})`}
+            . Unpublish it to make changes.
+          </div>
+        )}
 
         {/* Progress bar (queue mode only) */}
         {isQueueMode && (

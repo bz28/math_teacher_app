@@ -740,6 +740,12 @@ export const teacher = {
   deleteAssignment(assignmentId: string) {
     return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}`, { method: "DELETE" });
   },
+  publishAssignment(assignmentId: string) {
+    return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}/publish`, { method: "POST" });
+  },
+  unpublishAssignment(assignmentId: string) {
+    return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}/unpublish`, { method: "POST" });
+  },
   assignToSections(assignmentId: string, sectionIds: string[]) {
     return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}/sections`, {
       method: "POST",
@@ -893,6 +899,10 @@ export interface BankItem {
   final_answer: string | null;
   difficulty: string;
   status: string;
+  locked: boolean;
+  source: string;
+  parent_question_id: string | null;
+  used_in: { id: string; title: string }[];
   source_doc_ids: string[] | null;
   generation_prompt: string | null;
   has_previous_version: boolean;

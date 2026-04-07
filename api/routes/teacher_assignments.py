@@ -78,16 +78,13 @@ async def snapshot_bank_items(
     course_id: uuid.UUID,
     bank_item_ids: list[uuid.UUID],
 ) -> dict[str, Any]:
-    """Look up the bank items, verify they belong to the course AND are
-    approved, and return a content dict with a frozen snapshot of each
-    question. Order is preserved per the input list.
+    """Validate the bank items belong to the course and are approved, then
+    return a content dict that *references* them by id. The actual
+    question text is JOINed in at read time so edits to the bank
+    propagate live (the bank is the single source of truth).
 
-    The snapshot lives in assignments.content as:
-        { "problems": [
-            { "bank_item_id", "position", "question",
-              "solution_steps", "final_answer", "difficulty" },
-            ...
-        ] }
+    Stored shape:
+        { "problem_ids": ["uuid1", "uuid2", ...] }
     """
     if not bank_item_ids:
         raise HTTPException(
@@ -96,14 +93,14 @@ async def snapshot_bank_items(
         )
 
     rows = (await db.execute(
-        select(QuestionBankItem).where(
+        select(QuestionBankItem.id).where(
             QuestionBankItem.id.in_(bank_item_ids),
             QuestionBankItem.course_id == course_id,
             QuestionBankItem.status == "approved",
         )
     )).scalars().all()
 
-    found = {item.id: item for item in rows}
+    found = set(rows)
     missing = [str(i) for i in bank_item_ids if i not in found]
     if missing:
         raise HTTPException(
@@ -113,11 +110,36 @@ async def snapshot_bank_items(
             ),
         )
 
+    return {"problem_ids": [str(b) for b in bank_item_ids]}
+
+
+async def hydrate_assignment_content(
+    db: AsyncSession, assignment: Assignment,
+) -> dict[str, Any] | None:
+    """Read assignment.content and return it with live `problems` joined
+    from the bank. Backwards-compat fallback: if content is the legacy
+    snapshot shape (`problems` with question text), return it as-is."""
+    content = assignment.content
+    if not isinstance(content, dict):
+        return content
+    # Legacy: pre-refactor snapshots stored full problem objects.
+    if "problems" in content and "problem_ids" not in content:
+        return content
+    ids = content.get("problem_ids") or []
+    if not ids:
+        return {"problems": []}
+    uuid_ids = [uuid.UUID(i) if isinstance(i, str) else i for i in ids]
+    rows = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id.in_(uuid_ids))
+    )).scalars().all()
+    by_id = {str(r.id): r for r in rows}
     problems = []
-    for position, bank_id in enumerate(bank_item_ids, start=1):
-        item = found[bank_id]
+    for position, bid in enumerate(ids, start=1):
+        item = by_id.get(str(bid))
+        if not item:
+            continue  # silently drop missing/deleted refs
         problems.append({
-            "bank_item_id": str(bank_id),
+            "bank_item_id": str(item.id),
             "position": position,
             "question": item.question,
             "solution_steps": item.solution_steps,
@@ -125,6 +147,51 @@ async def snapshot_bank_items(
             "difficulty": item.difficulty,
         })
     return {"problems": problems}
+
+
+def _problem_ids_in_content(content: Any) -> list[str]:
+    """Extract bank item IDs from an assignment content dict, handling
+    both the new and legacy shapes."""
+    if not isinstance(content, dict):
+        return []
+    if "problem_ids" in content and isinstance(content["problem_ids"], list):
+        return [str(i) for i in content["problem_ids"]]
+    if "problems" in content and isinstance(content["problems"], list):
+        return [str(p.get("bank_item_id")) for p in content["problems"] if p.get("bank_item_id")]
+    return []
+
+
+async def used_in_assignments_map(
+    db: AsyncSession, course_id: uuid.UUID,
+) -> dict[str, list[dict[str, str]]]:
+    """For every published assignment in the course, return a map of
+    bank_item_id → list of {id, title} entries. Used to render the
+    "Used in" labels on bank cards. Only published assignments count
+    (drafts don't lock anything)."""
+    rows = (await db.execute(
+        select(Assignment).where(
+            Assignment.course_id == course_id,
+            Assignment.status == "published",
+        )
+    )).scalars().all()
+    out: dict[str, list[dict[str, str]]] = {}
+    for a in rows:
+        for pid in _problem_ids_in_content(a.content):
+            out.setdefault(pid, []).append({"id": str(a.id), "title": a.title})
+    return out
+
+
+async def recompute_bank_locks(db: AsyncSession, course_id: uuid.UUID) -> None:
+    """Recalculate `locked` for every bank item in a course based on
+    whether any published assignment references it. Cheap enough — runs
+    only on publish/unpublish."""
+    used = await used_in_assignments_map(db, course_id)
+    locked_ids = set(used.keys())
+    items = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)
+    )).scalars().all()
+    for item in items:
+        item.locked = str(item.id) in locked_ids
 
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
@@ -312,7 +379,7 @@ async def get_assignment(
     section_names = await _get_section_names(db, a.id)
     stats = await get_assignment_stats(db, a.id)
     result = assignment_to_dict(a, section_names, stats)
-    result["content"] = a.content
+    result["content"] = await hydrate_assignment_content(db, a)
     result["answer_key"] = a.answer_key
     return result
 
@@ -340,10 +407,16 @@ async def update_assignment(
     if body.late_policy is not None:
         a.late_policy = body.late_policy
     # Re-snapshotting bank items takes precedence over a raw content blob.
-    if body.bank_item_ids is not None:
-        a.content = await snapshot_bank_items(db, a.course_id, body.bank_item_ids)
-    elif body.content is not None:
-        a.content = body.content
+    if body.bank_item_ids is not None or body.content is not None:
+        if a.status == "published":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unpublish before editing problems",
+            )
+        if body.bank_item_ids is not None:
+            a.content = await snapshot_bank_items(db, a.course_id, body.bank_item_ids)
+        else:
+            a.content = body.content
     if body.answer_key is not None:
         a.answer_key = body.answer_key
 
@@ -358,7 +431,52 @@ async def delete_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if a.status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unpublish before deleting",
+        )
+    course_id = a.course_id
     await db.delete(a)
+    await db.flush()
+    await recompute_bank_locks(db, course_id)
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/assignments/{assignment_id}/publish")
+async def publish_assignment(
+    assignment_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if a.status == "published":
+        return {"status": "ok"}
+    if not _problem_ids_in_content(a.content):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot publish a homework with no problems",
+        )
+    a.status = "published"
+    await db.flush()
+    await recompute_bank_locks(db, a.course_id)
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/assignments/{assignment_id}/unpublish")
+async def unpublish_assignment(
+    assignment_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if a.status != "published":
+        return {"status": "ok"}
+    a.status = "draft"
+    await db.flush()
+    await recompute_bank_locks(db, a.course_id)
     await db.commit()
     return {"status": "ok"}
 
