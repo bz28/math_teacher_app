@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 import { MATERIAL_UPLOAD_MAX_BYTES } from "@/lib/constants";
 import { subfoldersOf, topUnits } from "@/lib/units";
-import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -417,7 +416,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       {loading ? (
         <LoadingSkeleton />
       ) : units.length === 0 && docs.length === 0 ? (
-        <EmptyState text="No materials yet. Create a unit or upload files to get started." />
+        <FirstTimeDropzone busy={busy} onDropTree={handleImport} />
       ) : (
         <div className="mt-4 grid gap-4 md:grid-cols-[280px_1fr]">
           <FolderTree
@@ -546,6 +545,48 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         onClose={() => setBulkMoveOpen(false)}
         onConfirm={(target) => moveDocuments([...selectedDocIds], target)}
       />
+    </div>
+  );
+}
+
+/**
+ * First-time experience for a brand-new course with zero units and
+ * zero documents. Wraps the shared UploadDropzone so drag-and-drop
+ * works here too, and leads with a large friendly CTA that tells
+ * teachers they can drop a folder to create their first unit.
+ */
+function FirstTimeDropzone({
+  busy,
+  onDropTree,
+}: {
+  busy: boolean;
+  onDropTree: (tree: DroppedTree) => void;
+}) {
+  return (
+    <div className="mt-4">
+      <UploadDropzone busy={busy} onDropTree={onDropTree}>
+        <div className="flex flex-col items-center justify-center gap-4 rounded-[--radius-lg] border-2 border-dashed border-border-light bg-surface px-6 py-16 text-center shadow-sm">
+          <span
+            className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-bg text-primary shadow-sm ring-1 ring-primary/20"
+            aria-hidden
+          >
+            <UploadIcon className="h-9 w-9" strokeWidth={2} />
+          </span>
+          <div className="max-w-md">
+            <h3 className="text-xl font-bold tracking-tight text-text-primary">
+              Drop files or a folder to get started
+            </h3>
+            <p className="mt-2 text-sm text-text-muted">
+              Drag a whole folder from Finder to create a unit with all of its
+              contents in one go — or drop individual PDFs and images.
+            </p>
+          </div>
+          <p className="text-[11px] font-medium text-text-muted">
+            PDF, PNG, JPG up to 25 MB · Drop multiple folders to create several
+            units at once
+          </p>
+        </div>
+      </UploadDropzone>
     </div>
   );
 }
