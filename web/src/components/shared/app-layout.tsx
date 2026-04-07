@@ -18,11 +18,7 @@ const studentNavItems = [
 // ── Teacher nav items ──
 
 const teacherNavItems = [
-  { label: "Dashboard", href: "/teacher", icon: DashboardIcon, exact: true },
-  { label: "Courses", href: "/teacher/courses", icon: CoursesIcon },
-  { label: "Assignments", href: "/teacher/assignments", icon: AssignmentsIcon },
-  { label: "Analytics", href: "/teacher/analytics", icon: AnalyticsIcon },
-  { label: "New (beta)", href: "/school/teacher", icon: BetaIcon },
+  { label: "Courses", href: "/school/teacher", icon: CoursesIcon },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -161,9 +157,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 space-y-0.5 px-3 py-4">
           {teacherNavItems.map((item) => {
-            const active = item.exact
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
+            const active = pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -227,7 +221,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile header for teachers */}
       <div className="flex flex-1 flex-col md:min-w-0">
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-light bg-surface/90 px-4 backdrop-blur-md md:hidden">
-          <Link href="/teacher" className="flex items-center gap-2">
+          <Link href="/school/teacher" className="flex items-center gap-2">
             <LogoMark size={28} />
             <span className="text-sm font-bold text-text-primary">
               {user?.school_name || "Teacher"}
@@ -252,9 +246,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-surface/95 backdrop-blur-md md:hidden">
           <div className="flex h-16 items-stretch">
             {teacherNavItems.map((item) => {
-              const active = item.exact
-                ? pathname === item.href
-                : pathname.startsWith(item.href);
+              const active = pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
@@ -315,47 +307,11 @@ function LearnIcon({ active }: { active: boolean }) {
   );
 }
 
-function DashboardIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="9" rx="1" />
-      <rect x="14" y="3" width="7" height="5" rx="1" />
-      <rect x="14" y="12" width="7" height="9" rx="1" />
-      <rect x="3" y="16" width="7" height="5" rx="1" />
-    </svg>
-  );
-}
-
 function CoursesIcon({ active }: { active: boolean }) {
   return (
     <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
       <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
-    </svg>
-  );
-}
-
-function AssignmentsIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-    </svg>
-  );
-}
-
-function AnalyticsIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 20V10M12 20V4M6 20v-6" />
-    </svg>
-  );
-}
-
-function BetaIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8 5.8 21.3l2.4-7.4L2 9.4h7.6z" />
     </svg>
   );
 }
