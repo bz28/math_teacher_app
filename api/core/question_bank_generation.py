@@ -166,6 +166,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
+            title=q.get("title") or None,
             question=q["text"],
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer"),
@@ -301,6 +302,7 @@ async def regenerate_one(
     except Exception as e:
         raise RuntimeError(f"AI revision failed: {e}") from e
 
+    new_title = result.get("title")
     new_question = result.get("question")
     new_steps = result.get("solution_steps")
     new_answer = result.get("final_answer")
@@ -308,6 +310,8 @@ async def regenerate_one(
         raise RuntimeError("AI revision returned no question text")
 
     snapshot_history(item)
+    if new_title:
+        item.title = str(new_title)[:120]
     item.question = str(new_question)
     item.solution_steps = new_steps if isinstance(new_steps, list) else None
     item.final_answer = str(new_answer) if new_answer else None

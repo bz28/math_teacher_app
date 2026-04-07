@@ -819,6 +819,7 @@ export const teacher = {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/generation-jobs/${jobId}`);
   },
   updateBankItem(itemId: string, data: {
+    title?: string;
     question?: string;
     solution_steps?: { title: string; description: string }[];
     final_answer?: string;
@@ -900,6 +901,7 @@ export interface BankItem {
   id: string;
   course_id: string;
   unit_id: string | null;
+  title: string | null;
   question: string;
   solution_steps: { title: string; description: string }[] | null;
   final_answer: string | null;

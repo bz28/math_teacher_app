@@ -67,6 +67,7 @@ class GenerateRequest(BaseModel):
 
 
 class UpdateBankItemRequest(BaseModel):
+    title: str | None = None
     question: str | None = None
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
@@ -133,6 +134,7 @@ def _serialize_item(
         "id": str(item.id),
         "course_id": str(item.course_id),
         "unit_id": str(item.unit_id) if item.unit_id else None,
+        "title": item.title,
         "question": item.question,
         "solution_steps": item.solution_steps,
         "final_answer": item.final_answer,
@@ -299,6 +301,9 @@ async def update_bank_item(
         _ensure_unlocked(item)
         snapshot_history(item)
 
+    if body.title is not None:
+        t = body.title.strip()[:120]
+        item.title = t or None
     if body.question is not None:
         q = body.question.strip()
         if not q:

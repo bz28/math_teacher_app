@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
   type BankCounts,
@@ -33,6 +32,45 @@ import { STATUS_FILTERS } from "./bank-styles";
 // every approved item is a root with zero children — but the rendering
 // is in place so when variations land they slot in automatically.
 type TreeNode = { item: BankItem; children: BankItem[] };
+
+// Concept emoji classifier — keyword-based, no AI cost. Maps the
+// title + question text to a single visual handle so a teacher can
+// scan the bank by category (sports problem, geometry, graph, etc.)
+// instead of reading every row's text.
+function conceptEmoji(title: string | null, question: string): string {
+  const text = ((title ?? "") + " " + question).toLowerCase();
+  if (/basketball|soccer|football|tennis|baseball|hockey|ball|frisbee/.test(text)) return "🏀";
+  if (/triangle|polygon|angle|circle|square|rectangle|geometry|perimeter|area|volume/.test(text)) return "📐";
+  if (/graph|plot|parabola|curve|axis|coordinate|sketch/.test(text)) return "📈";
+  if (/distance|speed|velocity|rate|time|hour|km\/h|mph/.test(text)) return "⏱️";
+  if (/probability|statistic|mean|median|distribution|sample|standard deviation/.test(text)) return "📊";
+  if (/money|cost|price|profit|revenue|interest|loan/.test(text)) return "💰";
+  if (/word problem|story|real|scenario|context|practical/.test(text)) return "🌍";
+  return "📝";
+}
+
+// Difficulty chip color/label.
+const DIFFICULTY_STYLE: Record<string, { label: string; cls: string }> = {
+  easy: {
+    label: "easy",
+    cls: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300",
+  },
+  medium: {
+    label: "medium",
+    cls: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
+  },
+  hard: {
+    label: "hard",
+    cls: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",
+  },
+};
+
+// Lazy fallback for un-titled rows: first ~60 chars of the question
+// text with LaTeX symbols stripped so it reads cleanly.
+function fallbackTitle(question: string): string {
+  const stripped = question.replace(/\$([^$]*)\$/g, "$1").replace(/\s+/g, " ").trim();
+  return stripped.length > 60 ? stripped.slice(0, 60) + "…" : stripped;
+}
 
 function buildTree(items: BankItem[]): TreeNode[] {
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -811,13 +849,18 @@ function BankRow({
           type="button"
           onClick={onOpen}
           className="block w-full text-left text-text-primary hover:text-primary"
-          title="Open question"
+          title={item.question}
         >
-          <div className="truncate">
+          <div className="flex items-center gap-2 truncate">
+            <span className="shrink-0" aria-hidden>
+              {conceptEmoji(item.title, item.question)}
+            </span>
             {item.source === "practice" && (
-              <span className="mr-1 text-purple-500" title="Practice variation">✨</span>
+              <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
             )}
-            <MathText text={item.question} />
+            <span className="truncate font-semibold">
+              {item.title || fallbackTitle(item.question)}
+            </span>
           </div>
         </button>
         {/* Mobile: pills + unit label wrap below the question text on
@@ -854,6 +897,14 @@ function BankRow({
             />
           ))}
         </div>
+      )}
+
+      {DIFFICULTY_STYLE[item.difficulty] && (
+        <span
+          className={`hidden shrink-0 rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider sm:inline ${DIFFICULTY_STYLE[item.difficulty].cls}`}
+        >
+          {DIFFICULTY_STYLE[item.difficulty].label}
+        </span>
       )}
 
       {item.locked && (
