@@ -44,8 +44,8 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   const lastClickedDocIdRef = useRef<string | null>(null);
   const { busy, error, setError, run } = useAsyncAction();
 
-  const reload = async () => {
-    setLoading(true);
+  const reload = async ({ showSkeleton = false }: { showSkeleton?: boolean } = {}) => {
+    if (showSkeleton) setLoading(true);
     setError(null);
     try {
       const [u, d] = await Promise.all([teacher.units(courseId), teacher.documents(courseId)]);
@@ -54,12 +54,13 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load materials");
     } finally {
-      setLoading(false);
+      if (showSkeleton) setLoading(false);
     }
   };
 
   useEffect(() => {
-    reload();
+    setLoading(true);
+    reload({ showSkeleton: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
