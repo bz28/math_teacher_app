@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
@@ -25,7 +25,31 @@ import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
-import { STATUS_BADGE, STATUS_FILTERS } from "./bank-styles";
+import { STATUS_FILTERS } from "./bank-styles";
+
+// Tree node = a root question + any practice variations under it.
+// Variations are bank items whose parent_question_id points at the root.
+// Today nothing has a parent (Generate Similar isn't shipped yet), so
+// every approved item is a root with zero children — but the rendering
+// is in place so when variations land they slot in automatically.
+type TreeNode = { item: BankItem; children: BankItem[] };
+
+function buildTree(items: BankItem[]): TreeNode[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const childrenByParent = new Map<string, BankItem[]>();
+  for (const item of items) {
+    const pid = item.parent_question_id;
+    if (pid && byId.has(pid)) {
+      const arr = childrenByParent.get(pid) ?? [];
+      arr.push(item);
+      childrenByParent.set(pid, arr);
+    }
+  }
+  // Roots = items without a parent in this view (orphans get promoted).
+  return items
+    .filter((item) => !item.parent_question_id || !byId.has(item.parent_question_id))
+    .map((item) => ({ item, children: childrenByParent.get(item.id) ?? [] }));
+}
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
 
@@ -38,7 +62,12 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     rejected: 0,
     archived: 0,
   });
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  // Default to Pending — that's the actionable view a teacher lands on
+  // most often after generating. If pending is empty on first load we
+  // flip to Approved automatically (see effect below) so the teacher
+  // doesn't land on an empty page.
+  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
+  const [defaultedToApproved, setDefaultedToApproved] = useState(false);
   // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
   // status filter so the teacher can narrow on both axes.
   const [unitFilter, setUnitFilter] = useState<string>("all");
@@ -66,8 +95,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const filters: { status?: string; unit_id?: string } = {};
-      if (statusFilter !== "all") filters.status = statusFilter;
+      const filters: { status?: string; unit_id?: string } = { status: statusFilter };
       // Note: backend doesn't support uncategorized filter yet, so we
       // filter in memory below for that case.
       if (unitFilter !== "all" && unitFilter !== "uncategorized") {
@@ -95,6 +123,19 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, statusFilter, unitFilter]);
+
+  // First-load default flip: if we landed on Pending but there's nothing
+  // to review, jump to Approved so the teacher sees their library
+  // instead of an empty page. Only fires once per courseId so a teacher
+  // who explicitly clicks Pending later won't get yanked away.
+  useEffect(() => {
+    if (defaultedToApproved) return;
+    if (loading) return;
+    if (statusFilter === "pending" && counts.pending === 0 && counts.approved > 0) {
+      setStatusFilter("approved");
+      setDefaultedToApproved(true);
+    }
+  }, [loading, counts.pending, counts.approved, statusFilter, defaultedToApproved]);
 
   // Poll active job until done/failed, then refresh the bank.
   // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
@@ -144,7 +185,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {counts.pending > 0 && (
+          {counts.pending > 0 && statusFilter !== "pending" && (
             <button
               type="button"
               className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
@@ -206,7 +247,12 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.key}
-              onClick={() => setStatusFilter(f.key)}
+              onClick={() => {
+                setStatusFilter(f.key);
+                // Dismiss any open workshop modal so switching tabs
+                // feels like a navigation, not a sticky overlay.
+                setOpenItemId(null);
+              }}
               className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
                 statusFilter === f.key
                   ? "bg-primary text-white"
@@ -214,7 +260,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
               }`}
             >
               {f.label}
-              {f.key !== "all" && <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>}
+              <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
             </button>
           ))}
         </div>
@@ -248,7 +294,9 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
         </div>
       </div>
 
-      {/* List — grouped by unit so the bank scans like a library */}
+      {/* List — Approved gets unit grouping + per-unit tabs.
+          Pending and Rejected get a flat dense list. All shows the
+          same grouping as Approved for consistency. */}
       <div className="mt-4 space-y-5">
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
@@ -257,12 +305,24 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             text={
               counts.pending + counts.approved + counts.rejected === 0
                 ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
-                : "No questions match this filter."
+                : statusFilter === "pending"
+                  ? "No pending review. New generations land here."
+                  : statusFilter === "rejected"
+                    ? "No rejected questions."
+                    : "No questions match this filter."
             }
+          />
+        ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+          <SimpleUnitList
+            items={items}
+            units={units}
+            onOpenItem={setOpenItemId}
+            onOpenHomework={setOpenHomeworkId}
+            onChanged={reload}
           />
         ) : (
           buildUnitGroups(items, units).map((group) => (
-            <UnitGroup
+            <ApprovedUnitGroup
               key={group.id}
               label={group.label}
               items={group.items}
@@ -346,7 +406,11 @@ function buildUnitGroups(
   return groups;
 }
 
-function UnitGroup({
+// Approved view: collapsible unit split into two sections — "Available"
+// (root questions not yet in any homework or test, default expanded)
+// and "In a homework or test" (used roots, default collapsed). Practice
+// variations nest under their parent in either section.
+function ApprovedUnitGroup({
   label,
   items,
   units,
@@ -362,8 +426,242 @@ function UnitGroup({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(true);
-  const approved = items.filter((i) => i.status === "approved").length;
-  const pending = items.filter((i) => i.status === "pending").length;
+  const [storageOpen, setStorageOpen] = useState(false);
+
+  const tree = buildTree(items);
+  const available = tree.filter((node) => node.item.used_in.length === 0);
+  const inUse = tree.filter((node) => node.item.used_in.length > 0);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 border-b border-border-light pb-1 text-left text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        <span>📁 {label}</span>
+        <span className="font-normal normal-case text-text-muted/80">
+          · {tree.length} {tree.length === 1 ? "question" : "questions"}
+          {available.length > 0 && ` · ${available.length} available`}
+          {inUse.length > 0 && ` · ${inUse.length} in use`}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          {/* Available section — default expanded */}
+          <BankSection
+            title="Available"
+            count={available.length}
+            nodes={available}
+            units={units}
+            defaultOpen
+            emptyText="All approved questions in this unit are in a homework or test 🎉"
+            onOpenItem={onOpenItem}
+            onOpenHomework={onOpenHomework}
+            onChanged={onChanged}
+          />
+
+          {/* In-use section — default collapsed, hidden when empty */}
+          {inUse.length > 0 && (
+            <BankSection
+              title="In a homework or test"
+              count={inUse.length}
+              nodes={inUse}
+              units={units}
+              defaultOpen={storageOpen}
+              onToggle={setStorageOpen}
+              onOpenItem={onOpenItem}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One labeled section inside an Approved unit (Available or In-use).
+// Renders a small header with count + caret, then the rows when open.
+function BankSection({
+  title,
+  count,
+  nodes,
+  units,
+  defaultOpen,
+  onToggle,
+  emptyText,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  title: string;
+  count: number;
+  nodes: TreeNode[];
+  units: TeacherUnit[];
+  defaultOpen: boolean;
+  onToggle?: (open: boolean) => void;
+  emptyText?: string;
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    onToggle?.(next);
+  };
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        <span>{title}</span>
+        <span className="font-normal normal-case text-text-muted/80">· {count}</span>
+      </button>
+      {open && (
+        <div className="mt-1 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
+          {nodes.length === 0 && emptyText ? (
+            <div className="px-3 py-6 text-center text-xs italic text-text-muted">
+              {emptyText}
+            </div>
+          ) : (
+            nodes.map((node) => (
+              <BankRowWithChildren
+                key={node.item.id}
+                node={node}
+                units={units}
+                onOpenItem={onOpenItem}
+                onOpenHomework={onOpenHomework}
+                onChanged={onChanged}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A root row with optional inline-expandable practice variations.
+function BankRowWithChildren({
+  node,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  node: TreeNode;
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [variationsOpen, setVariationsOpen] = useState(false);
+  const childrenCount = node.children.length;
+  const pendingChildren = node.children.filter((c) => c.status === "pending").length;
+
+  return (
+    <div>
+      <BankRow
+        item={node.item}
+        unitLabel={buildUnitLabel(units, node.item.unit_id)}
+        showUnit={false}
+        onOpen={() => onOpenItem(node.item.id)}
+        onOpenHomework={onOpenHomework}
+        onChanged={onChanged}
+      />
+      {childrenCount > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setVariationsOpen((v) => !v)}
+            className="ml-7 mb-1 flex items-center gap-1 text-[10px] font-semibold text-text-muted hover:text-primary"
+          >
+            <span>{variationsOpen ? "▾" : "▸"}</span>
+            <span>
+              {childrenCount} variation{childrenCount === 1 ? "" : "s"}
+              {pendingChildren > 0 && ` · ${pendingChildren} pending`}
+            </span>
+          </button>
+          {variationsOpen && (
+            <div className="ml-6 border-l border-border-light">
+              {node.children.map((child) => (
+                <BankRow
+                  key={child.id}
+                  item={child}
+                  unitLabel={buildUnitLabel(units, child.unit_id)}
+                  showUnit={false}
+                  variation
+                  onOpen={() => onOpenItem(child.id)}
+                  onOpenHomework={onOpenHomework}
+                  onChanged={onChanged}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Pending and Rejected views: same unit grouping as Approved, but no
+// sub-sections. Just a flat dense list of rows per unit. Lets the
+// teacher review/triage one topic at a time.
+function SimpleUnitList({
+  items,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  items: BankItem[];
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const groups = buildUnitGroups(items, units);
+  return (
+    <div className="space-y-5">
+      {groups.map((group) => (
+        <SimpleUnitGroup
+          key={group.id}
+          label={group.label}
+          items={group.items}
+          units={units}
+          onOpenItem={onOpenItem}
+          onOpenHomework={onOpenHomework}
+          onChanged={onChanged}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SimpleUnitGroup({
+  label,
+  items,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  label: string;
+  items: BankItem[];
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(true);
   return (
     <div>
       <button
@@ -375,17 +673,16 @@ function UnitGroup({
         <span>📁 {label}</span>
         <span className="font-normal normal-case text-text-muted/80">
           · {items.length} {items.length === 1 ? "question" : "questions"}
-          {approved > 0 && ` · ${approved} approved`}
-          {pending > 0 && ` · ${pending} pending`}
         </span>
       </button>
       {open && (
-        <div className="mt-3 space-y-3">
+        <div className="mt-2 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
           {items.map((item) => (
-            <BankItemCard
+            <BankRow
               key={item.id}
               item={item}
               unitLabel={buildUnitLabel(units, item.unit_id)}
+              showUnit={false}
               onOpen={() => onOpenItem(item.id)}
               onOpenHomework={onOpenHomework}
               onChanged={onChanged}
@@ -397,158 +694,286 @@ function UnitGroup({
   );
 }
 
-function BankItemCard({
+// Dense one-line row. Status dot, truncated question, Used-in pills,
+// optional unit label, lock badge, kebab menu. Click the question text
+// to open the workshop modal. The `variation` flag styles it slightly
+// smaller + no border so it nests visually under its parent.
+function BankRow({
   item,
   unitLabel,
+  showUnit,
+  variation = false,
   onOpen,
   onOpenHomework,
   onChanged,
 }: {
   item: BankItem;
   unitLabel: string;
+  showUnit: boolean;
+  variation?: boolean;
   onOpen: () => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { busy, error, run } = useAsyncAction();
 
-  // Status-driven left-border accent so the teacher can scan the bank
-  // and immediately spot which questions still need attention.
-  const statusBorder =
-    item.status === "pending"
-      ? "border-l-4 border-l-amber-400"
-      : item.status === "approved"
-        ? "border-l-4 border-l-green-500"
-        : "opacity-60";
+  const dotClass =
+    item.status === "approved"
+      ? "bg-green-500"
+      : item.status === "pending"
+        ? "bg-amber-400"
+        : "bg-text-muted/40";
 
   const approve = () =>
     run(async () => {
       await teacher.approveBankItem(item.id);
       onChanged();
     });
-
   const reject = () =>
     run(async () => {
       await teacher.rejectBankItem(item.id);
       onChanged();
     });
-
   const remove = () =>
     run(async () => {
       await teacher.deleteBankItem(item.id);
-      setConfirmingDelete(false);
       onChanged();
     });
 
   return (
-    <div className={`rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm ${statusBorder}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="cursor-pointer text-left text-sm text-text-primary hover:text-primary"
-            title="Open question"
-          >
+    <div
+      className={`flex items-start gap-3 px-3 transition-colors hover:bg-bg-subtle ${
+        variation ? "py-1.5 text-xs" : "py-2 text-sm"
+      } ${item.status === "rejected" ? "opacity-60" : ""}`}
+    >
+      <span
+        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotClass}`}
+        title={item.status}
+        aria-label={item.status}
+      />
+
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="block w-full text-left text-text-primary hover:text-primary"
+          title="Open question"
+        >
+          <div className="truncate">
             <MathText text={item.question} />
-          </button>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted">
-            <span>📁 {unitLabel}</span>
-            {item.used_in.length > 0 && (
-              <span className="flex flex-wrap items-center gap-1">
-                <span>· 📎 Used in</span>
-                {item.used_in.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenHomework(u.id);
-                    }}
-                    className="rounded-[--radius-pill] bg-bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-text-secondary hover:bg-primary-bg/40 hover:text-primary"
-                    title="Open this homework"
-                  >
-                    {u.title}
-                  </button>
-                ))}
-              </span>
-            )}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {item.locked && (
-            <span
-              className="rounded-[--radius-pill] bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
-              title="In published homework — unpublish to edit"
-            >
-              🔒 Locked
-            </span>
-          )}
-          <span
-            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
-              STATUS_BADGE[item.status] ?? ""
-            }`}
-          >
-            {item.status}
-          </span>
-        </div>
+        </button>
+        {/* Mobile: pills + unit label wrap below the question text on
+            narrow screens. Desktop renders them on the right. Lives
+            outside the question button so the nested-button is valid. */}
+        {(showUnit || item.used_in.length > 0) && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
+            {showUnit && <span>📁 {unitLabel}</span>}
+            {item.used_in.map((u) => (
+              <UsedInPill
+                key={u.id}
+                entry={u}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenHomework(u.id);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {/* Desktop: pills sit to the right of the question text */}
+      {item.used_in.length > 0 && (
+        <div className="hidden shrink-0 flex-wrap items-center gap-1 pt-0.5 sm:flex">
+          {item.used_in.map((u) => (
+            <UsedInPill
+              key={u.id}
+              entry={u}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenHomework(u.id);
+              }}
+            />
+          ))}
+        </div>
+      )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {confirmingDelete ? (
-          <>
-            <span className="text-xs font-semibold text-red-700">Delete this question?</span>
+      {item.locked && (
+        <span
+          className="shrink-0 pt-0.5 text-amber-600 dark:text-amber-400"
+          title="Locked — in published homework"
+        >
+          🔒
+        </span>
+      )}
+
+      <KebabMenu
+        item={item}
+        busy={busy}
+        onApprove={approve}
+        onReject={reject}
+        onRemove={remove}
+      />
+
+      {error && (
+        <span className="shrink-0 pt-0.5 text-[10px] text-red-600" title={error}>
+          ⚠
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Pill rendering for "used in" entries. Visually distinguishes
+// homework vs test, and draft vs published, so a teacher building a
+// new homework can tell at a glance which references are live.
+function UsedInPill({
+  entry,
+  onClick,
+}: {
+  entry: { id: string; title: string; type: string; status: string };
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const isTest = entry.type === "test" || entry.type === "quiz";
+  const isDraft = entry.status !== "published";
+  const colorClass = isDraft
+    ? "border border-dashed border-text-muted/40 bg-transparent text-text-muted hover:bg-bg-subtle"
+    : isTest
+      ? "bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300"
+      : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-500/20 dark:text-blue-300";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-bold transition-colors ${colorClass}`}
+      title={`Open ${entry.title}${isDraft ? " (draft)" : ""}`}
+    >
+      {entry.title}
+      {isDraft && <span className="ml-1 opacity-70">draft</span>}
+    </button>
+  );
+}
+
+// Action menu — three dots that opens a small dropdown. Replaces the
+// always-visible Approve/Reject/Delete row of buttons. Uses a window
+// click listener for outside-click dismiss.
+function KebabMenu({
+  item,
+  busy,
+  onApprove,
+  onReject,
+  onRemove,
+}: {
+  item: BankItem;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setConfirmDelete(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const lockedTitle = item.locked ? "Locked by published homework" : undefined;
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+        aria-label="Actions"
+      >
+        ⋯
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full z-20 mt-1 w-40 rounded-[--radius-md] border border-border-light bg-surface py-1 text-xs shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {item.status === "pending" && (
             <button
-              onClick={remove}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onApprove();
+              }}
+              disabled={busy || item.locked}
+              title={lockedTitle}
+              className="block w-full px-3 py-1.5 text-left font-semibold text-green-700 hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ✓ Approve
+            </button>
+          )}
+          {item.status !== "rejected" && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onReject();
+              }}
+              disabled={busy || item.locked}
+              title={lockedTitle}
+              className="block w-full px-3 py-1.5 text-left font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ✕ Reject
+            </button>
+          )}
+          {item.status === "rejected" && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onApprove();
+              }}
               disabled={busy}
-              className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              className="block w-full px-3 py-1.5 text-left font-semibold text-green-700 hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ↺ Restore
+            </button>
+          )}
+          {confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setConfirmDelete(false);
+                onRemove();
+              }}
+              disabled={busy}
+              className="block w-full px-3 py-1.5 text-left font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               Yes, delete
             </button>
+          ) : (
             <button
-              onClick={() => setConfirmingDelete(false)}
-              disabled={busy}
-              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <>
-            {item.status === "pending" && (
-              <>
-                <button
-                  onClick={approve}
-                  disabled={busy || item.locked}
-                  className="rounded-[--radius-sm] bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-                  title="Approve for use in homework, tests, and student practice"
-                >
-                  ✓ Approve
-                </button>
-                <button
-                  onClick={reject}
-                  disabled={busy || item.locked}
-                  className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
-                  title="Hide from students. Kept in your records."
-                >
-                  ✕ Reject
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => setConfirmingDelete(true)}
+              type="button"
+              onClick={() => setConfirmDelete(true)}
               disabled={busy || item.locked}
-              title={item.locked ? "Locked by published homework" : "Delete"}
-              className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              title={lockedTitle}
+              className="block w-full px-3 py-1.5 text-left font-semibold text-red-700 hover:bg-bg-subtle disabled:opacity-50"
             >
-              🗑
+              🗑 Delete
             </button>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

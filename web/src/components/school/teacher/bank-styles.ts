@@ -7,8 +7,7 @@ export const STATUS_BADGE: Record<string, string> = {
   archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
 };
 
-export const STATUS_FILTERS: { key: "all" | "pending" | "approved" | "rejected"; label: string }[] = [
-  { key: "all", label: "All" },
+export const STATUS_FILTERS: { key: "pending" | "approved" | "rejected"; label: string }[] = [
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
   { key: "rejected", label: "Rejected" },
