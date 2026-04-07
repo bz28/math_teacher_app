@@ -38,6 +38,9 @@ export function QuestionDetailModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
+  // Mobile-only: the chat is hidden behind a 💬 floating button by default.
+  // On md+ the chat is always visible as the right column.
+  const [chatOpenMobile, setChatOpenMobile] = useState(false);
   const { busy, error, setError, run } = useAsyncAction();
 
   // If the parent reloads the bank list and a fresher version of this item
@@ -80,6 +83,12 @@ export function QuestionDetailModal({
   const pendingProposal: BankChatProposal | null =
     pendingIdx >= 0 ? liveItem.chat_messages[pendingIdx].proposal! : null;
   const isProposalPending = pendingIdx >= 0;
+
+  // Auto-open the mobile chat drawer the moment a proposal lands so the
+  // teacher doesn't have to hunt for the Accept/Discard buttons.
+  useEffect(() => {
+    if (isProposalPending) setChatOpenMobile(true);
+  }, [isProposalPending, pendingIdx]);
 
   // Manual edits and content-changing actions are blocked while a proposal
   // is pending — the teacher must Accept or Discard first.
@@ -375,20 +384,61 @@ export function QuestionDetailModal({
             {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
           </div>
 
-          {/* RIGHT — chat panel */}
-          <ChatPanel
-            item={liveItem}
-            pendingIdx={pendingIdx}
-            isProposalPending={isProposalPending}
-            busy={busy}
-            confirmingClearChat={confirmingClearChat}
-            onSend={sendChat}
-            onAccept={acceptProposal}
-            onDiscard={discardProposal}
-            onStartClear={() => setConfirmingClearChat(true)}
-            onConfirmClear={clearChat}
-            onCancelClear={() => setConfirmingClearChat(false)}
-          />
+          {/* RIGHT — chat panel.
+              On md+ it's always inline as the right column.
+              On mobile it slides up from the bottom as a drawer when
+              chatOpenMobile is true (auto-opens when a proposal lands). */}
+          <div
+            className={`
+              ${chatOpenMobile
+                ? "fixed inset-x-0 bottom-0 z-30 max-h-[75vh] flex-col overflow-hidden border-t border-border-light bg-surface shadow-2xl rounded-t-[--radius-xl] flex md:relative md:inset-auto md:max-h-none md:rounded-none md:border-none md:shadow-none md:flex"
+                : "hidden md:flex"
+              }
+              md:max-w-sm md:flex-shrink-0
+            `}
+          >
+            {/* Mobile-only drawer header with a close button. Hidden on md+ */}
+            <div className="flex items-center justify-between border-b border-border-light px-4 py-2 md:hidden">
+              <span className="text-sm font-bold text-text-primary">💬 Workshop</span>
+              <button
+                type="button"
+                onClick={() => setChatOpenMobile(false)}
+                className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+              >
+                ✕
+              </button>
+            </div>
+
+            <ChatPanel
+              item={liveItem}
+              pendingIdx={pendingIdx}
+              isProposalPending={isProposalPending}
+              busy={busy}
+              confirmingClearChat={confirmingClearChat}
+              onSend={sendChat}
+              onAccept={acceptProposal}
+              onDiscard={discardProposal}
+              onStartClear={() => setConfirmingClearChat(true)}
+              onConfirmClear={clearChat}
+              onCancelClear={() => setConfirmingClearChat(false)}
+            />
+          </div>
+
+          {/* Mobile-only floating action button to open the workshop drawer. */}
+          {!chatOpenMobile && (
+            <button
+              type="button"
+              onClick={() => setChatOpenMobile(true)}
+              className="fixed bottom-4 right-4 z-20 flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-primary-dark md:hidden"
+            >
+              💬 Workshop
+              {liveItem.chat_messages.length > 0 && (
+                <span className="rounded-full bg-white/20 px-1.5 text-[10px] font-bold">
+                  {liveItem.chat_messages.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Footer */}
@@ -490,8 +540,9 @@ function ChatPanel({
   };
 
   return (
-    <div className="flex w-full flex-col md:max-w-sm md:flex-shrink-0">
-      <div className="flex items-center justify-between border-b border-border-light px-4 py-2.5">
+    <div className="flex w-full min-h-0 flex-col">
+      {/* Desktop-only header (mobile uses the drawer header above) */}
+      <div className="hidden items-center justify-between border-b border-border-light px-4 py-2.5 md:flex">
         <div className="flex items-center gap-2">
           <span className="text-base">💬</span>
           <span className="text-sm font-bold text-text-primary">Workshop</span>
