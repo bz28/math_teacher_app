@@ -1101,7 +1101,7 @@ function KebabMenu({
   );
 }
 
-const QUANTITY_CHIPS = [5, 10, 20, 50] as const;
+const QUANTITY_CHIPS = [1, 5, 10, 20, 50] as const;
 
 function GenerateQuestionsModal({
   courseId,
@@ -1319,6 +1319,18 @@ function GenerateQuestionsModal({
                     {n}
                   </button>
                 ))}
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={count}
+                  onChange={(e) => {
+                    const n = Number.parseInt(e.target.value, 10);
+                    if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
+                  }}
+                  aria-label="Custom quantity"
+                  className="w-14 rounded-[--radius-pill] border border-border-light bg-bg-base px-2 py-1 text-center text-xs font-bold text-text-primary focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
               </div>
             </div>
 

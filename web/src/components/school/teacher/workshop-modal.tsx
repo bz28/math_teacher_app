@@ -860,7 +860,7 @@ function GenerateSimilarDialog({
           How many?
         </label>
         <div className="mt-1 flex gap-1">
-          {[3, 5, 10].map((n) => (
+          {[1, 3, 5, 10].map((n) => (
             <button
               key={n}
               type="button"
@@ -874,6 +874,18 @@ function GenerateSimilarDialog({
               {n}
             </button>
           ))}
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={count}
+            onChange={(e) => {
+              const n = Number.parseInt(e.target.value, 10);
+              if (Number.isFinite(n)) setCount(Math.max(1, Math.min(20, n)));
+            }}
+            aria-label="Custom quantity"
+            className="w-14 rounded-[--radius-pill] border border-border-light bg-bg-base px-2 py-1 text-center text-xs font-bold text-text-primary focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
         </div>
 
         <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
