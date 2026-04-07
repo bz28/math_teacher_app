@@ -1691,19 +1691,25 @@ function QuestionDetailModal({
   }, [liveItem.chat_messages]);
   const pendingProposal: BankChatProposal | null =
     pendingIdx >= 0 ? liveItem.chat_messages[pendingIdx].proposal! : null;
+  const isProposalPending = pendingIdx >= 0;
 
-  // Manual edits — commit the PATCH first, THEN discard the pending
-  // proposal (if any). This ordering means a PATCH failure leaves both
-  // the proposal and the original content intact; only a successful
-  // edit triggers the discard.
+  // Manual edits and content-changing actions are blocked while a
+  // proposal is pending — the teacher must Accept or Discard first.
+  // The mental model is: one pending change at a time, no ambiguity.
+  const blockIfPending = (): boolean => {
+    if (isProposalPending) {
+      setError("Accept or discard the AI proposal before editing.");
+      return true;
+    }
+    return false;
+  };
+
   const saveQuestion = (next: string) =>
     wrap(async () => {
+      if (blockIfPending()) return;
       const q = next.trim();
       if (!q || q === liveItem.question) return;
       await teacher.updateBankItem(liveItem.id, { question: q });
-      if (pendingIdx >= 0) {
-        await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
-      }
       setLiveItem({ ...liveItem, question: q, has_previous_version: true });
       setShowUndo(true);
       onChanged();
@@ -1711,14 +1717,12 @@ function QuestionDetailModal({
 
   const saveStep = (idx: number, field: "title" | "description", next: string) =>
     wrap(async () => {
+      if (blockIfPending()) return;
       if (!liveItem.solution_steps) return;
       const updated = liveItem.solution_steps.map((s, i) =>
         i === idx ? { ...s, [field]: next } : s,
       );
       await teacher.updateBankItem(liveItem.id, { solution_steps: updated });
-      if (pendingIdx >= 0) {
-        await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
-      }
       setLiveItem({ ...liveItem, solution_steps: updated, has_previous_version: true });
       setShowUndo(true);
       onChanged();
@@ -1726,11 +1730,9 @@ function QuestionDetailModal({
 
   const saveFinalAnswer = (next: string) =>
     wrap(async () => {
+      if (blockIfPending()) return;
       if (next === (liveItem.final_answer ?? "")) return;
       await teacher.updateBankItem(liveItem.id, { final_answer: next });
-      if (pendingIdx >= 0) {
-        await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
-      }
       setLiveItem({ ...liveItem, final_answer: next, has_previous_version: true });
       setShowUndo(true);
       onChanged();
@@ -1783,6 +1785,7 @@ function QuestionDetailModal({
 
   const approve = () =>
     wrap(async () => {
+      if (blockIfPending()) return;
       await teacher.approveBankItem(liveItem.id);
       setLiveItem({ ...liveItem, status: "approved" });
       onChanged();
@@ -1790,6 +1793,7 @@ function QuestionDetailModal({
 
   const reject = () =>
     wrap(async () => {
+      if (blockIfPending()) return;
       await teacher.rejectBankItem(liveItem.id);
       setLiveItem({ ...liveItem, status: "rejected" });
       onChanged();
@@ -1868,7 +1872,7 @@ function QuestionDetailModal({
                 )}
               </div>
               <div className="mt-2 text-sm">
-                {questionChanged ? (
+                {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />
                 ) : (
                   <ClickToEditText
@@ -1915,7 +1919,7 @@ function QuestionDetailModal({
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-semibold text-text-primary">
-                              {stepsChanged ? (
+                              {stepsChanged || isProposalPending ? (
                                 <MathText text={s.title} />
                               ) : (
                                 <ClickToEditText
@@ -1928,7 +1932,7 @@ function QuestionDetailModal({
                             </div>
                             <div className="mt-1.5 h-px bg-border-light" />
                             <div className="mt-2 text-xs text-text-secondary">
-                              {stepsChanged ? (
+                              {stepsChanged || isProposalPending ? (
                                 <MathText text={s.description} />
                               ) : (
                                 <ClickToEditText
@@ -1968,7 +1972,7 @@ function QuestionDetailModal({
                   )}
                 </div>
                 <div className="mt-2 text-base font-semibold text-text-primary">
-                  {answerChanged ? (
+                  {answerChanged || isProposalPending ? (
                     <MathText text={previewAnswer ?? ""} />
                   ) : (
                     <ClickToEditText
@@ -1988,6 +1992,7 @@ function QuestionDetailModal({
           <ChatPanel
             item={liveItem}
             pendingIdx={pendingIdx}
+            isProposalPending={isProposalPending}
             busy={busy}
             onSend={sendChat}
             onAccept={acceptProposal}
@@ -2002,14 +2007,16 @@ function QuestionDetailModal({
             <>
               <button
                 onClick={approve}
-                disabled={busy}
+                disabled={busy || isProposalPending}
+                title={isProposalPending ? "Resolve the AI proposal first" : undefined}
                 className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
               >
                 ✓ Approve
               </button>
               <button
                 onClick={reject}
-                disabled={busy}
+                disabled={busy || isProposalPending}
+                title={isProposalPending ? "Resolve the AI proposal first" : undefined}
                 className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
               >
                 ✕ Reject
@@ -2062,6 +2069,7 @@ const SUGGESTION_CHIPS = [
 function ChatPanel({
   item,
   pendingIdx,
+  isProposalPending,
   busy,
   onSend,
   onAccept,
@@ -2070,6 +2078,7 @@ function ChatPanel({
 }: {
   item: BankItem;
   pendingIdx: number;
+  isProposalPending: boolean;
   busy: boolean;
   onSend: (message: string) => Promise<boolean>;
   onAccept: () => void;
@@ -2110,6 +2119,36 @@ function ChatPanel({
         </span>
       </div>
 
+      {/* Sticky pending-proposal banner. While a proposal is unresolved,
+          everything else in the workshop is gated — Accept or Discard is
+          the only way forward. */}
+      {isProposalPending && (
+        <div className="border-b border-blue-200 bg-blue-50 px-3 py-2.5 dark:border-blue-500/30 dark:bg-blue-500/10">
+          <div className="text-[11px] font-bold text-blue-900 dark:text-blue-200">
+            ✨ AI proposed a change
+          </div>
+          <div className="mt-0.5 text-[10px] text-blue-800 dark:text-blue-300">
+            Review the preview on the left, then accept or discard to continue.
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              onClick={onAccept}
+              disabled={busy}
+              className="flex-1 rounded-[--radius-sm] bg-green-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              ✓ Accept
+            </button>
+            <button
+              onClick={onDiscard}
+              disabled={busy}
+              className="flex-1 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ✕ Discard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <div
         ref={scrollRef}
@@ -2131,8 +2170,9 @@ function ChatPanel({
         )}
       </div>
 
-      {/* Suggestion chips on first open */}
-      {messages.length === 0 && (
+      {/* Suggestion chips on first open. Hidden once a proposal is pending
+          since clicking one would create a second proposal. */}
+      {messages.length === 0 && !isProposalPending && (
         <div className="flex flex-wrap gap-1.5 border-t border-border-light px-4 py-2">
           {SUGGESTION_CHIPS.map((chip) => (
             <button
@@ -2168,9 +2208,13 @@ function ChatPanel({
           onChange={(e) => setDraft(e.target.value)}
           rows={2}
           maxLength={2000}
-          placeholder="Ask for changes, ask a question, or just chat about this problem…"
-          className="w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-          disabled={busy}
+          placeholder={
+            isProposalPending
+              ? "Accept or discard the AI's proposal to keep chatting…"
+              : "Ask for changes, ask a question, or just chat about this problem…"
+          }
+          className="w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+          disabled={busy || isProposalPending}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -2182,14 +2226,14 @@ function ChatPanel({
           <button
             type="button"
             onClick={onClear}
-            disabled={busy || messages.length === 0}
+            disabled={busy || isProposalPending || messages.length === 0}
             className="text-[11px] font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
           >
             Clear chat
           </button>
           <button
             type="submit"
-            disabled={busy || !draft.trim()}
+            disabled={busy || isProposalPending || !draft.trim()}
             className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             Send
