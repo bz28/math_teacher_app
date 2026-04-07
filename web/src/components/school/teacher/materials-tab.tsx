@@ -9,6 +9,7 @@ import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  ChevronDownIcon,
   FolderIcon,
   FolderOpenIcon,
   PlusIcon,
@@ -26,6 +27,7 @@ import { CollisionDialog } from "./materials/collision-dialog";
 import {
   detectCollisions,
   fileCountInFolder,
+  treeFromDirectoryPicker,
   uniqueName,
 } from "./materials/walk-dropped-folder";
 import {
@@ -397,22 +399,11 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           <PlusIcon className="h-4 w-4" />
           New Unit
         </button>
-        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2">
-          <UploadIcon className="h-4 w-4" strokeWidth={2.25} />
-          Upload Files
-          <input
-            type="file"
-            multiple
-            accept=".pdf,.png,.jpg,.jpeg"
-            onChange={(e) => {
-              const files = e.target.files ? Array.from(e.target.files) : [];
-              e.target.value = "";
-              handleLooseFiles(files);
-            }}
-            className="hidden"
-            disabled={busy}
-          />
-        </label>
+        <SplitUploadButton
+          busy={busy}
+          onFiles={handleLooseFiles}
+          onFolderTree={handleImport}
+        />
       </div>
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
@@ -544,6 +535,130 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         onClose={() => setBulkMoveOpen(false)}
         onConfirm={(target) => moveDocuments([...selectedDocIds], target)}
       />
+    </div>
+  );
+}
+
+/**
+ * Primary action as a split button: the big pill opens the file picker
+ * (current behavior); the right chevron reveals a small menu with
+ * explicit "Files" / "Folder" entries. "Folder" triggers a second hidden
+ * <input webkitdirectory>. The directory picker only accepts one folder
+ * at a time (browser limitation) — multi-folder imports still require
+ * drag-and-drop.
+ */
+function SplitUploadButton({
+  busy,
+  onFiles,
+  onFolderTree,
+}: {
+  busy: boolean;
+  onFiles: (files: File[]) => void;
+  onFolderTree: (tree: DroppedTree) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: Event) => {
+      if (!containerRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <div ref={containerRef} className="relative inline-flex">
+      <label
+        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-l-[--radius-md] bg-primary pl-3.5 pr-3 py-1.5 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${
+          busy ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
+        <UploadIcon className="h-4 w-4" strokeWidth={2.25} />
+        Upload
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.png,.jpg,.jpeg"
+          onChange={(e) => {
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            e.target.value = "";
+            onFiles(files);
+          }}
+          className="hidden"
+          disabled={busy}
+        />
+      </label>
+      <button
+        type="button"
+        aria-label="More upload options"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        disabled={busy}
+        onClick={() => setMenuOpen((v) => !v)}
+        className="inline-flex items-center rounded-r-[--radius-md] border-l border-primary-dark/30 bg-primary px-2 py-1.5 text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60"
+      >
+        <ChevronDownIcon className="h-4 w-4" strokeWidth={2.5} />
+      </button>
+
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-expect-error — non-standard but universally supported
+        webkitdirectory=""
+        directory=""
+        multiple
+        onChange={(e) => {
+          const list = e.target.files;
+          e.target.value = "";
+          if (!list || list.length === 0) return;
+          onFolderTree(treeFromDirectoryPicker(list));
+        }}
+        className="hidden"
+      />
+
+      {menuOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-[--radius-md] border border-border-light bg-surface py-1 text-xs shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              fileInputRef.current?.click();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-secondary transition-colors hover:bg-bg-subtle"
+          >
+            <UploadIcon className="h-3.5 w-3.5" />
+            Files
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              folderInputRef.current?.click();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-secondary transition-colors hover:bg-bg-subtle"
+          >
+            <FolderIcon className="h-3.5 w-3.5" />
+            Folder
+          </button>
+        </div>
+      )}
     </div>
   );
 }
