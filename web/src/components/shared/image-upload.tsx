@@ -52,6 +52,7 @@ export function ImageUpload({
   const remaining = maxProblems - currentQueueLength;
 
   const [manualMode, setManualMode] = useState(false);
+  const manualModeRequestedRef = useRef(false);
 
   const autoExtract = useCallback(
     async (base64: string) => {
@@ -103,11 +104,17 @@ export function ImageUpload({
       reader.onload = () => {
         const base64 = (reader.result as string).split(",")[1];
         setImageBase64(base64);
-        autoExtract(base64);
+        if (manualModeRequestedRef.current) {
+          manualModeRequestedRef.current = false;
+          setManualMode(true);
+          setPhase("select");
+        } else {
+          autoExtract(base64);
+        }
       };
       reader.readAsDataURL(file);
     },
-    [autoExtract],
+    [autoExtract, setPhase],
   );
 
   const handleExtractRectangles = useCallback(
@@ -234,7 +241,7 @@ export function ImageUpload({
       <div className="flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed border-primary bg-primary-bg p-8 text-center">
         <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
         <p className="text-sm font-semibold text-primary">
-          Extracting problems from image...
+          Reading your problem…
         </p>
         <p className="text-xs text-text-muted">This usually takes a few seconds</p>
       </div>
@@ -299,6 +306,20 @@ export function ImageUpload({
         />
       </div>
 
+      {!scanLimitReached && !queueFull && (
+        <button
+          type="button"
+          onClick={() => {
+            manualModeRequestedRef.current = true;
+            fileInputRef.current?.click();
+          }}
+          className="mt-2 text-xs font-semibold text-text-muted underline-offset-2 hover:text-primary hover:underline"
+          aria-label="Upload an image and adjust crop manually"
+        >
+          Or upload and adjust crop manually
+        </button>
+      )}
+
       {error && (
         <p className="mt-2 text-sm text-error">{error}</p>
       )}
@@ -313,10 +334,10 @@ export function ImageUpload({
           <div className="space-y-4">
             <div>
               <h2 className="text-lg font-bold text-text-primary">
-                Extracted Problems
+                Got it — confirm
               </h2>
               <p className="text-sm text-text-secondary">
-                {result.problems.length} problem{result.problems.length !== 1 && "s"} found — review and edit before adding
+                Found {result.problems.length} problem{result.problems.length !== 1 && "s"}. Review, edit, and add.
               </p>
             </div>
 
