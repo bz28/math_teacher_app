@@ -613,6 +613,17 @@ function SplitUploadButton({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
+  // React doesn't render non-standard attributes reliably — set
+  // webkitdirectory / directory imperatively so the browser actually
+  // shows the folder picker instead of falling back to the file one.
+  useEffect(() => {
+    const input = folderInputRef.current;
+    if (!input) return;
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+    input.setAttribute("mozdirectory", "");
+  }, []);
+
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: Event) => {
@@ -667,9 +678,6 @@ function SplitUploadButton({
       <input
         ref={folderInputRef}
         type="file"
-        // @ts-expect-error — non-standard but universally supported
-        webkitdirectory=""
-        directory=""
         multiple
         onChange={(e) => {
           const list = e.target.files;
