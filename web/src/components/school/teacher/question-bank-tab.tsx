@@ -27,34 +27,28 @@ import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
 import { STATUS_FILTERS } from "./bank-styles";
 
-// Per-unit tabs inside the Approved view. Each tab is a usage bucket
-// — Homework / Tests / Practice (future) / Unused (approved but not in
-// any homework or test yet). Every approved question lives in at least
-// one tab. The "All" tab is intentionally absent — the unit header
-// already tells you the total, and most browsing is "show me X type."
-type UnitTab = "homework" | "tests" | "practice" | "unused";
+// Tree node = a root question + any practice variations under it.
+// Variations are bank items whose parent_question_id points at the root.
+// Today nothing has a parent (Generate Similar isn't shipped yet), so
+// every approved item is a root with zero children — but the rendering
+// is in place so when variations land they slot in automatically.
+type TreeNode = { item: BankItem; children: BankItem[] };
 
-const UNIT_TABS: { key: UnitTab; label: string }[] = [
-  { key: "homework", label: "Homework" },
-  { key: "tests", label: "Tests" },
-  { key: "practice", label: "Practice" },
-  { key: "unused", label: "Unused" },
-];
-
-// Type-of-assignment classifier — keep "quiz" lumped under tests so any
-// future quiz still has a home without a separate tab.
-function isHomework(t: string): boolean {
-  return t === "homework";
-}
-function isTest(t: string): boolean {
-  return t === "test" || t === "quiz";
-}
-
-function countByTab(item: BankItem): { homework: boolean; tests: boolean } {
-  return {
-    homework: item.used_in.some((u) => isHomework(u.type)),
-    tests: item.used_in.some((u) => isTest(u.type)),
-  };
+function buildTree(items: BankItem[]): TreeNode[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const childrenByParent = new Map<string, BankItem[]>();
+  for (const item of items) {
+    const pid = item.parent_question_id;
+    if (pid && byId.has(pid)) {
+      const arr = childrenByParent.get(pid) ?? [];
+      arr.push(item);
+      childrenByParent.set(pid, arr);
+    }
+  }
+  // Roots = items without a parent in this view (orphans get promoted).
+  return items
+    .filter((item) => !item.parent_question_id || !byId.has(item.parent_question_id))
+    .map((item) => ({ item, children: childrenByParent.get(item.id) ?? [] }));
 }
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
@@ -69,9 +63,11 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     archived: 0,
   });
   // Default to Pending — that's the actionable view a teacher lands on
-  // most often (review what just generated). Approved is for browsing,
-  // Rejected is the archive.
+  // most often after generating. If pending is empty on first load we
+  // flip to Approved automatically (see effect below) so the teacher
+  // doesn't land on an empty page.
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
+  const [defaultedToApproved, setDefaultedToApproved] = useState(false);
   // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
   // status filter so the teacher can narrow on both axes.
   const [unitFilter, setUnitFilter] = useState<string>("all");
@@ -127,6 +123,19 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, statusFilter, unitFilter]);
+
+  // First-load default flip: if we landed on Pending but there's nothing
+  // to review, jump to Approved so the teacher sees their library
+  // instead of an empty page. Only fires once per courseId so a teacher
+  // who explicitly clicks Pending later won't get yanked away.
+  useEffect(() => {
+    if (defaultedToApproved) return;
+    if (loading) return;
+    if (statusFilter === "pending" && counts.pending === 0 && counts.approved > 0) {
+      setStatusFilter("approved");
+      setDefaultedToApproved(true);
+    }
+  }, [loading, counts.pending, counts.approved, statusFilter, defaultedToApproved]);
 
   // Poll active job until done/failed, then refresh the bank.
   // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
@@ -392,9 +401,10 @@ function buildUnitGroups(
   return groups;
 }
 
-// Approved view: collapsible unit with per-unit [All][HW][Tests][Practice]
-// tabs that filter the rows below. Tab state is per-instance so each unit
-// remembers its own tab without affecting others.
+// Approved view: collapsible unit split into two sections — "Available"
+// (root questions not yet in any homework or test, default expanded)
+// and "In a homework or test" (used roots, default collapsed). Practice
+// variations nest under their parent in either section.
 function ApprovedUnitGroup({
   label,
   items,
@@ -410,35 +420,12 @@ function ApprovedUnitGroup({
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
-  // Default collapsed in Approved view — once a question is approved
-  // and slotted into a homework/test, the teacher rarely needs to read
-  // the full text again. The unit header gives the at-a-glance summary;
-  // expand only when actually browsing.
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<UnitTab>("homework");
+  const [open, setOpen] = useState(true);
+  const [storageOpen, setStorageOpen] = useState(false);
 
-  // Counts per tab. Homework and tests can overlap (a question used in
-  // both increments both). "Unused" = approved but not in any HW or test.
-  const counts = (() => {
-    let hw = 0;
-    let tests = 0;
-    let unused = 0;
-    for (const item of items) {
-      const c = countByTab(item);
-      if (c.homework) hw++;
-      if (c.tests) tests++;
-      if (!c.homework && !c.tests) unused++;
-    }
-    return { homework: hw, tests, practice: 0, unused };
-  })();
-
-  const visible = items.filter((item) => {
-    const c = countByTab(item);
-    if (tab === "homework") return c.homework;
-    if (tab === "tests") return c.tests;
-    if (tab === "unused") return !c.homework && !c.tests;
-    return false; // practice — empty until Generate Similar ships
-  });
+  const tree = buildTree(items);
+  const available = tree.filter((node) => node.item.used_in.length === 0);
+  const inUse = tree.filter((node) => node.item.used_in.length > 0);
 
   return (
     <div>
@@ -450,70 +437,180 @@ function ApprovedUnitGroup({
         <span>{open ? "▾" : "▸"}</span>
         <span>📁 {label}</span>
         <span className="font-normal normal-case text-text-muted/80">
-          · {items.length} {items.length === 1 ? "question" : "questions"}
-          {counts.homework > 0 && ` · ${counts.homework} in homework`}
-          {counts.tests > 0 && ` · ${counts.tests} in tests`}
-          {counts.unused > 0 && ` · ${counts.unused} unused`}
+          · {tree.length} {tree.length === 1 ? "question" : "questions"}
+          {available.length > 0 && ` · ${available.length} available`}
+          {inUse.length > 0 && ` · ${inUse.length} in use`}
         </span>
       </button>
 
       {open && (
-        <div className="mt-2">
-          {/* Per-unit tab strip */}
-          <div className="flex gap-1 overflow-x-auto pb-2">
-            {UNIT_TABS.map((t) => {
-              const c = counts[t.key];
-              const active = tab === t.key;
-              const empty = c === 0;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setTab(t.key)}
-                  className={`shrink-0 rounded-[--radius-pill] px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${
-                    active
-                      ? "bg-primary text-white"
-                      : empty
-                        ? "text-text-muted/50"
-                        : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-                  }`}
-                >
-                  {t.label} <span className="opacity-70">({c})</span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="mt-3 space-y-3">
+          {/* Available section — default expanded */}
+          <BankSection
+            title="Available"
+            count={available.length}
+            nodes={available}
+            units={units}
+            defaultOpen
+            emptyText="All approved questions in this unit are in a homework or test 🎉"
+            onOpenItem={onOpenItem}
+            onOpenHomework={onOpenHomework}
+            onChanged={onChanged}
+          />
 
-          <div className="mt-1 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
-            {visible.length === 0 ? (
-              <div className="px-3 py-6 text-center text-xs italic text-text-muted">
-                {tab === "practice"
-                  ? "Practice questions coming soon — generated by \u201CMake similar problems\u201D."
-                  : "No questions in this view."}
-              </div>
-            ) : (
-              visible.map((item) => (
-                <BankRow
-                  key={item.id}
-                  item={item}
-                  unitLabel={buildUnitLabel(units, item.unit_id)}
-                  showUnit={false}
-                  onOpen={() => onOpenItem(item.id)}
-                  onOpenHomework={onOpenHomework}
-                  onChanged={onChanged}
-                />
-              ))
-            )}
-          </div>
+          {/* In-use section — default collapsed, hidden when empty */}
+          {inUse.length > 0 && (
+            <BankSection
+              title="In a homework or test"
+              count={inUse.length}
+              nodes={inUse}
+              units={units}
+              defaultOpen={storageOpen}
+              onToggle={setStorageOpen}
+              onOpenItem={onOpenItem}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          )}
         </div>
       )}
     </div>
   );
 }
 
+// One labeled section inside an Approved unit (Available or In-use).
+// Renders a small header with count + caret, then the rows when open.
+function BankSection({
+  title,
+  count,
+  nodes,
+  units,
+  defaultOpen,
+  onToggle,
+  emptyText,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  title: string;
+  count: number;
+  nodes: TreeNode[];
+  units: TeacherUnit[];
+  defaultOpen: boolean;
+  onToggle?: (open: boolean) => void;
+  emptyText?: string;
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    onToggle?.(next);
+  };
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        <span>{title}</span>
+        <span className="font-normal normal-case text-text-muted/80">· {count}</span>
+      </button>
+      {open && (
+        <div className="mt-1 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
+          {nodes.length === 0 && emptyText ? (
+            <div className="px-3 py-6 text-center text-xs italic text-text-muted">
+              {emptyText}
+            </div>
+          ) : (
+            nodes.map((node) => (
+              <BankRowWithChildren
+                key={node.item.id}
+                node={node}
+                units={units}
+                onOpenItem={onOpenItem}
+                onOpenHomework={onOpenHomework}
+                onChanged={onChanged}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A root row with optional inline-expandable practice variations.
+function BankRowWithChildren({
+  node,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  node: TreeNode;
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [variationsOpen, setVariationsOpen] = useState(false);
+  const childrenCount = node.children.length;
+  const pendingChildren = node.children.filter((c) => c.status === "pending").length;
+
+  return (
+    <div>
+      <BankRow
+        item={node.item}
+        unitLabel={buildUnitLabel(units, node.item.unit_id)}
+        showUnit={false}
+        onOpen={() => onOpenItem(node.item.id)}
+        onOpenHomework={onOpenHomework}
+        onChanged={onChanged}
+      />
+      {childrenCount > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setVariationsOpen((v) => !v)}
+            className="ml-7 mb-1 flex items-center gap-1 text-[10px] font-semibold text-text-muted hover:text-primary"
+          >
+            <span>{variationsOpen ? "▾" : "▸"}</span>
+            <span>
+              {childrenCount} variation{childrenCount === 1 ? "" : "s"}
+              {pendingChildren > 0 && ` · ${pendingChildren} pending`}
+            </span>
+          </button>
+          {variationsOpen && (
+            <div className="ml-6 border-l border-border-light">
+              {node.children.map((child) => (
+                <BankRow
+                  key={child.id}
+                  item={child}
+                  unitLabel={buildUnitLabel(units, child.unit_id)}
+                  showUnit={false}
+                  variation
+                  onOpen={() => onOpenItem(child.id)}
+                  onOpenHomework={onOpenHomework}
+                  onChanged={onChanged}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Pending and Rejected views: flat list of dense rows, no grouping or
-// tabs. These views are for one-time actions (review, restore), not
-// browsing.
+// sectioning. These views are for one-time actions (review, restore),
+// not browsing. Each row shows its unit label since there's no unit
+// grouping to imply context.
 function FlatBankList({
   items,
   units,
@@ -545,12 +642,14 @@ function FlatBankList({
 }
 
 // Dense one-line row. Status dot, truncated question, Used-in pills,
-// optional unit label, lock badge, kebab menu. Click anywhere on the
-// question text or empty area opens the workshop modal.
+// optional unit label, lock badge, kebab menu. Click the question text
+// to open the workshop modal. The `variation` flag styles it slightly
+// smaller + no border so it nests visually under its parent.
 function BankRow({
   item,
   unitLabel,
   showUnit,
+  variation = false,
   onOpen,
   onOpenHomework,
   onChanged,
@@ -558,6 +657,7 @@ function BankRow({
   item: BankItem;
   unitLabel: string;
   showUnit: boolean;
+  variation?: boolean;
   onOpen: () => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
@@ -589,12 +689,12 @@ function BankRow({
 
   return (
     <div
-      className={`group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-subtle ${
-        item.status === "rejected" ? "opacity-60" : ""
-      }`}
+      className={`flex items-start gap-3 px-3 transition-colors hover:bg-bg-subtle ${
+        variation ? "py-1.5 text-xs" : "py-2 text-sm"
+      } ${item.status === "rejected" ? "opacity-60" : ""}`}
     >
       <span
-        className={`mt-1 h-2 w-2 shrink-0 self-start rounded-full ${dotClass}`}
+        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotClass}`}
         title={item.status}
         aria-label={item.status}
       />
@@ -602,42 +702,48 @@ function BankRow({
       <button
         type="button"
         onClick={onOpen}
-        className="min-w-0 flex-1 text-left text-sm text-text-primary hover:text-primary"
+        className="min-w-0 flex-1 text-left text-text-primary hover:text-primary"
         title="Open question"
       >
         <div className="truncate">
           <MathText text={item.question} />
         </div>
-        {(showUnit || item.used_in.length > 0) && (
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted">
-            {showUnit && <span>📁 {unitLabel}</span>}
-          </div>
-        )}
-      </button>
-
-      {/* Used-in pills */}
-      {item.used_in.length > 0 && (
-        <div className="hidden shrink-0 flex-wrap items-center gap-1 sm:flex">
+        {/* Mobile: pills + unit label wrap below the question text on
+            narrow screens. Desktop renders them on the right. */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
+          {showUnit && <span>📁 {unitLabel}</span>}
           {item.used_in.map((u) => (
-            <button
+            <UsedInPill
               key={u.id}
-              type="button"
+              entry={u}
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenHomework(u.id);
               }}
-              className="rounded-[--radius-pill] bg-bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-text-secondary hover:bg-primary-bg/40 hover:text-primary"
-              title={`Open ${u.title}`}
-            >
-              {u.title}
-            </button>
+            />
+          ))}
+        </div>
+      </button>
+
+      {/* Desktop: pills sit to the right of the question text */}
+      {item.used_in.length > 0 && (
+        <div className="hidden shrink-0 flex-wrap items-center gap-1 pt-0.5 sm:flex">
+          {item.used_in.map((u) => (
+            <UsedInPill
+              key={u.id}
+              entry={u}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenHomework(u.id);
+              }}
+            />
           ))}
         </div>
       )}
 
       {item.locked && (
         <span
-          className="shrink-0 text-amber-600 dark:text-amber-400"
+          className="shrink-0 pt-0.5 text-amber-600 dark:text-amber-400"
           title="Locked — in published homework"
         >
           🔒
@@ -653,11 +759,41 @@ function BankRow({
       />
 
       {error && (
-        <span className="shrink-0 text-[10px] text-red-600" title={error}>
+        <span className="shrink-0 pt-0.5 text-[10px] text-red-600" title={error}>
           ⚠
         </span>
       )}
     </div>
+  );
+}
+
+// Pill rendering for "used in" entries. Visually distinguishes
+// homework vs test, and draft vs published, so a teacher building a
+// new homework can tell at a glance which references are live.
+function UsedInPill({
+  entry,
+  onClick,
+}: {
+  entry: { id: string; title: string; type: string; status: string };
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const isTest = entry.type === "test" || entry.type === "quiz";
+  const isDraft = entry.status !== "published";
+  const colorClass = isDraft
+    ? "border border-dashed border-text-muted/40 bg-transparent text-text-muted hover:bg-bg-subtle"
+    : isTest
+      ? "bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300"
+      : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-500/20 dark:text-blue-300";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-bold transition-colors ${colorClass}`}
+      title={`Open ${entry.title}${isDraft ? " (draft)" : ""}`}
+    >
+      {entry.title}
+      {isDraft && <span className="ml-1 opacity-70">draft</span>}
+    </button>
   );
 }
 
@@ -703,8 +839,7 @@ function KebabMenu({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="rounded p-1 text-text-muted opacity-0 transition-opacity hover:bg-bg-subtle hover:text-text-primary group-hover:opacity-100 data-[open=true]:opacity-100"
-        data-open={open}
+        className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
         aria-label="Actions"
       >
         ⋯
