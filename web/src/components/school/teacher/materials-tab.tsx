@@ -8,7 +8,14 @@ import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SearchIcon, UploadIcon, XIcon } from "@/components/ui/icons";
+import {
+  FolderIcon,
+  FolderOpenIcon,
+  PlusIcon,
+  SearchIcon,
+  UploadIcon,
+  XIcon,
+} from "@/components/ui/icons";
 import { FolderTree } from "./materials/folder-tree";
 import { FileGrid } from "./materials/file-grid";
 import { UploadDropzone } from "./materials/upload-dropzone";
@@ -244,35 +251,32 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-text-primary">Materials</h2>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowNewUnit({ parentId: null })}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setShowNewUnit({ parentId: null })}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-sm font-semibold text-text-secondary shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-strong hover:bg-bg-subtle hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+        >
+          <PlusIcon className="h-4 w-4" />
+          New Unit
+        </button>
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2">
+          <UploadIcon className="h-4 w-4" strokeWidth={2.25} />
+          Upload Files
+          <input
+            type="file"
+            multiple
+            accept=".pdf,.png,.jpg,.jpeg"
+            onChange={(e) => {
+              const files = e.target.files ? Array.from(e.target.files) : [];
+              e.target.value = "";
+              if (files.length > 0) handleUpload(files);
+            }}
+            className="hidden"
             disabled={busy}
-            className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-          >
-            + New Unit
-          </button>
-          <label className="cursor-pointer rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark">
-            <span className="inline-flex items-center gap-1.5">
-              <UploadIcon className="h-4 w-4" /> Upload Files
-            </span>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={(e) => {
-                const files = e.target.files ? Array.from(e.target.files) : [];
-                e.target.value = "";
-                if (files.length > 0) handleUpload(files);
-              }}
-              className="hidden"
-              disabled={busy}
-            />
-          </label>
-        </div>
+          />
+        </label>
       </div>
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
@@ -303,15 +307,27 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           />
 
           <UploadDropzone busy={busy} onFiles={handleUpload}>
-            <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-bold text-text-primary">
-                  {selectedUnit ? selectedUnit.name : "Uncategorized"}
-                </h3>
-                <span className="text-xs text-text-muted">
-                  {visibleDocs.length} of {folderDocs.length} file
-                  {folderDocs.length === 1 ? "" : "s"}
-                </span>
+            <div className="rounded-[--radius-lg] border border-border-light bg-surface p-5 shadow-sm">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="flex items-center gap-2 text-lg font-bold tracking-tight text-text-primary">
+                    {selectedUnit ? (
+                      <FolderOpenIcon className="h-5 w-5 shrink-0 text-primary" />
+                    ) : (
+                      <FolderIcon className="h-5 w-5 shrink-0 text-text-muted" />
+                    )}
+                    <span className="truncate">
+                      {selectedUnit ? selectedUnit.name : "Uncategorized"}
+                    </span>
+                  </h3>
+                  <p className="mt-1 text-xs font-medium text-text-muted">
+                    {folderDocs.length === 0
+                      ? "No files"
+                      : `${visibleDocs.length} of ${folderDocs.length} file${
+                          folderDocs.length === 1 ? "" : "s"
+                        }`}
+                  </p>
+                </div>
               </div>
 
               <Toolbar
@@ -322,16 +338,13 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
               />
 
               {folderDocs.length === 0 ? (
-                <div className="mt-4 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
-                  No files in this folder yet. Drop files here or use{" "}
-                  <span className="font-semibold">Upload Files</span> above.
-                </div>
+                <FilesEmptyState />
               ) : visibleDocs.length === 0 ? (
-                <p className="mt-4 text-sm text-text-muted">
+                <p className="mt-6 text-center text-sm text-text-muted">
                   No files match &ldquo;{search}&rdquo;.
                 </p>
               ) : (
-                <div className="mt-4">
+                <div className="mt-5">
                   <FileGrid
                     docs={visibleDocs}
                     selectedIds={selectedDocIds}
@@ -403,40 +416,59 @@ function Toolbar({
   onSortChange: (s: SortMode) => void;
 }) {
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-2">
-      <div className="relative flex-1 min-w-[180px]">
-        <SearchIcon className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="relative min-w-[200px] flex-1">
+        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted transition-colors" />
         <input
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search files in this folder"
           aria-label="Search files in folder"
-          className="w-full rounded-[--radius-md] border border-border-light bg-bg-base py-1.5 pl-8 pr-8 text-sm text-text-primary focus:border-primary focus:outline-none"
+          className="h-9 w-full rounded-full border border-border-light bg-bg-subtle pl-9 pr-9 text-sm text-text-primary placeholder:text-text-muted transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         {search && (
           <button
             type="button"
             onClick={() => onSearchChange("")}
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary"
           >
             <XIcon className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
-      <label className="text-xs text-text-muted">
+      <label className="inline-flex items-center gap-1.5 text-xs font-medium text-text-muted">
         Sort
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortMode)}
-          className="ml-1 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none"
+          className="h-9 rounded-full border border-border-light bg-bg-subtle px-3 text-sm font-medium text-text-primary transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
         >
           <option value="name">Name (A–Z)</option>
           <option value="size">Size (largest)</option>
           <option value="added">Added (newest)</option>
         </select>
       </label>
+    </div>
+  );
+}
+
+function FilesEmptyState() {
+  return (
+    <div className="mt-6 flex flex-col items-center justify-center gap-3 px-4 py-12 text-center">
+      <span
+        className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-bg text-primary shadow-sm ring-1 ring-primary/10"
+        aria-hidden
+      >
+        <FolderIcon className="h-7 w-7" strokeWidth={2} />
+      </span>
+      <div>
+        <p className="text-sm font-bold text-text-primary">No files here yet</p>
+        <p className="mt-1 text-xs text-text-muted">
+          Drag files in or click <span className="font-semibold">Upload Files</span>
+        </p>
+      </div>
     </div>
   );
 }
@@ -458,33 +490,34 @@ function BulkActionBar({
     <div
       role="region"
       aria-label="Bulk file actions"
-      className="fixed inset-x-0 bottom-4 z-30 mx-auto flex w-fit items-center gap-3 rounded-[--radius-xl] border border-border-light bg-surface px-4 py-2 shadow-lg"
+      className="fixed inset-x-0 bottom-6 z-30 mx-auto flex w-fit items-center gap-2 rounded-full border border-border-light bg-surface/90 px-3 py-2 shadow-lg backdrop-blur-md materials-bulk-bar-enter"
     >
-      <span className="text-sm font-semibold text-text-primary">
-        {count} file{count === 1 ? "" : "s"} selected
+      <span className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-primary-bg px-3 py-1 text-xs font-bold text-primary">
+        <span className="tabular-nums">{count}</span>
+        <span>selected</span>
       </span>
-      <div className="h-5 w-px bg-border-light" />
+      <div className="mx-1 h-5 w-px bg-border-light" />
       <button
         type="button"
         onClick={onMove}
         disabled={busy}
-        className="rounded-[--radius-md] border border-border-light px-3 py-1 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-text-secondary transition-colors duration-150 ease-out hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
       >
-        Move
+        <FolderOpenIcon className="h-4 w-4" /> Move
       </button>
       <button
         type="button"
         onClick={onDelete}
         disabled={busy}
-        className="rounded-[--radius-md] bg-red-600 px-3 py-1 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-red-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
       >
-        Delete
+        <XIcon className="h-3.5 w-3.5" /> Delete
       </button>
       <button
         type="button"
         onClick={onClear}
         aria-label="Clear selection"
-        className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+        className="ml-1 rounded-full p-1.5 text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary"
       >
         <XIcon className="h-4 w-4" />
       </button>
@@ -495,16 +528,28 @@ function BulkActionBar({
 function LoadingSkeleton() {
   return (
     <div className="mt-4 grid gap-4 md:grid-cols-[280px_1fr]" aria-hidden>
-      <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3 space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-7 w-full" />
+      <div className="space-y-2 rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-sm">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-full rounded-[--radius-sm]" />
         ))}
       </div>
-      <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
-        <Skeleton className="h-5 w-32" />
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="rounded-[--radius-lg] border border-border-light bg-surface p-5 shadow-sm">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="mt-2 h-3 w-24" />
+        <Skeleton className="mt-4 h-9 w-full rounded-full" />
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full" />
+            <div
+              key={i}
+              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-bg-subtle p-3"
+            >
+              <Skeleton className="h-10 w-10 rounded-[--radius-sm]" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-2/3" />
+                <Skeleton className="h-2 w-1/2" />
+              </div>
+            </div>
           ))}
         </div>
       </div>

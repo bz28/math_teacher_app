@@ -237,3 +237,19 @@ html {
 .animate-ripple {
   animation: ripple 0.6s ease-out forwards;
 }
+
+/* ── Materials bulk-action bar slide-in ── */
+@keyframes materials-bulk-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.materials-bulk-bar-enter {
+  animation: materials-bulk-bar-in 200ms ease-out;
+}
