@@ -724,7 +724,7 @@ export const teacher = {
   createAssignment(courseId: string, data: {
     title: string; type: string; source_type?: string; due_at?: string;
     late_policy?: string; content?: unknown; answer_key?: unknown; unit_id?: string;
-    document_ids?: string[];
+    document_ids?: string[]; bank_item_ids?: string[];
   }) {
     return apiFetch<{ id: string; title: string; status: string }>(`/teacher/courses/${courseId}/assignments`, {
       method: "POST",
