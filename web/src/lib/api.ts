@@ -820,7 +820,7 @@ export const teacher = {
     unit_id?: string | null;
     clear_unit?: boolean;
   }) {
-    return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}`, {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });

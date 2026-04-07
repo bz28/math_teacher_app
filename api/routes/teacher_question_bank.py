@@ -246,7 +246,7 @@ async def update_bank_item(
     body: UpdateBankItemRequest,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
 
     # If any content fields are touched, snapshot the previous state for undo.
@@ -277,7 +277,7 @@ async def update_bank_item(
         item.unit_id = body.unit_id
 
     await db.commit()
-    return {"status": "ok"}
+    return _serialize_item(item)
 
 
 @router.post("/question-bank/{item_id}/revert")
