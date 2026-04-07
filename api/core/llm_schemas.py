@@ -213,6 +213,68 @@ GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
     },
 }
 
+# Workshop chat reply: a conversational response plus an OPTIONAL scoped
+# proposal. Each proposal field is null when unchanged so the frontend
+# only highlights / accepts the actual deltas. Used by the question bank
+# workshop chat (see api/core/question_bank_chat.py).
+BANK_CHAT_REPLY_SCHEMA: ToolSchema = {
+    "name": "return_chat_reply",
+    "description": (
+        "Reply to the teacher's chat message about a question. Optionally "
+        "include a scoped proposal of changes — set fields to null when "
+        "they should remain unchanged. Return proposal=null when the "
+        "teacher is just asking a question and no edit is needed."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "reply": {
+                "type": "string",
+                "description": (
+                    "Conversational response to the teacher. Keep it short "
+                    "(1-3 sentences). Acknowledge the request, mention what "
+                    "you changed, or answer the question."
+                ),
+            },
+            "proposal": {
+                "type": ["object", "null"],
+                "description": (
+                    "Scoped revision. Null when no edit is needed. When "
+                    "present, set fields to null when they should remain "
+                    "unchanged from the current state — only include fields "
+                    "the teacher actually wants changed."
+                ),
+                "properties": {
+                    "question": {
+                        "type": ["string", "null"],
+                        "description": "New question text, or null to leave unchanged.",
+                    },
+                    "solution_steps": {
+                        "type": ["array", "null"],
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "description": {"type": "string"},
+                            },
+                            "required": ["title", "description"],
+                            "additionalProperties": False,
+                        },
+                        "description": "New solution steps, or null to leave unchanged.",
+                    },
+                    "final_answer": {
+                        "type": ["string", "null"],
+                        "description": "New final answer, or null to leave unchanged.",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+        "required": ["reply", "proposal"],
+        "additionalProperties": False,
+    },
+}
+
 # Combined question + worked solution in a single tool call. Used for
 # question bank regeneration so we don't pay for two round-trips when
 # revising one question.

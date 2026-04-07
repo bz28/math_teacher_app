@@ -7,6 +7,7 @@ The frontend polls the job row for status.
 """
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -60,6 +62,24 @@ class RegenerateRequest(BaseModel):
     instructions: str | None = None
 
 
+class ChatMessageRequest(BaseModel):
+    message: str
+
+    @field_validator("message")
+    @classmethod
+    def _validate(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Message cannot be empty")
+        if len(v) > 2000:
+            raise ValueError("Message too long (max 2000 chars)")
+        return v
+
+
+class ChatMessageIndexRequest(BaseModel):
+    message_index: int
+
+
 # ── helpers ──
 
 
@@ -89,6 +109,8 @@ def _serialize_item(item: QuestionBankItem) -> dict[str, Any]:
         "source_doc_ids": item.source_doc_ids,
         "generation_prompt": item.generation_prompt,
         "has_previous_version": item.previous_question is not None,
+        "chat_messages": item.chat_messages or [],
+        "chat_soft_cap": CHAT_SOFT_CAP,
         "created_at": item.created_at.isoformat(),
         "updated_at": item.updated_at.isoformat(),
     }
@@ -344,3 +366,128 @@ async def delete_bank_item(
     await db.delete(item)
     await db.commit()
     return {"status": "ok"}
+
+
+# ── workshop chat ──
+
+
+@router.post("/question-bank/{item_id}/chat")
+async def post_chat_message(
+    item_id: uuid.UUID,
+    body: ChatMessageRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Append a teacher message to the chat, call Claude, append the AI
+    reply (with optional proposal). Returns the updated item.
+
+    The proposal is NOT applied to live fields here — that only happens
+    via /chat/accept."""
+    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    course = (await db.execute(select(Course).where(Course.id == item.course_id))).scalar_one()
+
+    try:
+        await chat_with_bank_item(
+            db, item, course,
+            teacher_message=body.message,
+            user_id=current_user.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Chat failed: {e}",
+        ) from e
+
+    return _serialize_item(item)
+
+
+@router.post("/question-bank/{item_id}/chat/accept")
+async def accept_chat_proposal(
+    item_id: uuid.UUID,
+    body: ChatMessageIndexRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Apply the proposal attached to a specific AI message in the chat.
+    Snapshots the current state to previous_* before mutating, marks the
+    chat message as accepted."""
+    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+
+    messages = list(item.chat_messages or [])
+    if body.message_index < 0 or body.message_index >= len(messages):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message index")
+    msg = messages[body.message_index]
+    if msg.get("role") != "ai":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not an AI message")
+    proposal = msg.get("proposal")
+    if not proposal:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No proposal on this message")
+    if msg.get("accepted") or msg.get("discarded"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proposal already resolved")
+
+    snapshot_history(item)
+
+    if proposal.get("question") is not None:
+        item.question = str(proposal["question"]).strip()
+    if proposal.get("solution_steps") is not None:
+        item.solution_steps = proposal["solution_steps"]
+    if proposal.get("final_answer") is not None:
+        item.final_answer = str(proposal["final_answer"])
+
+    # Mark the message accepted (and any other pending proposals as superseded)
+    for i, m in enumerate(messages):
+        if i == body.message_index:
+            m["accepted"] = True
+        elif (
+            m.get("role") == "ai"
+            and m.get("proposal")
+            and not m.get("accepted")
+            and not m.get("discarded")
+        ):
+            m["superseded"] = True
+    item.chat_messages = messages
+    item.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _serialize_item(item)
+
+
+@router.post("/question-bank/{item_id}/chat/discard")
+async def discard_chat_proposal(
+    item_id: uuid.UUID,
+    body: ChatMessageIndexRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Mark a proposal as discarded. No live content change."""
+    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+
+    messages = list(item.chat_messages or [])
+    if body.message_index < 0 or body.message_index >= len(messages):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message index")
+    msg = messages[body.message_index]
+    if msg.get("role") != "ai" or not msg.get("proposal"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a proposal message")
+    if msg.get("accepted") or msg.get("discarded"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proposal already resolved")
+
+    msg["discarded"] = True
+    item.chat_messages = messages
+    item.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _serialize_item(item)
+
+
+@router.post("/question-bank/{item_id}/chat/clear")
+async def clear_chat(
+    item_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Wipe the chat history for this item. Question/solution unchanged."""
+    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    item.chat_messages = []
+    item.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _serialize_item(item)

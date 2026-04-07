@@ -44,6 +44,11 @@ class QuestionBankItem(Base):
     previous_final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     previous_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Workshop chat thread. List of {role, text, proposal?, accepted?,
+    # discarded?, ts}. Persists across modal close so the conversation
+    # survives. See plans/question-bank-workshop-v2.md.
+    chat_messages: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
