@@ -20,8 +20,8 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
-from api.routes.teacher_assignments import used_in_assignments_map
 from api.routes.teacher_courses import get_teacher_course
+from api.services.bank import used_in_assignments_map, used_in_for_item
 
 
 def _ensure_unlocked(item: QuestionBankItem) -> None:
@@ -30,14 +30,6 @@ def _ensure_unlocked(item: QuestionBankItem) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="This question is in a published homework. Unpublish it first.",
         )
-
-
-async def _used_in_for(db: AsyncSession, item: QuestionBankItem) -> list[dict[str, str]]:
-    """Look up the published assignments referencing this single bank item.
-    Used by the per-item endpoints so the response stays consistent with
-    the list endpoint instead of returning a stale-empty `used_in`."""
-    used = await used_in_assignments_map(db, item.course_id)
-    return used.get(str(item.id), [])
 
 router = APIRouter()
 
@@ -323,12 +315,8 @@ async def update_bank_item(
     elif body.unit_id is not None:
         item.unit_id = body.unit_id
 
-    # Pre-set updated_at so SQLAlchemy doesn't need to lazy-fetch the
-    # server-default value after commit — that lazy fetch trips the
-    # MissingGreenlet error in async sessions. Pattern matches the
-    # chat endpoints which already do this.
     await db.commit()
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
 
 
 @router.post("/question-bank/{item_id}/revert")
@@ -355,7 +343,7 @@ async def revert_bank_item(
     item.previous_final_answer = None
     item.previous_status = None
     await db.commit()
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
 
 
 @router.post("/question-bank/{item_id}/approve")
@@ -407,7 +395,7 @@ async def regenerate_bank_item(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Regeneration failed: {e}",
         ) from e
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
 
 
 @router.post("/question-bank/{item_id}/generate-similar", status_code=status.HTTP_202_ACCEPTED)
@@ -497,7 +485,7 @@ async def post_chat_message(
             detail=f"Chat failed: {e}",
         ) from e
 
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/accept")
@@ -547,7 +535,7 @@ async def accept_chat_proposal(
             m["superseded"] = True
     item.chat_messages = messages
     await db.commit()
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/discard")
@@ -572,7 +560,7 @@ async def discard_chat_proposal(
     msg["discarded"] = True
     item.chat_messages = messages
     await db.commit()
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/clear")
@@ -585,4 +573,4 @@ async def clear_chat(
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     item.chat_messages = []
     await db.commit()
-    return _serialize_item(item, await _used_in_for(db, item))
+    return _serialize_item(item, await used_in_for_item(db, item))
