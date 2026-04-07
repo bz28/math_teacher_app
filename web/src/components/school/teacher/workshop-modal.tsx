@@ -56,6 +56,7 @@ export function WorkshopModal({
 
   const [liveItem, setLiveItem] = useState<BankItem | undefined>(sourceItem);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
+  const [showSimilar, setShowSimilar] = useState(false);
   const [showUndo, setShowUndo] = useState(sourceItem?.has_previous_version ?? false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
@@ -460,6 +461,18 @@ export function WorkshopModal({
                 ↶ Undo last change
               </button>
             )}
+            {/* Generate similar — only on root questions, not variations */}
+            {!liveItem.parent_question_id && (
+              <button
+                type="button"
+                onClick={() => setShowSimilar(true)}
+                disabled={busy}
+                className="rounded-[--radius-md] border border-primary/40 bg-primary-bg/30 px-2 py-0.5 text-xs font-bold text-primary hover:bg-primary-bg/60 disabled:opacity-50"
+                title="Generate variations of this question"
+              >
+                ✨ Make similar
+              </button>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -684,6 +697,125 @@ export function WorkshopModal({
           onCancelDelete={() => setConfirmingDelete(false)}
         />
       </div>
+
+      {showSimilar && liveItem && (
+        <GenerateSimilarDialog
+          itemId={liveItem.id}
+          onClose={() => setShowSimilar(false)}
+          onStarted={() => {
+            setShowSimilar(false);
+            onChanged();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Small dialog: pick how many variations + optional constraint, then
+// schedule the generate-similar job. Children land in the pending
+// queue with parent_question_id set so they nest under their parent
+// once approved.
+function GenerateSimilarDialog({
+  itemId,
+  onClose,
+  onStarted,
+}: {
+  itemId: string;
+  onClose: () => void;
+  onStarted: () => void;
+}) {
+  const [count, setCount] = useState(5);
+  const [constraint, setConstraint] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await teacher.generateSimilarBank(itemId, {
+        count,
+        constraint: constraint.trim() || null,
+      });
+      onStarted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <form
+        className="w-full max-w-sm rounded-[--radius-xl] bg-surface p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <h3 className="text-base font-bold text-text-primary">✨ Make similar</h3>
+        <p className="mt-1 text-xs text-text-muted">
+          Generate variations of this question. They&rsquo;ll land in your
+          Pending queue for review.
+        </p>
+
+        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
+          How many?
+        </label>
+        <div className="mt-1 flex gap-1">
+          {[3, 5, 10].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setCount(n)}
+              className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
+                count === n
+                  ? "bg-primary text-white"
+                  : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+
+        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
+          Optional constraint
+        </label>
+        <textarea
+          value={constraint}
+          onChange={(e) => setConstraint(e.target.value)}
+          rows={3}
+          maxLength={300}
+          placeholder='e.g. "use friendlier numbers" or "make them word problems"'
+          className="mt-1 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+        />
+
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-[--radius-md] bg-primary px-4 py-1.5 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+          >
+            {busy ? "Starting…" : "✨ Generate"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -108,6 +108,26 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
     )
 
+    # If this is a "generate similar" job, fetch the seed question and
+    # weave it into the constraint so Claude produces variations of it.
+    constraint_text = job.constraint
+    if job.parent_question_id:
+        parent = (await db.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
+        )).scalar_one_or_none()
+        if parent:
+            seed_block = (
+                "Generate questions that are SIMILAR TO but DIFFERENT FROM "
+                "this reference question. Match the same topic, difficulty, "
+                "and pedagogical style, but use different numbers, contexts, "
+                "or framing so each variation is its own problem.\n\n"
+                f"Reference question:\n{parent.question}"
+            )
+            constraint_text = (
+                f"{seed_block}\n\nAdditional constraint: {job.constraint}"
+                if job.constraint else seed_block
+            )
+
     # 1. Generate question texts. The bank flow doesn't use a structured
     # difficulty field — teachers describe what they want in the natural-
     # language constraint instead. The legacy job.difficulty column is
@@ -119,7 +139,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         subject=course.subject,
         user_id=str(job.created_by_id),
         images=images or None,
-        extra_instructions=job.constraint,
+        extra_instructions=constraint_text,
     )
 
     if not question_dicts:
@@ -154,6 +174,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             source_doc_ids=source_doc_id_strs,
             generation_prompt=job.constraint,
             created_by_id=job.created_by_id,
+            parent_question_id=job.parent_question_id,
         )
         db.add(item)
         if idx % _PROGRESS_BATCH == 0:

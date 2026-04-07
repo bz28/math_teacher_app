@@ -840,6 +840,12 @@ export const teacher = {
   rejectBankItem(itemId: string) {
     return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/reject`, { method: "POST" });
   },
+  generateSimilarBank(itemId: string, data: { count: number; constraint?: string | null }) {
+    return apiFetch<BankJob>(`/teacher/question-bank/${itemId}/generate-similar`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
   regenerateBankItem(itemId: string, instructions?: string) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/regenerate`, {
       method: "POST",

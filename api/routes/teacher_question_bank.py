@@ -79,6 +79,18 @@ class RegenerateRequest(BaseModel):
     instructions: str | None = None
 
 
+class GenerateSimilarRequest(BaseModel):
+    count: int
+    constraint: str | None = None
+
+    @field_validator("count")
+    @classmethod
+    def _validate_count(cls, v: int) -> int:
+        if v < 1 or v > 20:
+            raise ValueError("count must be between 1 and 20")
+        return v
+
+
 class ChatMessageRequest(BaseModel):
     message: str
 
@@ -385,6 +397,42 @@ async def regenerate_bank_item(
             detail=f"Regeneration failed: {e}",
         ) from e
     return _serialize_item(item, await _used_in_for(db, item))
+
+
+@router.post("/question-bank/{item_id}/generate-similar", status_code=status.HTTP_202_ACCEPTED)
+async def generate_similar_bank_questions(
+    item_id: uuid.UUID,
+    body: GenerateSimilarRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Schedule a generation job seeded from an existing approved bank
+    item. Children inherit unit + source docs from the parent and have
+    parent_question_id set, building the variation tree."""
+    parent = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    if parent.parent_question_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Can only generate similar from a root question, not a variation",
+        )
+
+    job = QuestionBankGenerationJob(
+        course_id=parent.course_id,
+        unit_id=parent.unit_id,
+        created_by_id=current_user.user_id,
+        status="queued",
+        requested_count=body.count,
+        difficulty="mixed",
+        constraint=body.constraint,
+        source_doc_ids=parent.source_doc_ids,
+        parent_question_id=parent.id,
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    schedule_generation_job(job.id)
+    return _serialize_job(job)
 
 
 @router.delete("/question-bank/{item_id}")
