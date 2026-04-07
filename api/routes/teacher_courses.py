@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -216,5 +217,15 @@ async def delete_course(
 ) -> dict[str, str]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
     await db.delete(course)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # FK CASCADE blocked — usually because of active published
+        # assignments referencing locked bank items. Roll back and
+        # tell the teacher what to do instead of returning a 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unpublish all assignments before deleting this course",
+        ) from None
     return {"status": "ok"}

@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import { MATERIAL_UPLOAD_MAX_BYTES } from "@/lib/constants";
 import { subfoldersOf, topUnits } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: () => void }) {
   const [units, setUnits] = useState<TeacherUnit[]>([]);
@@ -49,7 +48,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     run(async () => {
       if (!files || files.length === 0) return;
       for (const file of Array.from(files)) {
-        if (file.size > MAX_UPLOAD_BYTES) {
+        if (file.size > MATERIAL_UPLOAD_MAX_BYTES) {
           throw new Error(`${file.name} exceeds 25MB`);
         }
         const base64 = await fileToBase64(file);

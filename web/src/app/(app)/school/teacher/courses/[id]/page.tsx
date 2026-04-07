@@ -4,6 +4,11 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
+import {
+  BANK_JOB_POLL_INTERVAL_MS,
+  BANK_JOB_POLL_LIMIT_MS,
+  BANK_JOB_TOAST_AUTO_CLEAR_MS,
+} from "@/lib/constants";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { QuestionBankTab } from "@/components/school/teacher/question-bank-tab";
@@ -21,7 +26,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "settings", label: "Settings" },
 ];
 
-const POLL_LIMIT_MS = 5 * 60 * 1000;
 const ACTIVE_JOB_STORAGE_KEY = (courseId: string) => `bank.activeJob.${courseId}`;
 
 export default function CourseWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
@@ -97,7 +101,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
     const startedAt = Date.now();
     const jobId = activeJob.id;
     const interval = setInterval(async () => {
-      if (Date.now() - startedAt > POLL_LIMIT_MS) {
+      if (Date.now() - startedAt > BANK_JOB_POLL_LIMIT_MS) {
         updateActiveJob({
           ...activeJob,
           status: "failed",
@@ -111,7 +115,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
       } catch {
         // keep polling, transient errors are fine
       }
-    }, 3000);
+    }, BANK_JOB_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [activeJob, id, updateActiveJob]);
 
@@ -119,7 +123,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
   // jobs (parent_question_id set) stay until the teacher clicks Review.
   useEffect(() => {
     if (activeJob?.status === "done" && !activeJob.parent_question_id) {
-      const t = setTimeout(() => updateActiveJob(null), 4000);
+      const t = setTimeout(() => updateActiveJob(null), BANK_JOB_TOAST_AUTO_CLEAR_MS);
       return () => clearTimeout(t);
     }
   }, [activeJob?.status, activeJob?.parent_question_id, updateActiveJob]);
@@ -216,6 +220,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
         {tab === "bank" && (
           <QuestionBankTab
             courseId={course.id}
+            courseSubject={course.subject}
             activeJob={activeJob}
             setActiveJob={updateActiveJob}
           />

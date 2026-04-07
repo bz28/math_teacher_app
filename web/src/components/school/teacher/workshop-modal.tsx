@@ -10,6 +10,7 @@ import {
   type BankJob,
   type TeacherUnit,
 } from "@/lib/api";
+import { WORKSHOP_UNDO_GRACE_MS } from "@/lib/constants";
 import { subfoldersOf, topUnits } from "@/lib/units";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
@@ -123,7 +124,7 @@ export function WorkshopModal({
   }, [liveItem?.id, liveItem?.has_previous_version, liveItem?.updated_at]);
   useEffect(() => {
     if (!showUndo) return;
-    const t = setTimeout(() => setShowUndo(false), 30000);
+    const t = setTimeout(() => setShowUndo(false), WORKSHOP_UNDO_GRACE_MS);
     return () => clearTimeout(t);
   }, [showUndo]);
 

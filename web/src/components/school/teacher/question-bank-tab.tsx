@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   teacher,
   type BankCounts,
@@ -11,6 +11,10 @@ import {
 } from "@/lib/api";
 // Aliased to avoid colliding with the `unitLabel` prop on BankRow.
 import { subfoldersOf, topUnits, unitLabel as labelForUnit } from "@/lib/units";
+
+// Course subject context — read by BankRow's emoji classifier so we
+// don't have to drill the subject prop through 5 layers of components.
+const CourseSubjectContext = createContext<string>("math");
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
@@ -33,8 +37,28 @@ type TreeNode = { item: BankItem; children: BankItem[] };
 // more specific sport names check first so "baseball" doesn't fall
 // through to a generic ball bucket. Word boundaries (\b) keep
 // "basketball" from matching inside "basket-shaped" or vice versa.
-function conceptEmoji(title: string, question: string): string {
+//
+// Subject-gated: math courses get all the buckets; physics gets the
+// physics-flavored ones (🚀); chemistry gets a flask. Avoids the
+// chemistry-course-shows-rocket-for-"reagent-cost" mismatch.
+function conceptEmoji(title: string, question: string, subject: string): string {
   const text = (title + " " + question).toLowerCase();
+
+  if (subject === "chemistry") {
+    if (/\b(reaction|molecule|bond|acid|base|ph|reagent|compound)\b/.test(text)) return "🧪";
+    if (/\b(temperature|heat|kelvin|celsius)\b/.test(text)) return "🌡️";
+    return "⚗️";
+  }
+
+  if (subject === "physics") {
+    if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
+    if (/\b(force|newton|gravity|mass|acceleration|momentum)\b/.test(text)) return "⚙️";
+    if (/\b(wave|frequency|amplitude|wavelength|hertz)\b/.test(text)) return "〰️";
+    if (/\b(circuit|voltage|current|resistance|ohm|watt)\b/.test(text)) return "⚡";
+    return "🔬";
+  }
+
+  // math (default)
 
   // Sports — each gets its own emoji, checked specific-to-general
   if (/\bbaseball\b/.test(text)) return "⚾";
@@ -44,7 +68,7 @@ function conceptEmoji(title: string, question: string): string {
   if (/\bhockey\b|\bpuck\b/.test(text)) return "🏒";
   if (/\bfrisbee\b/.test(text)) return "🥏";
 
-  // Physics-flavored launches
+  // Physics-flavored launches (still useful in math word problems)
   if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
   if (/\bball\b|\bthrow(n|ing)?\b|\bkick(ed|ing)?\b/.test(text)) return "🏐";
 
@@ -104,10 +128,15 @@ function buildTree(items: BankItem[]): TreeNode[] {
 
 export function QuestionBankTab({
   courseId,
+  courseSubject,
   activeJob,
   setActiveJob,
 }: {
   courseId: string;
+  // Used by the concept emoji classifier to gate math/physics/chem
+  // buckets so a chem course doesn't render 🚀 for "reagent" word
+  // problems.
+  courseSubject: string;
   // Lifted to the course page so the active job survives tab switches.
   // Polling + auto-clear also live there. This component just consumes
   // the state and triggers updates.
@@ -220,6 +249,7 @@ export function QuestionBankTab({
   }, [activeJob?.status, activeJob?.id]);
 
   return (
+    <CourseSubjectContext.Provider value={courseSubject}>
     <div>
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -439,6 +469,7 @@ export function QuestionBankTab({
         />
       )}
     </div>
+    </CourseSubjectContext.Provider>
   );
 }
 
@@ -827,7 +858,7 @@ function BankRow({
         >
           <div className="flex items-center gap-2 truncate">
             <span className="shrink-0" aria-hidden>
-              {conceptEmoji(item.title, item.question)}
+              {conceptEmoji(item.title, item.question, useContext(CourseSubjectContext))}
             </span>
             {item.source === "practice" && (
               <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
