@@ -313,7 +313,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             }
           />
         ) : statusFilter === "pending" || statusFilter === "rejected" ? (
-          <FlatBankList
+          <SimpleUnitList
             items={items}
             units={units}
             onOpenItem={setOpenItemId}
@@ -612,11 +612,10 @@ function BankRowWithChildren({
   );
 }
 
-// Pending and Rejected views: flat list of dense rows, no grouping or
-// sectioning. These views are for one-time actions (review, restore),
-// not browsing. Each row shows its unit label since there's no unit
-// grouping to imply context.
-function FlatBankList({
+// Pending and Rejected views: same unit grouping as Approved, but no
+// sub-sections. Just a flat dense list of rows per unit. Lets the
+// teacher review/triage one topic at a time.
+function SimpleUnitList({
   items,
   units,
   onOpenItem,
@@ -629,19 +628,68 @@ function FlatBankList({
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
+  const groups = buildUnitGroups(items, units);
   return (
-    <div className="divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
-      {items.map((item) => (
-        <BankRow
-          key={item.id}
-          item={item}
-          unitLabel={buildUnitLabel(units, item.unit_id)}
-          showUnit={true}
-          onOpen={() => onOpenItem(item.id)}
+    <div className="space-y-5">
+      {groups.map((group) => (
+        <SimpleUnitGroup
+          key={group.id}
+          label={group.label}
+          items={group.items}
+          units={units}
+          onOpenItem={onOpenItem}
           onOpenHomework={onOpenHomework}
           onChanged={onChanged}
         />
       ))}
+    </div>
+  );
+}
+
+function SimpleUnitGroup({
+  label,
+  items,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  label: string;
+  items: BankItem[];
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 border-b border-border-light pb-1 text-left text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        <span>📁 {label}</span>
+        <span className="font-normal normal-case text-text-muted/80">
+          · {items.length} {items.length === 1 ? "question" : "questions"}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-2 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
+          {items.map((item) => (
+            <BankRow
+              key={item.id}
+              item={item}
+              unitLabel={buildUnitLabel(units, item.unit_id)}
+              showUnit={false}
+              onOpen={() => onOpenItem(item.id)}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
