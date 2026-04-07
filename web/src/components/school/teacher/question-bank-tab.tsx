@@ -187,13 +187,16 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id, activeJob?.status, courseId]);
 
-  // Auto-clear a finished job banner after a few seconds
+  // Auto-clear a finished job banner after a few seconds.
+  // Skipped for make-similar jobs — those are an active CTA the
+  // teacher needs to click ("Review them →"), not a passive toast.
+  // Cleared when the teacher clicks Review or starts another job.
   useEffect(() => {
-    if (activeJob?.status === "done") {
+    if (activeJob?.status === "done" && !activeJob.parent_question_id) {
       const t = setTimeout(() => setActiveJob(null), 4000);
       return () => clearTimeout(t);
     }
-  }, [activeJob?.status]);
+  }, [activeJob?.status, activeJob?.parent_question_id]);
 
   return (
     <div>
@@ -224,8 +227,9 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
         </div>
       </div>
 
-      {/* Active job banner */}
-      {activeJob && (
+      {/* Active job banner — hidden for make-similar jobs since those
+          have their own in-modal strip with the "Review them" CTA. */}
+      {activeJob && !activeJob.parent_question_id && (
         <div
           className={`mt-4 rounded-[--radius-lg] border p-3 text-sm ${
             activeJob.status === "failed"
