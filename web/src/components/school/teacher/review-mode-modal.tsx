@@ -3,17 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 import { teacher, type BankItem } from "@/lib/api";
+import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { QuestionDetailModal } from "./question-detail-modal";
 
 type ResolvedAction = "approved" | "rejected" | "skipped";
 
 /**
  * Focused single-question review mode. Walks the teacher through the
  * pending queue captured at open time. Approve/Reject hits the API and
- * advances; Skip leaves the question pending and advances. The full
- * QuestionDetailModal opens on top via Edit when a question needs deeper
- * work.
+ * advances; Skip leaves the question pending and advances.
+ *
+ * Inline edit mode is for quick fixes (typos, wording, small math
+ * corrections). Click "Edit" to swap the question / each step / final
+ * answer into click-to-edit mode in place — no second modal opens. For
+ * deeper AI-assisted edits, the teacher skips and uses the workshop
+ * modal from the bank list.
  *
  * The queue is a frozen snapshot — questions added to the bank after
  * open time don't enter this session. New "review pending" launches
@@ -28,14 +32,17 @@ export function ReviewModeModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  // Frozen at open time. Skipped/edited questions stay in this list at
-  // their original index so the counter and progress are stable.
-  const [queue] = useState<BankItem[]>(initialQueue);
+  // Mutable queue — manual edits update the item in place so the same
+  // session sees the new content. Status changes (approve/reject) live
+  // in `resolved`, not the queue itself.
+  const [queue, setQueue] = useState<BankItem[]>(initialQueue);
   // Per-index resolved action ("approved" | "rejected" | "skipped" | undefined)
   const [resolved, setResolved] = useState<Record<number, ResolvedAction>>({});
   const [index, setIndex] = useState(0);
   const [solutionOpen, setSolutionOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<BankItem | null>(null);
+  // Inline edit mode for the current question. Reset to false when the
+  // teacher advances or closes.
+  const [editing, setEditing] = useState(false);
   const { busy, error, setError, run } = useAsyncAction();
 
   const current = queue[index];
@@ -49,6 +56,7 @@ export function ReviewModeModal({
   const allResolved = Object.keys(resolved).length >= total;
 
   const advance = () => {
+    setEditing(false);
     // Move to the next unresolved index, wrapping if needed.
     for (let step = 1; step <= total; step++) {
       const next = (index + step) % total;
@@ -68,7 +76,7 @@ export function ReviewModeModal({
 
   const approve = () =>
     run(async () => {
-      if (!current) return;
+      if (!current || editing) return;
       await teacher.approveBankItem(current.id);
       markAndAdvance("approved");
       onChanged();
@@ -76,7 +84,7 @@ export function ReviewModeModal({
 
   const reject = () =>
     run(async () => {
-      if (!current) return;
+      if (!current || editing) return;
       await teacher.rejectBankItem(current.id);
       markAndAdvance("rejected");
       onChanged();
@@ -84,26 +92,50 @@ export function ReviewModeModal({
 
   const skip = () => {
     setError(null);
-    if (!current) return;
+    if (!current || editing) return;
     markAndAdvance("skipped");
   };
 
-  const openEdit = () => {
-    if (!current) return;
-    setEditingItem(current);
-  };
-
-  const handleEditClosed = () => {
-    setEditingItem(null);
-    // After editing, the parent's reload may have updated this item's status.
-    // We don't refetch here — onChanged() bumps the bank list, and any
-    // status change is captured by the next time the teacher opens review.
+  // Replace the queue entry at the given index with an updated item.
+  // Used after each click-to-edit save so the same review session shows
+  // the latest content.
+  const updateCurrent = (next: BankItem) => {
+    setQueue((prev) => prev.map((q, i) => (i === index ? next : q)));
     onChanged();
   };
 
-  // Keyboard shortcuts. Disabled while edit modal is open or busy.
+  const saveQuestion = (nextText: string) =>
+    run(async () => {
+      if (!current) return;
+      const trimmed = nextText.trim();
+      if (!trimmed || trimmed === current.question) return;
+      const updated = await teacher.updateBankItem(current.id, { question: trimmed });
+      updateCurrent(updated);
+    });
+
+  const saveStep = (idx: number, field: "title" | "description", nextText: string) =>
+    run(async () => {
+      if (!current?.solution_steps) return;
+      const updatedSteps = current.solution_steps.map((s, i) =>
+        i === idx ? { ...s, [field]: nextText } : s,
+      );
+      const updated = await teacher.updateBankItem(current.id, {
+        solution_steps: updatedSteps,
+      });
+      updateCurrent(updated);
+    });
+
+  const saveFinalAnswer = (nextText: string) =>
+    run(async () => {
+      if (!current) return;
+      if (nextText === (current.final_answer ?? "")) return;
+      const updated = await teacher.updateBankItem(current.id, { final_answer: nextText });
+      updateCurrent(updated);
+    });
+
+  // Keyboard shortcuts. Disabled while editing or busy or done.
   useEffect(() => {
-    if (editingItem || allResolved) return;
+    if (editing || allResolved) return;
     const handler = (e: KeyboardEvent) => {
       if (busy) return;
       // Ignore shortcuts when typing in an input
@@ -121,7 +153,7 @@ export function ReviewModeModal({
         skip();
       } else if (e.key === "e" || e.key === "E") {
         e.preventDefault();
-        openEdit();
+        setEditing(true);
       } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
         setSolutionOpen((v) => !v);
@@ -133,7 +165,7 @@ export function ReviewModeModal({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingItem, allResolved, busy, index, current?.id]);
+  }, [editing, allResolved, busy, index, current?.id]);
 
   // Empty queue — close immediately.
   if (total === 0) {
@@ -235,36 +267,55 @@ export function ReviewModeModal({
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {/* Question card */}
-            <div className="rounded-[--radius-lg] border border-border-light bg-surface p-5 shadow-sm">
+            <div
+              className={`rounded-[--radius-lg] border p-5 shadow-sm transition-colors ${
+                editing
+                  ? "border-primary bg-primary-bg/20"
+                  : "border-border-light bg-surface"
+              }`}
+            >
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                <span>Question</span>
+                <span>Question {editing && "· editing"}</span>
                 <span className="rounded-[--radius-pill] bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-500/10">
                   pending
                 </span>
               </div>
               <div className="mt-3 text-base text-text-primary">
-                <MathText text={current.question} />
+                {editing ? (
+                  <ClickToEditText
+                    value={current.question}
+                    multiline
+                    onSave={saveQuestion}
+                    busy={busy}
+                  />
+                ) : (
+                  <MathText text={current.question} />
+                )}
               </div>
             </div>
 
-            {/* Solution toggle */}
+            {/* Solution toggle (auto-expands while editing) */}
             <button
               type="button"
               onClick={() => setSolutionOpen(!solutionOpen)}
               className="mt-5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
             >
-              <span>{solutionOpen ? "▾" : "▸"}</span>
-              {solutionOpen ? "Hide" : "Show"} solution
+              <span>{solutionOpen || editing ? "▾" : "▸"}</span>
+              {solutionOpen || editing ? "Hide" : "Show"} solution
               {current.solution_steps && ` (${current.solution_steps.length} steps)`}
             </button>
 
-            {solutionOpen && (
+            {(solutionOpen || editing) && (
               <div className="mt-3 space-y-2">
                 {current.solution_steps && current.solution_steps.length > 0 ? (
                   current.solution_steps.map((s, i) => (
                     <div
                       key={i}
-                      className="rounded-[--radius-md] border border-border-light bg-bg-subtle p-3"
+                      className={`rounded-[--radius-md] border p-3 ${
+                        editing
+                          ? "border-primary/40 bg-primary-bg/10"
+                          : "border-border-light bg-bg-subtle"
+                      }`}
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
@@ -272,10 +323,28 @@ export function ReviewModeModal({
                         </div>
                         <div className="min-w-0 flex-1 text-xs">
                           <div className="font-semibold text-text-primary">
-                            <MathText text={s.title} />
+                            {editing ? (
+                              <ClickToEditText
+                                value={s.title}
+                                inline
+                                onSave={(next) => saveStep(i, "title", next)}
+                                busy={busy}
+                              />
+                            ) : (
+                              <MathText text={s.title} />
+                            )}
                           </div>
                           <div className="mt-1 text-text-secondary">
-                            <MathText text={s.description} />
+                            {editing ? (
+                              <ClickToEditText
+                                value={s.description}
+                                multiline
+                                onSave={(next) => saveStep(i, "description", next)}
+                                busy={busy}
+                              />
+                            ) : (
+                              <MathText text={s.description} />
+                            )}
                           </div>
                         </div>
                       </div>
@@ -284,85 +353,114 @@ export function ReviewModeModal({
                 ) : (
                   <p className="text-xs italic text-text-muted">No solution steps recorded.</p>
                 )}
-                {current.final_answer && (
-                  <div className="rounded-[--radius-md] border border-primary/30 bg-primary-bg/30 p-3 text-xs">
+                {(current.final_answer || editing) && (
+                  <div
+                    className={`rounded-[--radius-md] border p-3 text-xs ${
+                      editing
+                        ? "border-primary/40 bg-primary-bg/10"
+                        : "border-primary/30 bg-primary-bg/30"
+                    }`}
+                  >
                     <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
                       Final answer:
                     </span>{" "}
                     <span className="font-semibold text-text-primary">
-                      <MathText text={current.final_answer} />
+                      {editing ? (
+                        <ClickToEditText
+                          value={current.final_answer ?? ""}
+                          inline
+                          onSave={saveFinalAnswer}
+                          busy={busy}
+                        />
+                      ) : (
+                        <MathText text={current.final_answer ?? ""} />
+                      )}
                     </span>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Source + constraint footer */}
-            <div className="mt-5 space-y-1 border-t border-border-light pt-3 text-[11px] text-text-muted">
-              {current.source_doc_ids && current.source_doc_ids.length > 0 && (
-                <div>
-                  <span className="font-bold uppercase tracking-wider">Source:</span>{" "}
-                  {current.source_doc_ids.length} document
-                  {current.source_doc_ids.length === 1 ? "" : "s"}
-                </div>
-              )}
-              {current.generation_prompt && (
-                <div>
-                  <span className="font-bold uppercase tracking-wider">Constraint:</span>{" "}
-                  &ldquo;{current.generation_prompt}&rdquo;
-                </div>
-              )}
-            </div>
+            {/* Source + constraint footer (hidden in edit mode to keep focus) */}
+            {!editing && (
+              <div className="mt-5 space-y-1 border-t border-border-light pt-3 text-[11px] text-text-muted">
+                {current.source_doc_ids && current.source_doc_ids.length > 0 && (
+                  <div>
+                    <span className="font-bold uppercase tracking-wider">Source:</span>{" "}
+                    {current.source_doc_ids.length} document
+                    {current.source_doc_ids.length === 1 ? "" : "s"}
+                  </div>
+                )}
+                {current.generation_prompt && (
+                  <div>
+                    <span className="font-bold uppercase tracking-wider">Constraint:</span>{" "}
+                    &ldquo;{current.generation_prompt}&rdquo;
+                  </div>
+                )}
+              </div>
+            )}
 
             {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
           </div>
 
           {/* Actions */}
           <div className="border-t border-border-light px-6 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={reject}
-                disabled={busy}
-                className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                ✕ Reject
-              </button>
-              <button
-                onClick={skip}
-                disabled={busy}
-                className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-              >
-                Skip
-              </button>
-              <button
-                onClick={openEdit}
-                disabled={busy}
-                className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-              >
-                ✏ Edit
-              </button>
-              <button
-                onClick={approve}
-                disabled={busy}
-                className="ml-auto rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-              >
-                ✓ Approve
-              </button>
-            </div>
-            <p className="mt-2 text-[10px] text-text-muted">
-              ↵ approve · X reject · S skip · E edit · ↑ toggle solution · Esc close
-            </p>
+            {editing ? (
+              <>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setEditing(false)}
+                    disabled={busy}
+                    className="rounded-[--radius-md] bg-primary px-4 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                  >
+                    ✓ Done editing
+                  </button>
+                </div>
+                <p className="mt-2 text-[10px] text-text-muted">
+                  Click any text above to edit. Need AI help instead?
+                  Skip this question and open it from the bank list — the workshop has chat.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={reject}
+                    disabled={busy}
+                    className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    ✕ Reject
+                  </button>
+                  <button
+                    onClick={skip}
+                    disabled={busy}
+                    className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    onClick={() => setEditing(true)}
+                    disabled={busy}
+                    className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                  >
+                    ✏ Edit
+                  </button>
+                  <button
+                    onClick={approve}
+                    disabled={busy}
+                    className="ml-auto rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    ✓ Approve
+                  </button>
+                </div>
+                <p className="mt-2 text-[10px] text-text-muted">
+                  ↵ approve · X reject · S skip · E edit · ↑ toggle solution · Esc close
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>
-
-      {editingItem && (
-        <QuestionDetailModal
-          item={editingItem}
-          onClose={handleEditClosed}
-          onChanged={onChanged}
-        />
-      )}
     </>
   );
 }
