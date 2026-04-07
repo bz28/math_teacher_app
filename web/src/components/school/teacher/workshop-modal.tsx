@@ -13,7 +13,13 @@ import {
 import { subfoldersOf, topUnits } from "@/lib/units";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { STATUS_BADGE } from "./bank-styles";
+
+const STATUS_BADGE: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
+  approved: "bg-green-50 text-green-700 dark:bg-green-500/10",
+  rejected: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+  archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+};
 
 /**
  * Unified workshop modal for editing a single question OR walking through

@@ -15,7 +15,12 @@ import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
-import { STATUS_FILTERS } from "./bank-styles";
+
+const STATUS_FILTERS: { key: "pending" | "approved" | "rejected"; label: string }[] = [
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
 
 // Tree node = a root question + any practice variations under it.
 // Variations are bank items whose parent_question_id points at the root.
