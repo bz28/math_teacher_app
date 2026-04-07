@@ -26,10 +26,11 @@ from api.models.unit import Unit
 
 logger = logging.getLogger(__name__)
 
-# Soft cap on chat history sent to Claude. Beyond this, only the last
-# CHAT_CONTEXT_WINDOW messages are forwarded — we don't refuse the call,
-# the frontend just shows a banner.
+# Soft cap = frontend banner threshold (counted in TEACHER messages).
+# Hard cap = backend enforced — bounded cost vector regardless of client.
+# Window = trailing slice of chat_messages forwarded to Claude per call.
 CHAT_SOFT_CAP = 20
+CHAT_HARD_CAP = 100
 CHAT_CONTEXT_WINDOW = 20
 
 
@@ -129,13 +130,23 @@ async def chat_with_bank_item(
     if item.chat_messages is None:
         item.chat_messages = []
 
+    # Hard cap: refuse new messages once a teacher has sent CHAT_HARD_CAP.
+    # The frontend nudges at CHAT_SOFT_CAP, this is the actual limit so the
+    # cost is bounded regardless of client behavior.
+    teacher_count = sum(1 for m in item.chat_messages if m.get("role") == "teacher")
+    if teacher_count >= CHAT_HARD_CAP:
+        raise ValueError(
+            f"Chat limit reached ({CHAT_HARD_CAP} messages). Clear the chat or start a new question."
+        )
+
     now = datetime.now(timezone.utc).isoformat()
 
-    # Append teacher message immediately so it's persisted even if Claude fails
+    # Build the prompt against the future history (existing + the new
+    # teacher message), but DON'T persist it yet — if Claude fails we
+    # don't want a stranded teacher message in the DB. Persist both
+    # messages atomically after Claude returns.
     teacher_msg = {"role": "teacher", "text": teacher_message, "ts": now}
-    item.chat_messages = [*item.chat_messages, teacher_msg]
-    item.updated_at = datetime.now(timezone.utc)
-    await db.commit()
+    pending_history = [*item.chat_messages, teacher_msg]
 
     # Build prompt context
     unit_name = course.name
@@ -149,8 +160,8 @@ async def chat_with_bank_item(
 
     user_context = _build_user_context(item, unit_name, course.name)
 
-    # Trim history for the call
-    history = _strip_internal_fields(item.chat_messages[-CHAT_CONTEXT_WINDOW:])
+    # Trim history for the call (uses the pending list including the new msg)
+    history = _strip_internal_fields(pending_history[-CHAT_CONTEXT_WINDOW:])
 
     doc_ids = [uuid.UUID(d) for d in (item.source_doc_ids or [])]
     images = await fetch_document_images(
@@ -196,11 +207,11 @@ async def chat_with_bank_item(
     proposal_raw = result.get("proposal")
     proposal: dict[str, Any] | None = None
     if isinstance(proposal_raw, dict):
+        steps_raw = proposal_raw.get("solution_steps")
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
-            "solution_steps": proposal_raw.get("solution_steps")
-            if isinstance(proposal_raw.get("solution_steps"), list)
-            else None,
+            # Treat empty list as null — an empty solution is never a valid edit
+            "solution_steps": steps_raw if isinstance(steps_raw, list) and len(steps_raw) > 0 else None,
             "final_answer": proposal_raw.get("final_answer")
             if proposal_raw.get("final_answer")
             else None,
@@ -217,7 +228,10 @@ async def chat_with_bank_item(
     if proposal:
         ai_msg["proposal"] = proposal
 
-    item.chat_messages = [*item.chat_messages, ai_msg]
+    # Atomic persist: both the teacher message AND the AI reply land in
+    # the same commit. If Claude failed above, neither was persisted, so
+    # the frontend can re-submit the original draft cleanly.
+    item.chat_messages = [*pending_history, ai_msg]
     item.updated_at = datetime.now(timezone.utc)
     await db.commit()
 

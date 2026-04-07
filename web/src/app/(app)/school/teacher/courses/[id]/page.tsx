@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -1626,7 +1626,7 @@ function QuestionDetailModal({
   const [error, setError] = useState<string | null>(null);
   const [showUndo, setShowUndo] = useState(initialItem.has_previous_version);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [solutionOpen, setSolutionOpen] = useState(true);
+  const [solutionOpen, setSolutionOpen] = useState(false);
 
   // If the parent reloads the bank list and a fresher version of this item
   // arrives, prefer the fresher updated_at. We don't blindly replace because
@@ -1672,8 +1672,9 @@ function QuestionDetailModal({
   };
 
   // Pending proposal: latest AI message with a proposal that isn't
-  // accepted/discarded/superseded.
-  const pendingIdx = (() => {
+  // accepted/discarded/superseded. Memoized so we only walk the chat
+  // history when it actually changes.
+  const pendingIdx = useMemo(() => {
     for (let i = liveItem.chat_messages.length - 1; i >= 0; i--) {
       const m = liveItem.chat_messages[i];
       if (
@@ -1687,21 +1688,22 @@ function QuestionDetailModal({
       }
     }
     return -1;
-  })();
+  }, [liveItem.chat_messages]);
   const pendingProposal: BankChatProposal | null =
     pendingIdx >= 0 ? liveItem.chat_messages[pendingIdx].proposal! : null;
 
-  // Manual edits — refetch via PATCH; if a proposal is pending we discard
-  // it first (the manual edit invalidates it).
+  // Manual edits — commit the PATCH first, THEN discard the pending
+  // proposal (if any). This ordering means a PATCH failure leaves both
+  // the proposal and the original content intact; only a successful
+  // edit triggers the discard.
   const saveQuestion = (next: string) =>
     wrap(async () => {
       const q = next.trim();
       if (!q || q === liveItem.question) return;
+      await teacher.updateBankItem(liveItem.id, { question: q });
       if (pendingIdx >= 0) {
         await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
       }
-      await teacher.updateBankItem(liveItem.id, { question: q });
-      // Re-pull the item via the bank list refresh
       setLiveItem({ ...liveItem, question: q, has_previous_version: true });
       setShowUndo(true);
       onChanged();
@@ -1713,10 +1715,10 @@ function QuestionDetailModal({
       const updated = liveItem.solution_steps.map((s, i) =>
         i === idx ? { ...s, [field]: next } : s,
       );
+      await teacher.updateBankItem(liveItem.id, { solution_steps: updated });
       if (pendingIdx >= 0) {
         await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
       }
-      await teacher.updateBankItem(liveItem.id, { solution_steps: updated });
       setLiveItem({ ...liveItem, solution_steps: updated, has_previous_version: true });
       setShowUndo(true);
       onChanged();
@@ -1725,20 +1727,30 @@ function QuestionDetailModal({
   const saveFinalAnswer = (next: string) =>
     wrap(async () => {
       if (next === (liveItem.final_answer ?? "")) return;
+      await teacher.updateBankItem(liveItem.id, { final_answer: next });
       if (pendingIdx >= 0) {
         await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
       }
-      await teacher.updateBankItem(liveItem.id, { final_answer: next });
       setLiveItem({ ...liveItem, final_answer: next, has_previous_version: true });
       setShowUndo(true);
       onChanged();
     });
 
-  const sendChat = (message: string) =>
-    wrap(async () => {
+  // Returns true on success so ChatPanel can preserve the draft on failure.
+  const sendChat = async (message: string): Promise<boolean> => {
+    setBusy(true);
+    setError(null);
+    try {
       const next = await teacher.sendBankChat(liveItem.id, message);
       acceptUpdated(next);
-    });
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chat failed");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const acceptProposal = () =>
     wrap(async () => {
@@ -2059,27 +2071,31 @@ function ChatPanel({
   item: BankItem;
   pendingIdx: number;
   busy: boolean;
-  onSend: (message: string) => void;
+  onSend: (message: string) => Promise<boolean>;
   onAccept: () => void;
   onDiscard: () => void;
   onClear: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const messages = item.chat_messages;
-  const teacherCount = messages.filter((m) => m.role === "teacher").length;
-  const atSoftCap = teacherCount >= item.chat_soft_cap;
+  const teacherMessageCount = messages.filter((m) => m.role === "teacher").length;
+  // Soft cap is counted in teacher messages — that's the cost driver, and
+  // it matches what the backend banner threshold tracks.
+  const atSoftCap = teacherMessageCount >= item.chat_soft_cap;
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
-    const el = document.getElementById(`chat-scroll-${item.id}`);
+    const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, item.id, busy]);
+  }, [messages.length, busy]);
 
-  const submit = () => {
+  const submit = async () => {
     const text = draft.trim();
     if (!text || busy) return;
-    setDraft("");
-    onSend(text);
+    const ok = await onSend(text);
+    if (ok) setDraft("");
+    // On failure, leave the draft so the teacher can retry.
   };
 
   return (
@@ -2090,13 +2106,13 @@ function ChatPanel({
           <span className="text-sm font-bold text-text-primary">Workshop</span>
         </div>
         <span className={`text-[10px] font-semibold ${atSoftCap ? "text-amber-600" : "text-text-muted"}`}>
-          {teacherCount}/{item.chat_soft_cap}
+          {teacherMessageCount}/{item.chat_soft_cap}
         </span>
       </div>
 
       {/* Messages */}
       <div
-        id={`chat-scroll-${item.id}`}
+        ref={scrollRef}
         className="flex-1 space-y-3 overflow-y-auto bg-bg-subtle/40 px-4 py-3"
       >
         {messages.length === 0 && <WelcomeMessage />}
@@ -2121,7 +2137,9 @@ function ChatPanel({
           {SUGGESTION_CHIPS.map((chip) => (
             <button
               key={chip}
-              onClick={() => onSend(chip)}
+              onClick={() => {
+                void onSend(chip);
+              }}
               disabled={busy}
               className="rounded-[--radius-pill] border border-border-light bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:border-primary/30 hover:text-primary disabled:opacity-50"
             >
@@ -2210,7 +2228,7 @@ function ChatMessageBubble({
 }) {
   if (msg.role === "teacher") {
     return (
-      <div className="ml-6 rounded-[--radius-md] bg-primary px-3 py-2 text-xs text-white shadow-sm">
+      <div className="ml-6 whitespace-pre-wrap rounded-[--radius-md] bg-primary px-3 py-2 text-xs text-white shadow-sm">
         {msg.text}
       </div>
     );
@@ -2232,7 +2250,7 @@ function ChatMessageBubble({
       <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">
         AI
       </div>
-      <div className="text-text-primary">{msg.text}</div>
+      <div className="whitespace-pre-wrap text-text-primary">{msg.text}</div>
 
       {proposalState && (
         <div className="mt-2">
