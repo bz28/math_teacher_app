@@ -56,7 +56,6 @@ export function WorkshopModal({
 
   const [liveItem, setLiveItem] = useState<BankItem | undefined>(sourceItem);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
-  const [editingUnit, setEditingUnit] = useState(false);
   const [showUndo, setShowUndo] = useState(sourceItem?.has_previous_version ?? false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
@@ -197,26 +196,13 @@ export function WorkshopModal({
         setError("Accept or discard the AI proposal before doing anything else.");
         return;
       }
-      if (nextUnitId === liveItem.unit_id) {
-        setEditingUnit(false);
-        return;
-      }
+      if (nextUnitId === liveItem.unit_id) return;
       const updated = await teacher.updateBankItem(
         liveItem.id,
         nextUnitId === null ? { clear_unit: true } : { unit_id: nextUnitId },
       );
       replaceLiveItem(updated);
-      setEditingUnit(false);
     });
-
-  const unitLabel = (() => {
-    if (!liveItem?.unit_id) return "Uncategorized";
-    const u = units.find((x) => x.id === liveItem.unit_id);
-    if (!u) return "—";
-    if (!u.parent_id) return u.name;
-    const parent = units.find((x) => x.id === u.parent_id);
-    return parent ? `${parent.name} / ${u.name}` : u.name;
-  })();
 
   const saveQuestion = (next: string) =>
     run(async () => {
@@ -439,14 +425,14 @@ export function WorkshopModal({
             >
               {liveItem.status}
             </span>
-            {editingUnit ? (
+            <label className="flex items-center gap-1 text-xs font-semibold text-text-muted">
+              📁
               <select
-                autoFocus
                 value={liveItem.unit_id ?? ""}
                 onChange={(e) => saveUnit(e.target.value || null)}
-                onBlur={() => setEditingUnit(false)}
                 disabled={busy}
-                className="rounded-[--radius-md] border border-primary bg-bg-base px-2 py-0.5 text-xs text-text-primary focus:outline-none"
+                className="cursor-pointer rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-0.5 text-xs font-semibold text-text-primary hover:border-primary focus:border-primary focus:outline-none"
+                title="Move to a different unit"
               >
                 <option value="">Uncategorized</option>
                 {units
@@ -464,16 +450,7 @@ export function WorkshopModal({
                       )),
                   ])}
               </select>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditingUnit(true)}
-                title="Click to move to a different unit"
-                className="text-xs font-semibold text-text-muted hover:text-primary"
-              >
-                📁 <span className="underline decoration-dotted underline-offset-2">{unitLabel}</span>
-              </button>
-            )}
+            </label>
             {showUndo && (
               <button
                 onClick={undo}
