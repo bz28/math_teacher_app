@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
@@ -25,7 +25,34 @@ import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
-import { STATUS_BADGE, STATUS_FILTERS } from "./bank-styles";
+import { STATUS_FILTERS } from "./bank-styles";
+
+// Per-unit tabs inside the Approved view. Each tab filters this unit's
+// rows down to questions that match its category. "All" is the default.
+type UnitTab = "all" | "homework" | "tests" | "practice";
+
+const UNIT_TABS: { key: UnitTab; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "homework", label: "Homework" },
+  { key: "tests", label: "Tests" },
+  { key: "practice", label: "Practice" },
+];
+
+// Type-of-assignment classifier — keep "quiz" lumped under tests so any
+// future quiz still has a home without a separate tab.
+function isHomework(t: string): boolean {
+  return t === "homework";
+}
+function isTest(t: string): boolean {
+  return t === "test" || t === "quiz";
+}
+
+function countByTab(item: BankItem): { homework: boolean; tests: boolean } {
+  return {
+    homework: item.used_in.some((u) => isHomework(u.type)),
+    tests: item.used_in.some((u) => isTest(u.type)),
+  };
+}
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
 
@@ -144,7 +171,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {counts.pending > 0 && (
+          {counts.pending > 0 && statusFilter !== "pending" && (
             <button
               type="button"
               className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
@@ -248,7 +275,9 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
         </div>
       </div>
 
-      {/* List — grouped by unit so the bank scans like a library */}
+      {/* List — Approved gets unit grouping + per-unit tabs.
+          Pending and Rejected get a flat dense list. All shows the
+          same grouping as Approved for consistency. */}
       <div className="mt-4 space-y-5">
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
@@ -257,12 +286,24 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             text={
               counts.pending + counts.approved + counts.rejected === 0
                 ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
-                : "No questions match this filter."
+                : statusFilter === "pending"
+                  ? "No pending review. New generations land here."
+                  : statusFilter === "rejected"
+                    ? "No rejected questions."
+                    : "No questions match this filter."
             }
+          />
+        ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+          <FlatBankList
+            items={items}
+            units={units}
+            onOpenItem={setOpenItemId}
+            onOpenHomework={setOpenHomeworkId}
+            onChanged={reload}
           />
         ) : (
           buildUnitGroups(items, units).map((group) => (
-            <UnitGroup
+            <ApprovedUnitGroup
               key={group.id}
               label={group.label}
               items={group.items}
@@ -346,7 +387,10 @@ function buildUnitGroups(
   return groups;
 }
 
-function UnitGroup({
+// Approved view: collapsible unit with per-unit [All][HW][Tests][Practice]
+// tabs that filter the rows below. Tab state is per-instance so each unit
+// remembers its own tab without affecting others.
+function ApprovedUnitGroup({
   label,
   items,
   units,
@@ -362,8 +406,29 @@ function UnitGroup({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(true);
-  const approved = items.filter((i) => i.status === "approved").length;
-  const pending = items.filter((i) => i.status === "pending").length;
+  const [tab, setTab] = useState<UnitTab>("all");
+
+  // Counts per tab — homework and tests counts can overlap (a question
+  // used in both increments both), which is correct.
+  const counts = (() => {
+    let hw = 0;
+    let tests = 0;
+    for (const item of items) {
+      const c = countByTab(item);
+      if (c.homework) hw++;
+      if (c.tests) tests++;
+    }
+    return { all: items.length, homework: hw, tests, practice: 0 };
+  })();
+
+  const visible = items.filter((item) => {
+    if (tab === "all") return true;
+    const c = countByTab(item);
+    if (tab === "homework") return c.homework;
+    if (tab === "tests") return c.tests;
+    return false; // practice — empty until Generate Similar ships
+  });
+
   return (
     <div>
       <button
@@ -375,180 +440,333 @@ function UnitGroup({
         <span>📁 {label}</span>
         <span className="font-normal normal-case text-text-muted/80">
           · {items.length} {items.length === 1 ? "question" : "questions"}
-          {approved > 0 && ` · ${approved} approved`}
-          {pending > 0 && ` · ${pending} pending`}
         </span>
       </button>
+
       {open && (
-        <div className="mt-3 space-y-3">
-          {items.map((item) => (
-            <BankItemCard
-              key={item.id}
-              item={item}
-              unitLabel={buildUnitLabel(units, item.unit_id)}
-              onOpen={() => onOpenItem(item.id)}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
-            />
-          ))}
+        <div className="mt-2">
+          {/* Per-unit tab strip */}
+          <div className="flex gap-1 overflow-x-auto pb-2">
+            {UNIT_TABS.map((t) => {
+              const c = counts[t.key];
+              const active = tab === t.key;
+              const empty = c === 0;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={`shrink-0 rounded-[--radius-pill] px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${
+                    active
+                      ? "bg-primary text-white"
+                      : empty
+                        ? "text-text-muted/50"
+                        : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+                  }`}
+                >
+                  {t.label} <span className="opacity-70">({c})</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-1 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
+            {visible.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs italic text-text-muted">
+                {tab === "practice"
+                  ? "Practice questions coming soon — generated by \u201CMake similar problems\u201D."
+                  : "No questions in this view."}
+              </div>
+            ) : (
+              visible.map((item) => (
+                <BankRow
+                  key={item.id}
+                  item={item}
+                  unitLabel={buildUnitLabel(units, item.unit_id)}
+                  showUnit={false}
+                  onOpen={() => onOpenItem(item.id)}
+                  onOpenHomework={onOpenHomework}
+                  onChanged={onChanged}
+                />
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function BankItemCard({
+// Pending and Rejected views: flat list of dense rows, no grouping or
+// tabs. These views are for one-time actions (review, restore), not
+// browsing.
+function FlatBankList({
+  items,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  items: BankItem[];
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  return (
+    <div className="divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
+      {items.map((item) => (
+        <BankRow
+          key={item.id}
+          item={item}
+          unitLabel={buildUnitLabel(units, item.unit_id)}
+          showUnit={true}
+          onOpen={() => onOpenItem(item.id)}
+          onOpenHomework={onOpenHomework}
+          onChanged={onChanged}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Dense one-line row. Status dot, truncated question, Used-in pills,
+// optional unit label, lock badge, kebab menu. Click anywhere on the
+// question text or empty area opens the workshop modal.
+function BankRow({
   item,
   unitLabel,
+  showUnit,
   onOpen,
   onOpenHomework,
   onChanged,
 }: {
   item: BankItem;
   unitLabel: string;
+  showUnit: boolean;
   onOpen: () => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { busy, error, run } = useAsyncAction();
 
-  // Status-driven left-border accent so the teacher can scan the bank
-  // and immediately spot which questions still need attention.
-  const statusBorder =
-    item.status === "pending"
-      ? "border-l-4 border-l-amber-400"
-      : item.status === "approved"
-        ? "border-l-4 border-l-green-500"
-        : "opacity-60";
+  const dotClass =
+    item.status === "approved"
+      ? "bg-green-500"
+      : item.status === "pending"
+        ? "bg-amber-400"
+        : "bg-text-muted/40";
 
   const approve = () =>
     run(async () => {
       await teacher.approveBankItem(item.id);
       onChanged();
     });
-
   const reject = () =>
     run(async () => {
       await teacher.rejectBankItem(item.id);
       onChanged();
     });
-
   const remove = () =>
     run(async () => {
       await teacher.deleteBankItem(item.id);
-      setConfirmingDelete(false);
       onChanged();
     });
 
   return (
-    <div className={`rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm ${statusBorder}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="cursor-pointer text-left text-sm text-text-primary hover:text-primary"
-            title="Open question"
-          >
-            <MathText text={item.question} />
-          </button>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted">
-            <span>📁 {unitLabel}</span>
-            {item.used_in.length > 0 && (
-              <span className="flex flex-wrap items-center gap-1">
-                <span>· 📎 Used in</span>
-                {item.used_in.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenHomework(u.id);
-                    }}
-                    className="rounded-[--radius-pill] bg-bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-text-secondary hover:bg-primary-bg/40 hover:text-primary"
-                    title="Open this homework"
-                  >
-                    {u.title}
-                  </button>
-                ))}
-              </span>
-            )}
+    <div
+      className={`group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-subtle ${
+        item.status === "rejected" ? "opacity-60" : ""
+      }`}
+    >
+      <span
+        className={`mt-1 h-2 w-2 shrink-0 self-start rounded-full ${dotClass}`}
+        title={item.status}
+        aria-label={item.status}
+      />
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className="min-w-0 flex-1 text-left text-sm text-text-primary hover:text-primary"
+        title="Open question"
+      >
+        <div className="truncate">
+          <MathText text={item.question} />
+        </div>
+        {(showUnit || item.used_in.length > 0) && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted">
+            {showUnit && <span>📁 {unitLabel}</span>}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {item.locked && (
-            <span
-              className="rounded-[--radius-pill] bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
-              title="In published homework — unpublish to edit"
-            >
-              🔒 Locked
-            </span>
-          )}
-          <span
-            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
-              STATUS_BADGE[item.status] ?? ""
-            }`}
-          >
-            {item.status}
-          </span>
-        </div>
-      </div>
+        )}
+      </button>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {confirmingDelete ? (
-          <>
-            <span className="text-xs font-semibold text-red-700">Delete this question?</span>
+      {/* Used-in pills */}
+      {item.used_in.length > 0 && (
+        <div className="hidden shrink-0 flex-wrap items-center gap-1 sm:flex">
+          {item.used_in.map((u) => (
             <button
-              onClick={remove}
+              key={u.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenHomework(u.id);
+              }}
+              className="rounded-[--radius-pill] bg-bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-text-secondary hover:bg-primary-bg/40 hover:text-primary"
+              title={`Open ${u.title}`}
+            >
+              {u.title}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {item.locked && (
+        <span
+          className="shrink-0 text-amber-600 dark:text-amber-400"
+          title="Locked — in published homework"
+        >
+          🔒
+        </span>
+      )}
+
+      <KebabMenu
+        item={item}
+        busy={busy}
+        onApprove={approve}
+        onReject={reject}
+        onRemove={remove}
+      />
+
+      {error && (
+        <span className="shrink-0 text-[10px] text-red-600" title={error}>
+          ⚠
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Action menu — three dots that opens a small dropdown. Replaces the
+// always-visible Approve/Reject/Delete row of buttons. Uses a window
+// click listener for outside-click dismiss.
+function KebabMenu({
+  item,
+  busy,
+  onApprove,
+  onReject,
+  onRemove,
+}: {
+  item: BankItem;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setConfirmDelete(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const lockedTitle = item.locked ? "Locked by published homework" : undefined;
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="rounded p-1 text-text-muted opacity-0 transition-opacity hover:bg-bg-subtle hover:text-text-primary group-hover:opacity-100 data-[open=true]:opacity-100"
+        data-open={open}
+        aria-label="Actions"
+      >
+        ⋯
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full z-20 mt-1 w-40 rounded-[--radius-md] border border-border-light bg-surface py-1 text-xs shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {item.status === "pending" && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onApprove();
+              }}
+              disabled={busy || item.locked}
+              title={lockedTitle}
+              className="block w-full px-3 py-1.5 text-left font-semibold text-green-700 hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ✓ Approve
+            </button>
+          )}
+          {item.status !== "rejected" && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onReject();
+              }}
+              disabled={busy || item.locked}
+              title={lockedTitle}
+              className="block w-full px-3 py-1.5 text-left font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ✕ Reject
+            </button>
+          )}
+          {item.status === "rejected" && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onApprove();
+              }}
               disabled={busy}
-              className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              className="block w-full px-3 py-1.5 text-left font-semibold text-green-700 hover:bg-bg-subtle disabled:opacity-50"
+            >
+              ↺ Restore
+            </button>
+          )}
+          {confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setConfirmDelete(false);
+                onRemove();
+              }}
+              disabled={busy}
+              className="block w-full px-3 py-1.5 text-left font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               Yes, delete
             </button>
+          ) : (
             <button
-              onClick={() => setConfirmingDelete(false)}
-              disabled={busy}
-              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <>
-            {item.status === "pending" && (
-              <>
-                <button
-                  onClick={approve}
-                  disabled={busy || item.locked}
-                  className="rounded-[--radius-sm] bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-                  title="Approve for use in homework, tests, and student practice"
-                >
-                  ✓ Approve
-                </button>
-                <button
-                  onClick={reject}
-                  disabled={busy || item.locked}
-                  className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
-                  title="Hide from students. Kept in your records."
-                >
-                  ✕ Reject
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => setConfirmingDelete(true)}
+              type="button"
+              onClick={() => setConfirmDelete(true)}
               disabled={busy || item.locked}
-              title={item.locked ? "Locked by published homework" : "Delete"}
-              className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              title={lockedTitle}
+              className="block w-full px-3 py-1.5 text-left font-semibold text-red-700 hover:bg-bg-subtle disabled:opacity-50"
             >
-              🗑
+              🗑 Delete
             </button>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

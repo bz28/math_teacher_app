@@ -173,9 +173,9 @@ async def used_in_assignments_map(
     db: AsyncSession, course_id: uuid.UUID,
 ) -> dict[str, list[dict[str, str]]]:
     """For every published assignment in the course, return a map of
-    bank_item_id → list of {id, title} entries. Used to render the
-    "Used in" labels on bank cards. Only published assignments count
-    (drafts don't lock anything)."""
+    bank_item_id → list of {id, title, type} entries. Used to render
+    the "Used in" pills + power the per-unit Homework/Tests tabs.
+    Only published assignments count (drafts don't lock anything)."""
     rows = (await db.execute(
         select(Assignment).where(
             Assignment.course_id == course_id,
@@ -185,7 +185,9 @@ async def used_in_assignments_map(
     out: dict[str, list[dict[str, str]]] = {}
     for a in rows:
         for pid in _problem_ids_in_content(a.content):
-            out.setdefault(pid, []).append({"id": str(a.id), "title": a.title})
+            out.setdefault(pid, []).append(
+                {"id": str(a.id), "title": a.title, "type": a.type},
+            )
     return out
 
 
