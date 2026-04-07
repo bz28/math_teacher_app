@@ -1280,17 +1280,8 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
-  // Set so multiple solutions can be expanded at once — opening one no
-  // longer closes another.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const toggleExpanded = (id: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // Item currently open in the detail modal
+  const [openItemId, setOpenItemId] = useState<string | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -1431,8 +1422,7 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
             <BankItemCard
               key={item.id}
               item={item}
-              expanded={expanded.has(item.id)}
-              onToggle={() => toggleExpanded(item.id)}
+              onOpen={() => setOpenItemId(item.id)}
               onChanged={reload}
             />
           ))
@@ -1449,36 +1439,34 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
           }}
         />
       )}
+
+      {openItemId && (() => {
+        const openItem = items.find((i) => i.id === openItemId);
+        if (!openItem) return null;
+        return (
+          <QuestionDetailModal
+            item={openItem}
+            onClose={() => setOpenItemId(null)}
+            onChanged={reload}
+          />
+        );
+      })()}
     </div>
   );
 }
 
 function BankItemCard({
   item,
-  expanded,
-  onToggle,
+  onOpen,
   onChanged,
 }: {
   item: BankItem;
-  expanded: boolean;
-  onToggle: () => void;
+  onOpen: () => void;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showRegen, setShowRegen] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [draftQuestion, setDraftQuestion] = useState(item.question);
-  const [draftAnswer, setDraftAnswer] = useState(item.final_answer ?? "");
-
-  // Reset drafts when leaving edit mode
-  useEffect(() => {
-    if (!editing) {
-      setDraftQuestion(item.question);
-      setDraftAnswer(item.final_answer ?? "");
-    }
-  }, [editing, item.question, item.final_answer]);
 
   const wrap = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -1511,47 +1499,17 @@ function BankItemCard({
       onChanged();
     });
 
-  const saveEdit = () =>
-    wrap(async () => {
-      const q = draftQuestion.trim();
-      if (!q) {
-        setError("Question text cannot be empty");
-        return;
-      }
-      await teacher.updateBankItem(item.id, {
-        question: q,
-        final_answer: draftAnswer.trim(),
-      });
-      setEditing(false);
-      onChanged();
-    });
-
-  const regenerate = (instructions?: string) =>
-    wrap(async () => {
-      await teacher.regenerateBankItem(item.id, instructions);
-      setShowRegen(false);
-      onChanged();
-    });
-
   return (
-    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
+    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          {editing ? (
-            <textarea
-              value={draftQuestion}
-              onChange={(e) => setDraftQuestion(e.target.value)}
-              rows={3}
-              maxLength={2000}
-              className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-              autoFocus
-            />
-          ) : (
-            <div className="text-sm text-text-primary">
-              <MathText text={item.question} />
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex-1 cursor-pointer text-left text-sm text-text-primary hover:text-primary"
+          title="Open question"
+        >
+          <MathText text={item.question} />
+        </button>
         <span
           className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
             STATUS_BADGE[item.status] ?? ""
@@ -1561,77 +1519,10 @@ function BankItemCard({
         </span>
       </div>
 
-      {expanded && !editing && (
-        <div className="mt-3 rounded-[--radius-md] bg-bg-subtle p-3 text-xs text-text-secondary">
-          {item.solution_steps && item.solution_steps.length > 0 ? (
-            <ol className="space-y-2">
-              {item.solution_steps.map((s, i) => (
-                <li key={i}>
-                  <div className="font-semibold text-text-primary">
-                    {i + 1}. <MathText text={s.title} />
-                  </div>
-                  <div className="mt-0.5">
-                    <MathText text={s.description} />
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="italic text-text-muted">No solution steps recorded.</p>
-          )}
-          {item.final_answer && (
-            <div className="mt-3 border-t border-border-light pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                Final answer:
-              </span>{" "}
-              <span className="text-text-primary">
-                <MathText text={item.final_answer} />
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {editing && (
-        <div className="mt-3">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Final answer
-          </label>
-          <input
-            type="text"
-            value={draftAnswer}
-            onChange={(e) => setDraftAnswer(e.target.value)}
-            maxLength={500}
-            placeholder="e.g. x = 3"
-            className="mt-1 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-          />
-          <p className="mt-1 text-[11px] text-text-muted">
-            Solution steps stay as the AI generated them. Use Regenerate if you want them rewritten.
-          </p>
-        </div>
-      )}
-
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {editing ? (
-          <>
-            <button
-              onClick={saveEdit}
-              disabled={busy}
-              className="rounded-[--radius-sm] bg-primary px-2.5 py-1 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              disabled={busy}
-              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </>
-        ) : confirmingDelete ? (
+        {confirmingDelete ? (
           <>
             <span className="text-xs font-semibold text-red-700">Delete this question?</span>
             <button
@@ -1672,112 +1563,415 @@ function BankItemCard({
               </>
             )}
             <button
-              onClick={onToggle}
-              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
-            >
-              {expanded ? "Hide solution" : "View solution"}
-            </button>
-            <button
-              onClick={() => setEditing(true)}
-              disabled={busy}
-              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => setShowRegen(true)}
-              disabled={busy}
-              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-              title="Replace this question with a new AI-generated one (optionally with instructions)"
-            >
-              Regenerate
-            </button>
-            <button
               onClick={() => setConfirmingDelete(true)}
               disabled={busy}
               className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
-              Delete
+              🗑
             </button>
           </>
         )}
       </div>
-
-      {showRegen && (
-        <RegenerateModal
-          itemQuestion={item.question}
-          onClose={() => setShowRegen(false)}
-          onSubmit={regenerate}
-          busy={busy}
-        />
-      )}
     </div>
   );
 }
 
-function RegenerateModal({
-  itemQuestion,
+// ───────── Question Detail Modal ─────────
+//
+// The "workshop" — opens when the teacher clicks a question text on the
+// card. Click-to-edit pattern: question text, each solution step, and
+// final answer all become editable in place when clicked. The persistent
+// "Revise with AI" textarea is the primary affordance for changes you
+// don't want to type by hand. After any change, an Undo link appears
+// for 30 seconds (backed by previous_* DB columns).
+
+function QuestionDetailModal({
+  item,
   onClose,
-  onSubmit,
-  busy,
+  onChanged,
 }: {
-  itemQuestion: string;
+  item: BankItem;
   onClose: () => void;
-  onSubmit: (instructions?: string) => void;
-  busy: boolean;
+  onChanged: () => void;
 }) {
-  const [instructions, setInstructions] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [solutionOpen, setSolutionOpen] = useState(false);
+  const [aiInstructions, setAiInstructions] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showUndo, setShowUndo] = useState(item.has_previous_version);
+
+  // Reset undo visibility when the item identity changes
+  useEffect(() => {
+    setShowUndo(item.has_previous_version);
+  }, [item.id, item.has_previous_version]);
+
+  // Auto-hide the undo affordance 30s after a change
+  useEffect(() => {
+    if (!showUndo) return;
+    const t = setTimeout(() => setShowUndo(false), 30000);
+    return () => clearTimeout(t);
+  }, [showUndo, item.updated_at]);
+
+  const wrap = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveQuestion = (next: string) =>
+    wrap(async () => {
+      const q = next.trim();
+      if (!q) {
+        setError("Question cannot be empty");
+        return;
+      }
+      if (q === item.question) return;
+      await teacher.updateBankItem(item.id, { question: q });
+      setShowUndo(true);
+      onChanged();
+    });
+
+  const saveStep = (idx: number, field: "title" | "description", next: string) =>
+    wrap(async () => {
+      if (!item.solution_steps) return;
+      const updated = item.solution_steps.map((s, i) =>
+        i === idx ? { ...s, [field]: next } : s,
+      );
+      await teacher.updateBankItem(item.id, { solution_steps: updated });
+      setShowUndo(true);
+      onChanged();
+    });
+
+  const saveFinalAnswer = (next: string) =>
+    wrap(async () => {
+      if (next === (item.final_answer ?? "")) return;
+      await teacher.updateBankItem(item.id, { final_answer: next });
+      setShowUndo(true);
+      onChanged();
+    });
+
+  const reviseWithAI = () =>
+    wrap(async () => {
+      const inst = aiInstructions.trim();
+      await teacher.regenerateBankItem(item.id, inst || undefined);
+      setAiInstructions("");
+      setShowUndo(true);
+      onChanged();
+    });
+
+  const undo = () =>
+    wrap(async () => {
+      await teacher.revertBankItem(item.id);
+      setShowUndo(false);
+      onChanged();
+    });
+
+  const approve = () =>
+    wrap(async () => {
+      await teacher.approveBankItem(item.id);
+      onChanged();
+    });
+
+  const reject = () =>
+    wrap(async () => {
+      await teacher.rejectBankItem(item.id);
+      onChanged();
+    });
+
+  const remove = () =>
+    wrap(async () => {
+      await teacher.deleteBankItem(item.id);
+      onClose();
+      onChanged();
+    });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <form
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-6 shadow-xl"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmit(instructions.trim() || undefined);
-        }}
       >
-        <h2 className="text-lg font-bold text-text-primary">Regenerate Question</h2>
-        <div className="mt-1 line-clamp-2 text-xs text-text-muted">
-          <MathText text={itemQuestion} />
-        </div>
-
-        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
-          Instructions (optional)
-        </label>
-        <p className="mt-1 text-[11px] text-text-muted">
-          Tell the AI what to change. Leave blank for a fresh take on the same topic.
-        </p>
-        <textarea
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          rows={3}
-          maxLength={500}
-          autoFocus
-          placeholder="e.g. make the numbers smaller, redo the solution, change to a word problem"
-          className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-        />
-
-        <div className="mt-6 flex justify-end gap-2">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-bold text-text-primary">Question</h2>
+            <span
+              className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+                STATUS_BADGE[item.status] ?? ""
+              }`}
+            >
+              {item.status}
+            </span>
+            {showUndo && (
+              <button
+                onClick={undo}
+                disabled={busy}
+                className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+              >
+                ↶ Undo last change
+              </button>
+            )}
+          </div>
           <button
-            type="button"
             onClick={onClose}
-            disabled={busy}
-            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-          >
-            {busy ? "Regenerating…" : "Regenerate"}
+            ✕
           </button>
         </div>
-      </form>
+
+        {/* Body (scrollable) */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* Question */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Question
+            </div>
+            <div className="mt-1">
+              <ClickToEditText
+                value={item.question}
+                multiline
+                onSave={saveQuestion}
+                busy={busy}
+              />
+            </div>
+          </div>
+
+          {/* Solution (collapsible) */}
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setSolutionOpen(!solutionOpen)}
+              className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+            >
+              <span>{solutionOpen ? "▾" : "▸"}</span>
+              Solution {item.solution_steps && `(${item.solution_steps.length} steps)`}
+            </button>
+            {solutionOpen && (
+              <div className="mt-2 rounded-[--radius-md] bg-bg-subtle p-4">
+                {item.solution_steps && item.solution_steps.length > 0 ? (
+                  <ol className="space-y-3">
+                    {item.solution_steps.map((s, i) => (
+                      <li key={i} className="text-xs text-text-secondary">
+                        <div className="font-semibold text-text-primary">
+                          {i + 1}.{" "}
+                          <ClickToEditText
+                            value={s.title}
+                            inline
+                            onSave={(next) => saveStep(i, "title", next)}
+                            busy={busy}
+                          />
+                        </div>
+                        <div className="mt-1">
+                          <ClickToEditText
+                            value={s.description}
+                            multiline
+                            onSave={(next) => saveStep(i, "description", next)}
+                            busy={busy}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-xs italic text-text-muted">
+                    No solution steps recorded.
+                  </p>
+                )}
+                {item.final_answer !== null && (
+                  <div className="mt-4 border-t border-border-light pt-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      Final answer
+                    </div>
+                    <div className="mt-1 text-sm">
+                      <ClickToEditText
+                        value={item.final_answer ?? ""}
+                        onSave={saveFinalAnswer}
+                        busy={busy}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Revise with AI */}
+          <div className="mt-6 rounded-[--radius-lg] border border-primary/20 bg-primary-bg/30 p-4">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-primary">
+              Want the AI to change something?
+            </div>
+            <textarea
+              value={aiInstructions}
+              onChange={(e) => setAiInstructions(e.target.value)}
+              rows={2}
+              maxLength={500}
+              placeholder='e.g. "make the numbers smaller", "redo just the solution", "rewrite as a word problem", or leave blank for a fresh take'
+              className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                onClick={reviseWithAI}
+                disabled={busy}
+                className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                {busy ? "Revising…" : "✨ Revise with AI"}
+              </button>
+            </div>
+          </div>
+
+          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-2 border-t border-border-light px-6 py-4">
+          {item.status === "pending" && (
+            <>
+              <button
+                onClick={approve}
+                disabled={busy}
+                className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                ✓ Approve
+              </button>
+              <button
+                onClick={reject}
+                disabled={busy}
+                className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                ✕ Reject
+              </button>
+            </>
+          )}
+          {confirmingDelete ? (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs font-semibold text-red-700">Delete?</span>
+              <button
+                onClick={remove}
+                disabled={busy}
+                className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                Yes, delete
+              </button>
+              <button
+                onClick={() => setConfirmingDelete(false)}
+                className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              disabled={busy}
+              className="ml-auto rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              🗑 Delete
+            </button>
+          )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+// Click-to-edit text: shows MathText by default, becomes a textarea/input
+// when clicked. Saves on blur or Enter (single-line) or Cmd/Ctrl+Enter
+// (multiline). Escape cancels.
+function ClickToEditText({
+  value,
+  multiline,
+  inline,
+  onSave,
+  busy,
+}: {
+  value: string;
+  multiline?: boolean;
+  inline?: boolean;
+  onSave: (next: string) => void;
+  busy: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [editing, value]);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className={`group ${inline ? "inline" : "block w-full"} cursor-text text-left text-text-primary hover:rounded-[--radius-sm] hover:bg-primary-bg/20 hover:px-1 hover:-mx-1`}
+        title="Click to edit"
+        disabled={busy}
+      >
+        <MathText text={value || " "} />
+      </button>
+    );
+  }
+
+  const commit = () => {
+    onSave(draft);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft(value);
+    setEditing(false);
+  };
+
+  if (multiline) {
+    return (
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
+          } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        rows={Math.max(2, Math.min(8, draft.split("\n").length + 1))}
+        className="w-full rounded-[--radius-md] border border-primary bg-bg-base px-2 py-1 text-sm text-text-primary focus:outline-none"
+        autoFocus
+      />
+    );
+  }
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      className="w-full rounded-[--radius-sm] border border-primary bg-bg-base px-2 py-0.5 text-sm text-text-primary focus:outline-none"
+      autoFocus
+    />
   );
 }
 

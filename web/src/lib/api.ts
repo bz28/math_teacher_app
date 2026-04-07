@@ -814,6 +814,7 @@ export const teacher = {
   },
   updateBankItem(itemId: string, data: {
     question?: string;
+    solution_steps?: { title: string; description: string }[];
     final_answer?: string;
     difficulty?: string;
     unit_id?: string | null;
@@ -823,6 +824,9 @@ export const teacher = {
       method: "PATCH",
       body: JSON.stringify(data),
     });
+  },
+  revertBankItem(itemId: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/revert`, { method: "POST" });
   },
   approveBankItem(itemId: string) {
     return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/approve`, { method: "POST" });
@@ -853,6 +857,7 @@ export interface BankItem {
   status: string;
   source_doc_ids: string[] | null;
   generation_prompt: string | null;
+  has_previous_version: boolean;
   created_at: string;
   updated_at: string;
 }
