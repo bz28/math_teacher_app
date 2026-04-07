@@ -634,6 +634,10 @@ function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: ()
   const [selected, setSelected] = useState<string | null>(null); // unit id, or null for "Uncategorized"
   const [showNewUnit, setShowNewUnit] = useState<{ parentId: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [renamingUnitId, setRenamingUnitId] = useState<string | null>(null);
+  const [confirmingDeleteUnit, setConfirmingDeleteUnit] = useState<string | null>(null);
+  const [movingDocId, setMovingDocId] = useState<string | null>(null);
+  const [confirmingDeleteDoc, setConfirmingDeleteDoc] = useState<string | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -692,49 +696,51 @@ function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: ()
       onChanged();
     });
 
-  const deleteUnit = (unitId: string, name: string) =>
+  const deleteUnit = (unitId: string) =>
     wrap(async () => {
-      if (!confirm(`Delete "${name}"? Documents inside move to Uncategorized.`)) return;
       await teacher.deleteUnit(courseId, unitId);
       if (selected === unitId) setSelected(null);
+      setConfirmingDeleteUnit(null);
       await reload();
       onChanged();
     });
 
-  const renameUnit = (unit: TeacherUnit) =>
+  const renameUnit = (unit: TeacherUnit, nextName: string) =>
     wrap(async () => {
-      const next = prompt("Rename folder:", unit.name);
-      if (!next || next.trim() === unit.name) return;
-      await teacher.updateUnit(courseId, unit.id, { name: next.trim() });
+      const trimmed = nextName.trim();
+      if (!trimmed || trimmed === unit.name) {
+        setRenamingUnitId(null);
+        return;
+      }
+      await teacher.updateUnit(courseId, unit.id, { name: trimmed });
+      setRenamingUnitId(null);
       await reload();
     });
 
-  const moveDocument = (doc: TeacherDocument) =>
+  // Build a flat label list of every folder destination, used by the move popover
+  const destinations = (() => {
+    const out: { id: string | null; label: string }[] = [{ id: null, label: "Uncategorized" }];
+    for (const top of topUnits) {
+      out.push({ id: top.id, label: top.name });
+      for (const sub of subfoldersOf(top.id)) {
+        out.push({ id: sub.id, label: `${top.name} / ${sub.name}` });
+      }
+    }
+    return out;
+  })();
+
+  const moveDocument = (doc: TeacherDocument, targetUnitId: string | null) =>
     wrap(async () => {
-      // Build a flat label list of every folder destination
-      const destinations: { id: string | null; label: string }[] = [{ id: null, label: "Uncategorized" }];
-      for (const top of topUnits) {
-        destinations.push({ id: top.id, label: top.name });
-        for (const sub of subfoldersOf(top.id)) {
-          destinations.push({ id: sub.id, label: `${top.name} / ${sub.name}` });
-        }
-      }
-      const labels = destinations.map((d, i) => `${i + 1}. ${d.label}`).join("\n");
-      const choice = prompt(`Move "${doc.filename}" to:\n${labels}\n\nEnter number:`);
-      if (!choice) return;
-      const idx = Number(choice) - 1;
-      if (!Number.isInteger(idx) || idx < 0 || idx >= destinations.length) {
-        throw new Error("Invalid choice");
-      }
-      await teacher.updateDocument(courseId, doc.id, { unit_id: destinations[idx].id });
+      await teacher.updateDocument(courseId, doc.id, { unit_id: targetUnitId });
+      setMovingDocId(null);
       await reload();
       onChanged();
     });
 
-  const deleteDocument = (doc: TeacherDocument) =>
+  const deleteDocument = (docId: string) =>
     wrap(async () => {
-      if (!confirm(`Delete "${doc.filename}"?`)) return;
-      await teacher.deleteDocument(courseId, doc.id);
+      await teacher.deleteDocument(courseId, docId);
+      setConfirmingDeleteDoc(null);
       await reload();
       onChanged();
     });
@@ -801,26 +807,42 @@ function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: ()
                     unit={u}
                     selected={selected === u.id}
                     docCount={docsIn(u.id).length}
+                    isRenaming={renamingUnitId === u.id}
+                    isConfirmingDelete={confirmingDeleteUnit === u.id}
+                    busy={busy}
                     onSelect={() => setSelected(u.id)}
-                    onRename={() => renameUnit(u)}
-                    onDelete={() => deleteUnit(u.id, u.name)}
+                    onStartRename={() => setRenamingUnitId(u.id)}
+                    onSubmitRename={(name) => renameUnit(u, name)}
+                    onCancelRename={() => setRenamingUnitId(null)}
+                    onStartDelete={() => setConfirmingDeleteUnit(u.id)}
+                    onConfirmDelete={() => deleteUnit(u.id)}
+                    onCancelDelete={() => setConfirmingDeleteUnit(null)}
                     onAddSub={() => setShowNewUnit({ parentId: u.id })}
                   />
-                  <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border-light pl-2">
-                    {subfoldersOf(u.id).map((sub) => (
-                      <li key={sub.id}>
-                        <FolderRow
-                          unit={sub}
-                          selected={selected === sub.id}
-                          docCount={docsIn(sub.id).length}
-                          onSelect={() => setSelected(sub.id)}
-                          onRename={() => renameUnit(sub)}
-                          onDelete={() => deleteUnit(sub.id, sub.name)}
-                          isSub
-                        />
-                      </li>
-                    ))}
-                  </ul>
+                  {subfoldersOf(u.id).length > 0 && (
+                    <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border-light pl-2">
+                      {subfoldersOf(u.id).map((sub) => (
+                        <li key={sub.id}>
+                          <FolderRow
+                            unit={sub}
+                            selected={selected === sub.id}
+                            docCount={docsIn(sub.id).length}
+                            isRenaming={renamingUnitId === sub.id}
+                            isConfirmingDelete={confirmingDeleteUnit === sub.id}
+                            busy={busy}
+                            onSelect={() => setSelected(sub.id)}
+                            onStartRename={() => setRenamingUnitId(sub.id)}
+                            onSubmitRename={(name) => renameUnit(sub, name)}
+                            onCancelRename={() => setRenamingUnitId(null)}
+                            onStartDelete={() => setConfirmingDeleteUnit(sub.id)}
+                            onConfirmDelete={() => deleteUnit(sub.id)}
+                            onCancelDelete={() => setConfirmingDeleteUnit(null)}
+                            isSub
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
@@ -838,17 +860,25 @@ function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: ()
             </div>
 
             {selectedDocs.length === 0 ? (
-              <p className="mt-6 text-center text-sm text-text-muted">
-                No files in this folder yet.
-              </p>
+              <div className="mt-6 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
+                No files in this folder yet. Use <span className="font-semibold">+ Upload Files</span> above to add some.
+              </div>
             ) : (
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {selectedDocs.map((d) => (
                   <DocumentCard
                     key={d.id}
                     doc={d}
-                    onMove={() => moveDocument(d)}
-                    onDelete={() => deleteDocument(d)}
+                    isMoving={movingDocId === d.id}
+                    isConfirmingDelete={confirmingDeleteDoc === d.id}
+                    destinations={destinations}
+                    busy={busy}
+                    onStartMove={() => setMovingDocId(d.id)}
+                    onSubmitMove={(target) => moveDocument(d, target)}
+                    onCancelMove={() => setMovingDocId(null)}
+                    onStartDelete={() => setConfirmingDeleteDoc(d.id)}
+                    onConfirmDelete={() => deleteDocument(d.id)}
+                    onCancelDelete={() => setConfirmingDeleteDoc(null)}
                   />
                 ))}
               </div>
@@ -877,24 +907,109 @@ function FolderRow({
   unit,
   selected,
   docCount,
+  isRenaming,
+  isConfirmingDelete,
+  busy,
   onSelect,
-  onRename,
-  onDelete,
+  onStartRename,
+  onSubmitRename,
+  onCancelRename,
+  onStartDelete,
+  onConfirmDelete,
+  onCancelDelete,
   onAddSub,
   isSub,
 }: {
   unit: TeacherUnit;
   selected: boolean;
   docCount: number;
+  isRenaming: boolean;
+  isConfirmingDelete: boolean;
+  busy: boolean;
   onSelect: () => void;
-  onRename: () => void;
-  onDelete: () => void;
+  onStartRename: () => void;
+  onSubmitRename: (name: string) => void;
+  onCancelRename: () => void;
+  onStartDelete: () => void;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
   onAddSub?: () => void;
   isSub?: boolean;
 }) {
+  const [draft, setDraft] = useState(unit.name);
+
+  // Reset draft whenever we enter rename mode
+  useEffect(() => {
+    if (isRenaming) setDraft(unit.name);
+  }, [isRenaming, unit.name]);
+
+  if (isRenaming) {
+    return (
+      <form
+        className="flex items-center gap-1 rounded-[--radius-sm] bg-primary-bg/40 px-2 py-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmitRename(draft);
+        }}
+      >
+        <span>{isSub ? "📂" : "📁"}</span>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
+          maxLength={200}
+          className="flex-1 rounded-[--radius-sm] border border-border-light bg-bg-base px-1.5 py-0.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onCancelRename();
+          }}
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded px-1.5 py-0.5 text-xs font-bold text-primary hover:bg-surface disabled:opacity-50"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={onCancelRename}
+          className="rounded px-1.5 py-0.5 text-xs text-text-muted hover:bg-surface"
+        >
+          ✕
+        </button>
+      </form>
+    );
+  }
+
+  if (isConfirmingDelete) {
+    return (
+      <div className="flex items-center justify-between rounded-[--radius-sm] bg-red-50 px-2 py-1.5 text-xs dark:bg-red-500/10">
+        <span className="truncate font-semibold text-red-800 dark:text-red-300">
+          Delete &ldquo;{unit.name}&rdquo;?
+        </span>
+        <div className="ml-2 flex shrink-0 gap-1">
+          <button
+            onClick={onConfirmDelete}
+            disabled={busy}
+            className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            Delete
+          </button>
+          <button
+            onClick={onCancelDelete}
+            className="rounded border border-red-300 bg-white px-2 py-0.5 text-[11px] font-bold text-red-700 hover:bg-red-100"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`group flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 transition-colors ${
+      className={`flex items-center justify-between rounded-[--radius-sm] px-2 py-1.5 transition-colors ${
         selected ? "bg-primary-bg" : "hover:bg-bg-subtle"
       }`}
     >
@@ -909,7 +1024,7 @@ function FolderRow({
         <span className="truncate">{unit.name}</span>
         <span className="text-xs text-text-muted">({docCount})</span>
       </button>
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-0.5">
         {onAddSub && (
           <button
             type="button"
@@ -922,7 +1037,7 @@ function FolderRow({
         )}
         <button
           type="button"
-          onClick={onRename}
+          onClick={onStartRename}
           title="Rename"
           className="rounded p-1 text-xs text-text-muted hover:bg-surface hover:text-text-primary"
         >
@@ -930,7 +1045,7 @@ function FolderRow({
         </button>
         <button
           type="button"
-          onClick={onDelete}
+          onClick={onStartDelete}
           title="Delete"
           className="rounded p-1 text-xs text-text-muted hover:bg-surface hover:text-red-600"
         >
@@ -943,17 +1058,34 @@ function FolderRow({
 
 function DocumentCard({
   doc,
-  onMove,
-  onDelete,
+  isMoving,
+  isConfirmingDelete,
+  destinations,
+  busy,
+  onStartMove,
+  onSubmitMove,
+  onCancelMove,
+  onStartDelete,
+  onConfirmDelete,
+  onCancelDelete,
 }: {
   doc: TeacherDocument;
-  onMove: () => void;
-  onDelete: () => void;
+  isMoving: boolean;
+  isConfirmingDelete: boolean;
+  destinations: { id: string | null; label: string }[];
+  busy: boolean;
+  onStartMove: () => void;
+  onSubmitMove: (target: string | null) => void;
+  onCancelMove: () => void;
+  onStartDelete: () => void;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
 }) {
   const sizeKb = Math.max(1, Math.round(doc.file_size / 1024));
   const sizeLabel = sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+
   return (
-    <div className="group rounded-[--radius-md] border border-border-light bg-bg-subtle p-3 text-xs">
+    <div className="relative rounded-[--radius-md] border border-border-light bg-bg-subtle p-3 text-xs">
       <div className="flex items-start gap-2">
         <span className="text-base">📄</span>
         <div className="min-w-0 flex-1">
@@ -963,22 +1095,68 @@ function DocumentCard({
           <div className="mt-0.5 text-text-muted">{sizeLabel}</div>
         </div>
       </div>
-      <div className="mt-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          type="button"
-          onClick={onMove}
-          className="flex-1 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-bg-base"
+
+      {isConfirmingDelete ? (
+        <div className="mt-2 flex flex-col gap-1 rounded-[--radius-sm] bg-red-50 p-2 dark:bg-red-500/10">
+          <span className="text-[11px] font-semibold text-red-800 dark:text-red-300">
+            Delete this file?
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={onConfirmDelete}
+              disabled={busy}
+              className="flex-1 rounded-[--radius-sm] bg-red-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              Delete
+            </button>
+            <button
+              onClick={onCancelDelete}
+              className="rounded-[--radius-sm] border border-red-300 bg-white px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex gap-1">
+          <button
+            type="button"
+            onClick={onStartMove}
+            className="flex-1 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-bg-base"
+          >
+            Move
+          </button>
+          <button
+            type="button"
+            onClick={onStartDelete}
+            className="rounded-[--radius-sm] border border-red-300 bg-surface px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-50"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {isMoving && (
+        <div
+          className="absolute inset-x-2 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-[--radius-md] border border-border-light bg-surface p-1 shadow-lg"
+          onMouseLeave={onCancelMove}
         >
-          Move
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-[--radius-sm] border border-red-300 bg-surface px-2 py-1 text-[11px] font-bold text-red-700 hover:bg-red-50"
-        >
-          ×
-        </button>
-      </div>
+          <div className="px-2 pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Move to
+          </div>
+          {destinations.map((dest) => (
+            <button
+              key={dest.id ?? "uncategorized"}
+              type="button"
+              onClick={() => onSubmitMove(dest.id)}
+              disabled={busy}
+              className="block w-full truncate rounded-[--radius-sm] px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-primary-bg hover:text-primary disabled:opacity-50"
+            >
+              {dest.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1102,7 +1280,17 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  // Set so multiple solutions can be expanded at once — opening one no
+  // longer closes another.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const reload = async () => {
     setLoading(true);
@@ -1243,8 +1431,8 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
             <BankItemCard
               key={item.id}
               item={item}
-              expanded={expanded === item.id}
-              onToggle={() => setExpanded(expanded === item.id ? null : item.id)}
+              expanded={expanded.has(item.id)}
+              onToggle={() => toggleExpanded(item.id)}
               onChanged={reload}
             />
           ))
@@ -1279,6 +1467,18 @@ function BankItemCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRegen, setShowRegen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [draftQuestion, setDraftQuestion] = useState(item.question);
+  const [draftAnswer, setDraftAnswer] = useState(item.final_answer ?? "");
+
+  // Reset drafts when leaving edit mode
+  useEffect(() => {
+    if (!editing) {
+      setDraftQuestion(item.question);
+      setDraftAnswer(item.final_answer ?? "");
+    }
+  }, [editing, item.question, item.final_answer]);
 
   const wrap = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -1306,16 +1506,23 @@ function BankItemCard({
 
   const remove = () =>
     wrap(async () => {
-      if (!confirm("Delete this question permanently?")) return;
       await teacher.deleteBankItem(item.id);
+      setConfirmingDelete(false);
       onChanged();
     });
 
-  const editQuestion = () =>
+  const saveEdit = () =>
     wrap(async () => {
-      const next = prompt("Edit question text:", item.question);
-      if (!next || next.trim() === item.question) return;
-      await teacher.updateBankItem(item.id, { question: next.trim() });
+      const q = draftQuestion.trim();
+      if (!q) {
+        setError("Question text cannot be empty");
+        return;
+      }
+      await teacher.updateBankItem(item.id, {
+        question: q,
+        final_answer: draftAnswer.trim(),
+      });
+      setEditing(false);
       onChanged();
     });
 
@@ -1329,8 +1536,21 @@ function BankItemCard({
   return (
     <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 text-sm text-text-primary">
-          <MathText text={item.question} />
+        <div className="flex-1">
+          {editing ? (
+            <textarea
+              value={draftQuestion}
+              onChange={(e) => setDraftQuestion(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              autoFocus
+            />
+          ) : (
+            <div className="text-sm text-text-primary">
+              <MathText text={item.question} />
+            </div>
+          )}
         </div>
         <span
           className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
@@ -1341,7 +1561,7 @@ function BankItemCard({
         </span>
       </div>
 
-      {expanded && (
+      {expanded && !editing && (
         <div className="mt-3 rounded-[--radius-md] bg-bg-subtle p-3 text-xs text-text-secondary">
           {item.solution_steps && item.solution_steps.length > 0 ? (
             <ol className="space-y-2">
@@ -1372,54 +1592,115 @@ function BankItemCard({
         </div>
       )}
 
+      {editing && (
+        <div className="mt-3">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Final answer
+          </label>
+          <input
+            type="text"
+            value={draftAnswer}
+            onChange={(e) => setDraftAnswer(e.target.value)}
+            maxLength={500}
+            placeholder="e.g. x = 3"
+            className="mt-1 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+          />
+          <p className="mt-1 text-[11px] text-text-muted">
+            Solution steps stay as the AI generated them. Use Regenerate if you want them rewritten.
+          </p>
+        </div>
+      )}
+
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {item.status === "pending" && (
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {editing ? (
           <>
             <button
-              onClick={approve}
+              onClick={saveEdit}
               disabled={busy}
-              className="rounded-[--radius-sm] bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+              className="rounded-[--radius-sm] bg-primary px-2.5 py-1 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
             >
-              ✓ Approve
+              Save
             </button>
             <button
-              onClick={reject}
+              onClick={() => setEditing(false)}
+              disabled={busy}
+              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </>
+        ) : confirmingDelete ? (
+          <>
+            <span className="text-xs font-semibold text-red-700">Delete this question?</span>
+            <button
+              onClick={remove}
               disabled={busy}
               className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
             >
-              ✕ Reject
+              Yes, delete
+            </button>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              disabled={busy}
+              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            {item.status === "pending" && (
+              <>
+                <button
+                  onClick={approve}
+                  disabled={busy}
+                  className="rounded-[--radius-sm] bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                  title="Approve for use in homework, tests, and student practice"
+                >
+                  ✓ Approve
+                </button>
+                <button
+                  onClick={reject}
+                  disabled={busy}
+                  className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                  title="Hide from students. Kept in your records."
+                >
+                  ✕ Reject
+                </button>
+              </>
+            )}
+            <button
+              onClick={onToggle}
+              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+            >
+              {expanded ? "Hide solution" : "View solution"}
+            </button>
+            <button
+              onClick={() => setEditing(true)}
+              disabled={busy}
+              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => setShowRegen(true)}
+              disabled={busy}
+              className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+              title="Replace this question with a new AI-generated one (optionally with instructions)"
+            >
+              Regenerate
+            </button>
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              disabled={busy}
+              className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              Delete
             </button>
           </>
         )}
-        <button
-          onClick={onToggle}
-          className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
-        >
-          {expanded ? "Hide solution" : "View solution"}
-        </button>
-        <button
-          onClick={editQuestion}
-          disabled={busy}
-          className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => setShowRegen(true)}
-          disabled={busy}
-          className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-        >
-          Regenerate
-        </button>
-        <button
-          onClick={remove}
-          disabled={busy}
-          className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-        >
-          Delete
-        </button>
       </div>
 
       {showRegen && (
