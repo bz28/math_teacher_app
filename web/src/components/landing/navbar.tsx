@@ -78,6 +78,12 @@ export function Navbar() {
                 Features
               </a>
               <Link
+                href="/faq"
+                className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+              >
+                FAQ
+              </Link>
+              <Link
                 href="/teachers"
                 className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
               >
@@ -161,6 +167,13 @@ export function Navbar() {
                   >
                     Features
                   </a>
+                  <Link
+                    href="/faq"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
+                  >
+                    FAQ
+                  </Link>
                   <Link
                     href="/teachers"
                     onClick={() => setMobileOpen(false)}
