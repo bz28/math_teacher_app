@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
@@ -38,6 +38,22 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
   // job — the backend keeps generating regardless of the client.
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
 
+  // Single setter that keeps React state and sessionStorage in lockstep.
+  // We DON'T use a separate "mirror to storage" effect because that
+  // effect would fire on initial mount with activeJob=null and wipe
+  // any persisted key BEFORE the restore effect could read it.
+  const updateActiveJob = useCallback(
+    (next: BankJob | null) => {
+      setActiveJob(next);
+      if (next) {
+        sessionStorage.setItem(ACTIVE_JOB_STORAGE_KEY(id), next.id);
+      } else {
+        sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY(id));
+      }
+    },
+    [id],
+  );
+
   // On mount: restore + verify any persisted job from a previous tab
   // visit or browser reload.
   useEffect(() => {
@@ -68,15 +84,6 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
     };
   }, [id]);
 
-  // Mirror activeJob to sessionStorage so the next mount can recover.
-  useEffect(() => {
-    if (activeJob) {
-      sessionStorage.setItem(ACTIVE_JOB_STORAGE_KEY(id), activeJob.id);
-    } else {
-      sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY(id));
-    }
-  }, [activeJob, id]);
-
   // Poll the active job from the page level so it survives tab switches.
   useEffect(() => {
     if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
@@ -84,31 +91,31 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
     const jobId = activeJob.id;
     const interval = setInterval(async () => {
       if (Date.now() - startedAt > POLL_LIMIT_MS) {
-        setActiveJob((prev) =>
-          prev && prev.id === jobId
-            ? { ...prev, status: "failed", error_message: "Generation timed out — try again or refresh the page." }
-            : prev,
-        );
+        updateActiveJob({
+          ...activeJob,
+          status: "failed",
+          error_message: "Generation timed out — try again or refresh the page.",
+        });
         return;
       }
       try {
         const updated = await teacher.bankJob(id, jobId);
-        setActiveJob((prev) => (prev && prev.id === jobId ? updated : prev));
+        updateActiveJob(updated);
       } catch {
         // keep polling, transient errors are fine
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [activeJob?.id, activeJob?.status, id]);
+  }, [activeJob, id, updateActiveJob]);
 
   // Auto-clear bulk-generation toasts after a few seconds. Make-similar
   // jobs (parent_question_id set) stay until the teacher clicks Review.
   useEffect(() => {
     if (activeJob?.status === "done" && !activeJob.parent_question_id) {
-      const t = setTimeout(() => setActiveJob(null), 4000);
+      const t = setTimeout(() => updateActiveJob(null), 4000);
       return () => clearTimeout(t);
     }
-  }, [activeJob?.status, activeJob?.parent_question_id]);
+  }, [activeJob?.status, activeJob?.parent_question_id, updateActiveJob]);
 
   const jobInFlight =
     activeJob !== null &&
@@ -203,7 +210,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
           <QuestionBankTab
             courseId={course.id}
             activeJob={activeJob}
-            setActiveJob={setActiveJob}
+            setActiveJob={updateActiveJob}
           />
         )}
         {tab === "homework" && <HomeworkTab courseId={course.id} />}
