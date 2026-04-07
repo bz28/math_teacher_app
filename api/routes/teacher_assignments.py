@@ -89,43 +89,109 @@ async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, tea
     return assignment
 
 
+_EMPTY_STATS: dict[str, Any] = {
+    "total_students": 0,
+    "submitted": 0,
+    "graded": 0,
+    "avg_score": None,
+}
+
+
 async def get_assignment_stats(
     db: AsyncSession, assignment_id: uuid.UUID,
 ) -> dict[str, Any]:
-    """Get submission/grading stats for an assignment."""
-    enrolled_subq = (
-        select(SectionEnrollment.student_id)
-        .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
-        .where(AssignmentSection.assignment_id == assignment_id)
-        .distinct()
-        .subquery()
-    )
-    total_q = select(func.count()).select_from(enrolled_subq)
-    total = (await db.execute(total_q)).scalar() or 0
+    """Get submission/grading stats for a single assignment.
 
-    submitted = (await db.execute(
-        select(func.count()).where(Submission.assignment_id == assignment_id)
-    )).scalar() or 0
+    Per-assignment helper kept for the get_assignment endpoint. List
+    endpoints use bulk_assignment_stats below to avoid N+1.
+    """
+    return (await bulk_assignment_stats(db, [assignment_id])).get(assignment_id, _EMPTY_STATS)
 
-    graded = (await db.execute(
-        select(func.count())
-        .select_from(Submission)
+
+async def bulk_assignment_stats(
+    db: AsyncSession, assignment_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, dict[str, Any]]:
+    """Bulk version of get_assignment_stats — one query per stat instead
+    of (assignments × stats) queries. Returns a map keyed by
+    assignment_id; missing entries default to zeros.
+
+    Replaces the previous N+1 pattern in list_*_assignments where each
+    assignment ran 1 (sections) + 4 (stats) queries — 50 queries for
+    10 assignments.
+    """
+    if not assignment_ids:
+        return {}
+
+    # 1. Total enrolled students per assignment (distinct across sections).
+    totals_rows = (await db.execute(
+        select(
+            AssignmentSection.assignment_id,
+            func.count(SectionEnrollment.student_id.distinct()).label("c"),
+        )
+        .join(SectionEnrollment, SectionEnrollment.section_id == AssignmentSection.section_id)
+        .where(AssignmentSection.assignment_id.in_(assignment_ids))
+        .group_by(AssignmentSection.assignment_id)
+    )).all()
+    totals = {r.assignment_id: r.c for r in totals_rows}
+
+    # 2. Submission counts per assignment.
+    submitted_rows = (await db.execute(
+        select(Submission.assignment_id, func.count().label("c"))
+        .where(Submission.assignment_id.in_(assignment_ids))
+        .group_by(Submission.assignment_id)
+    )).all()
+    submitted = {r.assignment_id: r.c for r in submitted_rows}
+
+    # 3. Reviewed counts per assignment (graded + teacher-reviewed).
+    graded_rows = (await db.execute(
+        select(Submission.assignment_id, func.count().label("c"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
-        .where(Submission.assignment_id == assignment_id, Submission.status == "teacher_reviewed")
-    )).scalar() or 0
+        .where(
+            Submission.assignment_id.in_(assignment_ids),
+            Submission.status == "teacher_reviewed",
+        )
+        .group_by(Submission.assignment_id)
+    )).all()
+    graded = {r.assignment_id: r.c for r in graded_rows}
 
-    avg_score = (await db.execute(
-        select(func.avg(SubmissionGrade.final_score))
-        .join(Submission, Submission.id == SubmissionGrade.submission_id)
-        .where(Submission.assignment_id == assignment_id, SubmissionGrade.final_score.isnot(None))
-    )).scalar()
+    # 4. Average final_score per assignment (ignores nulls).
+    avg_rows = (await db.execute(
+        select(Submission.assignment_id, func.avg(SubmissionGrade.final_score).label("avg"))
+        .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .where(
+            Submission.assignment_id.in_(assignment_ids),
+            SubmissionGrade.final_score.isnot(None),
+        )
+        .group_by(Submission.assignment_id)
+    )).all()
+    avgs = {r.assignment_id: r.avg for r in avg_rows}
 
-    return {
-        "total_students": total,
-        "submitted": submitted,
-        "graded": graded,
-        "avg_score": round(avg_score, 1) if avg_score is not None else None,
-    }
+    out: dict[uuid.UUID, dict[str, Any]] = {}
+    for aid in assignment_ids:
+        out[aid] = {
+            "total_students": totals.get(aid, 0),
+            "submitted": submitted.get(aid, 0),
+            "graded": graded.get(aid, 0),
+            "avg_score": round(avgs[aid], 1) if aid in avgs and avgs[aid] is not None else None,
+        }
+    return out
+
+
+async def bulk_section_names(
+    db: AsyncSession, assignment_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[str]]:
+    """Bulk version of _get_section_names. One query, grouped in Python."""
+    if not assignment_ids:
+        return {}
+    rows = (await db.execute(
+        select(AssignmentSection.assignment_id, Section.name)
+        .join(Section, Section.id == AssignmentSection.section_id)
+        .where(AssignmentSection.assignment_id.in_(assignment_ids))
+    )).all()
+    out: dict[uuid.UUID, list[str]] = {aid: [] for aid in assignment_ids}
+    for aid, name in rows:
+        out[aid].append(name)
+    return out
 
 
 def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str, Any]) -> dict[str, Any]:
@@ -211,6 +277,23 @@ async def create_assignment(
     return {"id": str(assignment.id), "title": assignment.title, "status": assignment.status}
 
 
+async def _serialize_assignment_list(
+    db: AsyncSession, assignments: list[Assignment],
+) -> list[dict[str, Any]]:
+    """Serialize a batch of assignments using the bulk stats/section
+    helpers — avoids the per-assignment N+1 the list endpoints used
+    to suffer from."""
+    if not assignments:
+        return []
+    ids = [a.id for a in assignments]
+    stats_map = await bulk_assignment_stats(db, ids)
+    section_names_map = await bulk_section_names(db, ids)
+    return [
+        assignment_to_dict(a, section_names_map.get(a.id, []), stats_map.get(a.id, _EMPTY_STATS))
+        for a in assignments
+    ]
+
+
 @router.get("/courses/{course_id}/assignments")
 async def list_course_assignments(
     course_id: uuid.UUID,
@@ -225,13 +308,7 @@ async def list_course_assignments(
         .order_by(Assignment.created_at.desc())
     )).scalars().all()
 
-    results = []
-    for a in assignments:
-        section_names = await _get_section_names(db, a.id)
-        stats = await get_assignment_stats(db, a.id)
-        results.append(assignment_to_dict(a, section_names, stats))
-
-    return {"assignments": results}
+    return {"assignments": await _serialize_assignment_list(db, list(assignments))}
 
 
 @router.get("/assignments")
@@ -245,13 +322,7 @@ async def list_all_assignments(
         .order_by(Assignment.created_at.desc())
     )).scalars().all()
 
-    results = []
-    for a in assignments:
-        section_names = await _get_section_names(db, a.id)
-        stats = await get_assignment_stats(db, a.id)
-        results.append(assignment_to_dict(a, section_names, stats))
-
-    return {"assignments": results}
+    return {"assignments": await _serialize_assignment_list(db, list(assignments))}
 
 
 @router.get("/assignments/{assignment_id}")
@@ -261,8 +332,8 @@ async def get_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    section_names = await _get_section_names(db, a.id)
-    stats = await get_assignment_stats(db, a.id)
+    section_names = (await bulk_section_names(db, [a.id])).get(a.id, [])
+    stats = (await bulk_assignment_stats(db, [a.id])).get(a.id, _EMPTY_STATS)
     result = assignment_to_dict(a, section_names, stats)
     result["content"] = await hydrate_assignment_content(db, a)
     result["answer_key"] = a.answer_key
@@ -564,12 +635,3 @@ async def generate_assignment_solutions(
     return {"solutions": solutions}
 
 
-# ── Private helpers ──
-
-async def _get_section_names(db: AsyncSession, assignment_id: uuid.UUID) -> list[str]:
-    rows = (await db.execute(
-        select(Section.name)
-        .join(AssignmentSection, AssignmentSection.section_id == Section.id)
-        .where(AssignmentSection.assignment_id == assignment_id)
-    )).scalars().all()
-    return list(rows)
