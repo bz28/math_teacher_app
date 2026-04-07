@@ -247,7 +247,12 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.key}
-              onClick={() => setStatusFilter(f.key)}
+              onClick={() => {
+                setStatusFilter(f.key);
+                // Dismiss any open workshop modal so switching tabs
+                // feels like a navigation, not a sticky overlay.
+                setOpenItemId(null);
+              }}
               className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
                 statusFilter === f.key
                   ? "bg-primary text-white"
