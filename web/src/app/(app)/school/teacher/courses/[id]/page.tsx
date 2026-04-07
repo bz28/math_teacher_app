@@ -22,6 +22,7 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
+const ACTIVE_JOB_STORAGE_KEY = (courseId: string) => `bank.activeJob.${courseId}`;
 
 export default function CourseWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -32,8 +33,49 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
   // Lifted from QuestionBankTab so the active generation job survives
   // when the teacher switches tabs. The polling effect lives here too,
   // so the job keeps ticking in the background and a small indicator
-  // can show on the Question Bank tab label from any view.
+  // can show on the Question Bank tab label from any view. Persisted
+  // to sessionStorage so a browser reload also recovers the in-flight
+  // job — the backend keeps generating regardless of the client.
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+
+  // On mount: restore + verify any persisted job from a previous tab
+  // visit or browser reload.
+  useEffect(() => {
+    const stored = sessionStorage.getItem(ACTIVE_JOB_STORAGE_KEY(id));
+    if (!stored) return;
+    let cancelled = false;
+    teacher
+      .bankJob(id, stored)
+      .then((job) => {
+        if (cancelled) return;
+        // Only restore if the job is still actionable — done bulk jobs
+        // would just flash the toast pointlessly, failed ones are noise.
+        if (
+          job.status === "queued" ||
+          job.status === "running" ||
+          (job.status === "done" && job.parent_question_id)
+        ) {
+          setActiveJob(job);
+        } else {
+          sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY(id));
+        }
+      })
+      .catch(() => {
+        sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY(id));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Mirror activeJob to sessionStorage so the next mount can recover.
+  useEffect(() => {
+    if (activeJob) {
+      sessionStorage.setItem(ACTIVE_JOB_STORAGE_KEY(id), activeJob.id);
+    } else {
+      sessionStorage.removeItem(ACTIVE_JOB_STORAGE_KEY(id));
+    }
+  }, [activeJob, id]);
 
   // Poll the active job from the page level so it survives tab switches.
   useEffect(() => {
