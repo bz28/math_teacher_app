@@ -79,22 +79,29 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
   // When a make-similar review queue completes, we want to drop the
-  // teacher back at the parent question instead of the bare bank tab.
-  const [reviewQueueParentId, setReviewQueueParentId] = useState<string | null>(null);
+  // teacher back at the parent question. We stash the full BankItem
+  // (not just an id) so restoration works regardless of which status
+  // tab the teacher is currently on — the bank list might not contain
+  // the parent if it's in a different status bucket.
+  const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
 
   // Open a focused review queue containing only the just-generated
-  // pending children of `parentId`. Replaces the global pending pool
-  // with the 5 (or N) variations the teacher just made.
-  const openVariationReview = async (parentId: string) => {
+  // pending children of `parent`. Replaces the global pending pool
+  // with the variations the teacher just made.
+  const openVariationReview = async (parent: BankItem) => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
-      const children = res.items.filter((i) => i.parent_question_id === parentId);
+      const children = res.items.filter((i) => i.parent_question_id === parent.id);
       if (children.length === 0) return;
       setActiveJob(null); // dismiss the strip — its job is done
       setOpenItemId(null); // close the single-mode workshop
-      setReviewQueueParentId(parentId);
+      setReviewQueueParent(parent);
       setReviewQueue(children);
     } catch (e) {
+      // Close the modal so the bank tab's error message is visible —
+      // otherwise the workshop modal keeps the green CTA on screen
+      // hiding the error and the teacher thinks nothing happened.
+      setOpenItemId(null);
       setError(e instanceof Error ? e.message : "Failed to load variations");
     }
   };
@@ -371,12 +378,21 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
       )}
 
       {openItemId && (() => {
-        const openItem = items.find((i) => i.id === openItemId);
+        // Prefer items.find (so the workshop sees fresh data after a
+        // reload), but fall back to the stashed reviewQueueParent so
+        // restoration works even when the parent isn't in the current
+        // status tab's items list.
+        const openItem =
+          items.find((i) => i.id === openItemId) ??
+          (reviewQueueParent?.id === openItemId ? reviewQueueParent : undefined);
         if (!openItem) return null;
         return (
           <WorkshopModal
             item={openItem}
-            onClose={() => setOpenItemId(null)}
+            onClose={() => {
+              setOpenItemId(null);
+              setReviewQueueParent(null);
+            }}
             onChanged={reload}
             onJobStarted={setActiveJob}
             activeJob={activeJob}
@@ -392,10 +408,13 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             setReviewQueue(null);
             // If this queue was a focused variation review, drop the
             // teacher back on the parent question instead of the bare
-            // bank — keeps the mental thread intact.
-            if (reviewQueueParentId) {
-              setOpenItemId(reviewQueueParentId);
-              setReviewQueueParentId(null);
+            // bank — keeps the mental thread intact. We rely on the
+            // stashed reviewQueueParent (full BankItem) so restoration
+            // works regardless of the current status tab.
+            if (reviewQueueParent) {
+              setOpenItemId(reviewQueueParent.id);
+              // reviewQueueParent stays set so the openItem fallback
+              // can find it; cleared when the modal closes.
             }
             reload();
           }}

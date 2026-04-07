@@ -115,18 +115,21 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         parent = (await db.execute(
             select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
         )).scalar_one_or_none()
-        if parent:
-            seed_block = (
-                "Generate questions that are SIMILAR TO but DIFFERENT FROM "
-                "this reference question. Match the same topic, difficulty, "
-                "and pedagogical style, but use different numbers, contexts, "
-                "or framing so each variation is its own problem.\n\n"
-                f"Reference question:\n{parent.question}"
+        if not parent:
+            raise RuntimeError(
+                "Parent question was deleted before its variations could be generated"
             )
-            constraint_text = (
-                f"{seed_block}\n\nAdditional constraint: {job.constraint}"
-                if job.constraint else seed_block
-            )
+        seed_block = (
+            "Generate questions that are SIMILAR TO but DIFFERENT FROM "
+            "this reference question. Match the same topic, difficulty, "
+            "and pedagogical style, but use different numbers, contexts, "
+            "or framing so each variation is its own problem.\n\n"
+            f"Reference question:\n{parent.question}"
+        )
+        constraint_text = (
+            f"{seed_block}\n\nAdditional constraint: {job.constraint}"
+            if job.constraint else seed_block
+        )
 
     # 1. Generate question texts. The bank flow doesn't use a structured
     # difficulty field — teachers describe what they want in the natural-

@@ -53,7 +53,9 @@ export function WorkshopModal({
   activeJob?: BankJob | null;
   // Called when the teacher clicks "Review the N new variations" CTA
   // — parent hands back a scoped queue containing just those children.
-  onReviewVariations?: (parentId: string) => void;
+  // Receives the full BankItem so the parent can stash it for later
+  // restoration regardless of which status tab is active.
+  onReviewVariations?: (parent: BankItem) => void;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -472,8 +474,11 @@ export function WorkshopModal({
                 ↶ Undo last change
               </button>
             )}
-            {/* Generate similar — only on root questions, not variations */}
-            {!liveItem.parent_question_id && (
+            {/* Generate similar — only on approved root questions.
+                Variations don't get the button (one level deep) and
+                pending/rejected hide it because spawning variations of
+                unreviewed content compounds bad questions. */}
+            {!liveItem.parent_question_id && liveItem.status === "approved" && (
               <button
                 type="button"
                 onClick={() => setShowSimilar(true)}
@@ -511,7 +516,7 @@ export function WorkshopModal({
         {activeJob && activeJob.parent_question_id === liveItem.id && (
           <SimilarJobStrip
             job={activeJob}
-            onReview={() => onReviewVariations?.(liveItem.id)}
+            onReview={() => onReviewVariations?.(liveItem)}
           />
         )}
 
@@ -739,10 +744,6 @@ export function WorkshopModal({
   );
 }
 
-// Small dialog: pick how many variations + optional constraint, then
-// schedule the generate-similar job. Children land in the pending
-// queue with parent_question_id set so they nest under their parent
-// once approved.
 // Inline progress strip for an in-flight generate-similar job whose
 // parent is the current workshop question. Three states: working,
 // done (with Review CTA), failed.
@@ -790,6 +791,10 @@ function SimilarJobStrip({
   );
 }
 
+// Small dialog: pick how many variations + optional constraint, then
+// schedule the generate-similar job. Children land in the pending
+// queue with parent_question_id set so they nest under their parent
+// once approved.
 function GenerateSimilarDialog({
   itemId,
   onClose,

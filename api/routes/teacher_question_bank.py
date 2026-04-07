@@ -416,6 +416,11 @@ async def generate_similar_bank_questions(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Can only generate similar from a root question, not a variation",
         )
+    if parent.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Approve the question before generating similar variations",
+        )
 
     job = QuestionBankGenerationJob(
         course_id=parent.course_id,
