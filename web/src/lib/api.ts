@@ -800,7 +800,6 @@ export const teacher = {
   },
   generateBank(courseId: string, data: {
     count: number;
-    difficulty?: string;
     unit_id?: string | null;
     document_ids?: string[];
     constraint?: string | null;

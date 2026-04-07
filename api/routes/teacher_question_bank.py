@@ -14,9 +14,6 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-_VALID_STATUSES = {"pending", "approved", "rejected", "archived"}
-_VALID_DIFFICULTIES = {"easy", "medium", "hard"}
-
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -26,29 +23,27 @@ from api.routes.teacher_courses import get_teacher_course
 
 router = APIRouter()
 
+_VALID_STATUSES = {"pending", "approved", "rejected", "archived"}
+_VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+
 
 # ── request shapes ──
 
 
 class GenerateRequest(BaseModel):
     count: int
-    difficulty: str = "mixed"
     unit_id: uuid.UUID | None = None
     document_ids: list[uuid.UUID] = []
     constraint: str | None = None  # natural-language extra instructions
+    # difficulty intentionally absent: questions are modeled after the source
+    # documents, and the teacher can specify difficulty in `constraint` if they
+    # want it (e.g. "all hard" or "mostly easy").
 
     @field_validator("count")
     @classmethod
     def _validate_count(cls, v: int) -> int:
         if v < 1 or v > 50:
             raise ValueError("count must be between 1 and 50")
-        return v
-
-    @field_validator("difficulty")
-    @classmethod
-    def _validate_difficulty(cls, v: str) -> str:
-        if v not in ("easy", "medium", "hard", "mixed"):
-            raise ValueError("difficulty must be one of: easy, medium, hard, mixed")
         return v
 
 
@@ -129,9 +124,15 @@ async def list_bank_items(
     await get_teacher_course(db, course_id, current_user.user_id)
 
     if status_filter is not None and status_filter not in _VALID_STATUSES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status filter")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status filter (must be one of: {', '.join(sorted(_VALID_STATUSES))})",
+        )
     if difficulty is not None and difficulty not in _VALID_DIFFICULTIES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty filter")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid difficulty filter (must be one of: {', '.join(sorted(_VALID_DIFFICULTIES))})",
+        )
 
     query = select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)
     if status_filter:
@@ -180,7 +181,9 @@ async def generate_bank_questions(
         created_by_id=current_user.user_id,
         status="queued",
         requested_count=body.count,
-        difficulty=body.difficulty,
+        # difficulty column is legacy — hardcoded so generate_questions still
+        # gets a non-empty value but the teacher never picks it
+        difficulty="mixed",
         constraint=body.constraint,
         source_doc_ids=[str(d) for d in body.document_ids] if body.document_ids else None,
     )

@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
   type BankCounts,
@@ -18,6 +19,7 @@ import {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const POLL_LIMIT_MS = 5 * 60 * 1000;
 
 type TabKey = "sections" | "materials" | "bank" | "homework" | "tests" | "settings";
 
@@ -1085,12 +1087,6 @@ const STATUS_FILTERS: { key: "all" | "pending" | "approved" | "rejected"; label:
   { key: "rejected", label: "Rejected" },
 ];
 
-const DIFFICULTY_BADGE: Record<string, string> = {
-  easy: "bg-blue-50 text-blue-700 dark:bg-blue-500/10",
-  medium: "bg-purple-50 text-purple-700 dark:bg-purple-500/10",
-  hard: "bg-red-50 text-red-700 dark:bg-red-500/10",
-};
-
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
   approved: "bg-green-50 text-green-700 dark:bg-green-500/10",
@@ -1129,25 +1125,25 @@ function QuestionBankTab({ courseId }: { courseId: string }) {
   }, [courseId, statusFilter]);
 
   // Poll active job until done/failed, then refresh the bank.
-  // Hard cap at 5 minutes — if the backend process died after the row was
+  // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
   // created but before the asyncio task ran, the job stays "queued" forever.
   // The cap prevents the banner from polling indefinitely.
-  const POLL_LIMIT_MS = 5 * 60 * 1000;
   useEffect(() => {
     if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
     const startedAt = Date.now();
+    const jobId = activeJob.id;
     const interval = setInterval(async () => {
       if (Date.now() - startedAt > POLL_LIMIT_MS) {
-        setActiveJob({
-          ...activeJob,
-          status: "failed",
-          error_message: "Generation timed out — try again or refresh the page.",
-        });
+        setActiveJob((prev) =>
+          prev && prev.id === jobId
+            ? { ...prev, status: "failed", error_message: "Generation timed out — try again or refresh the page." }
+            : prev,
+        );
         return;
       }
       try {
-        const updated = await teacher.bankJob(courseId, activeJob.id);
-        setActiveJob(updated);
+        const updated = await teacher.bankJob(courseId, jobId);
+        setActiveJob((prev) => (prev && prev.id === jobId ? updated : prev));
         if (updated.status === "done") {
           reload();
         }
@@ -1333,23 +1329,16 @@ function BankItemCard({
   return (
     <div className="rounded-[--radius-lg] border border-border-light bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="flex-1 text-sm text-text-primary">{item.question}</p>
-        <div className="flex shrink-0 gap-1.5">
-          <span
-            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
-              DIFFICULTY_BADGE[item.difficulty] ?? ""
-            }`}
-          >
-            {item.difficulty}
-          </span>
-          <span
-            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
-              STATUS_BADGE[item.status] ?? ""
-            }`}
-          >
-            {item.status}
-          </span>
+        <div className="flex-1 text-sm text-text-primary">
+          <MathText text={item.question} />
         </div>
+        <span
+          className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+            STATUS_BADGE[item.status] ?? ""
+          }`}
+        >
+          {item.status}
+        </span>
       </div>
 
       {expanded && (
@@ -1359,9 +1348,11 @@ function BankItemCard({
               {item.solution_steps.map((s, i) => (
                 <li key={i}>
                   <div className="font-semibold text-text-primary">
-                    {i + 1}. {s.title}
+                    {i + 1}. <MathText text={s.title} />
                   </div>
-                  <div className="mt-0.5">{s.description}</div>
+                  <div className="mt-0.5">
+                    <MathText text={s.description} />
+                  </div>
                 </li>
               ))}
             </ol>
@@ -1373,7 +1364,9 @@ function BankItemCard({
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                 Final answer:
               </span>{" "}
-              <span className="text-text-primary">{item.final_answer}</span>
+              <span className="text-text-primary">
+                <MathText text={item.final_answer} />
+              </span>
             </div>
           )}
         </div>
@@ -1465,7 +1458,9 @@ function RegenerateModal({
         }}
       >
         <h2 className="text-lg font-bold text-text-primary">Regenerate Question</h2>
-        <p className="mt-1 line-clamp-2 text-xs text-text-muted">{itemQuestion}</p>
+        <div className="mt-1 line-clamp-2 text-xs text-text-muted">
+          <MathText text={itemQuestion} />
+        </div>
 
         <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
           Instructions (optional)
@@ -1518,7 +1513,6 @@ function GenerateQuestionsModal({
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [unitId, setUnitId] = useState<string>("");
   const [count, setCount] = useState(20);
-  const [difficulty, setDifficulty] = useState("mixed");
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [constraint, setConstraint] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1570,7 +1564,6 @@ function GenerateQuestionsModal({
     try {
       const job = await teacher.generateBank(courseId, {
         count,
-        difficulty,
         unit_id: unitId || null,
         document_ids: Array.from(selectedDocs),
         constraint: constraint.trim() || null,
@@ -1594,8 +1587,8 @@ function GenerateQuestionsModal({
       >
         <h2 className="text-lg font-bold text-text-primary">Generate Questions</h2>
         <p className="mt-1 text-xs text-text-muted">
-          Pick which materials to feed Claude, set quantity and difficulty, and add any
-          natural-language instructions.
+          Pick the source materials, how many questions, and any extra instructions
+          (style, difficulty, what to skip — anything in plain English).
         </p>
 
         {loading ? (
@@ -1683,20 +1676,6 @@ function GenerateQuestionsModal({
                 max={50}
                 className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
               />
-            </Field>
-
-            {/* Difficulty */}
-            <Field label="Difficulty">
-              <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-              >
-                <option value="mixed">Mixed (recommended)</option>
-                <option value="easy">All easy</option>
-                <option value="medium">All medium</option>
-                <option value="hard">All hard</option>
-              </select>
             </Field>
 
             {/* Target unit */}

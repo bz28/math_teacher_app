@@ -118,11 +118,6 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             "The AI didn't return any questions. Try adjusting your instructions or selecting different source documents."
         )
 
-    # Update progress: questions written, now solving
-    job.produced_count = 0
-    job.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-
     # 2. Solve each question in parallel (capped concurrency inside)
     solved = await generate_solutions(
         question_dicts,
@@ -130,9 +125,10 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         user_id=str(job.created_by_id),
     )
 
-    # 3. Persist as bank items (status = pending). Commit in batches so the
-    # frontend's polling banner shows real progress instead of jumping from
-    # 0 to N at the end.
+    # 3. Persist as bank items (status = pending). Commit in batches of
+    # PROGRESS_BATCH so the frontend's polling banner shows real progress
+    # without N+1 transactions on every single question.
+    PROGRESS_BATCH = 5
     source_doc_id_strs = [str(d) for d in doc_ids] if doc_ids else None
     for idx, (q, s) in enumerate(zip(question_dicts, solved), start=1):
         item = QuestionBankItem(
@@ -148,11 +144,13 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             created_by_id=job.created_by_id,
         )
         db.add(item)
-        job.produced_count = idx
-        job.updated_at = datetime.now(timezone.utc)
-        await db.commit()
+        if idx % PROGRESS_BATCH == 0:
+            job.produced_count = idx
+            job.updated_at = datetime.now(timezone.utc)
+            await db.commit()
 
     job.status = "done"
+    job.produced_count = len(question_dicts)
     job.updated_at = datetime.now(timezone.utc)
     await db.commit()
     logger.info("Generation job %s produced %d questions", job.id, len(question_dicts))
