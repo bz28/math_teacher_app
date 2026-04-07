@@ -901,7 +901,7 @@ export interface BankItem {
   id: string;
   course_id: string;
   unit_id: string | null;
-  title: string | null;
+  title: string;
   question: string;
   solution_steps: { title: string; description: string }[] | null;
   final_answer: string | null;

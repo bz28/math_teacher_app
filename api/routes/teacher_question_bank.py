@@ -303,7 +303,9 @@ async def update_bank_item(
 
     if body.title is not None:
         t = body.title.strip()[:120]
-        item.title = t or None
+        if not t:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title cannot be empty")
+        item.title = t
     if body.question is not None:
         q = body.question.strip()
         if not q:

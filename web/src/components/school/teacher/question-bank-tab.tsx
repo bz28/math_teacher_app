@@ -33,19 +33,43 @@ import { STATUS_FILTERS } from "./bank-styles";
 // is in place so when variations land they slot in automatically.
 type TreeNode = { item: BankItem; children: BankItem[] };
 
-// Concept emoji classifier — keyword-based, no AI cost. Maps the
-// title + question text to a single visual handle so a teacher can
-// scan the bank by category (sports problem, geometry, graph, etc.)
-// instead of reading every row's text.
-function conceptEmoji(title: string | null, question: string): string {
-  const text = ((title ?? "") + " " + question).toLowerCase();
-  if (/basketball|soccer|football|tennis|baseball|hockey|ball|frisbee/.test(text)) return "🏀";
-  if (/triangle|polygon|angle|circle|square|rectangle|geometry|perimeter|area|volume/.test(text)) return "📐";
-  if (/graph|plot|parabola|curve|axis|coordinate|sketch/.test(text)) return "📈";
-  if (/distance|speed|velocity|rate|time|hour|km\/h|mph/.test(text)) return "⏱️";
-  if (/probability|statistic|mean|median|distribution|sample|standard deviation/.test(text)) return "📊";
-  if (/money|cost|price|profit|revenue|interest|loan/.test(text)) return "💰";
-  if (/word problem|story|real|scenario|context|practical/.test(text)) return "🌍";
+// Concept emoji classifier — keyword-based, no AI cost. Order matters:
+// more specific sport names check first so "baseball" doesn't fall
+// through to a generic ball bucket. Word boundaries (\b) keep
+// "basketball" from matching inside "basket-shaped" or vice versa.
+function conceptEmoji(title: string, question: string): string {
+  const text = (title + " " + question).toLowerCase();
+
+  // Sports — each gets its own emoji, checked specific-to-general
+  if (/\bbaseball\b/.test(text)) return "⚾";
+  if (/\bbasketball\b/.test(text)) return "🏀";
+  if (/\bsoccer\b|\bfootball\b/.test(text)) return "⚽";
+  if (/\btennis\b/.test(text)) return "🎾";
+  if (/\bhockey\b|\bpuck\b/.test(text)) return "🏒";
+  if (/\bfrisbee\b/.test(text)) return "🥏";
+
+  // Physics-flavored launches
+  if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
+  if (/\bball\b|\bthrow(n|ing)?\b|\bkick(ed|ing)?\b/.test(text)) return "🏐";
+
+  // Geometry / measurement
+  if (/\b(triangle|polygon|angle|circle|square|rectangle|geometry|perimeter|area|volume)\b/.test(text)) return "📐";
+
+  // Graphs / functions
+  if (/\b(graph|plot|parabola|curve|axis|coordinate|sketch|function)\b/.test(text)) return "📈";
+
+  // Rates / kinematics
+  if (/\b(distance|speed|velocity|rate|hour|minute|km\/h|mph|seconds?)\b/.test(text)) return "⏱️";
+
+  // Statistics / probability
+  if (/\b(probability|statistic|mean|median|mode|distribution|sample|standard deviation)\b/.test(text)) return "📊";
+
+  // Money
+  if (/\b(money|cost|price|profit|revenue|interest|loan|dollar|salary)\b/.test(text)) return "💰";
+
+  // Real-world catch-all
+  if (/\b(word problem|story|real|scenario|context|practical)\b/.test(text)) return "🌍";
+
   return "📝";
 }
 
@@ -64,13 +88,6 @@ const DIFFICULTY_STYLE: Record<string, { label: string; cls: string }> = {
     cls: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",
   },
 };
-
-// Lazy fallback for un-titled rows: first ~60 chars of the question
-// text with LaTeX symbols stripped so it reads cleanly.
-function fallbackTitle(question: string): string {
-  const stripped = question.replace(/\$([^$]*)\$/g, "$1").replace(/\s+/g, " ").trim();
-  return stripped.length > 60 ? stripped.slice(0, 60) + "…" : stripped;
-}
 
 function buildTree(items: BankItem[]): TreeNode[] {
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -858,9 +875,7 @@ function BankRow({
             {item.source === "practice" && (
               <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
             )}
-            <span className="truncate font-semibold">
-              {item.title || fallbackTitle(item.question)}
-            </span>
+            <span className="truncate font-semibold">{item.title}</span>
           </div>
         </button>
         {/* Mobile: pills + unit label wrap below the question text on

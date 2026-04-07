@@ -231,7 +231,7 @@ export function WorkshopModal({
     run(async () => {
       if (!liveItem || blockIfPending()) return;
       const t = next.trim().slice(0, 120);
-      if (t === (liveItem.title ?? "")) return;
+      if (!t || t === liveItem.title) return;
       const updated = await teacher.updateBankItem(liveItem.id, { title: t });
       replaceLiveItem(updated);
     });
@@ -436,7 +436,7 @@ export function WorkshopModal({
         <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <InlineTitleEdit
-              value={liveItem.title || ""}
+              value={liveItem.title}
               onSave={saveTitle}
               busy={busy}
             />

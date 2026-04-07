@@ -27,7 +27,7 @@ class QuestionBankItem(Base):
 
     # Short concept label shown as the primary scan unit in the bank
     # list. AI-generated alongside the question; teacher-editable.
-    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     solution_steps: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
