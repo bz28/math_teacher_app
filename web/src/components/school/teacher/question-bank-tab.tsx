@@ -27,15 +27,18 @@ import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
 import { STATUS_FILTERS } from "./bank-styles";
 
-// Per-unit tabs inside the Approved view. Each tab filters this unit's
-// rows down to questions that match its category. "All" is the default.
-type UnitTab = "all" | "homework" | "tests" | "practice";
+// Per-unit tabs inside the Approved view. Each tab is a usage bucket
+// — Homework / Tests / Practice (future) / Unused (approved but not in
+// any homework or test yet). Every approved question lives in at least
+// one tab. The "All" tab is intentionally absent — the unit header
+// already tells you the total, and most browsing is "show me X type."
+type UnitTab = "homework" | "tests" | "practice" | "unused";
 
 const UNIT_TABS: { key: UnitTab; label: string }[] = [
-  { key: "all", label: "All" },
   { key: "homework", label: "Homework" },
   { key: "tests", label: "Tests" },
   { key: "practice", label: "Practice" },
+  { key: "unused", label: "Unused" },
 ];
 
 // Type-of-assignment classifier — keep "quiz" lumped under tests so any
@@ -65,7 +68,10 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     rejected: 0,
     archived: 0,
   });
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  // Default to Pending — that's the actionable view a teacher lands on
+  // most often (review what just generated). Approved is for browsing,
+  // Rejected is the archive.
+  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
   // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
   // status filter so the teacher can narrow on both axes.
   const [unitFilter, setUnitFilter] = useState<string>("all");
@@ -93,8 +99,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const filters: { status?: string; unit_id?: string } = {};
-      if (statusFilter !== "all") filters.status = statusFilter;
+      const filters: { status?: string; unit_id?: string } = { status: statusFilter };
       // Note: backend doesn't support uncategorized filter yet, so we
       // filter in memory below for that case.
       if (unitFilter !== "all" && unitFilter !== "uncategorized") {
@@ -241,7 +246,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
               }`}
             >
               {f.label}
-              {f.key !== "all" && <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>}
+              <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
             </button>
           ))}
         </div>
@@ -405,27 +410,33 @@ function ApprovedUnitGroup({
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
-  const [open, setOpen] = useState(true);
-  const [tab, setTab] = useState<UnitTab>("all");
+  // Default collapsed in Approved view — once a question is approved
+  // and slotted into a homework/test, the teacher rarely needs to read
+  // the full text again. The unit header gives the at-a-glance summary;
+  // expand only when actually browsing.
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<UnitTab>("homework");
 
-  // Counts per tab — homework and tests counts can overlap (a question
-  // used in both increments both), which is correct.
+  // Counts per tab. Homework and tests can overlap (a question used in
+  // both increments both). "Unused" = approved but not in any HW or test.
   const counts = (() => {
     let hw = 0;
     let tests = 0;
+    let unused = 0;
     for (const item of items) {
       const c = countByTab(item);
       if (c.homework) hw++;
       if (c.tests) tests++;
+      if (!c.homework && !c.tests) unused++;
     }
-    return { all: items.length, homework: hw, tests, practice: 0 };
+    return { homework: hw, tests, practice: 0, unused };
   })();
 
   const visible = items.filter((item) => {
-    if (tab === "all") return true;
     const c = countByTab(item);
     if (tab === "homework") return c.homework;
     if (tab === "tests") return c.tests;
+    if (tab === "unused") return !c.homework && !c.tests;
     return false; // practice — empty until Generate Similar ships
   });
 
@@ -440,6 +451,9 @@ function ApprovedUnitGroup({
         <span>📁 {label}</span>
         <span className="font-normal normal-case text-text-muted/80">
           · {items.length} {items.length === 1 ? "question" : "questions"}
+          {counts.homework > 0 && ` · ${counts.homework} in homework`}
+          {counts.tests > 0 && ` · ${counts.tests} in tests`}
+          {counts.unused > 0 && ` · ${counts.unused} unused`}
         </span>
       </button>
 

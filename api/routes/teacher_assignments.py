@@ -172,21 +172,20 @@ def _problem_ids_in_content(content: Any) -> list[str]:
 async def used_in_assignments_map(
     db: AsyncSession, course_id: uuid.UUID,
 ) -> dict[str, list[dict[str, str]]]:
-    """For every published assignment in the course, return a map of
-    bank_item_id → list of {id, title, type} entries. Used to render
-    the "Used in" pills + power the per-unit Homework/Tests tabs.
-    Only published assignments count (drafts don't lock anything)."""
+    """For every assignment in the course (draft + published), return a
+    map of bank_item_id → list of {id, title, type, status} entries.
+    Used to render the "Used in" pills + power the per-unit
+    Homework/Tests tabs. Drafts are included so the teacher sees their
+    in-progress homework references; only published entries actually
+    lock the bank item (see recompute_bank_locks)."""
     rows = (await db.execute(
-        select(Assignment).where(
-            Assignment.course_id == course_id,
-            Assignment.status == "published",
-        )
+        select(Assignment).where(Assignment.course_id == course_id)
     )).scalars().all()
     out: dict[str, list[dict[str, str]]] = {}
     for a in rows:
         for pid in _problem_ids_in_content(a.content):
             out.setdefault(pid, []).append(
-                {"id": str(a.id), "title": a.title, "type": a.type},
+                {"id": str(a.id), "title": a.title, "type": a.type, "status": a.status},
             )
     return out
 
@@ -196,7 +195,11 @@ async def recompute_bank_locks(db: AsyncSession, course_id: uuid.UUID) -> None:
     whether any published assignment references it. Cheap enough — runs
     only on publish/unpublish."""
     used = await used_in_assignments_map(db, course_id)
-    locked_ids = set(used.keys())
+    # Only published references lock the bank item; drafts can be edited freely.
+    locked_ids = {
+        pid for pid, refs in used.items()
+        if any(r.get("status") == "published" for r in refs)
+    }
     items = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)
     )).scalars().all()
