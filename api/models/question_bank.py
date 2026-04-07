@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,18 @@ class QuestionBankItem(Base):
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     # status: pending / approved / rejected / archived
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+
+    # True while at least one published assignment references this item.
+    # While locked, content edits / status changes / delete are refused.
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Provenance: generated (AI), imported (PDF), manual (typed by teacher).
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
+    # Variation tree — set by "generate similar" later.
+    parent_question_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     source_doc_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     generation_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)

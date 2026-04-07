@@ -7,6 +7,7 @@ import { teacher, type TeacherCourse } from "@/lib/api";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { QuestionBankTab } from "@/components/school/teacher/question-bank-tab";
+import { HomeworkTab } from "@/components/school/teacher/homework-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
 
 type TabKey = "sections" | "materials" | "bank" | "homework" | "tests" | "settings";
@@ -101,7 +102,7 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "bank" && <QuestionBankTab courseId={course.id} />}
-        {tab === "homework" && <ComingSoon name="Homework" phase="Phase 5" />}
+        {tab === "homework" && <HomeworkTab courseId={course.id} />}
         {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
       </div>

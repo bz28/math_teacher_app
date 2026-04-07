@@ -10,15 +10,28 @@ import {
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
+
+// Build a "Unit 5: Quadratics / Practice" label for any unit_id, or
+// "Uncategorized" when null.
+function buildUnitLabel(units: TeacherUnit[], unitId: string | null): string {
+  if (!unitId) return "Uncategorized";
+  const u = units.find((x) => x.id === unitId);
+  if (!u) return "Unknown";
+  if (!u.parent_id) return u.name;
+  const parent = units.find((x) => x.id === u.parent_id);
+  return parent ? `${parent.name} / ${u.name}` : u.name;
+}
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
+import { HomeworkDetailModal } from "./homework-tab";
 import { STATUS_BADGE, STATUS_FILTERS } from "./bank-styles";
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
 
 export function QuestionBankTab({ courseId }: { courseId: string }) {
   const [items, setItems] = useState<BankItem[]>([]);
+  const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [counts, setCounts] = useState<BankCounts>({
     pending: 0,
     approved: 0,
@@ -26,11 +39,15 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     archived: 0,
   });
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
+  // status filter so the teacher can narrow on both axes.
+  const [unitFilter, setUnitFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
 
   // Open review mode with all currently-pending items in the bank as the
@@ -49,10 +66,24 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const filters = statusFilter === "all" ? undefined : { status: statusFilter };
-      const res = await teacher.bank(courseId, filters);
-      setItems(res.items);
-      setCounts(res.counts);
+      const filters: { status?: string; unit_id?: string } = {};
+      if (statusFilter !== "all") filters.status = statusFilter;
+      // Note: backend doesn't support uncategorized filter yet, so we
+      // filter in memory below for that case.
+      if (unitFilter !== "all" && unitFilter !== "uncategorized") {
+        filters.unit_id = unitFilter;
+      }
+      const [bankRes, unitsRes] = await Promise.all([
+        teacher.bank(courseId, filters),
+        teacher.units(courseId),
+      ]);
+      let filteredItems = bankRes.items;
+      if (unitFilter === "uncategorized") {
+        filteredItems = bankRes.items.filter((i) => i.unit_id === null);
+      }
+      setItems(filteredItems);
+      setUnits(unitsRes.units);
+      setCounts(bankRes.counts);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load bank");
     } finally {
@@ -63,7 +94,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, statusFilter]);
+  }, [courseId, statusFilter, unitFilter]);
 
   // Poll active job until done/failed, then refresh the bank.
   // Hard cap at POLL_LIMIT_MS — if the backend process died after the row was
@@ -169,26 +200,56 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
-      {/* Status filter chips */}
-      <div className="mt-4 flex gap-2">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setStatusFilter(f.key)}
-            className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
-              statusFilter === f.key
-                ? "bg-primary text-white"
-                : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-            }`}
+      {/* Filter row: status chips + unit dropdown */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="flex gap-2">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
+                statusFilter === f.key
+                  ? "bg-primary text-white"
+                  : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+              }`}
+            >
+              {f.label}
+              {f.key !== "all" && <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Unit
+          </label>
+          <select
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value)}
+            className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
           >
-            {f.label}
-            {f.key !== "all" && <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>}
-          </button>
-        ))}
+            <option value="all">All units</option>
+            <option value="uncategorized">Uncategorized</option>
+            {units
+              .filter((u) => u.parent_id === null)
+              .flatMap((top) => [
+                <option key={top.id} value={top.id}>
+                  {top.name}
+                </option>,
+                ...units
+                  .filter((sub) => sub.parent_id === top.id)
+                  .map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      &nbsp;&nbsp;{top.name} / {sub.name}
+                    </option>
+                  )),
+              ])}
+          </select>
+        </div>
       </div>
 
-      {/* List */}
-      <div className="mt-4 space-y-3">
+      {/* List — grouped by unit so the bank scans like a library */}
+      <div className="mt-4 space-y-5">
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
         ) : items.length === 0 ? (
@@ -200,11 +261,14 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             }
           />
         ) : (
-          items.map((item) => (
-            <BankItemCard
-              key={item.id}
-              item={item}
-              onOpen={() => setOpenItemId(item.id)}
+          buildUnitGroups(items, units).map((group) => (
+            <UnitGroup
+              key={group.id}
+              label={group.label}
+              items={group.items}
+              units={units}
+              onOpenItem={setOpenItemId}
+              onOpenHomework={setOpenHomeworkId}
               onChanged={reload}
             />
           ))
@@ -244,17 +308,106 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
           onChanged={reload}
         />
       )}
+
+      {openHomeworkId && (
+        <HomeworkDetailModal
+          courseId={courseId}
+          assignmentId={openHomeworkId}
+          onClose={() => setOpenHomeworkId(null)}
+          onChanged={reload}
+        />
+      )}
+    </div>
+  );
+}
+
+// Group items by unit for visual scanning. Top units come first in
+// position order, with their subfolders nested via breadcrumb labels.
+// "Uncategorized" goes last.
+function buildUnitGroups(
+  items: BankItem[],
+  units: TeacherUnit[],
+): { id: string; label: string; items: BankItem[] }[] {
+  const groups: { id: string; label: string; items: BankItem[] }[] = [];
+  const itemsIn = (uid: string | null) => items.filter((i) => i.unit_id === uid);
+  const topUnits = units.filter((u) => u.parent_id === null);
+  for (const top of topUnits) {
+    const own = itemsIn(top.id);
+    if (own.length > 0) groups.push({ id: top.id, label: top.name, items: own });
+    for (const sub of units.filter((u) => u.parent_id === top.id)) {
+      const subItems = itemsIn(sub.id);
+      if (subItems.length > 0) {
+        groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, items: subItems });
+      }
+    }
+  }
+  const uncat = itemsIn(null);
+  if (uncat.length > 0) groups.push({ id: "uncategorized", label: "Uncategorized", items: uncat });
+  return groups;
+}
+
+function UnitGroup({
+  label,
+  items,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  label: string;
+  items: BankItem[];
+  units: TeacherUnit[];
+  onOpenItem: (id: string) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const approved = items.filter((i) => i.status === "approved").length;
+  const pending = items.filter((i) => i.status === "pending").length;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 border-b border-border-light pb-1 text-left text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        <span>📁 {label}</span>
+        <span className="font-normal normal-case text-text-muted/80">
+          · {items.length} {items.length === 1 ? "question" : "questions"}
+          {approved > 0 && ` · ${approved} approved`}
+          {pending > 0 && ` · ${pending} pending`}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          {items.map((item) => (
+            <BankItemCard
+              key={item.id}
+              item={item}
+              unitLabel={buildUnitLabel(units, item.unit_id)}
+              onOpen={() => onOpenItem(item.id)}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function BankItemCard({
   item,
+  unitLabel,
   onOpen,
+  onOpenHomework,
   onChanged,
 }: {
   item: BankItem;
+  unitLabel: string;
   onOpen: () => void;
+  onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -291,21 +444,55 @@ function BankItemCard({
   return (
     <div className={`rounded-[--radius-lg] border border-border-light bg-surface p-4 transition-shadow hover:shadow-sm ${statusBorder}`}>
       <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex-1 cursor-pointer text-left text-sm text-text-primary hover:text-primary"
-          title="Open question"
-        >
-          <MathText text={item.question} />
-        </button>
-        <span
-          className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
-            STATUS_BADGE[item.status] ?? ""
-          }`}
-        >
-          {item.status}
-        </span>
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="cursor-pointer text-left text-sm text-text-primary hover:text-primary"
+            title="Open question"
+          >
+            <MathText text={item.question} />
+          </button>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted">
+            <span>📁 {unitLabel}</span>
+            {item.used_in.length > 0 && (
+              <span className="flex flex-wrap items-center gap-1">
+                <span>· 📎 Used in</span>
+                {item.used_in.map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenHomework(u.id);
+                    }}
+                    className="rounded-[--radius-pill] bg-bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-text-secondary hover:bg-primary-bg/40 hover:text-primary"
+                    title="Open this homework"
+                  >
+                    {u.title}
+                  </button>
+                ))}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {item.locked && (
+            <span
+              className="rounded-[--radius-pill] bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+              title="In published homework — unpublish to edit"
+            >
+              🔒 Locked
+            </span>
+          )}
+          <span
+            className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+              STATUS_BADGE[item.status] ?? ""
+            }`}
+          >
+            {item.status}
+          </span>
+        </div>
       </div>
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
@@ -335,7 +522,7 @@ function BankItemCard({
               <>
                 <button
                   onClick={approve}
-                  disabled={busy}
+                  disabled={busy || item.locked}
                   className="rounded-[--radius-sm] bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
                   title="Approve for use in homework, tests, and student practice"
                 >
@@ -343,7 +530,7 @@ function BankItemCard({
                 </button>
                 <button
                   onClick={reject}
-                  disabled={busy}
+                  disabled={busy || item.locked}
                   className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
                   title="Hide from students. Kept in your records."
                 >
@@ -353,7 +540,8 @@ function BankItemCard({
             )}
             <button
               onClick={() => setConfirmingDelete(true)}
-              disabled={busy}
+              disabled={busy || item.locked}
+              title={item.locked ? "Locked by published homework" : "Delete"}
               className="ml-auto rounded-[--radius-sm] border border-red-300 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               🗑

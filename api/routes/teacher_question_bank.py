@@ -21,7 +21,24 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.routes.teacher_assignments import used_in_assignments_map
 from api.routes.teacher_courses import get_teacher_course
+
+
+def _ensure_unlocked(item: QuestionBankItem) -> None:
+    if item.locked:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question is in a published homework. Unpublish it first.",
+        )
+
+
+async def _used_in_for(db: AsyncSession, item: QuestionBankItem) -> list[dict[str, str]]:
+    """Look up the published assignments referencing this single bank item.
+    Used by the per-item endpoints so the response stays consistent with
+    the list endpoint instead of returning a stale-empty `used_in`."""
+    used = await used_in_assignments_map(db, item.course_id)
+    return used.get(str(item.id), [])
 
 router = APIRouter()
 
@@ -96,7 +113,10 @@ async def _get_bank_item_for_teacher(
     return item
 
 
-def _serialize_item(item: QuestionBankItem) -> dict[str, Any]:
+def _serialize_item(
+    item: QuestionBankItem,
+    used_in: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     return {
         "id": str(item.id),
         "course_id": str(item.course_id),
@@ -106,6 +126,10 @@ def _serialize_item(item: QuestionBankItem) -> dict[str, Any]:
         "final_answer": item.final_answer,
         "difficulty": item.difficulty,
         "status": item.status,
+        "locked": bool(item.locked),
+        "source": item.source,
+        "parent_question_id": str(item.parent_question_id) if item.parent_question_id else None,
+        "used_in": used_in or [],
         "source_doc_ids": item.source_doc_ids,
         "generation_prompt": item.generation_prompt,
         "has_previous_version": item.previous_question is not None,
@@ -180,8 +204,9 @@ async def list_bank_items(
         if s in counts:
             counts[s] = c
 
+    used_map = await used_in_assignments_map(db, course_id)
     return {
-        "items": [_serialize_item(i) for i in items],
+        "items": [_serialize_item(i, used_map.get(str(i.id))) for i in items],
         "counts": counts,
     }
 
@@ -249,13 +274,16 @@ async def update_bank_item(
 ) -> dict[str, Any]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
 
-    # If any content fields are touched, snapshot the previous state for undo.
+    # Lock policy: only *content* edits are blocked when the item is in a
+    # published homework. Metadata changes (unit move, difficulty tag) stay
+    # allowed because they don't change what students see.
     content_changing = (
         body.question is not None
         or body.solution_steps is not None
         or body.final_answer is not None
     )
     if content_changing:
+        _ensure_unlocked(item)
         snapshot_history(item)
 
     if body.question is not None:
@@ -277,7 +305,7 @@ async def update_bank_item(
         item.unit_id = body.unit_id
 
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/revert")
@@ -304,7 +332,7 @@ async def revert_bank_item(
     item.previous_final_answer = None
     item.previous_status = None
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/approve")
@@ -314,6 +342,7 @@ async def approve_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
     item.status = "approved"
     await db.commit()
     return {"status": "ok"}
@@ -326,6 +355,7 @@ async def reject_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
     item.status = "rejected"
     await db.commit()
     return {"status": "ok"}
@@ -339,6 +369,7 @@ async def regenerate_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
     course = (await db.execute(
         select(Course).where(Course.id == item.course_id)
     )).scalar_one()
@@ -353,7 +384,7 @@ async def regenerate_bank_item(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Regeneration failed: {e}",
         ) from e
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.delete("/question-bank/{item_id}")
@@ -363,6 +394,7 @@ async def delete_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
     await db.delete(item)
     await db.commit()
     return {"status": "ok"}
@@ -384,6 +416,7 @@ async def post_chat_message(
     The proposal is NOT applied to live fields here — that only happens
     via /chat/accept."""
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
     course = (await db.execute(select(Course).where(Course.id == item.course_id))).scalar_one()
 
     try:
@@ -400,7 +433,7 @@ async def post_chat_message(
             detail=f"Chat failed: {e}",
         ) from e
 
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/accept")
@@ -414,6 +447,7 @@ async def accept_chat_proposal(
     Snapshots the current state to previous_* before mutating, marks the
     chat message as accepted."""
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    _ensure_unlocked(item)
 
     messages = list(item.chat_messages or [])
     if body.message_index < 0 or body.message_index >= len(messages):
@@ -450,7 +484,7 @@ async def accept_chat_proposal(
     item.chat_messages = messages
     item.updated_at = datetime.now(UTC)
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/discard")
@@ -476,7 +510,7 @@ async def discard_chat_proposal(
     item.chat_messages = messages
     item.updated_at = datetime.now(UTC)
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/clear")
@@ -490,4 +524,4 @@ async def clear_chat(
     item.chat_messages = []
     item.updated_at = datetime.now(UTC)
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
