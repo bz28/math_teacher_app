@@ -7,6 +7,7 @@ import {
   type BankChatMessage,
   type BankChatProposal,
   type BankItem,
+  type BankJob,
   type TeacherUnit,
 } from "@/lib/api";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
@@ -38,11 +39,13 @@ export function WorkshopModal({
   queue,
   onClose,
   onChanged,
+  onJobStarted,
 }: {
   item?: BankItem;
   queue?: BankItem[];
   onClose: () => void;
   onChanged: () => void;
+  onJobStarted?: (job: BankJob) => void;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -702,8 +705,12 @@ export function WorkshopModal({
         <GenerateSimilarDialog
           itemId={liveItem.id}
           onClose={() => setShowSimilar(false)}
-          onStarted={() => {
+          onStarted={(job) => {
             setShowSimilar(false);
+            // Close the workshop so the teacher sees the bank's job
+            // banner ticking through their new variations.
+            onClose();
+            onJobStarted?.(job);
             onChanged();
           }}
         />
@@ -723,7 +730,7 @@ function GenerateSimilarDialog({
 }: {
   itemId: string;
   onClose: () => void;
-  onStarted: () => void;
+  onStarted: (job: BankJob) => void;
 }) {
   const [count, setCount] = useState(5);
   const [constraint, setConstraint] = useState("");
@@ -734,11 +741,11 @@ function GenerateSimilarDialog({
     setBusy(true);
     setError(null);
     try {
-      await teacher.generateSimilarBank(itemId, {
+      const job = await teacher.generateSimilarBank(itemId, {
         count,
         constraint: constraint.trim() || null,
       });
-      onStarted();
+      onStarted(job);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start");
       setBusy(false);

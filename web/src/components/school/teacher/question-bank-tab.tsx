@@ -354,6 +354,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             item={openItem}
             onClose={() => setOpenItemId(null)}
             onChanged={reload}
+            onJobStarted={setActiveJob}
           />
         );
       })()}
@@ -366,6 +367,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
             reload();
           }}
           onChanged={reload}
+          onJobStarted={setActiveJob}
         />
       )}
 
