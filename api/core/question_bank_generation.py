@@ -175,6 +175,10 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             generation_prompt=job.constraint,
             created_by_id=job.created_by_id,
             parent_question_id=job.parent_question_id,
+            # Children of a "make similar" job are practice variations.
+            # Bulk-generate jobs leave parent_question_id null and fall
+            # back to the model default of "generated".
+            source="practice" if job.parent_question_id else "generated",
         )
         db.add(item)
         if idx % _PROGRESS_BATCH == 0:
