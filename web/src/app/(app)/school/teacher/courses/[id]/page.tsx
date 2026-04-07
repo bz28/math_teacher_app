@@ -7,6 +7,8 @@ import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
+  type BankChatMessage,
+  type BankChatProposal,
   type BankCounts,
   type BankItem,
   type BankJob,
@@ -1083,6 +1085,9 @@ function DocumentCard({
 }) {
   const sizeKb = Math.max(1, Math.round(doc.file_size / 1024));
   const sizeLabel = sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+  const currentLocation = destinations.find((dest) => dest.id === doc.unit_id)?.label ?? "Uncategorized";
+  const availableDestinations = destinations.filter((dest) => dest.id !== doc.unit_id);
+  const canMove = availableDestinations.length > 0;
 
   return (
     <div className="relative rounded-[--radius-md] border border-border-light bg-bg-subtle p-3 text-xs">
@@ -1122,6 +1127,7 @@ function DocumentCard({
           <button
             type="button"
             onClick={onStartMove}
+            disabled={!canMove || busy}
             className="flex-1 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-bg-base"
           >
             Move
@@ -1141,20 +1147,27 @@ function DocumentCard({
           className="absolute inset-x-2 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-[--radius-md] border border-border-light bg-surface p-1 shadow-lg"
           onMouseLeave={onCancelMove}
         >
+          <div className="px-2 pb-1 pt-0.5 text-[10px] text-text-muted">
+            Current location: <span className="font-semibold text-text-secondary">{currentLocation}</span>
+          </div>
           <div className="px-2 pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Move to
           </div>
-          {destinations.map((dest) => (
-            <button
-              key={dest.id ?? "uncategorized"}
-              type="button"
-              onClick={() => onSubmitMove(dest.id)}
-              disabled={busy}
-              className="block w-full truncate rounded-[--radius-sm] px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-primary-bg hover:text-primary disabled:opacity-50"
-            >
-              {dest.label}
-            </button>
-          ))}
+          {availableDestinations.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-text-muted">No other destinations available.</p>
+          ) : (
+            availableDestinations.map((dest) => (
+              <button
+                key={dest.id ?? "uncategorized"}
+                type="button"
+                onClick={() => onSubmitMove(dest.id)}
+                disabled={busy}
+                className="block w-full truncate rounded-[--radius-sm] px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-primary-bg hover:text-primary disabled:opacity-50"
+              >
+                {dest.label}
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -1585,8 +1598,22 @@ function BankItemCard({
 // don't want to type by hand. After any change, an Undo link appears
 // for 30 seconds (backed by previous_* DB columns).
 
+// QuestionDetailModal — the workshop. Two panels:
+//   left: the artifact (question + solution + final answer, click-to-edit)
+//   right: persistent chat sidebar with Claude
+//
+// Key invariants:
+// - Local `liveItem` state owns the latest version of the item (the parent's
+//   item prop is only used as the initial value). Every API response from
+//   chat / accept / discard / clear / manual edit / approve / reject /
+//   revert returns the full item; we replace liveItem and call onChanged
+//   so the list refreshes too.
+// - The "preview" in the artifact is derived from the latest unresolved
+//   AI proposal in chat_messages. Accepting it applies the diff via the
+//   /chat/accept endpoint; discarding marks it discarded.
+
 function QuestionDetailModal({
-  item,
+  item: initialItem,
   onClose,
   onChanged,
 }: {
@@ -1594,24 +1621,43 @@ function QuestionDetailModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const [liveItem, setLiveItem] = useState<BankItem>(initialItem);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [solutionOpen, setSolutionOpen] = useState(false);
-  const [aiInstructions, setAiInstructions] = useState("");
+  const [showUndo, setShowUndo] = useState(initialItem.has_previous_version);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [showUndo, setShowUndo] = useState(item.has_previous_version);
+  const [solutionOpen, setSolutionOpen] = useState(true);
 
-  // Reset undo visibility when the item identity changes
+  // If the parent reloads the bank list and a fresher version of this item
+  // arrives, prefer the fresher updated_at. We don't blindly replace because
+  // mid-chat we may have a more recent local copy than the parent list.
   useEffect(() => {
-    setShowUndo(item.has_previous_version);
-  }, [item.id, item.has_previous_version]);
+    if (initialItem.id !== liveItem.id) {
+      setLiveItem(initialItem);
+    } else if (
+      new Date(initialItem.updated_at).getTime() >
+      new Date(liveItem.updated_at).getTime()
+    ) {
+      setLiveItem(initialItem);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialItem]);
 
-  // Auto-hide the undo affordance 30s after a change
+  useEffect(() => {
+    setShowUndo(liveItem.has_previous_version);
+  }, [liveItem.id, liveItem.has_previous_version, liveItem.updated_at]);
+
+  // Auto-hide undo after 30s
   useEffect(() => {
     if (!showUndo) return;
     const t = setTimeout(() => setShowUndo(false), 30000);
     return () => clearTimeout(t);
-  }, [showUndo, item.updated_at]);
+  }, [showUndo]);
+
+  const acceptUpdated = (next: BankItem) => {
+    setLiveItem(next);
+    onChanged();
+  };
 
   const wrap = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -1625,72 +1671,133 @@ function QuestionDetailModal({
     }
   };
 
+  // Pending proposal: latest AI message with a proposal that isn't
+  // accepted/discarded/superseded.
+  const pendingIdx = (() => {
+    for (let i = liveItem.chat_messages.length - 1; i >= 0; i--) {
+      const m = liveItem.chat_messages[i];
+      if (
+        m.role === "ai" &&
+        m.proposal &&
+        !m.accepted &&
+        !m.discarded &&
+        !m.superseded
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  })();
+  const pendingProposal: BankChatProposal | null =
+    pendingIdx >= 0 ? liveItem.chat_messages[pendingIdx].proposal! : null;
+
+  // Manual edits — refetch via PATCH; if a proposal is pending we discard
+  // it first (the manual edit invalidates it).
   const saveQuestion = (next: string) =>
     wrap(async () => {
       const q = next.trim();
-      if (!q) {
-        setError("Question cannot be empty");
-        return;
+      if (!q || q === liveItem.question) return;
+      if (pendingIdx >= 0) {
+        await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
       }
-      if (q === item.question) return;
-      await teacher.updateBankItem(item.id, { question: q });
+      await teacher.updateBankItem(liveItem.id, { question: q });
+      // Re-pull the item via the bank list refresh
+      setLiveItem({ ...liveItem, question: q, has_previous_version: true });
       setShowUndo(true);
       onChanged();
     });
 
   const saveStep = (idx: number, field: "title" | "description", next: string) =>
     wrap(async () => {
-      if (!item.solution_steps) return;
-      const updated = item.solution_steps.map((s, i) =>
+      if (!liveItem.solution_steps) return;
+      const updated = liveItem.solution_steps.map((s, i) =>
         i === idx ? { ...s, [field]: next } : s,
       );
-      await teacher.updateBankItem(item.id, { solution_steps: updated });
+      if (pendingIdx >= 0) {
+        await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
+      }
+      await teacher.updateBankItem(liveItem.id, { solution_steps: updated });
+      setLiveItem({ ...liveItem, solution_steps: updated, has_previous_version: true });
       setShowUndo(true);
       onChanged();
     });
 
   const saveFinalAnswer = (next: string) =>
     wrap(async () => {
-      if (next === (item.final_answer ?? "")) return;
-      await teacher.updateBankItem(item.id, { final_answer: next });
+      if (next === (liveItem.final_answer ?? "")) return;
+      if (pendingIdx >= 0) {
+        await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
+      }
+      await teacher.updateBankItem(liveItem.id, { final_answer: next });
+      setLiveItem({ ...liveItem, final_answer: next, has_previous_version: true });
       setShowUndo(true);
       onChanged();
     });
 
-  const reviseWithAI = () =>
+  const sendChat = (message: string) =>
     wrap(async () => {
-      const inst = aiInstructions.trim();
-      await teacher.regenerateBankItem(item.id, inst || undefined);
-      setAiInstructions("");
+      const next = await teacher.sendBankChat(liveItem.id, message);
+      acceptUpdated(next);
+    });
+
+  const acceptProposal = () =>
+    wrap(async () => {
+      if (pendingIdx < 0) return;
+      const next = await teacher.acceptBankChatProposal(liveItem.id, pendingIdx);
+      acceptUpdated(next);
       setShowUndo(true);
-      onChanged();
+    });
+
+  const discardProposal = () =>
+    wrap(async () => {
+      if (pendingIdx < 0) return;
+      const next = await teacher.discardBankChatProposal(liveItem.id, pendingIdx);
+      acceptUpdated(next);
+    });
+
+  const clearChat = () =>
+    wrap(async () => {
+      if (!confirm("Clear the chat history? Question and solution stay unchanged.")) return;
+      const next = await teacher.clearBankChat(liveItem.id);
+      acceptUpdated(next);
     });
 
   const undo = () =>
     wrap(async () => {
-      await teacher.revertBankItem(item.id);
+      const next = await teacher.revertBankItem(liveItem.id);
+      acceptUpdated(next);
       setShowUndo(false);
-      onChanged();
     });
 
   const approve = () =>
     wrap(async () => {
-      await teacher.approveBankItem(item.id);
+      await teacher.approveBankItem(liveItem.id);
+      setLiveItem({ ...liveItem, status: "approved" });
       onChanged();
     });
 
   const reject = () =>
     wrap(async () => {
-      await teacher.rejectBankItem(item.id);
+      await teacher.rejectBankItem(liveItem.id);
+      setLiveItem({ ...liveItem, status: "rejected" });
       onChanged();
     });
 
   const remove = () =>
     wrap(async () => {
-      await teacher.deleteBankItem(item.id);
+      await teacher.deleteBankItem(liveItem.id);
       onClose();
       onChanged();
     });
+
+  // Compute the artifact view: if a proposal is pending, show the
+  // proposed values for the changed fields (but mark them as preview).
+  const previewQuestion = pendingProposal?.question ?? liveItem.question;
+  const previewSteps = pendingProposal?.solution_steps ?? liveItem.solution_steps;
+  const previewAnswer = pendingProposal?.final_answer ?? liveItem.final_answer;
+  const questionChanged = pendingProposal?.question != null;
+  const stepsChanged = pendingProposal?.solution_steps != null;
+  const answerChanged = pendingProposal?.final_answer != null;
 
   return (
     <div
@@ -1698,19 +1805,19 @@ function QuestionDetailModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border-light px-6 py-3">
           <div className="flex items-center gap-3">
             <h2 className="text-base font-bold text-text-primary">Question</h2>
             <span
               className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
-                STATUS_BADGE[item.status] ?? ""
+                STATUS_BADGE[liveItem.status] ?? ""
               }`}
             >
-              {item.status}
+              {liveItem.status}
             </span>
             {showUndo && (
               <button
@@ -1730,112 +1837,156 @@ function QuestionDetailModal({
           </button>
         </div>
 
-        {/* Body (scrollable) */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {/* Question */}
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              Question
-            </div>
-            <div className="mt-1">
-              <ClickToEditText
-                value={item.question}
-                multiline
-                onSave={saveQuestion}
-                busy={busy}
-              />
-            </div>
-          </div>
-
-          {/* Solution (collapsible) */}
-          <div className="mt-6">
-            <button
-              type="button"
-              onClick={() => setSolutionOpen(!solutionOpen)}
-              className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+        {/* Two-panel body */}
+        <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+          {/* LEFT — artifact */}
+          <div className="flex-1 overflow-y-auto border-r border-border-light px-6 py-5">
+            {/* Question */}
+            <div
+              className={`rounded-[--radius-lg] border p-4 transition-colors ${
+                questionChanged
+                  ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                  : "border-border-light bg-surface"
+              }`}
             >
-              <span>{solutionOpen ? "▾" : "▸"}</span>
-              Solution {item.solution_steps && `(${item.solution_steps.length} steps)`}
-            </button>
-            {solutionOpen && (
-              <div className="mt-2 rounded-[--radius-md] bg-bg-subtle p-4">
-                {item.solution_steps && item.solution_steps.length > 0 ? (
-                  <ol className="space-y-3">
-                    {item.solution_steps.map((s, i) => (
-                      <li key={i} className="text-xs text-text-secondary">
-                        <div className="font-semibold text-text-primary">
-                          {i + 1}.{" "}
-                          <ClickToEditText
-                            value={s.title}
-                            inline
-                            onSave={(next) => saveStep(i, "title", next)}
-                            busy={busy}
-                          />
-                        </div>
-                        <div className="mt-1">
-                          <ClickToEditText
-                            value={s.description}
-                            multiline
-                            onSave={(next) => saveStep(i, "description", next)}
-                            busy={busy}
-                          />
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="text-xs italic text-text-muted">
-                    No solution steps recorded.
-                  </p>
-                )}
-                {item.final_answer !== null && (
-                  <div className="mt-4 border-t border-border-light pt-3">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      Final answer
-                    </div>
-                    <div className="mt-1 text-sm">
-                      <ClickToEditText
-                        value={item.final_answer ?? ""}
-                        onSave={saveFinalAnswer}
-                        busy={busy}
-                      />
-                    </div>
-                  </div>
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                <span>Question</span>
+                {questionChanged && (
+                  <span className="text-blue-700 dark:text-blue-300">Preview</span>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Revise with AI */}
-          <div className="mt-6 rounded-[--radius-lg] border border-primary/20 bg-primary-bg/30 p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-primary">
-              Want the AI to change something?
+              <div className="mt-2 text-sm">
+                {questionChanged ? (
+                  <MathText text={previewQuestion} />
+                ) : (
+                  <ClickToEditText
+                    value={liveItem.question}
+                    multiline
+                    onSave={saveQuestion}
+                    busy={busy}
+                  />
+                )}
+              </div>
             </div>
-            <textarea
-              value={aiInstructions}
-              onChange={(e) => setAiInstructions(e.target.value)}
-              rows={2}
-              maxLength={500}
-              placeholder='e.g. "make the numbers smaller", "redo just the solution", "rewrite as a word problem", or leave blank for a fresh take'
-              className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-            />
-            <div className="mt-2 flex justify-end">
+
+            {/* Solution */}
+            <div className="mt-6">
               <button
-                onClick={reviseWithAI}
-                disabled={busy}
-                className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                type="button"
+                onClick={() => setSolutionOpen(!solutionOpen)}
+                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
               >
-                {busy ? "Revising…" : "✨ Revise with AI"}
+                <span>{solutionOpen ? "▾" : "▸"}</span>
+                Solution {previewSteps && `(${previewSteps.length} steps)`}
+                {stepsChanged && (
+                  <span className="ml-2 rounded-[--radius-pill] bg-blue-100 px-2 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                    Preview
+                  </span>
+                )}
               </button>
+
+              {solutionOpen && (
+                <div className="mt-3 space-y-2">
+                  {previewSteps && previewSteps.length > 0 ? (
+                    previewSteps.map((s, i) => (
+                      <div
+                        key={i}
+                        className={`rounded-[--radius-lg] border p-4 ${
+                          stepsChanged
+                            ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                            : "border-border-light bg-surface"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                            {i + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold text-text-primary">
+                              {stepsChanged ? (
+                                <MathText text={s.title} />
+                              ) : (
+                                <ClickToEditText
+                                  value={s.title}
+                                  inline
+                                  onSave={(next) => saveStep(i, "title", next)}
+                                  busy={busy}
+                                />
+                              )}
+                            </div>
+                            <div className="mt-1.5 h-px bg-border-light" />
+                            <div className="mt-2 text-xs text-text-secondary">
+                              {stepsChanged ? (
+                                <MathText text={s.description} />
+                              ) : (
+                                <ClickToEditText
+                                  value={s.description}
+                                  multiline
+                                  onSave={(next) => saveStep(i, "description", next)}
+                                  busy={busy}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-[--radius-md] bg-bg-subtle p-4 text-xs italic text-text-muted">
+                      No solution steps recorded.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Final answer */}
+            {previewAnswer !== null && (
+              <div
+                className={`mt-6 rounded-[--radius-lg] border-2 p-4 ${
+                  answerChanged
+                    ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                    : "border-primary/30 bg-primary-bg/30"
+                }`}
+              >
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-primary">
+                  <span>Final answer</span>
+                  {answerChanged && (
+                    <span className="text-blue-700 dark:text-blue-300">Preview</span>
+                  )}
+                </div>
+                <div className="mt-2 text-base font-semibold text-text-primary">
+                  {answerChanged ? (
+                    <MathText text={previewAnswer ?? ""} />
+                  ) : (
+                    <ClickToEditText
+                      value={liveItem.final_answer ?? ""}
+                      onSave={saveFinalAnswer}
+                      busy={busy}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
           </div>
 
-          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+          {/* RIGHT — chat panel */}
+          <ChatPanel
+            item={liveItem}
+            pendingIdx={pendingIdx}
+            busy={busy}
+            onSend={sendChat}
+            onAccept={acceptProposal}
+            onDiscard={discardProposal}
+            onClear={clearChat}
+          />
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-2 border-t border-border-light px-6 py-4">
-          {item.status === "pending" && (
+        <div className="flex items-center gap-2 border-t border-border-light px-6 py-3">
+          {liveItem.status === "pending" && (
             <>
               <button
                 onClick={approve}
@@ -1881,6 +2032,248 @@ function QuestionDetailModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Chat sidebar inside the workshop modal. Renders the message thread,
+// the input box, the soft-cap banner, and the clear-chat link. Proposals
+// inside AI messages render with Accept/Discard buttons (only for the
+// pending one — others are tagged as accepted/discarded/superseded).
+
+const SUGGESTION_CHIPS = [
+  "Make it harder",
+  "Add a step to the solution",
+  "Rewrite as a word problem",
+];
+
+function ChatPanel({
+  item,
+  pendingIdx,
+  busy,
+  onSend,
+  onAccept,
+  onDiscard,
+  onClear,
+}: {
+  item: BankItem;
+  pendingIdx: number;
+  busy: boolean;
+  onSend: (message: string) => void;
+  onAccept: () => void;
+  onDiscard: () => void;
+  onClear: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const messages = item.chat_messages;
+  const teacherCount = messages.filter((m) => m.role === "teacher").length;
+  const atSoftCap = teacherCount >= item.chat_soft_cap;
+
+  // Auto-scroll to bottom on new message
+  useEffect(() => {
+    const el = document.getElementById(`chat-scroll-${item.id}`);
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, item.id, busy]);
+
+  const submit = () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setDraft("");
+    onSend(text);
+  };
+
+  return (
+    <div className="flex w-full flex-col md:max-w-sm md:flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-border-light px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-base">💬</span>
+          <span className="text-sm font-bold text-text-primary">Workshop</span>
+        </div>
+        <span className={`text-[10px] font-semibold ${atSoftCap ? "text-amber-600" : "text-text-muted"}`}>
+          {teacherCount}/{item.chat_soft_cap}
+        </span>
+      </div>
+
+      {/* Messages */}
+      <div
+        id={`chat-scroll-${item.id}`}
+        className="flex-1 space-y-3 overflow-y-auto bg-bg-subtle/40 px-4 py-3"
+      >
+        {messages.length === 0 && <WelcomeMessage />}
+        {messages.map((msg, i) => (
+          <ChatMessageBubble
+            key={i}
+            msg={msg}
+            isPending={i === pendingIdx}
+            busy={busy}
+            onAccept={onAccept}
+            onDiscard={onDiscard}
+          />
+        ))}
+        {busy && (
+          <div className="text-xs italic text-text-muted">AI is thinking…</div>
+        )}
+      </div>
+
+      {/* Suggestion chips on first open */}
+      {messages.length === 0 && (
+        <div className="flex flex-wrap gap-1.5 border-t border-border-light px-4 py-2">
+          {SUGGESTION_CHIPS.map((chip) => (
+            <button
+              key={chip}
+              onClick={() => onSend(chip)}
+              disabled={busy}
+              className="rounded-[--radius-pill] border border-border-light bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:border-primary/30 hover:text-primary disabled:opacity-50"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {atSoftCap && (
+        <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+          You&rsquo;ve sent a lot of messages — consider clearing the chat or starting fresh.
+        </div>
+      )}
+
+      {/* Input */}
+      <form
+        className="border-t border-border-light bg-surface p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={2}
+          maxLength={2000}
+          placeholder="Ask for changes, ask a question, or just chat about this problem…"
+          className="w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+          disabled={busy}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={busy || messages.length === 0}
+            className="text-[11px] font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
+          >
+            Clear chat
+          </button>
+          <button
+            type="submit"
+            disabled={busy || !draft.trim()}
+            className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function WelcomeMessage() {
+  return (
+    <div className="rounded-[--radius-md] bg-surface p-3 text-xs text-text-secondary shadow-sm">
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+        AI
+      </div>
+      Hi! Ask me anything about this question. I can rewrite it, redo the solution,
+      change the difficulty, turn it into a word problem, or just answer questions
+      about it. Try one of the suggestions below or type your own.
+    </div>
+  );
+}
+
+function ChatMessageBubble({
+  msg,
+  isPending,
+  busy,
+  onAccept,
+  onDiscard,
+}: {
+  msg: BankChatMessage;
+  isPending: boolean;
+  busy: boolean;
+  onAccept: () => void;
+  onDiscard: () => void;
+}) {
+  if (msg.role === "teacher") {
+    return (
+      <div className="ml-6 rounded-[--radius-md] bg-primary px-3 py-2 text-xs text-white shadow-sm">
+        {msg.text}
+      </div>
+    );
+  }
+
+  // AI message
+  const proposalState = msg.accepted
+    ? "accepted"
+    : msg.discarded
+      ? "discarded"
+      : msg.superseded
+        ? "superseded"
+        : msg.proposal
+          ? "pending"
+          : null;
+
+  return (
+    <div className="rounded-[--radius-md] bg-surface p-3 text-xs text-text-secondary shadow-sm">
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+        AI
+      </div>
+      <div className="text-text-primary">{msg.text}</div>
+
+      {proposalState && (
+        <div className="mt-2">
+          {proposalState === "pending" && isPending && (
+            <div className="rounded-[--radius-sm] border border-blue-200 bg-blue-50 p-2 dark:border-blue-500/30 dark:bg-blue-500/10">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                Preview shown ←
+              </div>
+              <div className="mt-1.5 flex gap-1.5">
+                <button
+                  onClick={onAccept}
+                  disabled={busy}
+                  className="flex-1 rounded-[--radius-sm] bg-green-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  ✓ Accept
+                </button>
+                <button
+                  onClick={onDiscard}
+                  disabled={busy}
+                  className="flex-1 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                >
+                  ✕ Discard
+                </button>
+              </div>
+            </div>
+          )}
+          {proposalState === "accepted" && (
+            <div className="mt-1 text-[10px] font-bold text-green-700 dark:text-green-400">
+              ✓ Accepted
+            </div>
+          )}
+          {proposalState === "discarded" && (
+            <div className="mt-1 text-[10px] font-bold text-text-muted">✕ Discarded</div>
+          )}
+          {proposalState === "superseded" && (
+            <div className="mt-1 text-[10px] font-bold text-text-muted">
+              ↻ Superseded by a newer proposal
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

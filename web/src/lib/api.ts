@@ -844,7 +844,45 @@ export const teacher = {
   deleteBankItem(itemId: string) {
     return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}`, { method: "DELETE" });
   },
+  sendBankChat(itemId: string, message: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+      timeout: 120_000,
+    });
+  },
+  acceptBankChatProposal(itemId: string, messageIndex: number) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/accept`, {
+      method: "POST",
+      body: JSON.stringify({ message_index: messageIndex }),
+    });
+  },
+  discardBankChatProposal(itemId: string, messageIndex: number) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/discard`, {
+      method: "POST",
+      body: JSON.stringify({ message_index: messageIndex }),
+    });
+  },
+  clearBankChat(itemId: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/clear`, { method: "POST" });
+  },
 };
+
+export interface BankChatProposal {
+  question: string | null;
+  solution_steps: { title: string; description: string }[] | null;
+  final_answer: string | null;
+}
+
+export interface BankChatMessage {
+  role: "ai" | "teacher";
+  text: string;
+  ts: string;
+  proposal?: BankChatProposal;
+  accepted?: boolean;
+  discarded?: boolean;
+  superseded?: boolean;
+}
 
 export interface BankItem {
   id: string;
@@ -858,6 +896,8 @@ export interface BankItem {
   source_doc_ids: string[] | null;
   generation_prompt: string | null;
   has_previous_version: boolean;
+  chat_messages: BankChatMessage[];
+  chat_soft_cap: number;
   created_at: string;
   updated_at: string;
 }
