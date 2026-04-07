@@ -47,6 +47,7 @@ async def generate_questions(
     subject: str = Subject.MATH,
     user_id: str | None = None,
     images: list[dict[str, str]] | None = None,
+    extra_instructions: str | None = None,
 ) -> list[dict[str, str]]:
     """Generate assignment questions for a given topic.
 
@@ -54,6 +55,9 @@ async def generate_questions(
         images: Optional list of {"filename", "base64", "media_type"} from
                 fetch_document_images. When provided, Claude reads the actual
                 document content to generate more relevant questions.
+        extra_instructions: Optional natural-language constraint from the
+                teacher (e.g. "only word problems", "skip trig"). Layered on
+                top of the system prompt.
 
     Returns list of {"text": "...", "difficulty": "..."}.
     """
@@ -73,6 +77,8 @@ async def generate_questions(
         f"Number of questions: {count}\n"
         f"{difficulty_instruction}"
     )
+    if extra_instructions:
+        user_message += f"\n\nAdditional teacher instructions:\n{extra_instructions.strip()}"
 
     if images:
         user_message = (

@@ -787,7 +787,141 @@ export const teacher = {
       { method: "POST", body: JSON.stringify(data), timeout: 90_000 },
     );
   },
+  // ── Question bank ──
+  bank(courseId: string, filters?: { status?: string; unit_id?: string; difficulty?: string }) {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status_filter", filters.status);
+    if (filters?.unit_id) params.set("unit_id", filters.unit_id);
+    if (filters?.difficulty) params.set("difficulty", filters.difficulty);
+    const qs = params.toString();
+    return apiFetch<{ items: BankItem[]; counts: BankCounts }>(
+      `/teacher/courses/${courseId}/question-bank${qs ? `?${qs}` : ""}`,
+    );
+  },
+  generateBank(courseId: string, data: {
+    count: number;
+    unit_id?: string | null;
+    document_ids?: string[];
+    constraint?: string | null;
+  }) {
+    return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/generate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  bankJob(courseId: string, jobId: string) {
+    return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/generation-jobs/${jobId}`);
+  },
+  updateBankItem(itemId: string, data: {
+    question?: string;
+    solution_steps?: { title: string; description: string }[];
+    final_answer?: string;
+    difficulty?: string;
+    unit_id?: string | null;
+    clear_unit?: boolean;
+  }) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+  revertBankItem(itemId: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/revert`, { method: "POST" });
+  },
+  approveBankItem(itemId: string) {
+    return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/approve`, { method: "POST" });
+  },
+  rejectBankItem(itemId: string) {
+    return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/reject`, { method: "POST" });
+  },
+  regenerateBankItem(itemId: string, instructions?: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/regenerate`, {
+      method: "POST",
+      body: JSON.stringify({ instructions: instructions ?? null }),
+      timeout: 120_000,
+    });
+  },
+  deleteBankItem(itemId: string) {
+    return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}`, { method: "DELETE" });
+  },
+  sendBankChat(itemId: string, message: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+      timeout: 120_000,
+    });
+  },
+  acceptBankChatProposal(itemId: string, messageIndex: number) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/accept`, {
+      method: "POST",
+      body: JSON.stringify({ message_index: messageIndex }),
+    });
+  },
+  discardBankChatProposal(itemId: string, messageIndex: number) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/discard`, {
+      method: "POST",
+      body: JSON.stringify({ message_index: messageIndex }),
+    });
+  },
+  clearBankChat(itemId: string) {
+    return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/clear`, { method: "POST" });
+  },
 };
+
+export interface BankChatProposal {
+  question: string | null;
+  solution_steps: { title: string; description: string }[] | null;
+  final_answer: string | null;
+}
+
+export interface BankChatMessage {
+  role: "ai" | "teacher";
+  text: string;
+  ts: string;
+  proposal?: BankChatProposal;
+  accepted?: boolean;
+  discarded?: boolean;
+  superseded?: boolean;
+}
+
+export interface BankItem {
+  id: string;
+  course_id: string;
+  unit_id: string | null;
+  question: string;
+  solution_steps: { title: string; description: string }[] | null;
+  final_answer: string | null;
+  difficulty: string;
+  status: string;
+  source_doc_ids: string[] | null;
+  generation_prompt: string | null;
+  has_previous_version: boolean;
+  chat_messages: BankChatMessage[];
+  chat_soft_cap: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BankCounts {
+  pending: number;
+  approved: number;
+  rejected: number;
+  archived: number;
+}
+
+export interface BankJob {
+  id: string;
+  course_id: string;
+  unit_id: string | null;
+  status: "queued" | "running" | "done" | "failed";
+  requested_count: number;
+  difficulty: string;
+  constraint: string | null;
+  produced_count: number;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 // ── Contact endpoints ──
 
