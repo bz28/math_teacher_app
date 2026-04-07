@@ -108,10 +108,12 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
     )
 
-    # 1. Generate question texts
+    # 1. Generate question texts. The bank flow doesn't use a structured
+    # difficulty field — teachers describe what they want in the natural-
+    # language constraint instead. The legacy job.difficulty column is
+    # ignored at the prompt level.
     question_dicts = await generate_questions(
         unit_name=unit_name,
-        difficulty=job.difficulty,
         count=job.requested_count,
         course_name=course.name,
         subject=course.subject,
@@ -144,7 +146,10 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             question=q["text"],
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer"),
-            difficulty=q.get("difficulty") or job.difficulty,
+            # Claude self-rates each generated question (easy/medium/hard)
+            # via the GENERATE_QUESTIONS_SCHEMA. We just store its rating —
+            # noisy but useful as a filter signal.
+            difficulty=q.get("difficulty") or "medium",
             status="pending",
             source_doc_ids=source_doc_id_strs,
             generation_prompt=job.constraint,
