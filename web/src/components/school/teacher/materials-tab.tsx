@@ -160,6 +160,8 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         .map((u) => ({ id: u.id, name: u.name }));
       const collisions = detectCollisions(tree.folders, topLevelNames);
 
+      // On cancel, treat all conflicting folders as "skip" but still
+      // import the non-conflicting folders and loose files.
       let resolutions: Map<string, ResolutionChoice> = new Map();
       if (collisions.length > 0) {
         const choices = await new Promise<Map<string, ResolutionChoice> | null>((resolve) => {
@@ -167,10 +169,10 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         });
         setPendingCollisions(null);
         if (choices === null) {
-          // Cancelled — abort the entire import.
-          return;
+          for (const c of collisions) resolutions.set(c.folder.name, "skip");
+        } else {
+          resolutions = choices;
         }
-        resolutions = choices;
       }
 
       // Track taken top-level names so "Create new" picks don't collide
