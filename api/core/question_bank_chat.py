@@ -44,6 +44,16 @@ ask you about it, or both. You can:
 2. Propose a scoped revision: only set the fields they want changed; leave other
    fields as null.
 
+About the attached images (IMPORTANT):
+- Any images attached to this conversation are the SOURCE MATERIALS the
+  question was originally generated from (e.g. a textbook page, a worksheet,
+  the teacher's class notes). They are NOT the question you are revising.
+- The question you are revising is in the "Current question:" text below.
+- Use the images ONLY as REFERENCE for style, notation, vocabulary, difficulty
+  level, and topic scope. Match the textbook's voice when you propose changes.
+- Do NOT treat problems shown in the source images as the question to edit.
+  The teacher's question to edit is the one in the "Current question:" text.
+
 Rules for proposals:
 - Set proposal=null when the teacher is just asking ("why did you...", "is this
   too hard...", "what topic does this cover").
@@ -62,9 +72,6 @@ Reply text:
   question.
 - Don't repeat the proposal content in your reply — the teacher will see the
   preview directly.
-
-You have access to the source documents the question was generated from. Use
-them to keep your revisions on-curriculum and consistent with the materials.
 """
 
 
@@ -179,8 +186,19 @@ async def chat_with_bank_item(
     try:
         if images:
             # call_claude_vision doesn't take a separate system prompt — inline
-            # the workshop role into the user content prefix.
-            content = build_vision_content(images, f"{system_prompt}\n\n{seed}")
+            # the workshop role into the user content prefix. The image
+            # preamble is loud on purpose: without it Claude tends to read the
+            # images as "the question to edit" rather than reference material.
+            image_preamble = (
+                "The following images are the SOURCE MATERIALS the question "
+                "was originally generated from — textbook pages, worksheets, "
+                "or notes. They are reference for style/notation/topic only. "
+                "They are NOT the question you are revising. The question to "
+                "revise is in the 'Current question:' text further down."
+            )
+            content = build_vision_content(
+                images, f"{system_prompt}\n\n{image_preamble}\n\n{seed}",
+            )
             result = await call_claude_vision(
                 content,
                 mode=LLMMode.BANK_CHAT,
