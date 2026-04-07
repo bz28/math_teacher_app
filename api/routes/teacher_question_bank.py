@@ -32,6 +32,14 @@ def _ensure_unlocked(item: QuestionBankItem) -> None:
             detail="This question is in a published homework. Unpublish it first.",
         )
 
+
+async def _used_in_for(db: AsyncSession, item: QuestionBankItem) -> list[dict[str, str]]:
+    """Look up the published assignments referencing this single bank item.
+    Used by the per-item endpoints so the response stays consistent with
+    the list endpoint instead of returning a stale-empty `used_in`."""
+    used = await used_in_assignments_map(db, item.course_id)
+    return used.get(str(item.id), [])
+
 router = APIRouter()
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "archived"}
@@ -295,7 +303,7 @@ async def update_bank_item(
         item.unit_id = body.unit_id
 
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/revert")
@@ -322,7 +330,7 @@ async def revert_bank_item(
     item.previous_final_answer = None
     item.previous_status = None
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/approve")
@@ -373,7 +381,7 @@ async def regenerate_bank_item(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Regeneration failed: {e}",
         ) from e
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.delete("/question-bank/{item_id}")
@@ -422,7 +430,7 @@ async def post_chat_message(
             detail=f"Chat failed: {e}",
         ) from e
 
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/accept")
@@ -473,7 +481,7 @@ async def accept_chat_proposal(
     item.chat_messages = messages
     item.updated_at = datetime.now(UTC)
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/discard")
@@ -499,7 +507,7 @@ async def discard_chat_proposal(
     item.chat_messages = messages
     item.updated_at = datetime.now(UTC)
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))
 
 
 @router.post("/question-bank/{item_id}/chat/clear")
@@ -513,4 +521,4 @@ async def clear_chat(
     item.chat_messages = []
     item.updated_at = datetime.now(UTC)
     await db.commit()
-    return _serialize_item(item)
+    return _serialize_item(item, await _used_in_for(db, item))

@@ -191,7 +191,9 @@ async def recompute_bank_locks(db: AsyncSession, course_id: uuid.UUID) -> None:
         select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)
     )).scalars().all()
     for item in items:
-        item.locked = str(item.id) in locked_ids
+        should_lock = str(item.id) in locked_ids
+        if item.locked != should_lock:
+            item.locked = should_lock
 
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
