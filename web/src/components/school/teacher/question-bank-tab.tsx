@@ -12,8 +12,7 @@ import {
 } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { QuestionDetailModal } from "./question-detail-modal";
-import { ReviewModeModal } from "./review-mode-modal";
+import { WorkshopModal } from "./workshop-modal";
 import { STATUS_BADGE, STATUS_FILTERS } from "./bank-styles";
 
 const POLL_LIMIT_MS = 5 * 60 * 1000;
@@ -227,7 +226,7 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
         const openItem = items.find((i) => i.id === openItemId);
         if (!openItem) return null;
         return (
-          <QuestionDetailModal
+          <WorkshopModal
             item={openItem}
             onClose={() => setOpenItemId(null)}
             onChanged={reload}
@@ -236,8 +235,8 @@ export function QuestionBankTab({ courseId }: { courseId: string }) {
       })()}
 
       {reviewQueue && (
-        <ReviewModeModal
-          initialQueue={reviewQueue}
+        <WorkshopModal
+          queue={reviewQueue}
           onClose={() => {
             setReviewQueue(null);
             reload();
