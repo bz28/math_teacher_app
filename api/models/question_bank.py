@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
@@ -68,7 +69,12 @@ class QuestionBankItem(Base):
     # Workshop chat thread. List of {role, text, proposal?, accepted?,
     # discarded?, ts}. Persists across modal close so the conversation
     # survives. See plans/question-bank-workshop-v2.md.
-    chat_messages: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    # MutableList wrapping makes SQLAlchemy auto-track in-place dict
+    # mutations (e.g. msg["discarded"] = True) — without it, callers
+    # would need flag_modified() after every nested mutation.
+    chat_messages: Mapped[list[Any]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list,
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
