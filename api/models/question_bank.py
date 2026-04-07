@@ -38,6 +38,12 @@ class QuestionBankItem(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
 
+    # One-level history for undo. Snapshotted on every edit/regen.
+    previous_question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_solution_steps: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    previous_final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -14,7 +14,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.question_bank_generation import regenerate_one, schedule_generation_job
+from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Course
@@ -88,6 +88,7 @@ def _serialize_item(item: QuestionBankItem) -> dict[str, Any]:
         "status": item.status,
         "source_doc_ids": item.source_doc_ids,
         "generation_prompt": item.generation_prompt,
+        "has_previous_version": item.previous_question is not None,
         "created_at": item.created_at.isoformat(),
         "updated_at": item.updated_at.isoformat(),
     }
@@ -226,6 +227,15 @@ async def update_bank_item(
 ) -> dict[str, str]:
     item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
 
+    # If any content fields are touched, snapshot the previous state for undo.
+    content_changing = (
+        body.question is not None
+        or body.solution_steps is not None
+        or body.final_answer is not None
+    )
+    if content_changing:
+        snapshot_history(item)
+
     if body.question is not None:
         q = body.question.strip()
         if not q:
@@ -246,6 +256,33 @@ async def update_bank_item(
 
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/question-bank/{item_id}/revert")
+async def revert_bank_item(
+    item_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Restore the previous_* snapshot. One level of undo only — after this
+    call, previous_* is cleared so the teacher can't ping-pong forever."""
+    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
+    if item.previous_question is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No previous version to restore",
+        )
+    item.question = item.previous_question
+    item.solution_steps = item.previous_solution_steps
+    item.final_answer = item.previous_final_answer
+    if item.previous_status:
+        item.status = item.previous_status
+    item.previous_question = None
+    item.previous_solution_steps = None
+    item.previous_final_answer = None
+    item.previous_status = None
+    await db.commit()
+    return _serialize_item(item)
 
 
 @router.post("/question-bank/{item_id}/approve")

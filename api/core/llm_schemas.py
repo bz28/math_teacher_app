@@ -213,6 +213,45 @@ GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
     },
 }
 
+# Combined question + worked solution in a single tool call. Used for
+# question bank regeneration so we don't pay for two round-trips when
+# revising one question.
+REGENERATE_QA_SCHEMA: ToolSchema = {
+    "name": "return_question_with_solution",
+    "description": "Return a single question with its worked step-by-step solution and final answer.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "The full question text. Use LaTeX with $ delimiters for math.",
+            },
+            "solution_steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Short 2-5 word heading."},
+                        "description": {"type": "string", "description": "Full explanation of the step."},
+                    },
+                    "required": ["title", "description"],
+                    "additionalProperties": False,
+                },
+                "description": "Ordered list of solution steps.",
+            },
+            "final_answer": {
+                "type": "string",
+                "description": (
+                    "The final simplified answer, LaTeX-formatted with $ delimiters. "
+                    "Use single backslashes for LaTeX commands."
+                ),
+            },
+        },
+        "required": ["question", "solution_steps", "final_answer"],
+        "additionalProperties": False,
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Image extraction
 # ---------------------------------------------------------------------------
