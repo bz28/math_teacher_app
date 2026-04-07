@@ -22,9 +22,6 @@ export function CTA() {
             <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
               Start mastering your next topic
             </h2>
-            <p className="mt-3 text-lg text-text-secondary">
-              Join students who are learning step by step. Free to start — no credit card needed.
-            </p>
 
             <Link
               href="/register"

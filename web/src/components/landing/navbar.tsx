@@ -71,8 +71,8 @@ export function Navbar() {
           ) : (
             <>
               <a
-                href="#features"
-                onClick={(e) => { e.preventDefault(); jumpTo("#features"); }}
+                href="/#features"
+                onClick={(e) => { if (pathname === "/") { e.preventDefault(); jumpTo("#features"); } }}
                 className="text-sm font-medium text-text-secondary transition-colors hover:text-primary"
               >
                 Features
@@ -161,8 +161,8 @@ export function Navbar() {
               ) : (
                 <>
                   <a
-                    href="#features"
-                    onClick={(e) => { e.preventDefault(); setMobileOpen(false); jumpTo("#features"); }}
+                    href="/#features"
+                    onClick={(e) => { setMobileOpen(false); if (pathname === "/") { e.preventDefault(); jumpTo("#features"); } }}
                     className="rounded-[--radius-sm] px-3 py-2 text-sm font-medium text-text-secondary hover:bg-primary-bg hover:text-primary"
                   >
                     Features
