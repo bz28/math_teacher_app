@@ -22,9 +22,18 @@ import { UploadDropzone } from "./materials/upload-dropzone";
 import { MoveDialog } from "./materials/move-dialog";
 import { DeleteFolderDialog } from "./materials/delete-folder-dialog";
 import { NewUnitModal } from "./materials/new-unit-modal";
+import { CollisionDialog } from "./materials/collision-dialog";
+import {
+  detectCollisions,
+  fileCountInFolder,
+  uniqueName,
+} from "./materials/walk-dropped-folder";
 import {
   fileToBase64,
+  type Collision,
   type Destination,
+  type DroppedTree,
+  type ResolutionChoice,
   type RowState,
   type SortMode,
 } from "./materials/types";
@@ -41,6 +50,10 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   const [sort, setSort] = useState<SortMode>("name");
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [pendingCollisions, setPendingCollisions] = useState<{
+    collisions: Collision[];
+    resolve: (choices: Map<string, ResolutionChoice> | null) => void;
+  } | null>(null);
   const lastClickedDocIdRef = useRef<string | null>(null);
   const { busy, error, setError, run } = useAsyncAction();
 
@@ -112,34 +125,156 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     return out;
   }, [tops, units]);
 
-  /* ── upload ── */
+  /* ── upload pipeline ──
+   * Both drag-drop and the file/folder pickers funnel into handleImport
+   * with a DroppedTree. Loose files go into the selected folder; folders
+   * become new top-level units (with optional 2-level subfolders). On
+   * name collisions we await the user's per-folder decision via the
+   * CollisionDialog before touching the backend.
+   */
 
-  const handleUpload = (files: File[]) =>
+  const uploadOne = async (file: File, unitId: string | null) => {
+    if (file.size > MATERIAL_UPLOAD_MAX_BYTES) throw new Error("exceeds 25MB");
+    const base64 = await fileToBase64(file);
+    await teacher.uploadDocument(courseId, {
+      image_base64: base64,
+      filename: file.name,
+      unit_id: unitId,
+    });
+  };
+
+  const handleImport = (tree: DroppedTree) =>
     run(async () => {
-      if (files.length === 0) return;
-      let ok = 0;
-      const failures: string[] = [];
-      for (const file of files) {
+      if (tree.folders.length === 0 && tree.looseFiles.length === 0) {
+        if (tree.skipped > 0) {
+          toast.error(`Skipped ${tree.skipped} unsupported file${tree.skipped === 1 ? "" : "s"}`);
+        }
+        return;
+      }
+
+      // Resolve collisions before touching the backend.
+      const topLevelNames = units
+        .filter((u) => u.parent_id === null)
+        .map((u) => ({ id: u.id, name: u.name }));
+      const collisions = detectCollisions(tree.folders, topLevelNames);
+
+      let resolutions: Map<string, ResolutionChoice> = new Map();
+      if (collisions.length > 0) {
+        const choices = await new Promise<Map<string, ResolutionChoice> | null>((resolve) => {
+          setPendingCollisions({ collisions, resolve });
+        });
+        setPendingCollisions(null);
+        if (choices === null) {
+          // Cancelled — abort the entire import.
+          return;
+        }
+        resolutions = choices;
+      }
+
+      // Track taken top-level names so "Create new" picks don't collide
+      // with each other (e.g. two dropped "Unit 1" folders both resolve
+      // to "create").
+      const taken = new Set(topLevelNames.map((u) => u.name.toLowerCase()));
+      const collisionByName = new Map(collisions.map((c) => [c.folder.name, c]));
+
+      let okFiles = 0;
+      let okUnits = 0;
+      let failedFiles = 0;
+
+      // ── folders ─────────────────────────────────────────────────
+      for (const folder of tree.folders) {
+        const collision = collisionByName.get(folder.name);
+        const choice = collision ? resolutions.get(folder.name) ?? "create" : "create";
+        if (choice === "skip") continue;
+
+        let targetUnitId: string;
         try {
-          if (file.size > MATERIAL_UPLOAD_MAX_BYTES) {
-            throw new Error("exceeds 25MB");
+          if (choice === "merge" && collision) {
+            targetUnitId = collision.existingUnitId;
+          } else {
+            const name = collision ? uniqueName(folder.name, taken) : folder.name;
+            if (!collision) taken.add(folder.name.toLowerCase());
+            const created = await teacher.createUnit(courseId, { name });
+            targetUnitId = created.id;
+            okUnits += 1;
           }
-          const base64 = await fileToBase64(file);
-          await teacher.uploadDocument(courseId, {
-            image_base64: base64,
-            filename: file.name,
-            unit_id: selected,
-          });
-          ok += 1;
-        } catch (e) {
-          failures.push(`${file.name}: ${e instanceof Error ? e.message : "failed"}`);
+        } catch {
+          failedFiles += fileCountInFolder(folder);
+          continue;
+        }
+
+        // root-level files in the folder
+        for (const file of folder.files) {
+          try {
+            await uploadOne(file, targetUnitId);
+            okFiles += 1;
+          } catch {
+            failedFiles += 1;
+          }
+        }
+
+        // level-2 subfolders. On merge, we still create the subfolders
+        // under the existing unit — teachers expect dropped structure to
+        // be preserved even when merging into an existing unit.
+        for (const sub of folder.subfolders) {
+          let subUnitId: string | null = null;
+          try {
+            const created = await teacher.createUnit(courseId, {
+              name: sub.name,
+              parent_id: targetUnitId,
+            });
+            subUnitId = created.id;
+          } catch {
+            failedFiles += sub.files.length;
+            continue;
+          }
+          for (const file of sub.files) {
+            try {
+              await uploadOne(file, subUnitId);
+              okFiles += 1;
+            } catch {
+              failedFiles += 1;
+            }
+          }
         }
       }
+
+      // ── loose files (go into currently-selected folder) ─────────
+      for (const file of tree.looseFiles) {
+        try {
+          await uploadOne(file, selected);
+          okFiles += 1;
+        } catch {
+          failedFiles += 1;
+        }
+      }
+
       await reload();
       onChanged();
-      if (ok > 0) toast.success(`Uploaded ${ok} file${ok === 1 ? "" : "s"}`);
-      if (failures.length > 0) toast.error(`Failed: ${failures.join("; ")}`);
+
+      // Summary toast
+      if (okFiles > 0 || okUnits > 0) {
+        const parts: string[] = [];
+        if (okUnits > 0) parts.push(`${okUnits} unit${okUnits === 1 ? "" : "s"}`);
+        if (okFiles > 0) parts.push(`${okFiles} file${okFiles === 1 ? "" : "s"}`);
+        const action = okUnits > 0 ? "Imported" : "Uploaded";
+        const skipSuffix = tree.skipped > 0 ? ` · ${tree.skipped} skipped` : "";
+        toast.success(`${action} ${parts.join(" · ")}${skipSuffix}`);
+      } else if (tree.skipped > 0 && failedFiles === 0) {
+        toast.error(`Skipped ${tree.skipped} unsupported file${tree.skipped === 1 ? "" : "s"}`);
+      }
+      if (failedFiles > 0) {
+        toast.error(`Failed to upload ${failedFiles} file${failedFiles === 1 ? "" : "s"}`);
+      }
     });
+
+  // Loose-file shim for the existing <input type="file"> click-picker
+  // path — wraps plain files into a DroppedTree so they funnel through
+  // the same pipeline.
+  const handleLooseFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    handleImport({ folders: [], looseFiles: files, skipped: 0 });
+  };
 
   /* ── folder mutations ── */
 
@@ -272,7 +407,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             onChange={(e) => {
               const files = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = "";
-              if (files.length > 0) handleUpload(files);
+              handleLooseFiles(files);
             }}
             className="hidden"
             disabled={busy}
@@ -307,7 +442,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             onAddSub={(parentId) => setShowNewUnit({ parentId })}
           />
 
-          <UploadDropzone busy={busy} onFiles={handleUpload}>
+          <UploadDropzone busy={busy} onDropTree={handleImport}>
             <div className="rounded-[--radius-lg] border border-border-light bg-surface p-5 shadow-sm">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div className="min-w-0">
@@ -390,6 +525,14 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         onConfirm={() => {
           if (rowState.kind === "deletingFolder") deleteFolder(rowState.id);
         }}
+      />
+
+      <CollisionDialog
+        open={pendingCollisions !== null}
+        collisions={pendingCollisions?.collisions ?? []}
+        busy={busy}
+        onCancel={() => pendingCollisions?.resolve(null)}
+        onConfirm={(choices) => pendingCollisions?.resolve(choices)}
       />
 
       <MoveDialog

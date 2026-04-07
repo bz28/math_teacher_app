@@ -2,19 +2,23 @@
 
 import { useState, type DragEvent, type ReactNode } from "react";
 import { UploadIcon } from "@/components/ui/icons";
+import { walkDataTransferItems } from "./walk-dropped-folder";
+import type { DroppedTree } from "./types";
 
 interface UploadDropzoneProps {
   busy: boolean;
-  onFiles: (files: File[]) => void;
+  onDropTree: (tree: DroppedTree) => void;
   children: ReactNode;
 }
 
 /**
  * Wraps the right pane and turns it into a drop target. Uses a counter to
  * track nested dragenter/leave events so the overlay doesn't flicker as the
- * pointer crosses child elements.
+ * pointer crosses child elements. Walks the DataTransferItemList so both
+ * files and folders (including mixed drops) are normalized into a
+ * DroppedTree before handing off to the parent.
  */
-export function UploadDropzone({ busy, onFiles, children }: UploadDropzoneProps) {
+export function UploadDropzone({ busy, onDropTree, children }: UploadDropzoneProps) {
   const [dragDepth, setDragDepth] = useState(0);
   const isDragging = dragDepth > 0;
 
@@ -32,13 +36,15 @@ export function UploadDropzone({ busy, onFiles, children }: UploadDropzoneProps)
     if (!e.dataTransfer.types.includes("Files")) return;
     setDragDepth((d) => Math.max(0, d - 1));
   };
-  const onDrop = (e: DragEvent) => {
+  const onDrop = async (e: DragEvent) => {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     setDragDepth(0);
     if (busy) return;
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) onFiles(files);
+    const tree = await walkDataTransferItems(e.dataTransfer.items);
+    if (tree.folders.length > 0 || tree.looseFiles.length > 0 || tree.skipped > 0) {
+      onDropTree(tree);
+    }
   };
 
   return (
@@ -65,9 +71,9 @@ export function UploadDropzone({ busy, onFiles, children }: UploadDropzoneProps)
             <UploadIcon className="h-7 w-7" strokeWidth={2.25} />
           </span>
           <div>
-            <p className="text-base font-bold text-primary">Drop files to upload</p>
+            <p className="text-base font-bold text-primary">Drop files or folders to upload</p>
             <p className="mt-1 text-xs font-medium text-primary/70">
-              PDF, PNG, JPG up to 25 MB
+              Folders become units · PDF, PNG, JPG up to 25 MB
             </p>
           </div>
         </div>
