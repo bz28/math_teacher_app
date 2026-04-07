@@ -508,9 +508,11 @@ async def assign_to_sections(
                 assignment_id=a.id, section_id=sid, published_at=now,
             ))
 
-    # Auto-publish if still draft
+    # Auto-publish if still draft — also locks the bank items it references.
     if a.status == "draft":
         a.status = "published"
+        await db.flush()
+        await recompute_bank_locks(db, a.course_id)
 
     await db.commit()
     return {"status": "ok"}
