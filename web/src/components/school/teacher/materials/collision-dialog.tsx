@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { FolderIcon } from "@/components/ui/icons";
 import type { Collision, ResolutionChoice } from "./types";
@@ -20,6 +20,11 @@ const CHOICES: { value: ResolutionChoice; label: string; hint: string }[] = [
   { value: "skip", label: "Skip", hint: "Don't import" },
 ];
 
+/**
+ * Parent should key this component on the collision batch so a new
+ * import remounts it with fresh defaults — avoids a useEffect reset
+ * and keeps all choices state local.
+ */
 export function CollisionDialog({
   open,
   collisions,
@@ -27,15 +32,11 @@ export function CollisionDialog({
   onCancel,
   onConfirm,
 }: CollisionDialogProps) {
-  const [choices, setChoices] = useState<Map<string, ResolutionChoice>>(new Map());
-
-  // Reset every time the dialog opens with a new batch of collisions.
-  useEffect(() => {
-    if (!open) return;
-    const next = new Map<string, ResolutionChoice>();
-    for (const c of collisions) next.set(c.folder.name, "create");
-    setChoices(next);
-  }, [open, collisions]);
+  const [choices, setChoices] = useState<Map<string, ResolutionChoice>>(() => {
+    const m = new Map<string, ResolutionChoice>();
+    for (const c of collisions) m.set(c.folder.name, "create");
+    return m;
+  });
 
   const applyToAll = (choice: ResolutionChoice) => {
     const next = new Map<string, ResolutionChoice>();

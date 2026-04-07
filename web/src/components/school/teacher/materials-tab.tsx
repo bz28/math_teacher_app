@@ -479,6 +479,12 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
                   />
                 </div>
               )}
+
+              <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-text-muted">
+                <UploadIcon className="h-3 w-3" />
+                Tip: drag files or folders here. Drop multiple folders to create
+                several units at once.
+              </p>
             </div>
           </UploadDropzone>
         </div>
@@ -518,13 +524,16 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         }}
       />
 
-      <CollisionDialog
-        open={pendingCollisions !== null}
-        collisions={pendingCollisions?.collisions ?? []}
-        busy={busy}
-        onCancel={() => pendingCollisions?.resolve(null)}
-        onConfirm={(choices) => pendingCollisions?.resolve(choices)}
-      />
+      {pendingCollisions && (
+        <CollisionDialog
+          key={pendingCollisions.collisions.map((c) => c.folder.name).join("|")}
+          open
+          collisions={pendingCollisions.collisions}
+          busy={busy}
+          onCancel={() => pendingCollisions.resolve(null)}
+          onConfirm={(choices) => pendingCollisions.resolve(choices)}
+        />
+      )}
 
       <MoveDialog
         open={bulkMoveOpen}
@@ -725,7 +734,10 @@ function FilesEmptyState() {
       <div>
         <p className="text-sm font-bold text-text-primary">No files here yet</p>
         <p className="mt-1 text-xs text-text-muted">
-          Drag files in or click <span className="font-semibold">Upload Files</span>
+          Drag files or folders in, or click <span className="font-semibold">Upload</span>
+        </p>
+        <p className="mt-0.5 text-[11px] text-text-muted">
+          Folders become new units
         </p>
       </div>
     </div>
