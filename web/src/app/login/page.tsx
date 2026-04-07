@@ -43,7 +43,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       const user = useAuthStore.getState().user;
-      router.replace(user?.role === "teacher" ? "/teacher" : "/home");
+      router.replace(user?.role === "teacher" ? "/school/teacher" : "/home");
     } catch {
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);

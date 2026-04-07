@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   teacher,
   type BankCounts,
@@ -9,22 +9,22 @@ import {
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
+// Aliased to avoid colliding with the `unitLabel` prop on BankRow.
+import { subfoldersOf, topUnits, unitLabel as labelForUnit } from "@/lib/units";
 
-// Build a "Unit 5: Quadratics / Practice" label for any unit_id, or
-// "Uncategorized" when null.
-function buildUnitLabel(units: TeacherUnit[], unitId: string | null): string {
-  if (!unitId) return "Uncategorized";
-  const u = units.find((x) => x.id === unitId);
-  if (!u) return "Unknown";
-  if (!u.parent_id) return u.name;
-  const parent = units.find((x) => x.id === u.parent_id);
-  return parent ? `${parent.name} / ${u.name}` : u.name;
-}
+// Course subject context — read by BankRow's emoji classifier so we
+// don't have to drill the subject prop through 5 layers of components.
+const CourseSubjectContext = createContext<string>("math");
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
-import { STATUS_FILTERS } from "./bank-styles";
+
+const STATUS_FILTERS: { key: "pending" | "approved" | "rejected"; label: string }[] = [
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
 
 // Tree node = a root question + any practice variations under it.
 // Variations are bank items whose parent_question_id points at the root.
@@ -37,8 +37,28 @@ type TreeNode = { item: BankItem; children: BankItem[] };
 // more specific sport names check first so "baseball" doesn't fall
 // through to a generic ball bucket. Word boundaries (\b) keep
 // "basketball" from matching inside "basket-shaped" or vice versa.
-function conceptEmoji(title: string, question: string): string {
+//
+// Subject-gated: math courses get all the buckets; physics gets the
+// physics-flavored ones (🚀); chemistry gets a flask. Avoids the
+// chemistry-course-shows-rocket-for-"reagent-cost" mismatch.
+function conceptEmoji(title: string, question: string, subject: string): string {
   const text = (title + " " + question).toLowerCase();
+
+  if (subject === "chemistry") {
+    if (/\b(reaction|molecule|bond|acid|base|ph|reagent|compound)\b/.test(text)) return "🧪";
+    if (/\b(temperature|heat|kelvin|celsius)\b/.test(text)) return "🌡️";
+    return "⚗️";
+  }
+
+  if (subject === "physics") {
+    if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
+    if (/\b(force|newton|gravity|mass|acceleration|momentum)\b/.test(text)) return "⚙️";
+    if (/\b(wave|frequency|amplitude|wavelength|hertz)\b/.test(text)) return "〰️";
+    if (/\b(circuit|voltage|current|resistance|ohm|watt)\b/.test(text)) return "⚡";
+    return "🔬";
+  }
+
+  // math (default)
 
   // Sports — each gets its own emoji, checked specific-to-general
   if (/\bbaseball\b/.test(text)) return "⚾";
@@ -48,7 +68,7 @@ function conceptEmoji(title: string, question: string): string {
   if (/\bhockey\b|\bpuck\b/.test(text)) return "🏒";
   if (/\bfrisbee\b/.test(text)) return "🥏";
 
-  // Physics-flavored launches
+  // Physics-flavored launches (still useful in math word problems)
   if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
   if (/\bball\b|\bthrow(n|ing)?\b|\bkick(ed|ing)?\b/.test(text)) return "🏐";
 
@@ -108,10 +128,15 @@ function buildTree(items: BankItem[]): TreeNode[] {
 
 export function QuestionBankTab({
   courseId,
+  courseSubject,
   activeJob,
   setActiveJob,
 }: {
   courseId: string;
+  // Used by the concept emoji classifier to gate math/physics/chem
+  // buckets so a chem course doesn't render 🚀 for "reagent" word
+  // problems.
+  courseSubject: string;
   // Lifted to the course page so the active job survives tab switches.
   // Polling + auto-clear also live there. This component just consumes
   // the state and triggers updates.
@@ -126,19 +151,19 @@ export function QuestionBankTab({
     rejected: 0,
     archived: 0,
   });
-  // Default to Pending — that's the actionable view a teacher lands on
-  // most often after generating. If pending is empty on first load we
-  // flip to Approved automatically (see effect below) so the teacher
-  // doesn't land on an empty page.
+  // Default to Pending — the actionable view a teacher lands on most
+  // often after generating. We used to auto-flip to Approved when
+  // pending was empty, but that caused a visible flicker (render
+  // Pending → fetch counts → flip to Approved). Now we just stay on
+  // Pending and show an empty state if there's nothing to review.
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
-  const [defaultedToApproved, setDefaultedToApproved] = useState(false);
   // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
   // status filter so the teacher can narrow on both axes.
   const [unitFilter, setUnitFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
-  const [openItemId, setOpenItemId] = useState<string | null>(null);
+  const [openItem, setOpenItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
   // When a make-similar review queue completes, we want to drop the
@@ -157,14 +182,14 @@ export function QuestionBankTab({
       const children = res.items.filter((i) => i.parent_question_id === parent.id);
       if (children.length === 0) return;
       setActiveJob(null); // dismiss the strip — its job is done
-      setOpenItemId(null); // close the single-mode workshop
+      setOpenItem(null); // close the single-mode workshop
       setReviewQueueParent(parent);
       setReviewQueue(children);
     } catch (e) {
       // Close the modal so the bank tab's error message is visible —
       // otherwise the workshop modal keeps the green CTA on screen
       // hiding the error and the teacher thinks nothing happened.
-      setOpenItemId(null);
+      setOpenItem(null);
       setError(e instanceof Error ? e.message : "Failed to load variations");
     }
   };
@@ -214,19 +239,6 @@ export function QuestionBankTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, statusFilter, unitFilter]);
 
-  // First-load default flip: if we landed on Pending but there's nothing
-  // to review, jump to Approved so the teacher sees their library
-  // instead of an empty page. Only fires once per courseId so a teacher
-  // who explicitly clicks Pending later won't get yanked away.
-  useEffect(() => {
-    if (defaultedToApproved) return;
-    if (loading) return;
-    if (statusFilter === "pending" && counts.pending === 0 && counts.approved > 0) {
-      setStatusFilter("approved");
-      setDefaultedToApproved(true);
-    }
-  }, [loading, counts.pending, counts.approved, statusFilter, defaultedToApproved]);
-
   // Reload the bank list when the active job (lifted to the page,
   // polled there) flips to done — pulls in the freshly generated rows.
   useEffect(() => {
@@ -237,6 +249,7 @@ export function QuestionBankTab({
   }, [activeJob?.status, activeJob?.id]);
 
   return (
+    <CourseSubjectContext.Provider value={courseSubject}>
     <div>
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -313,7 +326,7 @@ export function QuestionBankTab({
                 setStatusFilter(f.key);
                 // Dismiss any open workshop modal so switching tabs
                 // feels like a navigation, not a sticky overlay.
-                setOpenItemId(null);
+                setOpenItem(null);
               }}
               className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
                 statusFilter === f.key
@@ -378,7 +391,7 @@ export function QuestionBankTab({
           <SimpleUnitList
             items={items}
             units={units}
-            onOpenItem={setOpenItemId}
+            onOpenItem={setOpenItem}
             onOpenHomework={setOpenHomeworkId}
             onChanged={reload}
           />
@@ -389,7 +402,7 @@ export function QuestionBankTab({
               label={group.label}
               items={group.items}
               units={units}
-              onOpenItem={setOpenItemId}
+              onOpenItem={setOpenItem}
               onOpenHomework={setOpenHomeworkId}
               onChanged={reload}
             />
@@ -408,29 +421,23 @@ export function QuestionBankTab({
         />
       )}
 
-      {openItemId && (() => {
-        // Prefer items.find (so the workshop sees fresh data after a
-        // reload), but fall back to the stashed reviewQueueParent so
-        // restoration works even when the parent isn't in the current
-        // status tab's items list.
-        const openItem =
-          items.find((i) => i.id === openItemId) ??
-          (reviewQueueParent?.id === openItemId ? reviewQueueParent : undefined);
-        if (!openItem) return null;
-        return (
-          <WorkshopModal
-            item={openItem}
-            onClose={() => {
-              setOpenItemId(null);
-              setReviewQueueParent(null);
-            }}
-            onChanged={reload}
-            onJobStarted={setActiveJob}
-            activeJob={activeJob}
-            onReviewVariations={openVariationReview}
-          />
-        );
-      })()}
+      {openItem && (
+        // Prefer the freshest copy from items (in case reload brought
+        // updated content); fall back to the stashed openItem so the
+        // modal stays open across status-tab switches and after
+        // focused-review queue completion.
+        <WorkshopModal
+          item={items.find((i) => i.id === openItem.id) ?? openItem}
+          onClose={() => {
+            setOpenItem(null);
+            setReviewQueueParent(null);
+          }}
+          onChanged={reload}
+          onJobStarted={setActiveJob}
+          activeJob={activeJob}
+          onReviewVariations={openVariationReview}
+        />
+      )}
 
       {reviewQueue && (
         <WorkshopModal
@@ -443,9 +450,8 @@ export function QuestionBankTab({
             // stashed reviewQueueParent (full BankItem) so restoration
             // works regardless of the current status tab.
             if (reviewQueueParent) {
-              setOpenItemId(reviewQueueParent.id);
-              // reviewQueueParent stays set so the openItem fallback
-              // can find it; cleared when the modal closes.
+              setOpenItem(reviewQueueParent);
+              // reviewQueueParent stays set; cleared when the modal closes.
             }
             reload();
           }}
@@ -463,6 +469,7 @@ export function QuestionBankTab({
         />
       )}
     </div>
+    </CourseSubjectContext.Provider>
   );
 }
 
@@ -475,11 +482,10 @@ function buildUnitGroups(
 ): { id: string; label: string; items: BankItem[] }[] {
   const groups: { id: string; label: string; items: BankItem[] }[] = [];
   const itemsIn = (uid: string | null) => items.filter((i) => i.unit_id === uid);
-  const topUnits = units.filter((u) => u.parent_id === null);
-  for (const top of topUnits) {
+  for (const top of topUnits(units)) {
     const own = itemsIn(top.id);
     if (own.length > 0) groups.push({ id: top.id, label: top.name, items: own });
-    for (const sub of units.filter((u) => u.parent_id === top.id)) {
+    for (const sub of subfoldersOf(units, top.id)) {
       const subItems = itemsIn(sub.id);
       if (subItems.length > 0) {
         groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, items: subItems });
@@ -506,16 +512,22 @@ function ApprovedUnitGroup({
   label: string;
   items: BankItem[];
   units: TeacherUnit[];
-  onOpenItem: (id: string) => void;
+  onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [storageOpen, setStorageOpen] = useState(false);
 
-  const tree = buildTree(items);
-  const available = tree.filter((node) => node.item.used_in.length === 0);
-  const inUse = tree.filter((node) => node.item.used_in.length > 0);
+  // Memoize the tree + available/in-use split — buildTree is O(n) and
+  // this component re-renders on every parent reload + every poll tick.
+  const { available, inUse } = useMemo(() => {
+    const tree = buildTree(items);
+    return {
+      available: tree.filter((node) => node.item.used_in.length === 0),
+      inUse: tree.filter((node) => node.item.used_in.length > 0),
+    };
+  }, [items]);
 
   return (
     <div>
@@ -527,7 +539,7 @@ function ApprovedUnitGroup({
         <span>{open ? "▾" : "▸"}</span>
         <span>📁 {label}</span>
         <span className="font-normal normal-case text-text-muted/80">
-          · {tree.length} {tree.length === 1 ? "question" : "questions"}
+          · {available.length + inUse.length} {available.length + inUse.length === 1 ? "question" : "questions"}
           {available.length > 0 && ` · ${available.length} available`}
           {inUse.length > 0 && ` · ${inUse.length} in use`}
         </span>
@@ -589,7 +601,7 @@ function BankSection({
   defaultOpen: boolean;
   onToggle?: (open: boolean) => void;
   emptyText?: string;
-  onOpenItem: (id: string) => void;
+  onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -644,7 +656,7 @@ function BankRowWithChildren({
 }: {
   node: TreeNode;
   units: TeacherUnit[];
-  onOpenItem: (id: string) => void;
+  onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -656,9 +668,9 @@ function BankRowWithChildren({
     <div>
       <BankRow
         item={node.item}
-        unitLabel={buildUnitLabel(units, node.item.unit_id)}
+        unitLabel={labelForUnit(units,node.item.unit_id)}
         showUnit={false}
-        onOpen={() => onOpenItem(node.item.id)}
+        onOpen={() => onOpenItem(node.item)}
         onOpenHomework={onOpenHomework}
         onChanged={onChanged}
       />
@@ -681,10 +693,10 @@ function BankRowWithChildren({
                 <BankRow
                   key={child.id}
                   item={child}
-                  unitLabel={buildUnitLabel(units, child.unit_id)}
+                  unitLabel={labelForUnit(units,child.unit_id)}
                   showUnit={false}
                   variation
-                  onOpen={() => onOpenItem(child.id)}
+                  onOpen={() => onOpenItem(child)}
                   onOpenHomework={onOpenHomework}
                   onChanged={onChanged}
                 />
@@ -709,7 +721,7 @@ function SimpleUnitList({
 }: {
   items: BankItem[];
   units: TeacherUnit[];
-  onOpenItem: (id: string) => void;
+  onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -742,7 +754,7 @@ function SimpleUnitGroup({
   label: string;
   items: BankItem[];
   units: TeacherUnit[];
-  onOpenItem: (id: string) => void;
+  onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -766,9 +778,9 @@ function SimpleUnitGroup({
             <BankRow
               key={item.id}
               item={item}
-              unitLabel={buildUnitLabel(units, item.unit_id)}
+              unitLabel={labelForUnit(units,item.unit_id)}
               showUnit={false}
-              onOpen={() => onOpenItem(item.id)}
+              onOpen={() => onOpenItem(item)}
               onOpenHomework={onOpenHomework}
               onChanged={onChanged}
             />
@@ -846,7 +858,7 @@ function BankRow({
         >
           <div className="flex items-center gap-2 truncate">
             <span className="shrink-0" aria-hidden>
-              {conceptEmoji(item.title, item.question)}
+              {conceptEmoji(item.title, item.question, useContext(CourseSubjectContext))}
             </span>
             {item.source === "practice" && (
               <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
@@ -1120,8 +1132,6 @@ function GenerateQuestionsModal({
     });
   };
 
-  const topUnits = units.filter((u) => u.parent_id === null);
-  const subfoldersOf = (parentId: string) => units.filter((u) => u.parent_id === parentId);
   const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
 
   // Smart "Save to" default, derived during render. If the teacher hasn't
@@ -1177,12 +1187,12 @@ function GenerateQuestionsModal({
     if (uncategorized.length > 0) {
       groups.push({ id: "uncategorized", label: "Uncategorized", docs: uncategorized });
     }
-    for (const top of topUnits) {
+    for (const top of topUnits(units)) {
       const topDocs = docsIn(top.id);
       if (topDocs.length > 0) {
         groups.push({ id: top.id, label: top.name, docs: topDocs });
       }
-      for (const sub of subfoldersOf(top.id)) {
+      for (const sub of subfoldersOf(units, top.id)) {
         const subDocs = docsIn(sub.id);
         if (subDocs.length > 0) {
           groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, docs: subDocs });
@@ -1320,13 +1330,13 @@ function GenerateQuestionsModal({
                 className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
               >
                 <option value="">Uncategorized</option>
-                {topUnits.map((u) => (
+                {topUnits(units).map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
                 ))}
-                {topUnits.flatMap((u) =>
-                  subfoldersOf(u.id).map((sf) => (
+                {topUnits(units).flatMap((u) =>
+                  subfoldersOf(units, u.id).map((sf) => (
                     <option key={sf.id} value={sf.id}>
                       {u.name} / {sf.name}
                     </option>

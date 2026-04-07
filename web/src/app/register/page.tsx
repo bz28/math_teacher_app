@@ -93,7 +93,7 @@ function RegisterPageContent() {
         grade_level: gradeLevel,
         ...(inviteToken ? { invite_token: inviteToken } : {}),
       });
-      router.replace(invite ? "/teacher" : "/home");
+      router.replace(invite ? "/school/teacher" : "/home");
     } catch {
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);

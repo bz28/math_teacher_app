@@ -145,12 +145,25 @@ export interface EntitlementsResponse {
 
 // ── Error ──
 
+/**
+ * Shape of FastAPI error response bodies. `detail` is the standard
+ * field; the other fields are populated by specific error paths
+ * (e.g. entitlement gating).
+ */
+export interface ApiErrorBody {
+  detail?: string;
+  entitlement?: string;
+  is_limit?: boolean;
+  message?: string;
+  [key: string]: unknown;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
-    public body: Record<string, unknown>,
+    public body: ApiErrorBody,
   ) {
-    super((body?.detail as string) ?? `API error ${status}`);
+    super(body.detail ?? `API error ${status}`);
     this.name = "ApiError";
   }
 }
@@ -159,12 +172,12 @@ export class EntitlementError extends ApiError {
   public entitlement: string;
   public isLimit: boolean;
 
-  constructor(status: number, body: Record<string, unknown>) {
+  constructor(status: number, body: ApiErrorBody) {
     super(status, body);
     this.name = "EntitlementError";
-    this.entitlement = (body.entitlement as string) ?? "";
-    this.isLimit = (body.is_limit as boolean) ?? false;
-    this.message = (body.message as string) ?? "Feature requires Pro subscription";
+    this.entitlement = body.entitlement ?? "";
+    this.isLimit = body.is_limit ?? false;
+    this.message = body.message ?? "Feature requires Pro subscription";
   }
 }
 

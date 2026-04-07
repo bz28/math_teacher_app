@@ -10,9 +10,20 @@ import {
   type BankJob,
   type TeacherUnit,
 } from "@/lib/api";
+import { WORKSHOP_UNDO_GRACE_MS } from "@/lib/constants";
+import { subfoldersOf, topUnits } from "@/lib/units";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { STATUS_BADGE } from "./bank-styles";
+import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
+import { InlineTitleEdit } from "./_pieces/inline-title-edit";
+import { SimilarJobStrip } from "./_pieces/similar-job-strip";
+
+const STATUS_BADGE: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
+  approved: "bg-green-50 text-green-700 dark:bg-green-500/10",
+  rejected: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+  archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+};
 
 /**
  * Unified workshop modal for editing a single question OR walking through
@@ -113,7 +124,7 @@ export function WorkshopModal({
   }, [liveItem?.id, liveItem?.has_previous_version, liveItem?.updated_at]);
   useEffect(() => {
     if (!showUndo) return;
-    const t = setTimeout(() => setShowUndo(false), 30000);
+    const t = setTimeout(() => setShowUndo(false), WORKSHOP_UNDO_GRACE_MS);
     return () => clearTimeout(t);
   }, [showUndo]);
 
@@ -462,20 +473,16 @@ export function WorkshopModal({
                 title="Move to a different unit"
               >
                 <option value="">Uncategorized</option>
-                {units
-                  .filter((u) => u.parent_id === null)
-                  .flatMap((top) => [
-                    <option key={top.id} value={top.id}>
-                      {top.name}
-                    </option>,
-                    ...units
-                      .filter((sub) => sub.parent_id === top.id)
-                      .map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {top.name} / {sub.name}
-                        </option>
-                      )),
-                  ])}
+                {topUnits(units).flatMap((top) => [
+                  <option key={top.id} value={top.id}>
+                    {top.name}
+                  </option>,
+                  ...subfoldersOf(units, top.id).map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {top.name} / {sub.name}
+                    </option>
+                  )),
+                ])}
               </select>
             </label>
             {showUndo && (
@@ -753,173 +760,6 @@ export function WorkshopModal({
           }}
         />
       )}
-    </div>
-  );
-}
-
-// Inline progress strip for an in-flight generate-similar job whose
-// parent is the current workshop question. Three states: working,
-// done (with Review CTA), failed.
-function SimilarJobStrip({
-  job,
-  onReview,
-}: {
-  job: BankJob;
-  onReview: () => void;
-}) {
-  if (job.status === "failed") {
-    return (
-      <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-xs font-semibold text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-        ❌ Make similar failed: {job.error_message ?? "unknown error"}
-      </div>
-    );
-  }
-  if (job.status === "done") {
-    return (
-      <div className="flex items-center justify-between gap-3 border-b border-green-200 bg-green-50 px-6 py-2 text-xs font-semibold text-green-900 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-300">
-        <span>
-          ✨ {job.produced_count} new variation
-          {job.produced_count === 1 ? "" : "s"} ready for review
-        </span>
-        <button
-          type="button"
-          onClick={onReview}
-          className="rounded-[--radius-sm] bg-green-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-800"
-        >
-          Review them →
-        </button>
-      </div>
-    );
-  }
-  // queued or running
-  const progressText =
-    job.produced_count > 0
-      ? `Generating variations… ${job.produced_count}/${job.requested_count}`
-      : `Generating ${job.requested_count} variations…`;
-  return (
-    <div className="border-b border-blue-200 bg-blue-50 px-6 py-2 text-xs font-semibold text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
-      <span className="mr-2 inline-block animate-pulse">✨</span>
-      {progressText}
-    </div>
-  );
-}
-
-// Small dialog: pick how many variations + optional constraint, then
-// schedule the generate-similar job. Children land in the pending
-// queue with parent_question_id set so they nest under their parent
-// once approved.
-function GenerateSimilarDialog({
-  itemId,
-  onClose,
-  onStarted,
-}: {
-  itemId: string;
-  onClose: () => void;
-  onStarted: (job: BankJob) => void;
-}) {
-  const [count, setCount] = useState(5);
-  const [constraint, setConstraint] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const job = await teacher.generateSimilarBank(itemId, {
-        count,
-        constraint: constraint.trim() || null,
-      });
-      onStarted(job);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start");
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <form
-        className="w-full max-w-sm rounded-[--radius-xl] bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <h3 className="text-base font-bold text-text-primary">✨ Make similar</h3>
-        <p className="mt-1 text-xs text-text-muted">
-          Generate variations of this question. They&rsquo;ll land in your
-          Pending queue for review.
-        </p>
-
-        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
-          How many?
-        </label>
-        <div className="mt-1 flex gap-1">
-          {[1, 3, 5, 10].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setCount(n)}
-              className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
-                count === n
-                  ? "bg-primary text-white"
-                  : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={count}
-            onChange={(e) => {
-              const n = Number.parseInt(e.target.value, 10);
-              if (Number.isFinite(n)) setCount(Math.max(1, Math.min(20, n)));
-            }}
-            aria-label="Custom quantity"
-            className="w-14 rounded-[--radius-pill] border border-border-light bg-bg-base px-2 py-1 text-center text-xs font-bold text-text-primary focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-        </div>
-
-        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
-          Optional constraint
-        </label>
-        <textarea
-          value={constraint}
-          onChange={(e) => setConstraint(e.target.value)}
-          rows={3}
-          maxLength={300}
-          placeholder='e.g. "use friendlier numbers" or "make them word problems"'
-          className="mt-1 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-        />
-
-        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy}
-            className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-[--radius-md] bg-primary px-4 py-1.5 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-          >
-            {busy ? "Starting…" : "✨ Generate"}
-          </button>
-        </div>
-      </form>
     </div>
   );
 }
@@ -1483,77 +1323,3 @@ function CompletionModal({
   );
 }
 
-// Click-to-edit title for the workshop modal header. Plain text only
-// (no LaTeX rendering — title is a concept label, not math). Saves on
-// blur or Enter, cancels on Escape.
-function InlineTitleEdit({
-  value,
-  onSave,
-  busy,
-}: {
-  value: string;
-  onSave: (next: string) => void;
-  busy: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => !busy && setEditing(true)}
-        disabled={busy}
-        title="Click to edit title"
-        className="min-w-0 flex-1 truncate rounded-[--radius-sm] text-left text-base font-bold text-text-primary decoration-text-muted/30 decoration-dotted underline-offset-4 hover:bg-primary-bg/20 hover:underline hover:decoration-primary/40 disabled:cursor-default"
-      >
-        {value || (
-          <span className="italic text-text-muted">Add a concept title…</span>
-        )}
-      </button>
-    );
-  }
-
-  return (
-    <InlineTitleEditor
-      initial={value}
-      onCommit={(next) => {
-        onSave(next);
-        setEditing(false);
-      }}
-      onCancel={() => setEditing(false)}
-    />
-  );
-}
-
-function InlineTitleEditor({
-  initial,
-  onCommit,
-  onCancel,
-}: {
-  initial: string;
-  onCommit: (next: string) => void;
-  onCancel: () => void;
-}) {
-  const [draft, setDraft] = useState(initial);
-  return (
-    <input
-      type="text"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => onCommit(draft)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          onCommit(draft);
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          onCancel();
-        }
-      }}
-      autoFocus
-      maxLength={120}
-      placeholder="Add a concept title…"
-      className="min-w-0 flex-1 rounded-[--radius-sm] border border-primary bg-bg-base px-2 py-1 text-base font-bold text-text-primary focus:outline-none"
-    />
-  );
-}

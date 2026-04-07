@@ -158,6 +158,15 @@ async def remove_student(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
+    # IDOR guard: confirm the section actually belongs to the course in
+    # the URL — without this, a teacher of course A could remove students
+    # from course B by guessing section_ids since the DELETE filter only
+    # used section_id + student_id.
+    section = (await db.execute(
+        select(Section).where(Section.id == section_id, Section.course_id == course_id)
+    )).scalar_one_or_none()
+    if not section:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in this course")
     result = await db.execute(
         delete(SectionEnrollment).where(
             SectionEnrollment.section_id == section_id, SectionEnrollment.student_id == student_id)
