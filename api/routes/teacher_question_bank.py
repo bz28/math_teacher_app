@@ -104,16 +104,24 @@ class ChatMessageIndexRequest(BaseModel):
 # ── helpers ──
 
 
-async def _get_bank_item_for_teacher(
-    db: AsyncSession, item_id: uuid.UUID, teacher_id: uuid.UUID,
+async def get_bank_item(
+    item_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
 ) -> QuestionBankItem:
+    """FastAPI dependency that loads a bank item AND verifies the
+    teacher owns its course. Used by every per-item endpoint so the
+    ownership check is structurally guaranteed — no helper to forget
+    to call. The previous helper-based pattern (12/12 endpoints
+    correct) was fine but defensive: any future endpoint that takes
+    item_id must Depends(get_bank_item) to even get the item.
+    """
     item = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.id == item_id)
     )).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
-    # Ownership: must be teacher of the course this item belongs to
-    await get_teacher_course(db, item.course_id, teacher_id)
+    await get_teacher_course(db, item.course_id, current_user.user_id)
     return item
 
 
@@ -273,13 +281,10 @@ async def get_generation_job(
 
 @router.patch("/question-bank/{item_id}")
 async def update_bank_item(
-    item_id: uuid.UUID,
     body: UpdateBankItemRequest,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
-
     # Lock policy: only *content* edits are blocked when the item is in a
     # published homework. Metadata changes (unit move, difficulty tag) stay
     # allowed because they don't change what students see.
@@ -321,13 +326,11 @@ async def update_bank_item(
 
 @router.post("/question-bank/{item_id}/revert")
 async def revert_bank_item(
-    item_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Restore the previous_* snapshot. One level of undo only — after this
     call, previous_* is cleared so the teacher can't ping-pong forever."""
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     if item.previous_question is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -348,11 +351,9 @@ async def revert_bank_item(
 
 @router.post("/question-bank/{item_id}/approve")
 async def approve_bank_item(
-    item_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     _ensure_unlocked(item)
     item.status = "approved"
     await db.commit()
@@ -361,11 +362,9 @@ async def approve_bank_item(
 
 @router.post("/question-bank/{item_id}/reject")
 async def reject_bank_item(
-    item_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     _ensure_unlocked(item)
     item.status = "rejected"
     await db.commit()
@@ -374,12 +373,11 @@ async def reject_bank_item(
 
 @router.post("/question-bank/{item_id}/regenerate")
 async def regenerate_bank_item(
-    item_id: uuid.UUID,
     body: RegenerateRequest,
+    item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     _ensure_unlocked(item)
     course = (await db.execute(
         select(Course).where(Course.id == item.course_id)
@@ -400,15 +398,14 @@ async def regenerate_bank_item(
 
 @router.post("/question-bank/{item_id}/generate-similar", status_code=status.HTTP_202_ACCEPTED)
 async def generate_similar_bank_questions(
-    item_id: uuid.UUID,
     body: GenerateSimilarRequest,
+    parent: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Schedule a generation job seeded from an existing approved bank
     item. Children inherit unit + source docs from the parent and have
     parent_question_id set, building the variation tree."""
-    parent = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     if parent.parent_question_id is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -441,11 +438,9 @@ async def generate_similar_bank_questions(
 
 @router.delete("/question-bank/{item_id}")
 async def delete_bank_item(
-    item_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     _ensure_unlocked(item)
     await db.delete(item)
     await db.commit()
@@ -457,8 +452,8 @@ async def delete_bank_item(
 
 @router.post("/question-bank/{item_id}/chat")
 async def post_chat_message(
-    item_id: uuid.UUID,
     body: ChatMessageRequest,
+    item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -467,7 +462,6 @@ async def post_chat_message(
 
     The proposal is NOT applied to live fields here — that only happens
     via /chat/accept."""
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     _ensure_unlocked(item)
     course = (await db.execute(select(Course).where(Course.id == item.course_id))).scalar_one()
 
@@ -490,15 +484,13 @@ async def post_chat_message(
 
 @router.post("/question-bank/{item_id}/chat/accept")
 async def accept_chat_proposal(
-    item_id: uuid.UUID,
     body: ChatMessageIndexRequest,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Apply the proposal attached to a specific AI message in the chat.
     Snapshots the current state to previous_* before mutating, marks the
     chat message as accepted."""
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     _ensure_unlocked(item)
 
     messages = list(item.chat_messages or [])
@@ -540,14 +532,11 @@ async def accept_chat_proposal(
 
 @router.post("/question-bank/{item_id}/chat/discard")
 async def discard_chat_proposal(
-    item_id: uuid.UUID,
     body: ChatMessageIndexRequest,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Mark a proposal as discarded. No live content change."""
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
-
     messages = list(item.chat_messages or [])
     if body.message_index < 0 or body.message_index >= len(messages):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message index")
@@ -565,12 +554,10 @@ async def discard_chat_proposal(
 
 @router.post("/question-bank/{item_id}/chat/clear")
 async def clear_chat(
-    item_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_teacher),
+    item: QuestionBankItem = Depends(get_bank_item),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Wipe the chat history for this item. Question/solution unchanged."""
-    item = await _get_bank_item_for_teacher(db, item_id, current_user.user_id)
     item.chat_messages = []
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
