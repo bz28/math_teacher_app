@@ -64,6 +64,7 @@ export function LearnLoopSurface({
   const onLastStep = stepIdx >= totalSteps - 1;
 
   async function advance() {
+    if (advancing) return;
     setAdvancing(true);
     setError(null);
     try {

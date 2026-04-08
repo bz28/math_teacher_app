@@ -155,6 +155,10 @@ async def _load_assignment_for_student(
         raise HTTPException(status_code=404, detail="Assignment not found")
     if assignment.status != "published":
         raise HTTPException(status_code=403, detail="Assignment is not published")
+    # The school-student loop is for homework only — quizzes and tests
+    # are graded assessments and should not have an open practice loop.
+    if assignment.type != "homework":
+        raise HTTPException(status_code=404, detail="Not a homework assignment")
 
     # The student must be enrolled in at least one section this
     # assignment was assigned to. We check via a join — single round trip.
@@ -238,6 +242,9 @@ async def list_homework(
         .where(
             Assignment.course_id == course_id,
             Assignment.status == "published",
+            # Only homework belongs in the student "Homework" tab.
+            # Quizzes and tests are surfaced separately later.
+            Assignment.type == "homework",
             AssignmentSection.section_id.in_(section_rows),
         )
         .distinct()

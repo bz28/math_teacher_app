@@ -371,6 +371,35 @@ async def test_homework_detail_403_for_outsider(client: AsyncClient, world: dict
     assert r.status_code == 403
 
 
+async def test_quizzes_excluded_from_homework_list(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # Convert the seeded HW into a quiz and verify it disappears
+    # from the student's homework tab and the loop endpoint refuses it.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE assignments SET type='quiz' WHERE id=:id"),
+            {"id": world["assignment_id"]},
+        )
+        await s.commit()
+    classes = (await client.get(
+        "/v1/school/student/classes", headers=_auth(world["student_token"])
+    )).json()
+    course_id = classes[0]["course_id"]
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/homework",
+        headers=_auth(world["student_token"]),
+    )
+    # Quiz must NOT appear in the homework list
+    assert r.json() == []
+    # And the loop endpoint must reject it directly
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/problems/{world['primary_id']}/next-variation",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 404
+
+
 async def test_flag_and_list_flagged(client: AsyncClient, world: dict[str, Any]) -> None:
     # Serve + flag two siblings, complete one without flag
     served_ids = []

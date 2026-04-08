@@ -101,15 +101,22 @@ export function PracticeLoopSurface({
   // Build the option set: correct answer + teacher-pre-stored
   // distractors, deterministically shuffled by the variation id so
   // the order is stable across re-renders but the correct answer
-  // isn't always option A.
-  const choices = useMemo(
-    () =>
-      shuffleStable(
-        [correctAnswer, ...(variation.distractors || [])].filter(Boolean),
-        variation.bank_item_id,
-      ),
-    [variation.bank_item_id, correctAnswer, variation.distractors],
-  );
+  // isn't always option A. Dedupe by trimmed value so a distractor
+  // that happens to equal the correct answer doesn't render twice.
+  const choices = useMemo(() => {
+    const raw = [correctAnswer, ...(variation.distractors || [])]
+      .map((s) => (s || "").trim())
+      .filter(Boolean);
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const c of raw) {
+      if (!seen.has(c)) {
+        seen.add(c);
+        deduped.push(c);
+      }
+    }
+    return shuffleStable(deduped, variation.bank_item_id);
+  }, [variation.bank_item_id, correctAnswer, variation.distractors]);
 
   function handlePick(choice: string) {
     if (revealed) return;
@@ -118,11 +125,21 @@ export function PracticeLoopSurface({
   }
 
   async function pushResultAndAdvance(nextAction: "next" | "done") {
-    if (!picked) return;
+    // Allow advancing without an MCQ pick when the variation has no
+    // valid distractors (broken-data fallback). In that case there's
+    // no answer to record — just skip past it.
+    const noMcq = choices.length < 2;
+    if ((!picked && !noMcq) || advancing) return;
+    // Set the in-flight flag *immediately* so a rapid double-tap on
+    // the button can't race two parallel completeConsumption +
+    // nextVariation pairs and create duplicate consumption rows.
+    setAdvancing(true);
+
     // Only append a result row the first time this consumption is
     // resolved — guard against double-appends if the user double-taps
     // or if a lens swap re-mounts us with a result already recorded.
-    if (!results.some((r) => r.consumption_id === consumptionId)) {
+    // Skip the append entirely if there was no MCQ to answer.
+    if (picked && !results.some((r) => r.consumption_id === consumptionId)) {
       onAppendResult({
         consumption_id: consumptionId,
         variation,
@@ -139,8 +156,11 @@ export function PracticeLoopSurface({
       /* non-fatal */
     }
 
-    // Pull next variation
-    setAdvancing(true);
+    if (nextAction === "done") {
+      onDone();
+      return;
+    }
+
     setError(null);
     try {
       const resp = await schoolStudent.nextVariation(assignmentId, anchorBankItemId, "practice");
@@ -228,6 +248,16 @@ export function PracticeLoopSurface({
           <MathText text={variation.question} />
         </div>
 
+        {choices.length < 2 ? (
+          // Defensive fallback: a variation whose distractors weren't
+          // generated (LLM failure → stored as null) would otherwise
+          // render a single button and trap the student. Surface the
+          // problem clearly and let them advance via the footer.
+          <div className="mt-6 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-4 text-sm text-amber-700 dark:bg-amber-500/10">
+            This practice problem doesn&apos;t have multiple-choice options yet. Try the
+            next one or switch to Learn mode to see the worked solution.
+          </div>
+        ) : (
         <div className="mt-6 flex flex-col gap-2">
           {choices.map((choice, i) => {
             const isPicked = picked === choice;
@@ -256,8 +286,9 @@ export function PracticeLoopSurface({
             );
           })}
         </div>
+        )}
 
-        {revealed && (
+        {revealed && choices.length >= 2 && (
           <div className="mt-4 text-sm font-medium">
             {picked && picked.trim() === correctAnswer ? (
               <span className="text-green-600">Nice — that&apos;s correct.</span>
@@ -295,17 +326,17 @@ export function PracticeLoopSurface({
           <span className="text-xs font-medium text-text-muted">{remaining} more available</span>
           <button
             onClick={() => pushResultAndAdvance("done")}
-            disabled={!revealed || advancing}
+            disabled={(!revealed && choices.length >= 2) || advancing}
             className="rounded-[--radius-sm] border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50"
           >
             Done practicing
           </button>
           <button
             onClick={() => pushResultAndAdvance("next")}
-            disabled={!revealed || advancing}
+            disabled={(!revealed && choices.length >= 2) || advancing}
             className="rounded-[--radius-sm] bg-primary px-4 py-1.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
           >
-            {advancing ? "Loading…" : "Practice similar"}
+            {advancing ? "Loading…" : choices.length < 2 ? "Skip" : "Practice similar"}
           </button>
         </div>
       </div>
