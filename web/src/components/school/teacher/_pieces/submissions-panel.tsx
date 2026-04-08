@@ -29,7 +29,11 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  // Derived: we're loading the detail iff a row is open and the
+  // detail object hasn't arrived yet. Avoids a separate state slice
+  // (and the cascading-render lint rule that comes with setting it
+  // synchronously inside the fetch effect).
+  const detailLoading = openId !== null && detail === null;
 
   useEffect(() => {
     teacher
@@ -39,17 +43,30 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   }, [assignmentId]);
 
   useEffect(() => {
-    if (!openId) {
-      setDetail(null);
-      return;
-    }
-    setDetailLoading(true);
+    // Only fetch when transitioning into the detail view. Clearing
+    // the detail when openId becomes null happens in the close-row
+    // handler below — keeping the effect "fetch only" satisfies
+    // the no-cascading-render rule and matches the React docs'
+    // recommended pattern (https://react.dev/learn/you-might-not-need-an-effect).
+    if (!openId) return;
+    let cancelled = false;
     teacher
       .submissionDetail(openId)
-      .then(setDetail)
-      .catch(() => setError("Couldn't load submission detail."))
-      .finally(() => setDetailLoading(false));
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load submission detail.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [openId]);
+
+  function closeDetail() {
+    setOpenId(null);
+    setDetail(null);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -59,7 +76,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
             {openId && detail ? `${detail.student_name} — ${detail.assignment_title}` : "Submissions"}
           </h2>
           <button
-            onClick={openId ? () => setOpenId(null) : onClose}
+            onClick={openId ? closeDetail : onClose}
             className="rounded-[--radius-sm] border border-border-light px-3 py-1 text-xs font-bold text-text-secondary hover:bg-bg-subtle"
           >
             {openId ? "← Back to list" : "Close"}
