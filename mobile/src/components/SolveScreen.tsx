@@ -18,6 +18,8 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
+import { MathKeyboard } from "./MathKeyboard";
+import { MockTestConfig } from "./MockTestConfig";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
 import { RectangleSelector } from "./RectangleSelector";
@@ -30,7 +32,7 @@ import { colors, spacing, radii, typography, shadows, gradients } from "../theme
 const MAX_PROBLEMS = 10;
 
 type SubjectKey = "math" | "physics" | "chemistry";
-type Mode = "learn" | "practice";
+type Mode = "learn" | "mock_test";
 
 const SUBJECTS: { key: SubjectKey; label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }[] = [
   { key: "math", label: "Math", icon: "calculator", gradient: "primary" },
@@ -38,9 +40,9 @@ const SUBJECTS: { key: SubjectKey; label: string; icon: keyof typeof Ionicons.gl
   { key: "chemistry", label: "Chemistry", icon: "flask", gradient: "chemistry" },
 ];
 
-const MODES: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: "learn", label: "Learn", icon: "book-outline" },
-  { key: "practice", label: "Practice", icon: "barbell-outline" },
+const MODES: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }[] = [
+  { key: "learn", label: "Learn", icon: "book-outline", gradient: "primary" },
+  { key: "mock_test", label: "Mock Test", icon: "document-text-outline", gradient: "warning" },
 ];
 
 interface Props {
@@ -64,12 +66,18 @@ export function SolveScreen({
   const [quotaConfirm, setQuotaConfirm] = useState(false);
   const [mode, setMode] = useState<Mode>("learn");
 
+  // Mock test config
+  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
+  const [untimed, setUntimed] = useState(true);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
+  const [multipleChoice, setMultipleChoice] = useState(true);
+
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const problemImages = useSessionStore((s) => s.problemImages);
   const startSession = useSessionStore((s) => s.startSession);
   const startLearnQueue = useSessionStore((s) => s.startLearnQueue);
-  const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
+  const startMockTest = useSessionStore((s) => s.startMockTest);
   const setStoreSubject = useSessionStore((s) => s.setSubject);
   const sessionPhase = useSessionStore((s) => s.phase);
   const sessionError = useSessionStore((s) => s.error);
@@ -87,6 +95,7 @@ export function SolveScreen({
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
   const activeSubject = SUBJECTS.find((s) => s.key === subject) ?? SUBJECTS[0];
+  const activeMode = MODES.find((m) => m.key === mode) ?? MODES[0];
 
   const {
     extracting,
@@ -166,6 +175,19 @@ export function SolveScreen({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const handleEditFromQueue = (index: number) => {
+    // Match main InputScreen behavior: load text back into input, remove from queue
+    setInput(problemQueue[index]);
+    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    inputRef.current?.focus();
+  };
+
+  const handleInsert = (value: string) => {
+    setInput((prev) => prev + value);
+    inputRef.current?.focus();
+  };
+
   const collectProblems = (): string[] => {
     const allProblems = [...problemQueue];
     const text = input.trim();
@@ -190,14 +212,17 @@ export function SolveScreen({
     setQuotaConfirm(false);
 
     onSessionStart();
-    if (mode === "practice") {
-      // Practice handles one problem at a time; uses first if queue has multiple.
-      await startPracticeBatch(allProblems[0], 1);
+
+    if (mode === "mock_test") {
+      const generateCount = examType === "generate_similar" ? allProblems.length : 0;
+      const timeLimit = untimed ? null : timeLimitMinutes;
+      await startMockTest(allProblems, generateCount, timeLimit, multipleChoice);
     } else if (allProblems.length === 1) {
       await startSession(allProblems[0], "learn");
     } else {
       await startLearnQueue(allProblems);
     }
+
     const postPhase = useSessionStore.getState().phase;
     if (postPhase === "error") {
       onSessionError();
@@ -237,10 +262,30 @@ export function SolveScreen({
     );
   }
 
-  // Clamp extraction progress display so it never reads "4 of 3"
+  // Clamp extraction progress so it never reads "4 of 3"
   const progressDone = extractionProgress
     ? Math.min(extractionProgress.done + 1, extractionProgress.total)
     : 0;
+
+  // Queue label adapts to mode + examType
+  const queueLabel = (() => {
+    const n = problemQueue.length;
+    const noun = n === 1 ? "problem" : "problems";
+    if (mode === "mock_test") {
+      if (examType === "generate_similar") {
+        return `${n} seed${n !== 1 ? "s" : ""} → ${n} generated question${n !== 1 ? "s" : ""}`;
+      }
+      return `${n} question${n !== 1 ? "s" : ""}`;
+    }
+    return `${n} ${noun} queued`;
+  })();
+
+  // Solve button label
+  const solveLabel = (() => {
+    const verb = mode === "mock_test" ? "Start Exam" : "Solve";
+    if (totalProblems === 0 || totalProblems === 1) return verb;
+    return `${verb} (${totalProblems})`;
+  })();
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -256,28 +301,6 @@ export function SolveScreen({
         >
           {SUBJECTS.map((s) => {
             const isActive = s.key === subject;
-            const pill = (
-              <View
-                style={[
-                  styles.subjectPill,
-                  !isActive && styles.subjectPillInactive,
-                ]}
-              >
-                <Ionicons
-                  name={s.icon}
-                  size={16}
-                  color={isActive ? colors.white : colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.subjectPillText,
-                    !isActive && styles.subjectPillTextInactive,
-                  ]}
-                >
-                  {s.label}
-                </Text>
-              </View>
-            );
             return (
               <AnimatedPressable
                 key={s.key}
@@ -298,7 +321,10 @@ export function SolveScreen({
                     <Text style={styles.subjectPillText}>{s.label}</Text>
                   </LinearGradient>
                 ) : (
-                  pill
+                  <View style={[styles.subjectPill, styles.subjectPillInactive]}>
+                    <Ionicons name={s.icon} size={16} color={colors.textSecondary} />
+                    <Text style={[styles.subjectPillText, styles.subjectPillTextInactive]}>{s.label}</Text>
+                  </View>
                 )}
               </AnimatedPressable>
             );
@@ -336,7 +362,6 @@ export function SolveScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero */}
           <Text style={styles.greetingTitle}>What can I help you solve today?</Text>
 
           {/* Big primary capture target */}
@@ -361,7 +386,7 @@ export function SolveScreen({
             </LinearGradient>
           </AnimatedPressable>
 
-          {/* Secondary actions row */}
+          {/* Secondary actions row — vertical-stacked for clarity */}
           <View style={styles.secondaryRow}>
             <AnimatedPressable
               style={[styles.secondaryCard, shadows.sm]}
@@ -371,7 +396,7 @@ export function SolveScreen({
               accessibilityRole="button"
               accessibilityLabel="Choose photo from gallery"
             >
-              <Ionicons name="images-outline" size={20} color={colors.primary} />
+              <Ionicons name="images-outline" size={24} color={colors.primary} />
               <Text style={styles.secondaryLabel}>Gallery</Text>
             </AnimatedPressable>
             <AnimatedPressable
@@ -381,7 +406,7 @@ export function SolveScreen({
               accessibilityRole="button"
               accessibilityLabel="Type a problem"
             >
-              <Ionicons name="create-outline" size={20} color={colors.primary} />
+              <Ionicons name="create-outline" size={24} color={colors.primary} />
               <Text style={styles.secondaryLabel}>Type it</Text>
             </AnimatedPressable>
           </View>
@@ -399,6 +424,7 @@ export function SolveScreen({
               autoCorrect={false}
               returnKeyType="done"
               onSubmitEditing={handleAddToQueue}
+              inputAccessoryViewID="solve-math-keyboard"
               accessibilityLabel="Problem text input"
             />
             {input.trim() && problemQueue.length < maxQueueSize ? (
@@ -413,13 +439,10 @@ export function SolveScreen({
             ) : null}
           </View>
 
-          {/* Inline queue chips */}
+          {/* Inline queue chips — tap to edit */}
           {problemQueue.length > 0 && (
             <View style={styles.queueChips}>
-              <Text style={styles.queueChipsLabel}>
-                {problemQueue.length} queued
-                {mode === "practice" && problemQueue.length > 1 && " · practice uses first"}
-              </Text>
+              <Text style={styles.queueChipsLabel}>{queueLabel}</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -427,7 +450,14 @@ export function SolveScreen({
               >
                 {problemQueue.map((p, i) => (
                   <View key={`${i}-${p}`} style={styles.queueChip}>
-                    <Text numberOfLines={1} style={styles.queueChipText}>{p}</Text>
+                    <TouchableOpacity
+                      onPress={() => handleEditFromQueue(i)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit problem ${i + 1}`}
+                      style={styles.queueChipTextWrap}
+                    >
+                      <Text numberOfLines={1} style={styles.queueChipText}>{p}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleRemoveFromQueue(i)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -440,6 +470,20 @@ export function SolveScreen({
                 ))}
               </ScrollView>
             </View>
+          )}
+
+          {/* Mock Test config (matches main InputScreen behavior) */}
+          {mode === "mock_test" && (
+            <MockTestConfig
+              examType={examType}
+              onExamTypeChange={setExamType}
+              untimed={untimed}
+              onUntimedChange={setUntimed}
+              timeLimitMinutes={timeLimitMinutes}
+              onTimeLimitChange={setTimeLimitMinutes}
+              multipleChoice={multipleChoice}
+              onMultipleChoiceChange={setMultipleChoice}
+            />
           )}
 
           {/* Extracting indicator */}
@@ -489,20 +533,17 @@ export function SolveScreen({
           />}
         </ScrollView>
 
-        {/* Sticky solve button */}
+        {/* Math keyboard accessory (iOS) */}
+        <MathKeyboard onInsert={handleInsert} accessoryID="solve-math-keyboard" />
+
+        {/* Sticky solve button — gradient reflects mode */}
         <View style={styles.bottomBar}>
           <GradientButton
             onPress={handleSolve}
-            label={
-              totalProblems === 0
-                ? mode === "practice" ? "Practice" : "Solve"
-                : totalProblems === 1
-                  ? mode === "practice" ? "Practice" : "Solve"
-                  : `${mode === "practice" ? "Practice" : "Solve"} ${totalProblems} problems`
-            }
+            label={solveLabel}
             loading={isLoading}
             disabled={totalProblems === 0}
-            gradient={activeSubject.gradient}
+            gradient={activeMode.gradient}
             style={styles.solveButton}
           />
         </View>
@@ -664,7 +705,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
   },
 
-  // Secondary row
+  // Secondary row — vertical-stacked cards
   secondaryRow: {
     flexDirection: "row",
     gap: spacing.md,
@@ -672,18 +713,18 @@ const styles = StyleSheet.create({
   },
   secondaryCard: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.sm,
+    gap: spacing.xs,
     backgroundColor: colors.white,
     borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.sm,
   },
   secondaryLabel: {
     ...typography.bodyBold,
     color: colors.text,
-    fontSize: 14,
   },
 
   // Input
@@ -737,13 +778,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    maxWidth: 200,
+    maxWidth: 220,
+  },
+  queueChipTextWrap: {
+    flexShrink: 1,
   },
   queueChipText: {
     ...typography.label,
     color: colors.primary,
     fontSize: 13,
-    flexShrink: 1,
   },
 
   // Extracting
