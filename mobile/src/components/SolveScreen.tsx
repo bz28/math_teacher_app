@@ -18,7 +18,6 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
-import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
@@ -71,7 +70,9 @@ export function SolveScreen({
   onSessionError,
 }: Props) {
   const inputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState("");
+  const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
   const [mode, setMode] = useState<Mode>("learn");
@@ -189,11 +190,6 @@ export function SolveScreen({
     setInput(problemQueue[index]);
     setProblemQueue(problemQueue.filter((_, i) => i !== index));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    inputRef.current?.focus();
-  };
-
-  const handleInsert = (value: string) => {
-    setInput((prev) => prev + value);
     inputRef.current?.focus();
   };
 
@@ -343,7 +339,8 @@ export function SolveScreen({
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
       >
         {/* Mode segmented control */}
         <View style={styles.modeRow}>
@@ -375,9 +372,11 @@ export function SolveScreen({
         </View>
 
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets
         >
           <Text style={styles.greetingTitle}>What can I help you solve?</Text>
 
@@ -430,46 +429,79 @@ export function SolveScreen({
             </View>
           </AnimatedPressable>
 
-          {/* TYPE — full-width outlined card with text input inside */}
-          <View
-            style={[
-              styles.bigCard,
-              styles.bigCardOutlined,
-              shadows.sm,
-              { borderColor: theme.primary },
-            ]}
+          {/* TYPE — full-width card matching Snap/Gallery */}
+          <AnimatedPressable
+            onPress={() => {
+              setTyping(true);
+              setTimeout(() => {
+                inputRef.current?.focus();
+                scrollRef.current?.scrollToEnd({ animated: true });
+              }, 80);
+            }}
+            disabled={typing}
+            scaleDown={0.97}
+            accessibilityRole="button"
+            accessibilityLabel="Type a problem"
           >
-            <View style={[styles.bigCardIconWrap, { backgroundColor: theme.primaryBg }]}>
-              <Ionicons name="create" size={28} color={theme.primary} />
+            <View
+              style={[
+                styles.bigCard,
+                styles.bigCardOutlined,
+                shadows.sm,
+                { borderColor: theme.primary },
+              ]}
+            >
+              <View style={[styles.bigCardIconWrap, { backgroundColor: theme.primaryBg }]}>
+                <Ionicons name="create" size={32} color={theme.primary} />
+              </View>
+              {typing ? (
+                <View style={styles.typeInputRow}>
+                  <TextInput
+                    ref={inputRef}
+                    style={[styles.typeInput, { color: theme.primary }]}
+                    value={input}
+                    onChangeText={(t) => { setInput(t); setError(null); }}
+                    placeholder="Type your problem here…"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    blurOnSubmit
+                    onSubmitEditing={() => {
+                      handleAddToQueue();
+                      inputRef.current?.blur();
+                      setTyping(false);
+                    }}
+                    onBlur={() => {
+                      if (!input.trim()) setTyping(false);
+                    }}
+                    accessibilityLabel="Problem text input"
+                  />
+                  {input.trim() ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        handleAddToQueue();
+                        inputRef.current?.blur();
+                        setTyping(false);
+                      }}
+                      style={[styles.addChip, { backgroundColor: theme.primary }]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add to queue"
+                    >
+                      <Ionicons name="checkmark" size={20} color={colors.white} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : (
+                <>
+                  <Text style={[styles.bigCardTitle, { color: theme.primary }]}>Type a problem</Text>
+                  <Text style={[styles.bigCardSubtitle, { color: colors.textSecondary }]}>
+                    Tap to enter your problem here
+                  </Text>
+                </>
+              )}
             </View>
-            <View style={styles.typeInputWrap}>
-              <TextInput
-                ref={inputRef}
-                style={styles.typeInput}
-                value={input}
-                onChangeText={(t) => { setInput(t); setError(null); }}
-                placeholder="Type a problem…"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="done"
-                onSubmitEditing={handleAddToQueue}
-                inputAccessoryViewID="solve-math-keyboard"
-                accessibilityLabel="Problem text input"
-                multiline
-              />
-              {input.trim() && problemQueue.length < maxQueueSize ? (
-                <TouchableOpacity
-                  onPress={handleAddToQueue}
-                  style={[styles.addChip, { backgroundColor: theme.primary }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add to queue"
-                >
-                  <Ionicons name="add" size={18} color={colors.white} />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
+          </AnimatedPressable>
 
           {/* Inline queue chips — tap to edit */}
           {problemQueue.length > 0 && (
@@ -572,9 +604,6 @@ export function SolveScreen({
             themeColor={theme.primary}
           />}
         </ScrollView>
-
-        {/* Math keyboard accessory (iOS) */}
-        <MathKeyboard onInsert={handleInsert} accessoryID="solve-math-keyboard" />
 
         {/* Sticky solve button — gradient reflects active subject */}
         <View style={styles.bottomBar}>
@@ -762,29 +791,25 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
   },
 
-  // Type input — sits inside the third big card
-  typeInputWrap: {
+  // Type input row — appears inside the type card when in editing state
+  typeInputRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     width: "100%",
     gap: spacing.sm,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   typeInput: {
     flex: 1,
-    ...typography.body,
+    ...typography.bodyBold,
+    fontSize: 16,
     color: colors.text,
-    backgroundColor: colors.inputBg,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    minHeight: 48,
-    maxHeight: 100,
-    textAlignVertical: "top",
+    paddingVertical: spacing.sm,
+    textAlign: "center",
   },
   addChip: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: radii.pill,
     justifyContent: "center",
     alignItems: "center",

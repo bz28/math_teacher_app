@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -233,29 +234,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Persistent chat history above the current step (Learn mode) */}
-        {isLearn && !isCompleted && (chatHistory[session.current_step]?.length ?? 0) > 0 && (
-          <View style={chatStyles.thread}>
-            {chatHistory[session.current_step].map((msg, i) => (
-              <View
-                key={`chat-${session.current_step}-${i}`}
-                style={msg.role === "user" ? chatStyles.userBubble : chatStyles.tutorBubble}
-              >
-                {msg.role === "user" ? (
-                  <Text style={chatStyles.userText}>{msg.text}</Text>
-                ) : (
-                  <View style={chatStyles.tutorRow}>
-                    <View style={chatStyles.tutorIconWrap}>
-                      <Ionicons name="sparkles" size={12} color={colors.primary} />
-                    </View>
-                    <MathText text={msg.text} style={chatStyles.tutorText} />
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
-
         {/* Practice mode: prompt */}
         {isPractice && !isCompleted && (
           <Text style={styles.promptText}>Enter your final answer</Text>
@@ -335,48 +313,92 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       {isLearn && !isCompleted && (
         <View style={readerStyles.actionBar}>
           {askMode ? (
-            <View style={readerStyles.askWrap}>
-              <TextInput
-                ref={inputRef}
-                style={readerStyles.askInput}
-                value={input}
-                onChangeText={setInput}
-                placeholder="Ask a question about this step…"
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-                returnKeyType="send"
-                blurOnSubmit
-                textAlignVertical="center"
-                onSubmitEditing={async () => {
-                  inputRef.current?.blur();
-                  setAskMode(false);
-                  if (!input.trim()) return;
-                  await handleAsk();
-                }}
-                accessibilityLabel="Ask a question"
-              />
-              <TouchableOpacity
-                onPress={() => { setAskMode(false); setInput(""); }}
-                style={readerStyles.askCancel}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel question"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            <View style={readerStyles.askPanel}>
+              {/* Chat header */}
+              <View style={readerStyles.askHeader}>
+                <Text style={readerStyles.askHeaderTitle}>Ask about this step</Text>
+                <TouchableOpacity
+                  onPress={() => { Keyboard.dismiss(); setAskMode(false); setInput(""); }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close ask"
+                >
+                  <Ionicons name="close" size={20} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Chat thread (iMessage-style) */}
+              <ScrollView
+                style={readerStyles.chatScroll}
+                contentContainerStyle={readerStyles.chatScrollContent}
+                ref={(r) => { if (r) setTimeout(() => r.scrollToEnd({ animated: true }), 50); }}
               >
-                <Ionicons name="close" size={20} color={colors.textMuted} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={async () => {
-                  if (!input.trim()) return;
-                  await handleAsk();
-                  setAskMode(false);
-                }}
-                style={readerStyles.askSend}
-                disabled={!input.trim() || phase === "thinking"}
-                accessibilityRole="button"
-                accessibilityLabel="Send question"
-              >
-                <Ionicons name="arrow-up" size={20} color={colors.white} />
-              </TouchableOpacity>
+                {(chatHistory[session.current_step]?.length ?? 0) === 0 && phase !== "thinking" && (
+                  <Text style={readerStyles.chatEmpty}>
+                    No questions yet — ask anything about this step
+                  </Text>
+                )}
+                {(chatHistory[session.current_step] ?? []).map((msg, i) => (
+                  <View
+                    key={`chat-${session.current_step}-${i}`}
+                    style={[
+                      readerStyles.bubbleRow,
+                      msg.role === "user" ? readerStyles.bubbleRowUser : readerStyles.bubbleRowTutor,
+                    ]}
+                  >
+                    {msg.role === "user" ? (
+                      <View style={readerStyles.bubbleUser}>
+                        <Text style={readerStyles.bubbleUserText}>{msg.text}</Text>
+                      </View>
+                    ) : (
+                      <View style={readerStyles.bubbleTutor}>
+                        <MathText text={msg.text} style={readerStyles.bubbleTutorText} />
+                      </View>
+                    )}
+                  </View>
+                ))}
+                {phase === "thinking" && (
+                  <View style={[readerStyles.bubbleRow, readerStyles.bubbleRowTutor]}>
+                    <View style={readerStyles.bubbleTutor}>
+                      <Text style={readerStyles.bubbleTutorText}>Thinking…</Text>
+                    </View>
+                  </View>
+                )}
+              </ScrollView>
+
+              {/* Compose row */}
+              <View style={readerStyles.askInputRow}>
+                <TextInput
+                  ref={inputRef}
+                  style={readerStyles.askInput}
+                  value={input}
+                  onChangeText={setInput}
+                  placeholder="Ask…"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                  returnKeyType="send"
+                  blurOnSubmit={false}
+                  onSubmitEditing={async () => {
+                    if (!input.trim()) return;
+                    Keyboard.dismiss();
+                    await handleAsk();
+                  }}
+                  accessibilityLabel="Ask a question"
+                />
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!input.trim()) return;
+                    Keyboard.dismiss();
+                    await handleAsk();
+                  }}
+                  style={readerStyles.askSend}
+                  disabled={!input.trim() || phase === "thinking"}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send question"
+                >
+                  <Ionicons name="arrow-up" size={20} color={colors.white} />
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <View style={readerStyles.actionRow}>
@@ -411,7 +433,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             </View>
           )}
           {!isPro && chatsRemaining() < Infinity && askMode && (
-            <Text style={readerStyles.chatHint}>{chatsRemaining()} chats left today</Text>
+            <Text style={readerStyles.askChatHint}>{chatsRemaining()} chats left today</Text>
           )}
         </View>
       )}
@@ -561,27 +583,99 @@ const readerStyles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Ask mode
-  askWrap: {
+  // Ask panel — iMessage-style chat thread + compose row
+  askPanel: {
+    width: "100%",
+  },
+  askHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    marginBottom: spacing.sm,
+  },
+  askHeaderTitle: {
+    ...typography.bodyBold,
+    color: colors.text,
+    fontSize: 14,
+  },
+  chatScroll: {
+    maxHeight: 280,
+    minHeight: 80,
+  },
+  chatScrollContent: {
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  chatEmpty: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    paddingVertical: spacing.lg,
+  },
+  bubbleRow: {
+    flexDirection: "row",
+    marginVertical: 2,
+  },
+  bubbleRowUser: {
+    justifyContent: "flex-end",
+    paddingLeft: 40,
+  },
+  bubbleRowTutor: {
+    justifyContent: "flex-start",
+    paddingRight: 40,
+  },
+  bubbleUser: {
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    maxWidth: "100%",
+  },
+  bubbleUserText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.white,
+  },
+  bubbleTutor: {
+    backgroundColor: colors.inputBg,
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    maxWidth: "100%",
+  },
+  bubbleTutorText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  // Compose row at the bottom of the ask panel
+  askInputRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
     backgroundColor: colors.inputBg,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderWidth: 1.5,
+    paddingVertical: 4,
+    borderWidth: 1,
     borderColor: colors.border,
+    marginTop: spacing.sm,
+    minHeight: 48,
   },
   askInput: {
     flex: 1,
     ...typography.body,
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text,
-    paddingVertical: spacing.sm,
-  },
-  askCancel: {
-    padding: spacing.xs,
+    paddingVertical: 0,
+    paddingHorizontal: spacing.xs,
+    textAlignVertical: "center",
   },
   askSend: {
     width: 36,
@@ -591,63 +685,11 @@ const readerStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  chatHint: {
+  askChatHint: {
     ...typography.caption,
     color: colors.textMuted,
     textAlign: "center",
     marginTop: spacing.xs,
-  },
-});
-
-const chatStyles = StyleSheet.create({
-  thread: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  userBubble: {
-    alignSelf: "flex-end",
-    maxWidth: "85%",
-    backgroundColor: colors.primaryBg,
-    borderRadius: radii.lg,
-    borderBottomRightRadius: 4,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  userText: {
-    ...typography.body,
-    color: colors.primary,
-    fontSize: 14,
-  },
-  tutorBubble: {
-    alignSelf: "flex-start",
-    maxWidth: "92%",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  tutorRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-  },
-  tutorIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.primaryBg,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  tutorText: {
-    ...typography.body,
-    color: colors.text,
-    fontSize: 14,
-    flex: 1,
   },
 });
 

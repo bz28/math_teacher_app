@@ -177,7 +177,15 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       try {
         const resp = await respondToStep(session.id, "", true);
         const updated = await getSession(session.id);
-        set({ session: updated, lastResponse: null, phase: "awaiting_input" });
+        // If the backend marked the session completed (last step advanced),
+        // land directly on the completion phase instead of forcing the user
+        // to tap "I get it" a second time.
+        const isDone = resp.action === "completed" || updated.status === "completed";
+        set({
+          session: updated,
+          lastResponse: null,
+          phase: isDone ? "completed" : "awaiting_input",
+        });
       } catch (e) {
         set({ phase: "error", error: errorMessage(e) });
       }

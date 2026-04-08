@@ -17,6 +17,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
+import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
 import { useMockTimer, formatTime } from "../hooks/useMockTimer";
@@ -207,7 +208,7 @@ export function MockTestScreen({ onBack }: Props) {
 
         {/* Question card */}
         <View style={[styles.questionCard, shadows.sm]}>
-          <Text style={styles.questionText}>{currentQuestion.question}</Text>
+          <MathText text={currentQuestion.question} style={styles.questionText} />
         </View>
 
         {/* Answer input — MC choices or free response */}
@@ -245,9 +246,13 @@ export function MockTestScreen({ onBack }: Props) {
                             {letters[i]}
                           </Text>
                         </View>
-                        <Text style={[styles.choiceText, isSelected && styles.choiceTextSelected]}>
-                          {choice}
-                        </Text>
+                        <MathText
+                          text={choice}
+                          style={{
+                            ...styles.choiceText,
+                            ...(isSelected ? styles.choiceTextSelected : {}),
+                          }}
+                        />
                       </AnimatedPressable>
                     );
                   });
@@ -310,7 +315,7 @@ export function MockTestScreen({ onBack }: Props) {
           </Text>
         </AnimatedPressable>
 
-        {/* Prev / Next buttons */}
+        {/* Prev / Next-or-Submit buttons */}
         <View style={styles.navRow}>
           <GradientButton
             onPress={handlePrev}
@@ -318,12 +323,20 @@ export function MockTestScreen({ onBack }: Props) {
             disabled={currentIndex === 0}
             style={styles.navButton}
           />
-          <GradientButton
-            onPress={handleNext}
-            label="Next →"
-            disabled={currentIndex === questions.length - 1}
-            style={styles.navButton}
-          />
+          {currentIndex === questions.length - 1 ? (
+            <GradientButton
+              onPress={handleSubmit}
+              label="✓ Submit Exam"
+              gradient="success"
+              style={styles.navButton}
+            />
+          ) : (
+            <GradientButton
+              onPress={handleNext}
+              label="Next →"
+              style={styles.navButton}
+            />
+          )}
         </View>
       </ScrollView>
 
