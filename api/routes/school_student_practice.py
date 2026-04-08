@@ -31,17 +31,23 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
-from api.models.assignment import Assignment, AssignmentSection
+from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import Course
 from api.models.question_bank import BankConsumption, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from api.services.bank import problem_ids_in_content
+
+# Sanity cap on the base64 image payload. ~5 MB raw image →
+# ~6.7 MB base64; we round up so PNG screenshots from a phone aren't
+# rejected. Real abuse protection lives at the rate-limit / S3 layer.
+MAX_IMAGE_BASE64_LEN = 7_000_000
 
 router = APIRouter(prefix="/school/student", tags=["school-student"])
 
@@ -101,6 +107,8 @@ class StudentHomeworkSummary(BaseModel):
     type: str
     due_at: datetime | None
     problem_count: int
+    # "not_started" or "submitted". Drives the badge on the HW list.
+    status: str
 
 
 class StudentHomeworkProblem(BaseModel):
@@ -124,6 +132,30 @@ class StudentHomeworkDetail(BaseModel):
     course_id: str
     course_name: str
     problems: list[StudentHomeworkProblem]
+    submitted: bool
+    submission_id: str | None
+
+
+class SubmitHomeworkRequest(BaseModel):
+    # base64-encoded image of the completed homework. Required —
+    # the work is the source of truth for both the teacher view and
+    # the upcoming integrity-checker pipeline (which will extract
+    # per-problem answers from the image).
+    image_base64: str
+
+
+class SubmitHomeworkResponse(BaseModel):
+    submission_id: str
+    submitted_at: datetime
+    is_late: bool
+
+
+class StudentSubmissionDetail(BaseModel):
+    submission_id: str
+    submitted_at: datetime
+    is_late: bool
+    image_data: str | None
+    final_answers: dict[str, str]
 
 
 # ── Helpers ──
@@ -255,6 +287,17 @@ async def list_homework(
         .order_by(Assignment.due_at.asc().nullslast(), Assignment.created_at.desc())
     )).scalars().all() if aid_rows else []
 
+    # Single query to find which of these the student already submitted.
+    submitted_ids: set[uuid.UUID] = set()
+    if rows:
+        submitted_rows = (await db.execute(
+            select(Submission.assignment_id).where(
+                Submission.student_id == user.id,
+                Submission.assignment_id.in_([a.id for a in rows]),
+            )
+        )).scalars().all()
+        submitted_ids = set(submitted_rows)
+
     return [
         StudentHomeworkSummary(
             assignment_id=str(a.id),
@@ -262,6 +305,7 @@ async def list_homework(
             type=a.type,
             due_at=a.due_at,
             problem_count=len(problem_ids_in_content(a.content)),
+            status="submitted" if a.id in submitted_ids else "not_started",
         )
         for a in rows
     ]
@@ -320,6 +364,16 @@ async def homework_detail(
             approved_variation_count=counts.get(str(pid), 0),
         ))
 
+    # Existing submission for this student? Drives the HW page's
+    # render branch (submit form vs submitted read-only view).
+    sub = (await db.execute(
+        select(Submission.id).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == user.id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+
     return StudentHomeworkDetail(
         assignment_id=str(assignment.id),
         title=assignment.title,
@@ -328,6 +382,136 @@ async def homework_detail(
         course_id=str(course.id),
         course_name=course.name,
         problems=problems,
+        submitted=sub is not None,
+        submission_id=str(sub) if sub is not None else None,
+    )
+
+
+@router.post("/homework/{assignment_id}/submit")
+async def submit_homework(
+    assignment_id: uuid.UUID,
+    body: SubmitHomeworkRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> SubmitHomeworkResponse:
+    """Insert a submission for this student/HW. One-shot — resubmission
+    is not allowed in v1; a second call returns 409. Soft-locks late
+    submissions (sets is_late=true, doesn't reject).
+    """
+    assignment = await _load_assignment_for_student(db, assignment_id, user.id)
+
+    # Already submitted? One-shot enforcement.
+    existing = (await db.execute(
+        select(Submission.id).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == user.id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Already submitted")
+
+    # The image is required and is the source of truth — the work is
+    # what the teacher reviews and what the integrity checker will
+    # eventually read for per-problem answer extraction.
+    if not body.image_base64:
+        raise HTTPException(status_code=400, detail="An image of your work is required")
+    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
+        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
+    # Accept PNG or JPEG only — both as raw base64 magic bytes or as
+    # an explicit data URL. Tighter than `data:image/*` to keep SVG
+    # (and any other image type that might land later) out of the
+    # storage path. The frontend file picker filters to these two
+    # types but a tampered client could bypass that.
+    head = body.image_base64[:32]
+    if not (
+        head.startswith("data:image/png;base64,")
+        or head.startswith("data:image/jpeg;base64,")
+        or head.startswith("data:image/jpg;base64,")
+        or head.startswith("iVBOR")  # PNG raw
+        or head.startswith("/9j/")    # JPEG raw
+    ):
+        raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
+
+    # Find which section this student is enrolled in for this assignment.
+    # We need a section_id on the row; the existing schema requires it.
+    section_id = (await db.execute(
+        select(SectionEnrollment.section_id)
+        .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
+        .where(
+            AssignmentSection.assignment_id == assignment_id,
+            SectionEnrollment.student_id == user.id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if section_id is None:
+        # Should be impossible since _load_assignment_for_student already
+        # validated enrollment, but defensive.
+        raise HTTPException(status_code=403, detail="Not enrolled in this assignment")
+
+    is_late = bool(assignment.due_at and datetime.now(UTC) > assignment.due_at)
+    submission = Submission(
+        assignment_id=assignment_id,
+        student_id=user.id,
+        section_id=section_id,
+        status="submitted",
+        image_data=body.image_base64,
+        # final_answers is left null on new submissions; the next PR
+        # (integrity checker) populates it from a Vision-extracted
+        # confirm-and-edit step. The column is preserved so legacy
+        # submissions render correctly on the read side.
+        final_answers=None,
+        is_late=is_late,
+    )
+    db.add(submission)
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Two parallel submits both passed the SELECT-existing check
+        # but only one INSERT can satisfy the unique constraint on
+        # (assignment_id, student_id). Convert the raw 500 into the
+        # same 409 the application-layer check returns.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Already submitted") from None
+    await db.refresh(submission)
+
+    return SubmitHomeworkResponse(
+        submission_id=str(submission.id),
+        submitted_at=submission.submitted_at,
+        is_late=submission.is_late,
+    )
+
+
+@router.get("/homework/{assignment_id}/submission")
+async def get_my_submission(
+    assignment_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentSubmissionDetail:
+    """Return this student's own submission for an HW. 404 if not yet
+    submitted. Used by the HW page to render the submitted read-only
+    view (image + typed answers).
+
+    Deliberately does NOT call _load_assignment_for_student: a student
+    must be able to see their own submission even if the teacher
+    unpublishes the homework after they turned it in. Ownership is
+    enforced by the (student_id == user.id) WHERE clause.
+    """
+    sub = (await db.execute(
+        select(Submission).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="No submission yet")
+
+    return StudentSubmissionDetail(
+        submission_id=str(sub.id),
+        submitted_at=sub.submitted_at,
+        is_late=sub.is_late,
+        image_data=sub.image_data,
+        final_answers=dict(sub.final_answers or {}),
     )
 
 

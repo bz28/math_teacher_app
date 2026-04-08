@@ -757,3 +757,94 @@ async def generate_assignment_solutions(
     return {"solutions": solutions}
 
 
+# ── Submission detail viewing (list endpoint already exists above as
+# `list_submissions`; the per-submission detail endpoint below is new
+# and powers the teacher's per-submission panel with the student's
+# image + per-problem typed answers + answer key side-by-side). ──
+
+class TeacherSubmissionDetailProblem(BaseModel):
+    bank_item_id: str
+    position: int
+    question: str
+    final_answer: str | None  # the teacher-side answer key (correct answer)
+    student_answer: str | None  # what the student typed for this problem
+
+
+class TeacherSubmissionDetail(BaseModel):
+    submission_id: str
+    assignment_id: str
+    assignment_title: str
+    student_id: str
+    student_name: str
+    student_email: str
+    submitted_at: datetime
+    is_late: bool
+    image_data: str | None
+    problems: list[TeacherSubmissionDetailProblem]
+
+
+@router.get("/submissions/{submission_id}")
+async def get_submission_detail(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> TeacherSubmissionDetail:
+    """Full per-submission detail for the teacher view: image + per-
+    problem typed answers shown alongside the original problem text
+    and the answer key. No grading or annotations in this PR."""
+    from api.models.question_bank import QuestionBankItem
+    from api.models.user import User as UserModel
+
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    # Ownership check via the assignment
+    assignment = await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+
+    student = (await db.execute(
+        select(UserModel).where(UserModel.id == sub.student_id)
+    )).scalar_one_or_none()
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    # Reuse the same hydration approach as the student-side detail
+    primary_ids = problem_ids_in_content(assignment.content)
+    items_by_id: dict[str, QuestionBankItem] = {}
+    if primary_ids:
+        primary_uuids = [uuid.UUID(p) for p in primary_ids]
+        items = (await db.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id.in_(primary_uuids))
+        )).scalars().all()
+        items_by_id = {str(it.id): it for it in items}
+
+    answers_map = sub.final_answers or {}
+    problems: list[TeacherSubmissionDetailProblem] = []
+    for pos, pid in enumerate(primary_ids, start=1):
+        item = items_by_id.get(str(pid))
+        if not item:
+            continue
+        problems.append(TeacherSubmissionDetailProblem(
+            bank_item_id=str(item.id),
+            position=pos,
+            question=item.question,
+            final_answer=item.final_answer,
+            student_answer=answers_map.get(str(pid)),
+        ))
+
+    return TeacherSubmissionDetail(
+        submission_id=str(sub.id),
+        assignment_id=str(assignment.id),
+        assignment_title=assignment.title,
+        student_id=str(student.id),
+        student_name=student.name or student.email,
+        student_email=student.email,
+        submitted_at=sub.submitted_at,
+        is_late=sub.is_late,
+        image_data=sub.image_data,
+        problems=problems,
+    )
+
+

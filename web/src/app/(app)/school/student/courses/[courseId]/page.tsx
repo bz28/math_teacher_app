@@ -58,9 +58,15 @@ export default function ClassDetail() {
                     {hw.due_at ? ` · Due ${new Date(hw.due_at).toLocaleDateString()}` : ""}
                   </div>
                 </div>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-500/10">
-                  Not started
-                </span>
+                {hw.status === "submitted" ? (
+                  <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-600 dark:bg-green-500/10">
+                    Submitted ✓
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-500/10">
+                    Not started
+                  </span>
+                )}
               </div>
             </Link>
           ))}

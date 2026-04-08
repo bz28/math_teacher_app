@@ -160,12 +160,14 @@ async def world() -> dict[str, Any]:
         return {
             "student_id": student.id,
             "outsider_id": outsider.id,
+            "teacher_id": teacher.id,
             "assignment_id": assignment.id,
             "primary_id": primary.id,
             "approved_sibling_ids": [s.id for s in siblings_approved],
             "pending_sibling_id": pending_sib.id,
             "student_token": create_access_token(str(student.id), "student"),
             "outsider_token": create_access_token(str(outsider.id), "student"),
+            "teacher_token": create_access_token(str(teacher.id), "teacher"),
         }
 
 
@@ -371,6 +373,196 @@ async def test_homework_detail_403_for_outsider(client: AsyncClient, world: dict
     assert r.status_code == 403
 
 
+TINY_PNG = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4"
+    "2mP8/x8AAusB9YpO3vQAAAAASUVORK5CYII="
+)
+
+
+async def test_submit_homework_happy_path(client: AsyncClient, world: dict[str, Any]) -> None:
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "submission_id" in body
+    assert body["is_late"] is False
+
+    # Detail endpoint reflects submitted state
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["submitted"] is True
+    assert r.json()["submission_id"] == body["submission_id"]
+
+    # Get-my-submission returns the data — final_answers is null on
+    # new submissions (will be populated by the integrity-checker PR
+    # from a Vision-extracted confirm step).
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}/submission",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["final_answers"] == {}
+    assert out["image_data"]
+    assert out["is_late"] is False
+
+
+async def test_submit_homework_409_on_resubmit(client: AsyncClient, world: dict[str, Any]) -> None:
+    body = {"image_base64": TINY_PNG}
+    r1 = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json=body,
+    )
+    assert r1.status_code == 200
+    r2 = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json=body,
+    )
+    assert r2.status_code == 409
+
+
+async def test_submit_homework_400_missing_image(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # No image at all → 422 from pydantic (image_base64 is required)
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={},
+    )
+    assert r.status_code == 422
+
+    # Empty string → 400 from our explicit check
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": ""},
+    )
+    assert r.status_code == 400
+
+
+async def test_submit_homework_413_oversized_image(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    huge = "iVBOR" + ("A" * 8_000_000)
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": huge},
+    )
+    assert r.status_code == 413
+
+
+async def test_submit_homework_400_bad_image_format(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": "ZmFrZWltYWdl"},
+    )
+    assert r.status_code == 400
+
+
+async def test_submit_homework_400_rejects_svg(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # Even though browsers don't execute scripts in SVGs loaded via
+    # <img src=...>, we tighten the magic check to PNG/JPEG only so
+    # nothing exotic ends up in the storage path.
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="},
+    )
+    assert r.status_code == 400
+
+
+async def test_submit_homework_accepts_data_url_png(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # Confirm the data URL form (what the frontend now sends after the
+    # MIME-preservation fix) is accepted alongside raw base64.
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": f"data:image/png;base64,{TINY_PNG}"},
+    )
+    assert r.status_code == 200
+
+
+async def test_submit_homework_403_for_outsider(client: AsyncClient, world: dict[str, Any]) -> None:
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["outsider_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    assert r.status_code == 403
+
+
+async def test_get_my_submission_404_when_not_submitted(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}/submission",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 404
+
+
+async def test_homework_list_status_reflects_submission(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    classes = (await client.get(
+        "/v1/school/student/classes", headers=_auth(world["student_token"])
+    )).json()
+    course_id = classes[0]["course_id"]
+
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/homework",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()[0]["status"] == "not_started"
+
+    await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/homework",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()[0]["status"] == "submitted"
+
+
+async def test_submit_homework_late_marks_is_late(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # Set due_at to yesterday
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE assignments SET due_at = now() - interval '1 day' WHERE id=:id"),
+            {"id": world["assignment_id"]},
+        )
+        await s.commit()
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_late"] is True
+
+
 async def test_quizzes_excluded_from_homework_list(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
@@ -444,3 +636,102 @@ async def test_flag_and_list_flagged(client: AsyncClient, world: dict[str, Any])
         headers=_auth(world["student_token"]),
     )
     assert len(r.json()) == 1
+
+
+# ── Teacher submission viewing ──
+
+async def test_teacher_list_submissions_uses_existing_endpoint(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # The existing /v1/teacher/assignments/{id}/submissions endpoint
+    # was built for the old grading flow but already returns the
+    # fields the new submission UI needs (id, student_name, is_late,
+    # submitted_at). We don't add a duplicate — just confirm it works
+    # against rows our new submit endpoint creates.
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["submissions"] == []
+
+    await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
+        headers=_auth(world["teacher_token"]),
+    )
+    rows = r.json()["submissions"]
+    assert len(rows) == 1
+    assert rows[0]["is_late"] is False
+    assert rows[0]["student_email"]
+
+
+async def test_teacher_submission_detail(client: AsyncClient, world: dict[str, Any]) -> None:
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["submission_id"] == submission_id
+    assert out["student_id"] == str(world["student_id"])
+    assert len(out["problems"]) == 1
+    p = out["problems"][0]
+    assert p["bank_item_id"] == str(world["primary_id"])
+    # New submissions have null student_answer (the integrity-checker
+    # PR will populate it from a Vision-extracted confirm step).
+    assert p["student_answer"] is None
+    # Teacher view DOES include the answer key (the teacher needs it)
+    assert p["final_answer"] == "x = 2 or x = 3"
+    assert out["image_data"]
+
+
+async def test_teacher_submission_detail_403_for_other_teacher(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # First, the real teacher submits something
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        other = User(
+            email=f"other2_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=12,
+            role="teacher",
+            name="OT2",
+        )
+        s.add(other)
+        await s.commit()
+        other_token = create_access_token(str(other.id), "teacher")
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(other_token),
+    )
+    assert r.status_code == 403
+
+
+async def test_teacher_submission_detail_404_for_missing(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    r = await client.get(
+        f"/v1/teacher/submissions/{uuid.uuid4()}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 404

@@ -901,7 +901,53 @@ export const teacher = {
   clearBankChat(itemId: string) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/clear`, { method: "POST" });
   },
+  // ── Submissions ──
+  listAssignmentSubmissions(assignmentId: string) {
+    return apiFetch<{ submissions: TeacherSubmissionRow[] }>(
+      `/teacher/assignments/${assignmentId}/submissions`,
+    );
+  },
+  submissionDetail(submissionId: string) {
+    return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
+  },
 };
+
+export interface TeacherSubmissionRow {
+  id: string;
+  student_name: string;
+  student_email: string;
+  status: string;
+  submitted_at: string | null;
+  is_late: boolean;
+  // Grading fields included by the existing endpoint; unused in this PR.
+  ai_score: number | null;
+  ai_breakdown: unknown;
+  teacher_score: number | null;
+  teacher_notes: string | null;
+  final_score: number | null;
+  reviewed_at: string | null;
+}
+
+export interface TeacherSubmissionDetailProblem {
+  bank_item_id: string;
+  position: number;
+  question: string;
+  final_answer: string | null;
+  student_answer: string | null;
+}
+
+export interface TeacherSubmissionDetail {
+  submission_id: string;
+  assignment_id: string;
+  assignment_title: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  submitted_at: string;
+  is_late: boolean;
+  image_data: string | null;
+  problems: TeacherSubmissionDetailProblem[];
+}
 
 export interface BankChatProposal {
   question: string | null;
@@ -993,6 +1039,8 @@ export interface StudentHomeworkSummary {
   type: string;
   due_at: string | null;
   problem_count: number;
+  /** "not_started" | "submitted". Drives the badge on the HW list. */
+  status: string;
 }
 
 export interface StudentHomeworkProblem {
@@ -1013,6 +1061,22 @@ export interface StudentHomeworkDetail {
   course_id: string;
   course_name: string;
   problems: StudentHomeworkProblem[];
+  submitted: boolean;
+  submission_id: string | null;
+}
+
+export interface StudentSubmission {
+  submission_id: string;
+  submitted_at: string;
+  is_late: boolean;
+  image_data: string | null;
+  final_answers: Record<string, string>;
+}
+
+export interface SubmitHomeworkResponse {
+  submission_id: string;
+  submitted_at: string;
+  is_late: boolean;
 }
 
 export interface VariationPayload {
@@ -1066,6 +1130,18 @@ export const schoolStudent = {
     return apiFetch<FlaggedConsumption[]>(
       `/school/student/homework/${assignmentId}/problems/${bankItemId}/flagged`,
     );
+  },
+  submitHomework(
+    assignmentId: string,
+    body: { image_base64: string },
+  ) {
+    return apiFetch<SubmitHomeworkResponse>(`/school/student/homework/${assignmentId}/submit`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  getMySubmission(assignmentId: string) {
+    return apiFetch<StudentSubmission>(`/school/student/homework/${assignmentId}/submission`);
   },
 };
 
