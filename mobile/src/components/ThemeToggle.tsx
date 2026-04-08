@@ -1,16 +1,12 @@
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemePref } from "../stores/themePref";
-import { colors, radii } from "../theme";
+import { colors, radii, spacing, typography } from "../theme";
 
 /**
- * Mobile equivalent of web/src/components/ui/theme-toggle.tsx —
- * a single icon button that cycles system → light → dark → system.
- *
- * Icon represents current state:
- * - system  → monitor (auto)
- * - light   → moon (resolved currently light)
- * - dark    → sun (resolved currently dark)
+ * Single button that cycles system → light → dark → system.
+ * Shows both an icon (current state) and the text label so the user
+ * can see clearly that the click registered.
  */
 export function ThemeToggle() {
   const { pref, resolved, toggle } = useThemePref();
@@ -18,34 +14,39 @@ export function ThemeToggle() {
   const iconName: keyof typeof Ionicons.glyphMap =
     pref === "system" ? "phone-portrait-outline" : resolved === "dark" ? "sunny-outline" : "moon-outline";
 
-  const label =
-    pref === "system"
-      ? "Using system theme"
-      : pref === "dark"
-        ? "Switch to system theme"
-        : "Switch to dark mode";
+  const label = pref === "system" ? "System" : pref === "dark" ? "Dark" : "Light";
 
   return (
     <TouchableOpacity
-      onPress={() => { toggle(); }}
+      onPress={() => {
+        toggle();
+      }}
       style={styles.button}
       accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityLabel={`Theme: ${label}. Tap to change.`}
+      activeOpacity={0.6}
     >
-      <View>
-        <Ionicons name={iconName} size={18} color={colors.textMuted} />
-      </View>
+      <Ionicons name={iconName} size={18} color={colors.primary} />
+      <Text style={styles.label}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.sm,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryBg,
+    minWidth: 100,
+    justifyContent: "center",
+  },
+  label: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 13,
   },
 });

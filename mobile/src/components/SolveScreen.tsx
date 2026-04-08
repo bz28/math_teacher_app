@@ -27,7 +27,6 @@ import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
-import { MathText } from "./MathText";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
@@ -506,11 +505,12 @@ export function SolveScreen({
                       accessibilityLabel={`Edit problem ${i + 1}`}
                       style={styles.queueChipTextWrap}
                     >
-                      <MathText
-                        text={p}
-                        style={{ ...typography.label, color: theme.primary, fontSize: 13 }}
+                      <Text
                         numberOfLines={1}
-                      />
+                        style={{ ...typography.label, color: theme.primary, fontSize: 13 }}
+                      >
+                        {p}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleRemoveFromQueue(i)}
