@@ -160,12 +160,14 @@ async def world() -> dict[str, Any]:
         return {
             "student_id": student.id,
             "outsider_id": outsider.id,
+            "teacher_id": teacher.id,
             "assignment_id": assignment.id,
             "primary_id": primary.id,
             "approved_sibling_ids": [s.id for s in siblings_approved],
             "pending_sibling_id": pending_sib.id,
             "student_token": create_access_token(str(student.id), "student"),
             "outsider_token": create_access_token(str(outsider.id), "student"),
+            "teacher_token": create_access_token(str(teacher.id), "teacher"),
         }
 
 
@@ -610,3 +612,102 @@ async def test_flag_and_list_flagged(client: AsyncClient, world: dict[str, Any])
         headers=_auth(world["student_token"]),
     )
     assert len(r.json()) == 1
+
+
+# ── Teacher submission viewing ──
+
+async def test_teacher_list_submissions_uses_existing_endpoint(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # The existing /v1/teacher/assignments/{id}/submissions endpoint
+    # was built for the old grading flow but already returns the
+    # fields the new submission UI needs (id, student_name, is_late,
+    # submitted_at). We don't add a duplicate — just confirm it works
+    # against rows our new submit endpoint creates.
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["submissions"] == []
+
+    await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"final_answers": {str(world["primary_id"]): "ans"}, "image_base64": None},
+    )
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
+        headers=_auth(world["teacher_token"]),
+    )
+    rows = r.json()["submissions"]
+    assert len(rows) == 1
+    assert rows[0]["is_late"] is False
+    assert rows[0]["student_email"]
+
+
+async def test_teacher_submission_detail(client: AsyncClient, world: dict[str, Any]) -> None:
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={
+            "final_answers": {str(world["primary_id"]): "x = 2 or x = 3"},
+            "image_base64": None,
+        },
+    )
+    submission_id = submit_resp.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["submission_id"] == submission_id
+    assert out["student_id"] == str(world["student_id"])
+    assert len(out["problems"]) == 1
+    p = out["problems"][0]
+    assert p["bank_item_id"] == str(world["primary_id"])
+    assert p["student_answer"] == "x = 2 or x = 3"
+    # Teacher view DOES include the answer key (the teacher needs it)
+    assert p["final_answer"] == "x = 2 or x = 3"
+
+
+async def test_teacher_submission_detail_403_for_other_teacher(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # First, the real teacher submits something
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"final_answers": {str(world["primary_id"]): "x"}, "image_base64": None},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        other = User(
+            email=f"other2_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=12,
+            role="teacher",
+            name="OT2",
+        )
+        s.add(other)
+        await s.commit()
+        other_token = create_access_token(str(other.id), "teacher")
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(other_token),
+    )
+    assert r.status_code == 403
+
+
+async def test_teacher_submission_detail_404_for_missing(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    r = await client.get(
+        f"/v1/teacher/submissions/{uuid.uuid4()}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 404
