@@ -253,3 +253,9 @@ html {
 .materials-bulk-bar-enter {
   animation: materials-bulk-bar-in 200ms ease-out;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .materials-bulk-bar-enter {
+    animation: none;
+  }
+}

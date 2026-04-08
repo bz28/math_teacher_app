@@ -53,6 +53,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   const [sort, setSort] = useState<SortMode>("name");
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [liveMessage, setLiveMessage] = useState("");
   const [pendingCollisions, setPendingCollisions] = useState<{
     collisions: Collision[];
     resolve: (choices: Map<string, ResolutionChoice> | null) => void;
@@ -86,10 +87,15 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     reload({ showSkeleton: true });
   }, [reload]);
 
-  // Clear multi-selection on Escape.
+  // Clear multi-selection on Escape — but only when no modal is open,
+  // so pressing Escape to close a dialog doesn't also wipe the selection
+  // in the background.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && selectedDocIds.size > 0) setSelectedDocIds(new Set());
+      if (e.key !== "Escape") return;
+      if (e.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (selectedDocIds.size > 0) setSelectedDocIds(new Set());
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -253,20 +259,26 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
       if (await reload()) onChanged();
 
-      // Summary toast
+      // Summary toast + screen-reader announcement
+      let summary = "";
       if (okFiles > 0 || okUnits > 0) {
         const parts: string[] = [];
         if (okUnits > 0) parts.push(`${okUnits} unit${okUnits === 1 ? "" : "s"}`);
         if (okFiles > 0) parts.push(`${okFiles} file${okFiles === 1 ? "" : "s"}`);
         const action = okUnits > 0 ? "Imported" : "Uploaded";
         const skipSuffix = tree.skipped > 0 ? ` · ${tree.skipped} skipped` : "";
-        toast.success(`${action} ${parts.join(" · ")}${skipSuffix}`);
+        summary = `${action} ${parts.join(" · ")}${skipSuffix}`;
+        toast.success(summary);
       } else if (tree.skipped > 0 && failedFiles === 0) {
-        toast.error(`Skipped ${tree.skipped} unsupported file${tree.skipped === 1 ? "" : "s"}`);
+        summary = `Skipped ${tree.skipped} unsupported file${tree.skipped === 1 ? "" : "s"}`;
+        toast.error(summary);
       }
       if (failedFiles > 0) {
-        toast.error(`Failed to upload ${failedFiles} file${failedFiles === 1 ? "" : "s"}`);
+        const fail = `Failed to upload ${failedFiles} file${failedFiles === 1 ? "" : "s"}`;
+        summary = summary ? `${summary}. ${fail}` : fail;
+        toast.error(fail);
       }
+      setLiveMessage(summary);
     });
 
   // Loose-file shim for the existing <input type="file"> click-picker
@@ -311,7 +323,11 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       setBulkMoveOpen(false);
       setSelectedDocIds(new Set());
       if (await reload()) onChanged();
-      if (ok > 0) toast.success(`Moved ${ok} file${ok === 1 ? "" : "s"}`);
+      if (ok > 0) {
+        const msg = `Moved ${ok} file${ok === 1 ? "" : "s"}`;
+        toast.success(msg);
+        setLiveMessage(msg);
+      }
       if (failed > 0) toast.error(`Failed to move ${failed} file(s)`);
     });
 
@@ -324,7 +340,11 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       const failed = results.length - ok;
       setSelectedDocIds(new Set());
       if (await reload()) onChanged();
-      if (ok > 0) toast.success(`Deleted ${ok} file${ok === 1 ? "" : "s"}`);
+      if (ok > 0) {
+        const msg = `Deleted ${ok} file${ok === 1 ? "" : "s"}`;
+        toast.success(msg);
+        setLiveMessage(msg);
+      }
       if (failed > 0) toast.error(`Failed to delete ${failed} file(s)`);
     });
 
@@ -383,7 +403,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           type="button"
           onClick={() => setShowNewUnit({ parentId: null })}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-sm font-semibold text-text-secondary shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-strong hover:bg-bg-subtle hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-2 text-sm font-semibold text-text-secondary shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-strong hover:bg-bg-subtle hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
         >
           <PlusIcon className="h-4 w-4" />
           New Unit
@@ -398,7 +418,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
       <div aria-busy={busy || loading} aria-live="polite" className="sr-only">
-        {busy ? "Working…" : ""}
+        {busy ? "Working…" : liveMessage}
       </div>
 
       {loading ? (
@@ -469,7 +489,8 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
                 </div>
               )}
 
-              <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-text-muted">
+              {/* Hide the drag-drop tip on touch-only devices where it would lie. */}
+              <p className="mt-4 hidden items-center justify-center gap-1.5 text-[11px] text-text-muted [@media(hover:hover)]:flex">
                 <UploadIcon className="h-3 w-3" />
                 Tip: drag files or folders here. Drop multiple folders to create
                 several units at once.
@@ -562,11 +583,22 @@ function FirstTimeDropzone({
           </span>
           <div className="max-w-md">
             <h3 className="text-xl font-bold tracking-tight text-text-primary">
-              Drop files or a folder to get started
+              <span className="[@media(hover:none)]:hidden">
+                Drop files or a folder to get started
+              </span>
+              <span className="hidden [@media(hover:none)]:inline">
+                Upload files to get started
+              </span>
             </h3>
             <p className="mt-2 text-sm text-text-muted">
-              Drag a whole folder from Finder to create a unit with all of its
-              contents in one go — or drop individual PDFs and images.
+              <span className="[@media(hover:none)]:hidden">
+                Drag a whole folder from Finder to create a unit with all of
+                its contents in one go — or drop individual PDFs and images.
+              </span>
+              <span className="hidden [@media(hover:none)]:inline">
+                Tap Upload to add PDFs or images, or create a unit with the
+                New Unit button.
+              </span>
             </p>
           </div>
           <p className="text-[11px] font-medium text-text-muted">
@@ -631,7 +663,7 @@ function SplitUploadButton({
   return (
     <div ref={containerRef} className="relative inline-flex">
       <label
-        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-l-[--radius-md] bg-primary pl-3.5 pr-3 py-1.5 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${
+        className={`inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-l-[--radius-md] bg-primary pl-4 pr-3 py-2 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${
           busy ? "pointer-events-none opacity-60" : ""
         }`}
       >
@@ -658,7 +690,7 @@ function SplitUploadButton({
         aria-expanded={menuOpen}
         disabled={busy}
         onClick={() => setMenuOpen((v) => !v)}
-        className="inline-flex items-center rounded-r-[--radius-md] border-l border-primary-dark/30 bg-primary px-2 py-1.5 text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60"
+        className="inline-flex min-h-[44px] min-w-[36px] items-center justify-center rounded-r-[--radius-md] border-l border-primary-dark/30 bg-primary px-2 py-2 text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60"
       >
         <ChevronDownIcon className="h-4 w-4" strokeWidth={2.5} />
       </button>
@@ -800,7 +832,8 @@ function BulkActionBar({
     <div
       role="region"
       aria-label="Bulk file actions"
-      className="fixed inset-x-0 bottom-6 z-30 mx-auto flex w-fit items-center gap-2 rounded-full border border-border-light bg-surface/90 px-3 py-2 shadow-lg backdrop-blur-md materials-bulk-bar-enter"
+      className="fixed inset-x-0 z-30 mx-auto flex w-fit items-center gap-2 rounded-full border border-border-light bg-surface/90 px-3 py-2 shadow-lg backdrop-blur-md materials-bulk-bar-enter"
+      style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
     >
       <span className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-primary-bg px-3 py-1 text-xs font-bold text-primary">
         <span className="tabular-nums">{count}</span>
@@ -811,7 +844,7 @@ function BulkActionBar({
         type="button"
         onClick={onMove}
         disabled={busy}
-        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-text-secondary transition-colors duration-150 ease-out hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold text-text-secondary transition-colors duration-150 ease-out hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
       >
         <FolderOpenIcon className="h-4 w-4" /> Move
       </button>
@@ -819,7 +852,7 @@ function BulkActionBar({
         type="button"
         onClick={onDelete}
         disabled={busy}
-        className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-red-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-2 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-red-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
       >
         <XIcon className="h-3.5 w-3.5" /> Delete
       </button>
