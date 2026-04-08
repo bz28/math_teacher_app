@@ -55,8 +55,8 @@ export function BankRow({
 
   return (
     <div
-      className={`flex items-start gap-3 px-3 transition-colors hover:bg-bg-subtle ${
-        variation ? "py-1.5 text-xs" : "py-2 text-sm"
+      className={`flex items-start gap-3 px-3 transition-all hover:-translate-y-px hover:bg-bg-subtle hover:shadow-sm ${
+        variation ? "py-1.5 text-xs" : "py-3 text-sm"
       } ${item.status === "rejected" ? "opacity-60" : ""}`}
     >
       <span

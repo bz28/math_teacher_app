@@ -29,16 +29,16 @@ export interface UseBankDataResult {
  * of the QuestionBankTab god-component so render code can stay focused
  * on layout + interaction.
  *
- * Behavior intentionally identical to the previous inline reload:
+ * Behavior:
  * - statusFilter is forwarded to the backend list endpoint
- * - unitFilter "uncategorized" is filtered client-side because the
- *   backend doesn't have an uncategorized parameter
- * - re-runs whenever courseId / statusFilter / unitFilter change
+ * - all items for that status are fetched in one shot; unit-level
+ *   filtering happens client-side in the rail/shell so per-unit counts
+ *   are accurate and switching units doesn't trigger a refetch
+ * - re-runs whenever courseId / statusFilter change
  */
 export function useBankData(
   courseId: string,
   statusFilter: "pending" | "approved" | "rejected",
-  unitFilter: string,
 ): UseBankDataResult {
   const [items, setItems] = useState<BankItem[]>([]);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
@@ -55,19 +55,11 @@ export function useBankData(
     setLoading(true);
     setError(null);
     try {
-      const filters: { status?: string; unit_id?: string } = { status: statusFilter };
-      // Backend doesn't support uncategorized filter — handled client-side below.
-      if (unitFilter !== "all" && unitFilter !== "uncategorized") {
-        filters.unit_id = unitFilter;
-      }
       const [bankRes, unitsRes] = await Promise.all([
-        teacher.bank(courseId, filters),
+        teacher.bank(courseId, { status: statusFilter }),
         teacher.units(courseId),
       ]);
-      const filtered = unitFilter === "uncategorized"
-        ? bankRes.items.filter((i) => i.unit_id === null)
-        : bankRes.items;
-      setItems(filtered);
+      setItems(bankRes.items);
       setUnits(unitsRes.units);
       setCounts(bankRes.counts);
     } catch (e) {
@@ -75,7 +67,7 @@ export function useBankData(
     } finally {
       setLoading(false);
     }
-  }, [courseId, statusFilter, unitFilter]);
+  }, [courseId, statusFilter]);
 
   useEffect(() => {
     reload();

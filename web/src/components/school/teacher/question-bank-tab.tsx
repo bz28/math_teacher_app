@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { teacher, type BankItem, type BankJob } from "@/lib/api";
 import { useBankData } from "./_hooks/use-bank-data";
 import { EmptyState } from "@/components/school/shared/empty-state";
@@ -11,7 +11,7 @@ import { STATUS_FILTERS } from "./question-bank/constants";
 import { buildUnitGroups } from "./question-bank/tree";
 import { ApprovedUnitGroup, SimpleUnitList } from "./question-bank/unit-groups";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
-import { subfoldersOf, topUnits } from "@/lib/units";
+import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
 
 export function QuestionBankTab({
   courseId,
@@ -36,14 +36,26 @@ export function QuestionBankTab({
   // Pending → fetch counts → flip to Approved). Now we just stay on
   // Pending and show an empty state if there's nothing to review.
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
-  // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
-  // status filter so the teacher can narrow on both axes.
-  const [unitFilter, setUnitFilter] = useState<string>("all");
+  // Unit selection — "all" | "uncategorized" | unit id. Drives the
+  // rail's active state and the client-side filter for the content
+  // area. Decoupled from status filter so the teacher can narrow on
+  // both axes.
+  const [unitSelection, setUnitSelection] = useState<UnitSelection>("all");
   // Data fetching extracted to a custom hook — items/units/counts/
-  // loading/error/reload all live there.
+  // loading/error/reload all live there. The hook now fetches all
+  // items for the current status; unit filtering is client-side so
+  // the rail can show accurate per-unit counts.
   const { items, units, counts, loading, error, reload, setError } = useBankData(
-    courseId, statusFilter, unitFilter,
+    courseId, statusFilter,
   );
+
+  // Client-side unit filter applied to the loaded items.
+  const filteredItems = useMemo(() => {
+    if (unitSelection === "all") return items;
+    if (unitSelection === "uncategorized")
+      return items.filter((i) => i.unit_id === null);
+    return items.filter((i) => i.unit_id === unitSelection);
+  }, [items, unitSelection]);
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
@@ -165,98 +177,84 @@ export function QuestionBankTab({
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
-      {/* Filter row: status chips + unit dropdown */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="flex gap-2">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => {
-                setStatusFilter(f.key);
-                // Dismiss any open workshop modal so switching tabs
-                // feels like a navigation, not a sticky overlay.
-                setOpenItem(null);
-              }}
-              className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
-                statusFilter === f.key
-                  ? "bg-primary text-white"
-                  : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-              }`}
-            >
-              {f.label}
-              <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Unit
-          </label>
-          <select
-            value={unitFilter}
-            onChange={(e) => setUnitFilter(e.target.value)}
-            className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
-          >
-            <option value="all">All units</option>
-            <option value="uncategorized">Uncategorized</option>
-            {units
-              .filter((u) => u.parent_id === null)
-              .flatMap((top) => [
-                <option key={top.id} value={top.id}>
-                  {top.name}
-                </option>,
-                ...units
-                  .filter((sub) => sub.parent_id === top.id)
-                  .map((sub) => (
-                    <option key={sub.id} value={sub.id}>
-                      &nbsp;&nbsp;{top.name} / {sub.name}
-                    </option>
-                  )),
-              ])}
-          </select>
-        </div>
-      </div>
-
-      {/* List — Approved gets unit grouping + per-unit tabs.
-          Pending and Rejected get a flat dense list. All shows the
-          same grouping as Approved for consistency. */}
-      <div className="mt-4 space-y-5">
-        {loading ? (
-          <p className="text-sm text-text-muted">Loading…</p>
-        ) : items.length === 0 ? (
-          <EmptyState
-            text={
-              counts.pending + counts.approved + counts.rejected === 0
-                ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
-                : statusFilter === "pending"
-                  ? "No pending review. New generations land here."
-                  : statusFilter === "rejected"
-                    ? "No rejected questions."
-                    : "No questions match this filter."
-            }
-          />
-        ) : statusFilter === "pending" || statusFilter === "rejected" ? (
-          <SimpleUnitList
-            items={items}
+      {/* Two-pane: unit rail on the left, content on the right. */}
+      <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start">
+        <aside className="md:w-60 md:shrink-0">
+          <UnitRail
             units={units}
-            onOpenItem={setOpenItem}
-            onOpenHomework={setOpenHomeworkId}
-            onChanged={reload}
+            items={items}
+            selected={unitSelection}
+            onSelect={(s) => {
+              setUnitSelection(s);
+              // Dismiss any open workshop modal so switching units
+              // feels like a navigation, not a sticky overlay.
+              setOpenItem(null);
+            }}
           />
-        ) : (
-          buildUnitGroups(items, units).map((group) => (
-            <ApprovedUnitGroup
-              key={group.id}
-              label={group.label}
-              items={group.items}
-              units={units}
-              onOpenItem={setOpenItem}
-              onOpenHomework={setOpenHomeworkId}
-              onChanged={reload}
-            />
-          ))
-        )}
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          {/* Status chips */}
+          <div className="flex gap-2">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => {
+                  setStatusFilter(f.key);
+                  setOpenItem(null);
+                }}
+                className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
+                  statusFilter === f.key
+                    ? "bg-primary text-white"
+                    : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
+              </button>
+            ))}
+          </div>
+
+          {/* List — Approved gets unit grouping + per-unit tabs.
+              Pending and Rejected get a flat dense list. */}
+          <div className="mt-4 space-y-5">
+            {loading ? (
+              <p className="text-sm text-text-muted">Loading…</p>
+            ) : filteredItems.length === 0 ? (
+              <EmptyState
+                text={
+                  counts.pending + counts.approved + counts.rejected === 0
+                    ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
+                    : statusFilter === "pending"
+                      ? "No pending review. New generations land here."
+                      : statusFilter === "rejected"
+                        ? "No rejected questions."
+                        : "No questions match this filter."
+                }
+              />
+            ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+              <SimpleUnitList
+                items={filteredItems}
+                units={units}
+                onOpenItem={setOpenItem}
+                onOpenHomework={setOpenHomeworkId}
+                onChanged={reload}
+              />
+            ) : (
+              buildUnitGroups(filteredItems, units).map((group) => (
+                <ApprovedUnitGroup
+                  key={group.id}
+                  label={group.label}
+                  items={group.items}
+                  units={units}
+                  onOpenItem={setOpenItem}
+                  onOpenHomework={setOpenHomeworkId}
+                  onChanged={reload}
+                />
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {showGenerate && (
