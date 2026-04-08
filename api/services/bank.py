@@ -130,22 +130,29 @@ def problem_ids_in_content(content: Any) -> list[str]:
 
 async def used_in_assignments_map(
     db: AsyncSession, course_id: uuid.UUID,
-) -> dict[str, list[dict[str, str]]]:
+) -> dict[str, list[dict[str, Any]]]:
     """For every assignment in the course (draft + published), return a
-    map of bank_item_id → list of {id, title, type, status} entries.
-    Used to render the "Used in" pills + power the per-unit
-    Homework/Tests tabs. Drafts are included so the teacher sees their
-    in-progress homework references; only published entries actually
-    lock the bank item (see recompute_bank_locks)."""
+    map of bank_item_id → list of {id, title, type, status, unit_ids}
+    entries. The unit_ids field lets the question bank UI group its
+    Approved view by HW's units without a separate fetch.
+
+    Drafts are included so the teacher sees their in-progress homework
+    references; only published entries actually lock the bank item
+    (see recompute_bank_locks)."""
     rows = (await db.execute(
         select(Assignment).where(Assignment.course_id == course_id)
     )).scalars().all()
-    out: dict[str, list[dict[str, str]]] = {}
+    out: dict[str, list[dict[str, Any]]] = {}
     for a in rows:
+        entry = {
+            "id": str(a.id),
+            "title": a.title,
+            "type": a.type,
+            "status": a.status,
+            "unit_ids": [str(u) for u in (a.unit_ids or [])],
+        }
         for pid in problem_ids_in_content(a.content):
-            out.setdefault(pid, []).append(
-                {"id": str(a.id), "title": a.title, "type": a.type, "status": a.status},
-            )
+            out.setdefault(pid, []).append(entry)
     return out
 
 
@@ -170,7 +177,7 @@ async def recompute_bank_locks(db: AsyncSession, course_id: uuid.UUID) -> None:
 
 async def used_in_for_item(
     db: AsyncSession, item: QuestionBankItem,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Look up the assignments referencing this single bank item.
     Used by per-item endpoints so the response stays consistent with
     the list endpoint instead of returning a stale-empty `used_in`."""

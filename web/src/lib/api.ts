@@ -928,7 +928,14 @@ export interface BankItem {
   locked: boolean;
   source: string;
   parent_question_id: string | null;
-  used_in: { id: string; title: string; type: string; status: string }[];
+  used_in: {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    /** Units the assignment is in. May be empty for legacy data. */
+    unit_ids: string[];
+  }[];
   source_doc_ids: string[] | null;
   generation_prompt: string | null;
   has_previous_version: boolean;

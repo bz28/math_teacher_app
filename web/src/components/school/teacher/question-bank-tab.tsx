@@ -8,9 +8,8 @@ import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
 import { CourseSubjectContext } from "./question-bank/course-subject-context";
 import { STATUS_FILTERS } from "./question-bank/constants";
-import { buildUnitGroups } from "./question-bank/tree";
 import { SimpleUnitList } from "./question-bank/unit-groups";
-import { ApprovedUnitFolder } from "./question-bank/approved-tree";
+import { ApprovedView } from "./question-bank/approved-tree";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
@@ -304,19 +303,13 @@ export function QuestionBankTab({
               />
             </div>
           ) : (
-            <div className="space-y-6">
-              {buildUnitGroups(filteredItems, units).map((group) => (
-                <ApprovedUnitFolder
-                  key={group.id}
-                  label={group.label}
-                  items={group.items}
-                  units={units}
-                  onOpenItem={setOpenItem}
-                  onOpenHomework={setOpenHomeworkId}
-                  onChanged={reload}
-                />
-              ))}
-            </div>
+            <ApprovedView
+              items={filteredItems}
+              units={units}
+              onOpenItem={setOpenItem}
+              onOpenHomework={setOpenHomeworkId}
+              onChanged={reload}
+            />
           )}
         </div>
       </div>
