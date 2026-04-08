@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -56,8 +57,10 @@ export function SolveScreen({
 }: Props) {
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const typeCardRef = useRef<View>(null);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
   const [mode, setMode] = useState<Mode>("learn");
@@ -88,6 +91,27 @@ export function SolveScreen({
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
+
+  // Track keyboard height so we can pad the scroll content precisely
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0),
+    );
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  // When the keyboard appears in typing mode, scroll the type card so its
+  // bottom edge sits just above the keyboard. The extra paddingBottom (set
+  // by the ScrollView prop above) gives us room to scroll into.
+  useEffect(() => {
+    if (!typing || keyboardHeight === 0) return;
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+  }, [typing, keyboardHeight]);
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
   const activeSubject = getSubjectMeta(subject);
@@ -291,7 +315,7 @@ export function SolveScreen({
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={undefined}
       >
         {/* Mode segmented control */}
         <View style={styles.modeRow}>
@@ -326,9 +350,10 @@ export function SolveScreen({
           ref={scrollRef}
           contentContainerStyle={[
             styles.scrollContent,
-            // Extra bottom space so the type card sits above the keyboard
-            // when in typing mode without overshooting.
-            typing && { paddingBottom: 320 },
+            // When the keyboard is up, pad the bottom by exactly the
+            // keyboard height + 16 so the type card has somewhere to scroll
+            // to that lands its bottom edge just above the keyboard.
+            typing && keyboardHeight > 0 && { paddingBottom: keyboardHeight + 16 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -390,13 +415,7 @@ export function SolveScreen({
           <AnimatedPressable
             onPress={() => {
               setTyping(true);
-              // Focus on next tick, then scroll the type card into view.
-              // The extra paddingBottom (set when typing=true) gives the
-              // ScrollView room to scroll past the keyboard.
-              requestAnimationFrame(() => {
-                inputRef.current?.focus();
-                setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
-              });
+              requestAnimationFrame(() => inputRef.current?.focus());
             }}
             disabled={typing}
             scaleDown={0.97}
@@ -404,6 +423,7 @@ export function SolveScreen({
             accessibilityLabel="Type a problem"
           >
             <View
+              ref={typeCardRef}
               style={[
                 styles.bigCard,
                 styles.bigCardOutlined,
