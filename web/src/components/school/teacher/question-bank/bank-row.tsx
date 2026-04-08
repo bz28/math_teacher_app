@@ -200,6 +200,7 @@ function KebabMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -208,6 +209,7 @@ function KebabMenu({
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
         setConfirmDelete(false);
+        setConfirmReject(false);
       }
     };
     window.addEventListener("mousedown", handler);
@@ -215,6 +217,11 @@ function KebabMenu({
   }, [open]);
 
   const lockedTitle = item.locked ? "Locked by published homework" : undefined;
+  // Confirm-on-reject only when the item is currently in some draft
+  // HW — yanking it out has a side effect the teacher should
+  // acknowledge. Plain pending items reject without ceremony.
+  const draftRefs = item.used_in.filter((u) => u.status !== "published");
+  const needsRejectConfirm = draftRefs.length > 0;
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -248,12 +255,16 @@ function KebabMenu({
               ✓ Approve
             </button>
           )}
-          {item.status !== "rejected" && (
+          {item.status !== "rejected" && !confirmReject && (
             <button
               type="button"
               onClick={() => {
-                setOpen(false);
-                onReject();
+                if (needsRejectConfirm) {
+                  setConfirmReject(true);
+                } else {
+                  setOpen(false);
+                  onReject();
+                }
               }}
               disabled={busy || item.locked}
               title={lockedTitle}
@@ -261,6 +272,40 @@ function KebabMenu({
             >
               ✕ Reject
             </button>
+          )}
+          {confirmReject && (
+            <div className="border-t border-border-light bg-amber-50 px-3 py-2 text-[10px] text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+              Will be removed from{" "}
+              {draftRefs.map((r, i) => (
+                <span key={r.id}>
+                  <span className="font-bold">{r.title}</span>
+                  {i < draftRefs.length - 1 ? ", " : ""}
+                </span>
+              ))}
+              .
+              <div className="mt-1 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setConfirmReject(false);
+                    onReject();
+                  }}
+                  disabled={busy}
+                  className="rounded px-2 py-0.5 font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-200 dark:hover:bg-amber-500/20"
+                >
+                  Reject anyway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReject(false)}
+                  disabled={busy}
+                  className="rounded px-2 py-0.5 text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-300 dark:hover:bg-amber-500/20"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
           {item.status === "rejected" && (
             <button

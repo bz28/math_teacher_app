@@ -190,9 +190,16 @@ export function QuestionBankTab({
         </aside>
 
         <div className="min-w-0 flex-1">
-          {/* Status chips */}
+          {/* Status chips. Rejected is hidden unless there's something
+              there or it's currently selected — keeps the bin out of
+              sight until needed. */}
           <div className="flex gap-2">
-            {STATUS_FILTERS.map((f) => (
+            {STATUS_FILTERS.filter(
+              (f) =>
+                f.key !== "rejected" ||
+                counts.rejected > 0 ||
+                statusFilter === "rejected",
+            ).map((f) => (
               <button
                 key={f.key}
                 onClick={() => {
