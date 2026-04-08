@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
+from api.core.practice import generate_distractors
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import REGENERATE_QA_SCHEMA
@@ -158,6 +159,35 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         user_id=str(job.created_by_id),
     )
 
+    # 2b. Generate 3 MCQ distractors per question. Stored on the bank
+    # item so the school-student practice loop can serve MCQs with
+    # zero LLM calls per kid — the teacher pays for distractor
+    # generation once at publish time. Capped concurrency mirrors the
+    # solve step. On failure for any one item we keep an empty list
+    # rather than blocking the whole job; the consuming endpoint can
+    # decide how to render that case.
+    distractors_sem = asyncio.Semaphore(5)
+
+    async def make_distractors(idx: int, q: dict, s: dict) -> list[str]:
+        final = s.get("final_answer")
+        if not final or final.startswith("(solution failed"):
+            return []
+        async with distractors_sem:
+            try:
+                return await generate_distractors(
+                    q["text"],
+                    final,
+                    user_id=str(job.created_by_id),
+                    subject=course.subject,
+                )
+            except Exception:
+                logger.warning("Distractor generation failed for question %d in job %s", idx, job.id)
+                return []
+
+    distractor_lists = await asyncio.gather(
+        *[make_distractors(i, q, s) for i, (q, s) in enumerate(zip(question_dicts, solved))]
+    )
+
     # 3. Persist as bank items (status = pending). Commit in batches of
     # _PROGRESS_BATCH so the frontend's polling banner shows real progress
     # without N+1 transactions on every single question.
@@ -170,6 +200,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             question=q["text"],
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer"),
+            distractors=distractor_lists[idx - 1] or None,
             # Claude self-rates each generated question (easy/medium/hard)
             # via the GENERATE_QUESTIONS_SCHEMA. We just store its rating —
             # noisy but useful as a filter signal.
@@ -315,6 +346,23 @@ async def regenerate_one(
     item.question = str(new_question)
     item.solution_steps = new_steps if isinstance(new_steps, list) else None
     item.final_answer = str(new_answer) if new_answer else None
+    # Regenerate distractors to match the new question/answer. The old
+    # distractors were keyed off the old wrong-answer patterns and would
+    # be misleading on the new problem. Failure here is non-fatal —
+    # we drop to None and let the next student-facing fetch handle it.
+    if item.final_answer:
+        try:
+            item.distractors = await generate_distractors(
+                item.question,
+                item.final_answer,
+                user_id=str(user_id),
+                subject=course.subject,
+            ) or None
+        except Exception:
+            logger.warning("Distractor regeneration failed for item %s", item.id)
+            item.distractors = None
+    else:
+        item.distractors = None
     # Status is preserved (approved stays approved). New rows from /generate
     # already start as pending; this only affects already-curated items.
     item.updated_at = datetime.now(UTC)

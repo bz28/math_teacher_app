@@ -38,6 +38,11 @@ class QuestionBankItem(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     solution_steps: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 3 MCQ wrong-answer options, generated at the same time as the
+    # solution. Populated by question_bank_generation; consumed by the
+    # school-student practice loop so it can serve MCQs with zero LLM
+    # calls per kid.
+    distractors: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     # status: pending / approved / rejected / archived
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
