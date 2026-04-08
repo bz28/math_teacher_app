@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BankItem, TeacherUnit } from "@/lib/api";
-import { unitLabel as labelForUnit } from "@/lib/units";
+import { unitLabel as labelForUnit, topUnitIdOf } from "@/lib/units";
 import { MathText } from "@/components/shared/math-text";
 import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 import { DIFFICULTY_STYLE } from "./constants";
@@ -337,53 +337,109 @@ function ProblemCard({
   onOpenItem: (item: BankItem) => void;
 }) {
   const item = node.item;
+  const [variationsOpen, setVariationsOpen] = useState(false);
   const childrenCount = node.children.length;
   const approvedChildren = node.children.filter((c) => c.status === "approved").length;
   const pendingChildren = node.children.filter((c) => c.status === "pending").length;
   const hasVariations = childrenCount > 0;
 
-  // Borrowed = the problem's unit isn't in the HW's units list.
+  // Borrowed = the problem's TOP unit isn't in the HW's units list.
+  // Roll the item's unit_id up to its top so a question saved into a
+  // subfolder of the HW's unit isn't mistakenly flagged as borrowed.
+  const itemTopUnit = topUnitIdOf(units, item.unit_id);
   const borrowed =
-    item.unit_id !== null && hwUnitIds.length > 0 && !hwUnitIds.includes(item.unit_id);
+    itemTopUnit !== null && hwUnitIds.length > 0 && !hwUnitIds.includes(itemTopUnit);
   const itemUnitLabel = labelForUnit(units, item.unit_id);
 
+  // Outer wrapper is a <div>, not a <button>, so we can nest the
+  // variation-toggle button. The big "open question" hit area is its
+  // own button that fills the row.
   return (
-    <button
-      type="button"
-      onClick={() => onOpenItem(item)}
-      className="block w-full rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-bg-subtle"
-    >
-      {/* Question text — focal element, math-rendered, capped at
-          2 lines via line-clamp so heavy expressions don't explode. */}
-      <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
-        <MathText text={item.question} />
-      </div>
+    <div className="rounded-[--radius-md] border border-border-light bg-surface transition-colors hover:border-primary/40">
+      <button
+        type="button"
+        onClick={() => onOpenItem(item)}
+        className="block w-full px-4 py-3 text-left hover:bg-bg-subtle"
+      >
+        {/* Question text — focal element, math-rendered, capped at
+            2 lines via line-clamp so heavy expressions don't explode. */}
+        <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
+          <MathText text={item.question} />
+        </div>
 
-      {/* Metadata strip — single thin row, low contrast. */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-        <DifficultyPill difficulty={item.difficulty} />
-        {borrowed && (
-          <span
-            className="rounded-full bg-bg-subtle px-1.5 py-0.5 font-semibold text-text-muted"
-            title={`Originally from ${itemUnitLabel}`}
+        {/* Metadata strip — single thin row, low contrast. The
+            variation badge sits here as a span (it's not clickable
+            from inside the parent button — its expander is a
+            sibling button below). */}
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+          <DifficultyPill difficulty={item.difficulty} />
+          {borrowed && (
+            <span
+              className="rounded-full bg-bg-subtle px-1.5 py-0.5 font-semibold text-text-muted"
+              title={`Originally from ${itemUnitLabel}`}
+            >
+              from {itemUnitLabel}
+            </span>
+          )}
+          {!hasVariations && (
+            <span className="rounded-full border border-dashed border-amber-400 bg-amber-50 px-2 py-0.5 font-bold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
+              ⚠️ no practice variations
+            </span>
+          )}
+        </div>
+      </button>
+
+      {/* Variations expander — outside the parent button so it's an
+          independent clickable target. Click to expand and see the
+          approved children inline (and any pending ones, though those
+          are normally reviewed via the pending tray). */}
+      {hasVariations && (
+        <div className="border-t border-border-light/50 px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setVariationsOpen((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-800 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:hover:bg-purple-500/30"
           >
-            from {itemUnitLabel}
-          </span>
-        )}
-        {hasVariations ? (
-          <span className="rounded-full bg-purple-100 px-2 py-0.5 font-bold text-purple-800 dark:bg-purple-500/20 dark:text-purple-300">
-            ✨ {approvedChildren} variation{approvedChildren === 1 ? "" : "s"}
+            <span>{variationsOpen ? "▾" : "▸"}</span>
+            <span>
+              ✨ {approvedChildren} variation{approvedChildren === 1 ? "" : "s"}
+            </span>
             {pendingChildren > 0 && (
-              <span className="ml-1 opacity-70">· {pendingChildren} pending</span>
+              <span className="ml-0.5 opacity-70">· {pendingChildren} pending</span>
             )}
-          </span>
-        ) : (
-          <span className="rounded-full border border-dashed border-amber-400 bg-amber-50 px-2 py-0.5 font-bold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
-            ⚠️ no practice variations
-          </span>
-        )}
-      </div>
-    </button>
+          </button>
+          {variationsOpen && (
+            <div className="mt-2 space-y-1.5 border-l-2 border-purple-200 pl-3 dark:border-purple-500/30">
+              {node.children.map((child) => (
+                <button
+                  key={child.id}
+                  type="button"
+                  onClick={() => onOpenItem(child)}
+                  className="block w-full rounded-[--radius-sm] border border-border-light/60 bg-bg-base/40 px-3 py-2 text-left hover:border-primary/40 hover:bg-bg-subtle"
+                >
+                  <div className="line-clamp-2 text-[13px] leading-snug text-text-primary">
+                    <MathText text={child.question} />
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-[10px]">
+                    <DifficultyPill difficulty={child.difficulty} />
+                    {child.status === "pending" && (
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-400">
+                        pending
+                      </span>
+                    )}
+                    {child.status === "rejected" && (
+                      <span className="rounded-full bg-bg-subtle px-1.5 py-0.5 font-bold text-text-muted">
+                        rejected
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

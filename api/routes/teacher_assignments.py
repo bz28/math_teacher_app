@@ -82,7 +82,12 @@ class CreateAssignmentRequest(BaseModel):
 class UpdateAssignmentRequest(BaseModel):
     title: str | None = None
     status: str | None = None
+    # ISO datetime to set, or empty string / "null" sentinel to clear.
+    # We can't use real None to mean "clear" because None already means
+    # "leave unchanged" — that's the cost of an open PATCH shape. The
+    # frontend uses clear_due_at=true for unambiguous clearing.
     due_at: str | None = None
+    clear_due_at: bool = False
     late_policy: str | None = None
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
@@ -232,24 +237,28 @@ async def bulk_assignment_stats(
     return out
 
 
-async def bulk_section_names(
+async def bulk_section_assignments(
     db: AsyncSession, assignment_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, list[str]]:
-    """Bulk version of _get_section_names. One query, grouped in Python."""
+) -> dict[uuid.UUID, list[tuple[uuid.UUID, str]]]:
+    """One query, grouped in Python. Returns the (id, name) tuples for
+    every section attached to each assignment so callers can serialize
+    both section_ids (for editing) and section_names (for display)."""
     if not assignment_ids:
         return {}
     rows = (await db.execute(
-        select(AssignmentSection.assignment_id, Section.name)
+        select(AssignmentSection.assignment_id, Section.id, Section.name)
         .join(Section, Section.id == AssignmentSection.section_id)
         .where(AssignmentSection.assignment_id.in_(assignment_ids))
     )).all()
-    out: dict[uuid.UUID, list[str]] = {aid: [] for aid in assignment_ids}
-    for aid, name in rows:
-        out[aid].append(name)
+    out: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {aid: [] for aid in assignment_ids}
+    for aid, sid, name in rows:
+        out[aid].append((sid, name))
     return out
 
 
-def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str, Any]) -> dict[str, Any]:
+def assignment_to_dict(
+    a: Assignment, sections: list[tuple[uuid.UUID, str]], stats: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "id": str(a.id),
         "course_id": str(a.course_id),
@@ -261,7 +270,11 @@ def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str,
         "due_at": a.due_at.isoformat() if a.due_at else None,
         "late_policy": a.late_policy,
         "document_ids": a.document_ids,
-        "section_names": section_names,
+        "section_ids": [str(sid) for sid, _ in sections],
+        "section_names": [name for _, name in sections],
+        # Cheap from-content count so the list view can show "5 problems"
+        # without round-tripping each assignment's detail.
+        "problem_count": len(problem_ids_in_content(a.content)),
         "total_students": stats["total_students"],
         "submitted": stats["submitted"],
         "graded": stats["graded"],
@@ -337,9 +350,9 @@ async def _serialize_assignment_list(
         return []
     ids = [a.id for a in assignments]
     stats_map = await bulk_assignment_stats(db, ids)
-    section_names_map = await bulk_section_names(db, ids)
+    sections_map = await bulk_section_assignments(db, ids)
     return [
-        assignment_to_dict(a, section_names_map.get(a.id, []), stats_map.get(a.id, _EMPTY_STATS))
+        assignment_to_dict(a, sections_map.get(a.id, []), stats_map.get(a.id, _EMPTY_STATS))
         for a in assignments
     ]
 
@@ -382,9 +395,9 @@ async def get_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    section_names = (await bulk_section_names(db, [a.id])).get(a.id, [])
+    sections = (await bulk_section_assignments(db, [a.id])).get(a.id, [])
     stats = (await bulk_assignment_stats(db, [a.id])).get(a.id, _EMPTY_STATS)
-    result = assignment_to_dict(a, section_names, stats)
+    result = assignment_to_dict(a, sections, stats)
     result["content"] = await hydrate_assignment_content(db, a)
     result["answer_key"] = a.answer_key
     return result
@@ -398,6 +411,24 @@ async def update_assignment(
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
+    # Configuration fields (title, units, due_at, late_policy) all
+    # lock when the homework is published. The frontend already
+    # disables every config control on published HWs and shows the
+    # "Unpublish to edit" banner; this enforces the same contract on
+    # the API so a stale UI or direct call can't bypass it.
+    config_fields_touched = (
+        body.title is not None
+        or body.clear_due_at
+        or body.due_at is not None
+        or body.late_policy is not None
+        or body.unit_ids is not None
+    )
+    if config_fields_touched and a.status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unpublish before editing configuration",
+        )
+
     if body.title is not None:
         title = body.title.strip()
         if not title or len(title) > 300:
@@ -405,7 +436,10 @@ async def update_assignment(
         a.title = title
     if body.status is not None:
         a.status = body.status
-    if body.due_at is not None:
+
+    if body.clear_due_at:
+        a.due_at = None
+    elif body.due_at is not None and body.due_at != "":
         try:
             a.due_at = datetime.fromisoformat(body.due_at)
         except ValueError:
@@ -460,10 +494,28 @@ async def publish_assignment(
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
     if a.status == "published":
         return {"status": "ok"}
+    # Defense-in-depth: the frontend gates the Publish button on
+    # these three, but a stale UI or direct API call could bypass.
+    # Enforce the same contract here.
     if not problem_ids_in_content(a.content):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot publish a homework with no problems",
+        )
+    if not (a.unit_ids or []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot publish a homework with no units",
+        )
+    section_count = (await db.execute(
+        select(func.count())
+        .select_from(AssignmentSection)
+        .where(AssignmentSection.assignment_id == a.id)
+    )).scalar_one()
+    if section_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot publish a homework with no sections assigned",
         )
     a.status = "published"
     await db.flush()
@@ -494,32 +546,49 @@ async def assign_to_sections(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    """Idempotent set-sections operation. Replaces the assignment's
+    section list with exactly the ids in body.section_ids — adds new
+    ones, removes old ones. Does NOT change publish status; the new
+    homework flow has an explicit Publish button gated on this list
+    being non-empty (legacy behavior auto-published as a side effect
+    here, which silently flipped drafts to published when teachers
+    expected pure config)."""
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if a.status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unpublish before editing sections",
+        )
+
+    # Validate every requested section belongs to this course before
+    # touching any join rows.
+    if body.section_ids:
+        found = set((await db.execute(
+            select(Section.id).where(
+                Section.id.in_(body.section_ids), Section.course_id == a.course_id,
+            )
+        )).scalars().all())
+        if len(found) != len(set(body.section_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="One or more sections do not belong to this course",
+            )
+
+    # Read existing assignments and diff against the desired set.
+    existing_rows = (await db.execute(
+        select(AssignmentSection).where(AssignmentSection.assignment_id == a.id)
+    )).scalars().all()
+    existing_ids = {r.section_id for r in existing_rows}
+    desired_ids = set(body.section_ids)
 
     now = datetime.now(UTC)
-    for sid in body.section_ids:
-        # Verify section belongs to assignment's course
-        section = (await db.execute(
-            select(Section).where(Section.id == sid, Section.course_id == a.course_id)
-        )).scalar_one_or_none()
-        if not section:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in this course")
-
-        # Check if already assigned
-        existing = (await db.execute(
-            select(AssignmentSection)
-            .where(AssignmentSection.assignment_id == a.id, AssignmentSection.section_id == sid)
-        )).scalar_one_or_none()
-        if not existing:
-            db.add(AssignmentSection(
-                assignment_id=a.id, section_id=sid, published_at=now,
-            ))
-
-    # Auto-publish if still draft — also locks the bank items it references.
-    if a.status == "draft":
-        a.status = "published"
-        await db.flush()
-        await recompute_bank_locks(db, a.course_id)
+    for row in existing_rows:
+        if row.section_id not in desired_ids:
+            await db.delete(row)
+    for sid in desired_ids - existing_ids:
+        db.add(AssignmentSection(
+            assignment_id=a.id, section_id=sid, published_at=now,
+        ))
 
     await db.commit()
     return {"status": "ok"}

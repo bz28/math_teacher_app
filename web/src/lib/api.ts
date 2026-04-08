@@ -611,7 +611,11 @@ export interface TeacherAssignment {
   status: string;
   due_at: string | null;
   late_policy: string;
+  section_ids: string[];
   section_names: string[];
+  /** Number of problems in this assignment, cheaply derived from
+   *  content.problem_ids on the backend. */
+  problem_count: number;
   total_students: number;
   submitted: number;
   graded: number;

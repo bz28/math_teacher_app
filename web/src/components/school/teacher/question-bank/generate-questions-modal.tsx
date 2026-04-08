@@ -7,7 +7,7 @@ import {
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
-import { subfoldersOf, topUnits } from "@/lib/units";
+import { subfoldersOf, topUnitIdOf, topUnits } from "@/lib/units";
 import { QUANTITY_CHIPS } from "./constants";
 
 export function GenerateQuestionsModal({
@@ -53,14 +53,18 @@ export function GenerateQuestionsModal({
 
   const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
 
-  // Smart "Save to" default, derived during render. If the teacher hasn't
-  // explicitly picked a target yet AND all selected docs share a unit, use
-  // that unit. Otherwise fall back to the override (or null/Uncategorized).
+  // Smart "Save to" default, derived during render. Bank questions
+  // can only live at the top-unit level, so we roll each selected
+  // doc's unit_id up to its top before deciding whether they share
+  // one. Picking a doc inside "math / algebra" defaults Save-to to
+  // "math", not "math / algebra".
   const autoUnitId: string | null = (() => {
     if (selectedDocs.size === 0) return null;
     const selected = docs.filter((d) => selectedDocs.has(d.id));
-    const shared = selected[0]?.unit_id ?? null;
-    return selected.every((d) => d.unit_id === shared) ? shared : null;
+    const shared = topUnitIdOf(units, selected[0]?.unit_id ?? null);
+    return selected.every((d) => topUnitIdOf(units, d.unit_id) === shared)
+      ? shared
+      : null;
   })();
   const unitId = overrideUnitId === undefined ? autoUnitId : overrideUnitId;
 
@@ -254,13 +258,6 @@ export function GenerateQuestionsModal({
                     {u.name}
                   </option>
                 ))}
-                {topUnits(units).flatMap((u) =>
-                  subfoldersOf(units, u.id).map((sf) => (
-                    <option key={sf.id} value={sf.id}>
-                      {u.name} / {sf.name}
-                    </option>
-                  )),
-                )}
               </select>
             </div>
           </div>

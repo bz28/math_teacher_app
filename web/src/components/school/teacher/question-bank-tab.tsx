@@ -12,7 +12,8 @@ import { SimpleUnitList } from "./question-bank/unit-groups";
 import { ApprovedView } from "./question-bank/approved-tree";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
-import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
+import { UnitRail, type UnitSelection } from "./_pieces/unit-rail";
+import { topUnitIdOf } from "@/lib/units";
 import { PendingTray } from "./question-bank/pending-tray";
 import { ReviewModal } from "./question-bank/review-modal";
 
@@ -55,12 +56,14 @@ export function QuestionBankTab({
 
   // Client-side unit + search filter applied to the loaded items.
   // Search matches title and question text, case-insensitive.
+  // Unit filter rolls subfolder unit_ids up to their top unit so a
+  // question saved into "math / algebra" still shows up under math.
   const filteredItems = useMemo(() => {
     let out = items;
     if (unitSelection === "uncategorized") {
       out = out.filter((i) => i.unit_id === null);
     } else if (unitSelection !== "all") {
-      out = out.filter((i) => i.unit_id === unitSelection);
+      out = out.filter((i) => topUnitIdOf(units, i.unit_id) === unitSelection);
     }
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -71,7 +74,7 @@ export function QuestionBankTab({
       );
     }
     return out;
-  }, [items, unitSelection, searchQuery]);
+  }, [items, units, unitSelection, searchQuery]);
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
   // Separate state for "edit invoked from inside ReviewModal" so we
@@ -102,7 +105,15 @@ export function QuestionBankTab({
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
       const children = res.items.filter((i) => i.parent_question_id === parent.id);
-      if (children.length === 0) return;
+      if (children.length === 0) {
+        // Pending children were all resolved since the job tracker
+        // last cared (e.g. another tab approved them). Dismiss the
+        // stale strip and surface a clear message instead of silently
+        // no-op'ing.
+        setActiveJob(null);
+        setError("All variations for this question have already been reviewed.");
+        return;
+      }
       setActiveJob(null); // dismiss the strip — its job is done
       setOpenItem(null); // close the single-mode workshop
       setReviewQueueParent(parent);
@@ -272,7 +283,14 @@ export function QuestionBankTab({
         <aside className="md:w-52 md:shrink-0">
           <UnitRail
             units={units}
-            items={items}
+            totalCount={items.length}
+            countFor={(uid) =>
+              items.filter((i) =>
+                uid === null
+                  ? i.unit_id === null
+                  : topUnitIdOf(units, i.unit_id) === uid,
+              ).length
+            }
             selected={unitSelection}
             onSelect={(s) => {
               setUnitSelection(s);

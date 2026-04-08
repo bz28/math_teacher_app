@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 import { teacher, type TeacherAssignment } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { BankPicker } from "./bank-picker";
+import { UnitMultiSelect } from "./unit-multi-select";
+import { SectionMultiSelect } from "./section-multi-select";
+import { InlineSavedHint, type SaveState } from "./inline-saved-hint";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -15,11 +18,25 @@ interface AssignmentProblem {
   difficulty: string;
 }
 
+const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "penalty_per_day", label: "10% per day" },
+  { value: "no_credit", label: "No credit after due" },
+];
+
+// The four inline-editable config fields. Each has its own SaveState
+// so a saving units field doesn't block a separate due-date edit.
+type ConfigField = "units" | "dueAt" | "latePolicy" | "sections";
+
 /**
- * Detail modal for an existing homework. Shows the problem list (live
- * from the bank), inline title editing, edit-problems mode, publish /
- * unpublish, and delete. Re-used from question-bank-tab so the
- * Used-in pills can open homework directly without navigation.
+ * Detail modal for an existing homework. v2: full lifecycle config
+ * (units, due date, late policy, sections) inline-editable, fat
+ * problem cards matching the question bank visual, publish gating
+ * tooltip listing what's missing, Submissions placeholder for the
+ * future grading view.
+ *
+ * Reused from question-bank-tab so the Used-in pills can open
+ * homework directly without navigation.
  */
 export function HomeworkDetailModal({
   courseId,
@@ -39,6 +56,20 @@ export function HomeworkDetailModal({
   const [editingProblems, setEditingProblems] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { busy, error, setError, run } = useAsyncAction();
+
+  // Per-field save state for the inline-edited config block.
+  const [saveStates, setSaveStates] = useState<Record<ConfigField, SaveState>>({
+    units: "idle",
+    dueAt: "idle",
+    latePolicy: "idle",
+    sections: "idle",
+  });
+  const [saveErrors, setSaveErrors] = useState<Record<ConfigField, string | null>>({
+    units: null,
+    dueAt: null,
+    latePolicy: null,
+    sections: null,
+  });
 
   const reload = async () => {
     setLoading(true);
@@ -62,6 +93,8 @@ export function HomeworkDetailModal({
     hw?.content && typeof hw.content === "object" && "problems" in hw.content
       ? ((hw.content as { problems: AssignmentProblem[] }).problems ?? [])
       : [];
+
+  const isPublished = hw?.status === "published";
 
   const saveTitle = () =>
     run(async () => {
@@ -113,7 +146,115 @@ export function HomeworkDetailModal({
       onChanged();
     });
 
-  const isPublished = hw?.status === "published";
+  // Inline auto-save runner. Optimistic — applies the change to the
+  // local hw state immediately, fires the PATCH, and on failure
+  // restores ONLY this field (via the caller-supplied applyRevert).
+  //
+  // Per-field revert (vs replacing the whole hw object) is important:
+  // if two fields are edited concurrently and the second succeeds
+  // before the first fails, a whole-hw revert would wipe out the
+  // second's optimistic update. Field-scoped revert leaves the
+  // unrelated success intact.
+  //
+  // Per-field lastCallRef gives last-write-wins for rapid-fire edits
+  // to the same field (the date picker can fire many onChanges).
+  const lastCallRef = useRef<Record<ConfigField, number>>({
+    units: 0, dueAt: 0, latePolicy: 0, sections: 0,
+  });
+  const patchField = async <K extends ConfigField>(
+    field: K,
+    applyOptimistic: () => void,
+    applyRevert: () => void,
+    request: () => Promise<void>,
+  ) => {
+    const callId = ++lastCallRef.current[field];
+    applyOptimistic();
+    setSaveStates((s) => ({ ...s, [field]: "saving" }));
+    setSaveErrors((s) => ({ ...s, [field]: null }));
+    try {
+      await request();
+      // If a newer call for this field superseded us, drop silently.
+      if (lastCallRef.current[field] !== callId) return;
+      setSaveStates((s) => ({ ...s, [field]: "saved" }));
+      onChanged();
+    } catch (e) {
+      if (lastCallRef.current[field] !== callId) return;
+      applyRevert();
+      setSaveStates((s) => ({ ...s, [field]: "error" }));
+      setSaveErrors((s) => ({
+        ...s,
+        [field]: e instanceof Error ? e.message : "Save failed",
+      }));
+    }
+  };
+
+  const onChangeUnits = (next: string[]) => {
+    if (!hw) return;
+    if (next.length === 0) {
+      setSaveStates((s) => ({ ...s, units: "error" }));
+      setSaveErrors((s) => ({ ...s, units: "At least one unit is required" }));
+      return;
+    }
+    const prev = hw.unit_ids;
+    void patchField(
+      "units",
+      () => setHw((h) => (h ? { ...h, unit_ids: next } : h)),
+      () => setHw((h) => (h ? { ...h, unit_ids: prev } : h)),
+      () =>
+        teacher.updateAssignment(assignmentId, { unit_ids: next }).then(() => undefined),
+    );
+  };
+
+  const onChangeDueAt = (next: string | null) => {
+    if (!hw) return;
+    const prev = hw.due_at;
+    void patchField(
+      "dueAt",
+      () => setHw((h) => (h ? { ...h, due_at: next } : h)),
+      () => setHw((h) => (h ? { ...h, due_at: prev } : h)),
+      () =>
+        teacher
+          .updateAssignment(
+            assignmentId,
+            next === null ? { clear_due_at: true } : { due_at: next },
+          )
+          .then(() => undefined),
+    );
+  };
+
+  const onChangeLatePolicy = (next: string) => {
+    if (!hw) return;
+    const prev = hw.late_policy;
+    void patchField(
+      "latePolicy",
+      () => setHw((h) => (h ? { ...h, late_policy: next } : h)),
+      () => setHw((h) => (h ? { ...h, late_policy: prev } : h)),
+      () =>
+        teacher
+          .updateAssignment(assignmentId, { late_policy: next })
+          .then(() => undefined),
+    );
+  };
+
+  const onChangeSections = (next: string[]) => {
+    if (!hw) return;
+    const prev = hw.section_ids;
+    void patchField(
+      "sections",
+      () => setHw((h) => (h ? { ...h, section_ids: next } : h)),
+      () => setHw((h) => (h ? { ...h, section_ids: prev } : h)),
+      () => teacher.assignToSections(assignmentId, next).then(() => undefined),
+    );
+  };
+
+  // Publish gating — list of missing requirements with concrete fixes.
+  const missingForPublish: string[] = [];
+  if (hw) {
+    if (problems.length === 0) missingForPublish.push("at least one problem");
+    if (hw.unit_ids.length === 0) missingForPublish.push("a unit");
+    if (hw.section_ids.length === 0) missingForPublish.push("a section");
+  }
+  const canPublish = !isPublished && missingForPublish.length === 0;
 
   return (
     <div
@@ -193,32 +334,8 @@ export function HomeworkDetailModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {loading ? (
+          {loading || !hw ? (
             <p className="text-sm text-text-muted">Loading…</p>
-          ) : isPublished ? (
-            <>
-              <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                🔒 This homework is published. Students can see it and the
-                questions inside are locked. Unpublish it to edit.
-              </div>
-              <ol className="mt-4 space-y-3">
-                {problems.map((p) => (
-                  <li
-                    key={`${p.bank_item_id}-${p.position}`}
-                    className="rounded-[--radius-lg] border border-border-light bg-surface p-4"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
-                        {p.position}
-                      </div>
-                      <div className="min-w-0 flex-1 text-sm text-text-primary">
-                        <MathText text={p.question} />
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </>
           ) : editingProblems ? (
             <EditProblemsView
               courseId={courseId}
@@ -229,44 +346,55 @@ export function HomeworkDetailModal({
             />
           ) : (
             <>
-              <div className="flex items-baseline justify-between">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                  {problems.length} {problems.length === 1 ? "problem" : "problems"}
+              {isPublished && (
+                <div className="mb-5 rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                  🔒 This homework is published. Students can see it and the
+                  questions inside are locked. Unpublish it to edit.
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setEditingProblems(true)}
-                  disabled={isPublished}
-                  title={isPublished ? "Unpublish to edit" : ""}
-                  className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
-                >
-                  ✏ Edit problems
-                </button>
-              </div>
-
-              {problems.length === 0 ? (
-                <p className="mt-4 text-xs italic text-text-muted">
-                  No problems on this homework. Click Edit problems to add some.
-                </p>
-              ) : (
-                <ol className="mt-4 space-y-3">
-                  {problems.map((p) => (
-                    <li
-                      key={`${p.bank_item_id}-${p.position}`}
-                      className="rounded-[--radius-lg] border border-border-light bg-surface p-4"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
-                          {p.position}
-                        </div>
-                        <div className="min-w-0 flex-1 text-sm text-text-primary">
-                          <MathText text={p.question} />
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
               )}
+
+              {/* Configuration block */}
+              <ConfigBlock
+                hw={hw}
+                courseId={courseId}
+                disabled={isPublished}
+                saveStates={saveStates}
+                saveErrors={saveErrors}
+                onChangeUnits={onChangeUnits}
+                onChangeDueAt={onChangeDueAt}
+                onChangeLatePolicy={onChangeLatePolicy}
+                onChangeSections={onChangeSections}
+              />
+
+              {/* Problems block */}
+              <div className="mt-6">
+                <div className="flex items-baseline justify-between border-b border-border-light pb-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                    Problems · {problems.length}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingProblems(true)}
+                    disabled={isPublished}
+                    title={isPublished ? "Unpublish to edit" : ""}
+                    className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
+                  >
+                    ✏ Edit problems
+                  </button>
+                </div>
+
+                {problems.length === 0 ? (
+                  <p className="mt-4 text-xs italic text-text-muted">
+                    No problems on this homework. Click Edit problems to add some.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {problems.map((p) => (
+                      <ProblemRow key={`${p.bank_item_id}-${p.position}`} problem={p} />
+                    ))}
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -274,9 +402,9 @@ export function HomeworkDetailModal({
         </div>
 
         {/* Footer */}
-        {!editingProblems && (
+        {!editingProblems && hw && (
           <div className="flex items-center justify-between gap-2 border-t border-border-light px-6 py-3">
-            <div>
+            <div className="flex items-center gap-2">
               {isPublished ? (
                 <button
                   type="button"
@@ -290,13 +418,25 @@ export function HomeworkDetailModal({
                 <button
                   type="button"
                   onClick={publish}
-                  disabled={busy || problems.length === 0}
-                  title={problems.length === 0 ? "Add at least one problem first" : "Publish — locks the questions in the bank"}
+                  disabled={busy || !canPublish}
+                  title={
+                    canPublish
+                      ? "Publish — locks the questions in the bank"
+                      : `Missing: ${missingForPublish.join(", ")}`
+                  }
                   className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  Publish
+                  Publish ▸
                 </button>
               )}
+              <button
+                type="button"
+                disabled
+                title="Coming soon"
+                className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-muted disabled:opacity-50"
+              >
+                ⚙ Submissions
+              </button>
             </div>
             {confirmingDelete ? (
               <div className="flex items-center gap-2">
@@ -327,7 +467,7 @@ export function HomeworkDetailModal({
                 title={isPublished ? "Unpublish before deleting" : ""}
                 className="rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
-                🗑 Delete homework
+                🗑 Delete
               </button>
             )}
           </div>
@@ -336,6 +476,251 @@ export function HomeworkDetailModal({
     </div>
   );
 }
+
+// ── Configuration block ──
+
+function ConfigBlock({
+  hw,
+  courseId,
+  disabled,
+  saveStates,
+  saveErrors,
+  onChangeUnits,
+  onChangeDueAt,
+  onChangeLatePolicy,
+  onChangeSections,
+}: {
+  hw: TeacherAssignment;
+  courseId: string;
+  disabled: boolean;
+  saveStates: Record<ConfigField, SaveState>;
+  saveErrors: Record<ConfigField, string | null>;
+  onChangeUnits: (next: string[]) => void;
+  onChangeDueAt: (next: string | null) => void;
+  onChangeLatePolicy: (next: string) => void;
+  onChangeSections: (next: string[]) => void;
+}) {
+  return (
+    <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-bg-base/30 p-4">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        Configuration
+      </div>
+
+      {/* Units */}
+      <Field
+        label="Units"
+        required
+        hint={
+          saveStates.units === "idle" && hw.unit_ids.length === 0
+            ? "Required — at least one unit"
+            : undefined
+        }
+        saveState={saveStates.units}
+        saveError={saveErrors.units}
+      >
+        <UnitMultiSelect
+          courseId={courseId}
+          selected={hw.unit_ids}
+          onChange={onChangeUnits}
+          disabled={disabled}
+        />
+      </Field>
+
+      {/* Due date */}
+      <Field
+        label="Due date"
+        saveState={saveStates.dueAt}
+        saveError={saveErrors.dueAt}
+      >
+        <DueDatePicker
+          value={hw.due_at}
+          onChange={onChangeDueAt}
+          disabled={disabled}
+        />
+      </Field>
+
+      {/* Late policy */}
+      <Field
+        label="Late policy"
+        saveState={saveStates.latePolicy}
+        saveError={saveErrors.latePolicy}
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {LATE_POLICY_OPTIONS.map((opt) => {
+            const active = hw.late_policy === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onChangeLatePolicy(opt.value)}
+                disabled={disabled}
+                className={`rounded-[--radius-pill] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                  active
+                    ? "border-primary bg-primary text-white"
+                    : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
+                }`}
+              >
+                {active && <span className="mr-1">✓</span>}
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      {/* Sections */}
+      <Field
+        label="Sections"
+        hint={
+          hw.section_ids.length === 0
+            ? "No sections assigned — required to publish"
+            : undefined
+        }
+        saveState={saveStates.sections}
+        saveError={saveErrors.sections}
+      >
+        <SectionMultiSelect
+          courseId={courseId}
+          selected={hw.section_ids}
+          onChange={onChangeSections}
+          disabled={disabled}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  required,
+  hint,
+  saveState,
+  saveError,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  hint?: string;
+  saveState: SaveState;
+  saveError: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+          {label}
+          {required && (
+            <span className="ml-1 font-normal normal-case text-text-muted/70">· required</span>
+          )}
+        </span>
+        <InlineSavedHint state={saveState} errorMessage={saveError} />
+      </div>
+      {children}
+      {hint && saveState === "idle" && (
+        <p className="mt-1 text-[10px] text-text-muted">{hint}</p>
+      )}
+    </div>
+  );
+}
+
+// Native datetime-local picker. The browser handles localization and
+// the mobile experience. Returns null when cleared.
+function DueDatePicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string | null;
+  onChange: (next: string | null) => void;
+  disabled: boolean;
+}) {
+  // Snapshot "now" once at mount so the render stays pure (Date.now()
+  // in render trips react-hooks/purity). The modal is short-lived
+  // enough that a stale snapshot is fine — the warning is informational
+  // and the only edge case is "user picks a future date that becomes
+  // past while the modal stays open for hours," which we don't care
+  // about.
+  const [now] = useState(() => Date.now());
+  // datetime-local needs YYYY-MM-DDTHH:mm — drop the timezone suffix.
+  const localValue = value ? toLocalDatetimeInputValue(value) : "";
+  const isPast = value !== null && new Date(value).getTime() < now;
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="datetime-local"
+        value={localValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) {
+            onChange(null);
+            return;
+          }
+          // Parse the local-time string back to an ISO with the
+          // browser's local timezone offset baked in.
+          const d = new Date(v);
+          if (Number.isNaN(d.getTime())) return;
+          onChange(d.toISOString());
+        }}
+        disabled={disabled}
+        className="rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+      />
+      {value && !disabled && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="text-[11px] font-semibold text-text-muted hover:text-text-primary"
+        >
+          Clear
+        </button>
+      )}
+      {isPast && !disabled && (
+        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+          ⚠ in the past
+        </span>
+      )}
+    </div>
+  );
+}
+
+function toLocalDatetimeInputValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // Format YYYY-MM-DDTHH:mm in local time.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
+// ── Problem row ──
+//
+// Fat card with the math-rendered question as the focal element.
+// Mirrors approved-tree's ProblemCard but read-only (clicking does
+// nothing — editing happens via the Edit problems button).
+function ProblemRow({ problem }: { problem: AssignmentProblem }) {
+  return (
+    <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
+          {problem.position}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
+            <MathText text={problem.question} />
+          </div>
+          <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            {problem.difficulty}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit problems sub-view ──
 
 function EditProblemsView({
   courseId,

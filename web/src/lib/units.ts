@@ -18,6 +18,25 @@ export function subfoldersOf(units: TeacherUnit[], parentId: string): TeacherUni
 }
 
 /**
+ * Roll a (possibly subfolder) unit_id up to its top-level unit. Returns
+ * null when given null. Returns the input id unchanged if the unit
+ * isn't found in the list (defensive — treat unknown as top).
+ *
+ * Used when grouping/filtering by top-level units while still
+ * tolerating items whose unit_id points at a subfolder (e.g. a bank
+ * question saved into a subfolder of math should still be visible
+ * when filtering by math at the top level).
+ */
+export function topUnitIdOf(
+  units: TeacherUnit[], unitId: string | null,
+): string | null {
+  if (!unitId) return null;
+  const u = units.find((x) => x.id === unitId);
+  if (!u) return unitId;
+  return u.parent_id ?? u.id;
+}
+
+/**
  * Build a "Unit 5: Quadratics / Practice" label for any unit_id, or
  * "Uncategorized" when null. "Unknown" if the id doesn't resolve.
  */

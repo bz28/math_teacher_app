@@ -40,15 +40,16 @@ export function NewHomeworkModal({
         setError("Pick at least one unit");
         return;
       }
-      if (picked.length === 0) {
-        setError("Pick at least one question");
-        return;
-      }
+      // Problems are NOT required at create time. The teacher might
+      // want to scaffold an empty draft now (title + units), generate
+      // questions later, then add them via the detail modal's edit-
+      // problems flow. Publish gating already requires ≥1 problem so
+      // empty drafts can never reach students.
       await teacher.createAssignment(courseId, {
         title: t,
         type: "homework",
         unit_ids: unitIds,
-        bank_item_ids: picked,
+        ...(picked.length > 0 ? { bank_item_ids: picked } : {}),
       });
       onCreated();
     });
@@ -110,11 +111,13 @@ export function NewHomeworkModal({
           {/* Bank picker */}
           <div className="mt-6">
             <label className="block text-sm font-bold text-text-primary">
-              Pick problems from your bank
+              Pick problems from your bank{" "}
+              <span className="font-normal text-text-muted">· optional</span>
             </label>
             <p className="mt-1 text-[11px] text-text-muted">
-              Only approved questions show up here. Pending and rejected questions
-              are filtered out. Pick from any unit — homework can mix units.
+              Only approved questions show up here. You can also create the homework
+              empty now and add problems later — you&rsquo;ll need at least one before
+              you can publish.
             </p>
             <BankPicker
               courseId={courseId}
