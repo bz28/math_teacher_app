@@ -1009,6 +1009,7 @@ function ModeLineFooter({
               <DestinationPicker
                 courseId={courseId}
                 busy={busy}
+                align="end"
                 onClose={onCloseAddToHomework}
                 onPickExisting={onPickExistingHomework}
                 onCreateNew={onCreateNewHomework}
