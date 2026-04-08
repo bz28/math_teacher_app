@@ -15,6 +15,7 @@ from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
+from api.models.unit import Unit
 from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import (
     hydrate_assignment_content,
@@ -113,6 +114,24 @@ class AssignSectionsRequest(BaseModel):
 
 
 # ── Helpers ──
+
+async def _validate_units_in_course(
+    db: AsyncSession, course_id: uuid.UUID, unit_ids: list[uuid.UUID],
+) -> None:
+    """Verify every id in `unit_ids` is a unit owned by `course_id`.
+    Raises 404 with a generic message (no id echo) on the first failure
+    so a teacher can't enumerate units across other courses."""
+    if not unit_ids:
+        return
+    found = set((await db.execute(
+        select(Unit.id).where(Unit.id.in_(unit_ids), Unit.course_id == course_id)
+    )).scalars().all())
+    if len(found) != len(unit_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more units do not belong to this course",
+        )
+
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
     assignment = (await db.execute(
@@ -270,15 +289,7 @@ async def create_assignment(
 
     # Validate every unit belongs to this course. Required ≥1 by the
     # request validator.
-    from api.models.unit import Unit
-    found_units = set((await db.execute(
-        select(Unit.id).where(Unit.id.in_(body.unit_ids), Unit.course_id == course_id)
-    )).scalars().all())
-    if len(found_units) != len(body.unit_ids):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="One or more units do not belong to this course",
-        )
+    await _validate_units_in_course(db, course_id, body.unit_ids)
 
     # Validate document_ids belong to this course
     doc_id_strings: list[str] | None = None
@@ -402,15 +413,7 @@ async def update_assignment(
     if body.late_policy is not None:
         a.late_policy = body.late_policy
     if body.unit_ids is not None:
-        from api.models.unit import Unit
-        found_units = set((await db.execute(
-            select(Unit.id).where(Unit.id.in_(body.unit_ids), Unit.course_id == a.course_id)
-        )).scalars().all())
-        if len(found_units) != len(body.unit_ids):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="One or more units do not belong to this course",
-            )
+        await _validate_units_in_course(db, a.course_id, body.unit_ids)
         a.unit_ids = body.unit_ids
     # Re-snapshotting bank items takes precedence over a raw content blob.
     if body.bank_item_ids is not None or body.content is not None:

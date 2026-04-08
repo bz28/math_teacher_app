@@ -5,6 +5,7 @@ import type { BankItem, TeacherUnit } from "@/lib/api";
 import { unitLabel as labelForUnit } from "@/lib/units";
 import { MathText } from "@/components/shared/math-text";
 import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
+import { DIFFICULTY_STYLE } from "./constants";
 import { buildTree, type TreeNode } from "./tree";
 
 // Approved view, v2.
@@ -33,13 +34,14 @@ export function ApprovedView({
   units,
   onOpenItem,
   onOpenHomework,
-  onChanged,
 }: {
   items: BankItem[];
   units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
+  /** Used by the HW header's "Open ↗" button to jump to the
+   *  HomeworkDetailModal. ProblemCard rows do NOT use this — clicking
+   *  a card opens the WorkshopModal via onOpenItem instead. */
   onOpenHomework: (id: string) => void;
-  onChanged: () => void;
 }) {
   // Build the unit → HW → primaries grouping. A HW with multiple
   // unit_ids is shown under each of its units (intentional, explicit
@@ -142,7 +144,6 @@ export function ApprovedView({
           units={units}
           onOpenItem={onOpenItem}
           onOpenHomework={onOpenHomework}
-          onChanged={onChanged}
         />
       ))}
 
@@ -156,8 +157,6 @@ export function ApprovedView({
               nodes={inTestOrQuiz}
               units={units}
               onOpenItem={onOpenItem}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
             />
           )}
           {unattached.length > 0 && (
@@ -168,8 +167,6 @@ export function ApprovedView({
               nodes={unattached}
               units={units}
               onOpenItem={onOpenItem}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
             />
           )}
         </div>
@@ -186,14 +183,12 @@ function UnitSection({
   units,
   onOpenItem,
   onOpenHomework,
-  onChanged,
 }: {
   label: string;
   hws: { id: string; title: string; status: string; unit_ids: string[]; nodes: TreeNode[] }[];
   units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
-  onChanged: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const totalProblems = hws.reduce((sum, hw) => sum + hw.nodes.length, 0);
@@ -229,7 +224,6 @@ function UnitSection({
               units={units}
               onOpenItem={onOpenItem}
               onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
             />
           ))}
         </div>
@@ -246,13 +240,11 @@ function HomeworkCard({
   units,
   onOpenItem,
   onOpenHomework,
-  onChanged,
 }: {
   hw: { id: string; title: string; status: string; unit_ids: string[]; nodes: TreeNode[] };
   units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
-  onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const isPublished = hw.status === "published";
@@ -318,8 +310,6 @@ function HomeworkCard({
               node={node}
               units={units}
               onOpenItem={onOpenItem}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
             />
           ))}
         </div>
@@ -339,15 +329,12 @@ function ProblemCard({
   node,
   units,
   onOpenItem,
-  onChanged,
 }: {
   /** Units of the parent HW. Used to detect cross-unit borrowing. */
   hwUnitIds: string[];
   node: TreeNode;
   units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
 }) {
   const item = node.item;
   const childrenCount = node.children.length;
@@ -401,17 +388,13 @@ function ProblemCard({
 }
 
 function DifficultyPill({ difficulty }: { difficulty: string }) {
-  const cls =
-    difficulty === "easy"
-      ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
-      : difficulty === "hard"
-        ? "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300"
-        : "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300";
+  const style = DIFFICULTY_STYLE[difficulty];
+  if (!style) return null;
   return (
     <span
-      className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${style.cls}`}
     >
-      {difficulty}
+      {style.label}
     </span>
   );
 }
@@ -425,8 +408,6 @@ function SecondarySection({
   nodes,
   units,
   onOpenItem,
-  onOpenHomework,
-  onChanged,
 }: {
   icon: string;
   label: string;
@@ -434,8 +415,6 @@ function SecondarySection({
   nodes: TreeNode[];
   units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -461,8 +440,6 @@ function SecondarySection({
               node={node}
               units={units}
               onOpenItem={onOpenItem}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
             />
           ))}
         </div>

@@ -308,7 +308,6 @@ export function QuestionBankTab({
               units={units}
               onOpenItem={setOpenItem}
               onOpenHomework={setOpenHomeworkId}
-              onChanged={reload}
             />
           )}
         </div>

@@ -9,14 +9,12 @@ import { DIFFICULTY_STYLE } from "./constants";
 
 // Dense one-line row. Status dot, truncated question, Used-in pills,
 // optional unit label, lock badge, kebab menu. Click the question text
-// to open the workshop modal. The `variation` flag styles it slightly
-// smaller + no border so it nests visually under its parent.
+// to open the workshop modal. Used by SimpleUnitList for the
+// Pending/Rejected views (Approved uses approved-tree's ProblemCard).
 export function BankRow({
   item,
   unitLabel,
   showUnit,
-  variation = false,
-  hideUsedInPills = false,
   onOpen,
   onOpenHomework,
   onChanged,
@@ -24,11 +22,6 @@ export function BankRow({
   item: BankItem;
   unitLabel: string;
   showUnit: boolean;
-  variation?: boolean;
-  // When the row is rendered inside a HW folder, the "used in <hw>"
-  // pill is redundant — the surrounding folder already says it. Hide
-  // the pills in that context to cut visual noise.
-  hideUsedInPills?: boolean;
   onOpen: () => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
@@ -60,9 +53,9 @@ export function BankRow({
 
   return (
     <div
-      className={`flex items-start gap-3 px-3 transition-all hover:-translate-y-px hover:bg-bg-subtle hover:shadow-sm ${
-        variation ? "py-1.5 text-xs" : "py-3 text-sm"
-      } ${item.status === "rejected" ? "opacity-60" : ""}`}
+      className={`flex items-start gap-3 px-3 py-3 text-sm transition-all hover:-translate-y-px hover:bg-bg-subtle hover:shadow-sm ${
+        item.status === "rejected" ? "opacity-60" : ""
+      }`}
     >
       <span
         className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotClass}`}
@@ -84,7 +77,7 @@ export function BankRow({
             {item.source === "practice" && (
               <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
             )}
-            <span className={`truncate font-semibold ${variation ? "" : "text-[15px]"}`}>
+            <span className="truncate text-[15px] font-semibold">
               {item.title}
             </span>
           </div>
@@ -92,26 +85,25 @@ export function BankRow({
         {/* Mobile: pills + unit label wrap below the question text on
             narrow screens. Desktop renders them on the right. Lives
             outside the question button so the nested-button is valid. */}
-        {(showUnit || (!hideUsedInPills && item.used_in.length > 0)) && (
+        {(showUnit || item.used_in.length > 0) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
             {showUnit && <span>📁 {unitLabel}</span>}
-            {!hideUsedInPills &&
-              item.used_in.map((u) => (
-                <UsedInPill
-                  key={u.id}
-                  entry={u}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenHomework(u.id);
-                  }}
-                />
-              ))}
+            {item.used_in.map((u) => (
+              <UsedInPill
+                key={u.id}
+                entry={u}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenHomework(u.id);
+                }}
+              />
+            ))}
           </div>
         )}
       </div>
 
       {/* Desktop: pills sit to the right of the question text */}
-      {!hideUsedInPills && item.used_in.length > 0 && (
+      {item.used_in.length > 0 && (
         <div className="hidden shrink-0 flex-wrap items-center gap-1 pt-0.5 sm:flex">
           {item.used_in.map((u) => (
             <UsedInPill
