@@ -55,6 +55,11 @@ export function HomeworkDetailModal({
   const [titleDraft, setTitleDraft] = useState("");
   const [editingProblems, setEditingProblems] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Confirm dialog for "publish without due date" — common mistake we
+  // catch with a soft confirm rather than blocking, because no-due-date
+  // HWs are a real legitimate use case (in-class, untimed practice).
+  const [confirmingNoDueDate, setConfirmingNoDueDate] = useState(false);
+  const dueDateInputRef = useRef<HTMLInputElement>(null);
   const { busy, error, setError, run } = useAsyncAction();
 
   // Per-field save state for the inline-edited config block.
@@ -135,9 +140,22 @@ export function HomeworkDetailModal({
   const publish = () =>
     run(async () => {
       await teacher.publishAssignment(assignmentId);
+      setConfirmingNoDueDate(false);
       await reload();
       onChanged();
     });
+
+  // Click handler for the Publish button. If the HW has no due date,
+  // intercept and show a soft confirm — most "no due date" publishes
+  // are mistakes, but it IS a valid choice (in-class work, ongoing
+  // practice). Click "Publish anyway" in the confirm to proceed.
+  const handlePublishClick = () => {
+    if (hw && hw.due_at === null) {
+      setConfirmingNoDueDate(true);
+      return;
+    }
+    publish();
+  };
 
   const unpublish = () =>
     run(async () => {
@@ -360,6 +378,7 @@ export function HomeworkDetailModal({
                 disabled={isPublished}
                 saveStates={saveStates}
                 saveErrors={saveErrors}
+                dueDateInputRef={dueDateInputRef}
                 onChangeUnits={onChangeUnits}
                 onChangeDueAt={onChangeDueAt}
                 onChangeLatePolicy={onChangeLatePolicy}
@@ -403,73 +422,114 @@ export function HomeworkDetailModal({
 
         {/* Footer */}
         {!editingProblems && hw && (
-          <div className="flex items-center justify-between gap-2 border-t border-border-light px-6 py-3">
-            <div className="flex items-center gap-2">
-              {isPublished ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-light px-6 py-3">
+            {confirmingNoDueDate ? (
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  ⚠ Publish without a due date? Students will see this as
+                  &ldquo;no due date&rdquo;.
+                </span>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmingNoDueDate(false);
+                      // Focus the date input + scroll it into view so the
+                      // teacher can fix it without hunting.
+                      setTimeout(() => {
+                        dueDateInputRef.current?.focus();
+                        dueDateInputRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                      }, 0);
+                    }}
+                    disabled={busy}
+                    className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                  >
+                    Add due date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={publish}
+                    disabled={busy}
+                    className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Publish anyway
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {isPublished ? (
+                  <button
+                    type="button"
+                    onClick={unpublish}
+                    disabled={busy}
+                    className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                  >
+                    Unpublish
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handlePublishClick}
+                    disabled={busy || !canPublish}
+                    title={
+                      canPublish
+                        ? "Publish — locks the questions in the bank"
+                        : `Missing: ${missingForPublish.join(", ")}`
+                    }
+                    className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Publish ▸
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={unpublish}
-                  disabled={busy}
-                  className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                  disabled
+                  title="Coming soon"
+                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-muted disabled:opacity-50"
                 >
-                  Unpublish
+                  ⚙ Submissions
                 </button>
+              </div>
+            )}
+            {/* Right side hidden while the no-due-date confirm is up
+                so the two confirms don't compete for the row. */}
+            {!confirmingNoDueDate &&
+              (confirmingDelete ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-red-700">
+                    Delete this homework?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={remove}
+                    disabled={busy}
+                    className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    Yes, delete
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
-                  onClick={publish}
-                  disabled={busy || !canPublish}
-                  title={
-                    canPublish
-                      ? "Publish — locks the questions in the bank"
-                      : `Missing: ${missingForPublish.join(", ")}`
-                  }
-                  className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+                  onClick={() => setConfirmingDelete(true)}
+                  disabled={isPublished}
+                  title={isPublished ? "Unpublish before deleting" : ""}
+                  className="rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
                 >
-                  Publish ▸
+                  🗑 Delete
                 </button>
-              )}
-              <button
-                type="button"
-                disabled
-                title="Coming soon"
-                className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-muted disabled:opacity-50"
-              >
-                ⚙ Submissions
-              </button>
-            </div>
-            {confirmingDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-red-700">
-                  Delete this homework?
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={remove}
-                  disabled={busy}
-                  className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  Yes, delete
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(true)}
-                disabled={isPublished}
-                title={isPublished ? "Unpublish before deleting" : ""}
-                className="rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-              >
-                🗑 Delete
-              </button>
-            )}
+              ))}
           </div>
         )}
       </div>
@@ -485,6 +545,7 @@ function ConfigBlock({
   disabled,
   saveStates,
   saveErrors,
+  dueDateInputRef,
   onChangeUnits,
   onChangeDueAt,
   onChangeLatePolicy,
@@ -495,6 +556,7 @@ function ConfigBlock({
   disabled: boolean;
   saveStates: Record<ConfigField, SaveState>;
   saveErrors: Record<ConfigField, string | null>;
+  dueDateInputRef?: React.Ref<HTMLInputElement>;
   onChangeUnits: (next: string[]) => void;
   onChangeDueAt: (next: string | null) => void;
   onChangeLatePolicy: (next: string) => void;
@@ -536,6 +598,7 @@ function ConfigBlock({
           value={hw.due_at}
           onChange={onChangeDueAt}
           disabled={disabled}
+          inputRef={dueDateInputRef}
         />
       </Field>
 
@@ -630,10 +693,12 @@ function DueDatePicker({
   value,
   onChange,
   disabled,
+  inputRef,
 }: {
   value: string | null;
   onChange: (next: string | null) => void;
   disabled: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
 }) {
   // Snapshot "now" once at mount so the render stays pure (Date.now()
   // in render trips react-hooks/purity). The modal is short-lived
@@ -649,6 +714,7 @@ function DueDatePicker({
   return (
     <div className="flex items-center gap-2">
       <input
+        ref={inputRef}
         type="datetime-local"
         value={localValue}
         onChange={(e) => {
