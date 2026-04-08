@@ -16,6 +16,7 @@ export function BankRow({
   unitLabel,
   showUnit,
   variation = false,
+  hideUsedInPills = false,
   onOpen,
   onOpenHomework,
   onChanged,
@@ -24,6 +25,10 @@ export function BankRow({
   unitLabel: string;
   showUnit: boolean;
   variation?: boolean;
+  // When the row is rendered inside a HW folder, the "used in <hw>"
+  // pill is redundant — the surrounding folder already says it. Hide
+  // the pills in that context to cut visual noise.
+  hideUsedInPills?: boolean;
   onOpen: () => void;
   onOpenHomework: (id: string) => void;
   onChanged: () => void;
@@ -73,37 +78,40 @@ export function BankRow({
           title={item.question}
         >
           <div className="flex items-center gap-2 truncate">
-            <span className="shrink-0" aria-hidden>
+            <span className="shrink-0 text-base" aria-hidden>
               {conceptEmoji(item.title, item.question, useContext(CourseSubjectContext))}
             </span>
             {item.source === "practice" && (
               <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
             )}
-            <span className="truncate font-semibold">{item.title}</span>
+            <span className={`truncate font-semibold ${variation ? "" : "text-[15px]"}`}>
+              {item.title}
+            </span>
           </div>
         </button>
         {/* Mobile: pills + unit label wrap below the question text on
             narrow screens. Desktop renders them on the right. Lives
             outside the question button so the nested-button is valid. */}
-        {(showUnit || item.used_in.length > 0) && (
+        {(showUnit || (!hideUsedInPills && item.used_in.length > 0)) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
             {showUnit && <span>📁 {unitLabel}</span>}
-            {item.used_in.map((u) => (
-              <UsedInPill
-                key={u.id}
-                entry={u}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenHomework(u.id);
-                }}
-              />
-            ))}
+            {!hideUsedInPills &&
+              item.used_in.map((u) => (
+                <UsedInPill
+                  key={u.id}
+                  entry={u}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenHomework(u.id);
+                  }}
+                />
+              ))}
           </div>
         )}
       </div>
 
       {/* Desktop: pills sit to the right of the question text */}
-      {item.used_in.length > 0 && (
+      {!hideUsedInPills && item.used_in.length > 0 && (
         <div className="hidden shrink-0 flex-wrap items-center gap-1 pt-0.5 sm:flex">
           {item.used_in.map((u) => (
             <UsedInPill

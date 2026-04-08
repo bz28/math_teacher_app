@@ -2,6 +2,7 @@
 
 import type { BankItem, TeacherUnit } from "@/lib/api";
 import { subfoldersOf, topUnits } from "@/lib/units";
+import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 
 // Selection model for the rail. "all" = no filter; "uncategorized" =
 // items with no unit; otherwise a unit id.
@@ -15,11 +16,10 @@ interface UnitRailProps {
 }
 
 // Sidebar that lets the teacher pick which unit to view. Mirrors the
-// materials FolderTree visual language (rounded card, indented sub-units,
-// counts on the right) but is read-only — unit creation/rename/delete
-// lives in the materials tab. Counts come from the locally loaded items
-// for the current status filter, so they update instantly when the
-// teacher flips between Pending/Approved/Rejected.
+// materials FolderTree visual language exactly so the two surfaces feel
+// like siblings: rounded card container, indented sub-units, purple
+// accent on the selected row, count pill on the right. Read-only —
+// unit creation/rename/delete lives in the materials tab.
 export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
   const tops = topUnits(units);
 
@@ -32,17 +32,14 @@ export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
     <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-sm">
       <RailRow
         label="All units"
-        icon="📚"
         count={totalCount}
         active={selected === "all"}
         onSelect={() => onSelect("all")}
       />
       <RailRow
         label="Uncategorized"
-        icon="📂"
         count={uncategorizedCount}
         active={selected === "uncategorized"}
-        muted
         onSelect={() => onSelect("uncategorized")}
       />
 
@@ -58,7 +55,6 @@ export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
             <li key={u.id}>
               <RailRow
                 label={u.name}
-                icon="📁"
                 count={countFor(u.id)}
                 active={selected === u.id}
                 onSelect={() => onSelect(u.id)}
@@ -69,7 +65,6 @@ export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
                     <li key={sub.id}>
                       <RailRow
                         label={sub.name}
-                        icon="📁"
                         count={countFor(sub.id)}
                         active={selected === sub.id}
                         isSub
@@ -89,18 +84,14 @@ export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
 
 function RailRow({
   label,
-  icon,
   count,
   active,
-  muted,
   isSub,
   onSelect,
 }: {
   label: string;
-  icon: string;
   count: number;
   active: boolean;
-  muted?: boolean;
   isSub?: boolean;
   onSelect: () => void;
 }) {
@@ -108,27 +99,35 @@ function RailRow({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center gap-2 rounded-[--radius-md] px-2 py-1.5 text-left text-xs transition-colors ${
+      className={`group/row relative flex w-full items-center gap-2 rounded-[--radius-sm] px-2 py-2 text-left text-sm transition-colors duration-150 ease-out focus-visible:outline-none ${
         active
-          ? "bg-primary/10 font-bold text-primary"
-          : muted
-            ? "text-text-muted hover:bg-bg-subtle"
-            : "text-text-secondary hover:bg-bg-subtle hover:text-text-primary"
-      } ${isSub ? "text-[11px]" : ""}`}
+          ? "bg-primary-bg font-semibold text-primary"
+          : "text-text-secondary hover:bg-bg-subtle"
+      }`}
     >
-      <span aria-hidden>{icon}</span>
-      <span className="min-w-0 flex-1 truncate font-semibold">{label}</span>
-      {count > 0 && (
+      {active && (
         <span
-          className={`shrink-0 rounded-[--radius-pill] px-1.5 text-[10px] font-bold ${
-            active
-              ? "bg-primary text-white"
-              : "bg-bg-subtle text-text-muted"
-          }`}
-        >
-          {count}
-        </span>
+          aria-hidden
+          className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-primary"
+        />
       )}
+      {active && !isSub ? (
+        <FolderOpenIcon className="h-4 w-4 shrink-0 text-primary" />
+      ) : (
+        <FolderIcon
+          className={`h-4 w-4 shrink-0 ${active ? "text-primary" : "text-text-muted"}`}
+        />
+      )}
+      <span className={`min-w-0 flex-1 truncate ${isSub ? "text-[13px]" : ""}`}>{label}</span>
+      <span
+        className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+          active
+            ? "bg-primary text-white"
+            : "bg-bg-subtle text-text-muted group-hover/row:bg-surface"
+        }`}
+      >
+        {count}
+      </span>
     </button>
   );
 }

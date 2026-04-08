@@ -3,25 +3,21 @@
 import { useMemo, useState } from "react";
 import type { BankItem, TeacherUnit } from "@/lib/api";
 import { unitLabel as labelForUnit } from "@/lib/units";
+import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 import { BankRow } from "./bank-row";
 import { buildTree, type TreeNode } from "./tree";
 
-// Approved view, folder edition. Replaces the old Available / In a
-// homework or test split with the proper folder structure agreed in
-// plans/question-bank-redesign-v2.md:
+// Approved view, folder edition. Renders the agreed structure:
 //
 //   📁 Unit
 //     └─ 📝 Homework
 //         └─ HW #1
 //             ├─ Q1 🔒  ✨ N variations
-//             └─ Q2 🔒  ⚠️ 0 variations
-//     └─ 📂 Unattached  (approved primaries not yet in any homework)
+//             └─ Q2 🔒  ⚠️ 0 practice variations
+//     └─ 📂 Unattached  (rare; legacy or orphan questions)
 //
-// Tests / mock exam are deferred to a later phase.
-//
-// All grouping is computed client-side from the items prop and each
-// item's used_in array — there's no server-side join needed because
-// the bank list endpoint already hydrates used_in.
+// Visual language matches the materials tab — rounded surface card,
+// purple accent on hover, generous spacing.
 export function ApprovedUnitFolder({
   label,
   items,
@@ -38,12 +34,7 @@ export function ApprovedUnitFolder({
   onChanged: () => void;
 }) {
   const [unitOpen, setUnitOpen] = useState(true);
-  const [homeworkOpen, setHomeworkOpen] = useState(true);
-  const [unattachedOpen, setUnattachedOpen] = useState(false);
 
-  // Group root nodes by HW. A primary that lives in multiple homeworks
-  // (rare but possible — same question on two HWs) appears under each.
-  // Variations are pulled along as children of the primary.
   const { hwGroups, unattached } = useMemo(() => {
     const tree = buildTree(items);
     const hwMap = new Map<
@@ -84,98 +75,62 @@ export function ApprovedUnitFolder({
   const totalCount = items.length;
 
   return (
-    <div>
+    <section className="rounded-[--radius-lg] border border-border-light bg-surface shadow-sm">
+      {/* Unit header — large, clickable to collapse */}
       <button
         type="button"
         onClick={() => setUnitOpen((v) => !v)}
-        className="flex w-full items-center gap-2 border-b border-border-light pb-1 text-left text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-subtle"
       >
-        <span>{unitOpen ? "▾" : "▸"}</span>
-        <span>📁 {label}</span>
-        <span className="font-normal normal-case text-text-muted/80">
-          · {totalCount} {totalCount === 1 ? "question" : "questions"}
+        {unitOpen ? (
+          <FolderOpenIcon className="h-5 w-5 shrink-0 text-primary" />
+        ) : (
+          <FolderIcon className="h-5 w-5 shrink-0 text-text-muted" />
+        )}
+        <h3 className="min-w-0 flex-1 truncate text-base font-bold text-text-primary">
+          {label}
+        </h3>
+        <span className="shrink-0 rounded-full bg-bg-subtle px-2 py-0.5 text-[11px] font-bold text-text-muted">
+          {totalCount} {totalCount === 1 ? "question" : "questions"}
         </span>
+        <span className="shrink-0 text-text-muted">{unitOpen ? "▾" : "▸"}</span>
       </button>
 
       {unitOpen && (
-        <div className="mt-3 space-y-3">
-          {/* Homework folder — only if any HWs reference questions in
-              this unit. */}
-          {hwGroups.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setHomeworkOpen((v) => !v)}
-                className="flex w-full items-center gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
-              >
-                <span>{homeworkOpen ? "▾" : "▸"}</span>
-                <span>📝 Homework</span>
-                <span className="font-normal normal-case text-text-muted/80">
-                  · {hwGroups.length}
-                </span>
-              </button>
-              {homeworkOpen && (
-                <div className="mt-2 space-y-3">
-                  {hwGroups.map((hw) => (
-                    <HomeworkFolder
-                      key={hw.id}
-                      hw={hw}
-                      units={units}
-                      onOpenItem={onOpenItem}
-                      onOpenHomework={onOpenHomework}
-                      onChanged={onChanged}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        <div className="space-y-4 border-t border-border-light px-4 py-4">
+          {hwGroups.map((hw) => (
+            <HomeworkCard
+              key={hw.id}
+              hw={hw}
+              units={units}
+              onOpenItem={onOpenItem}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          ))}
 
-          {/* Unattached primaries — approved but not in any HW yet.
-              Should be rare under the new flow but happens for legacy
-              data or after a HW gets deleted. */}
           {unattached.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setUnattachedOpen((v) => !v)}
-                className="flex w-full items-center gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
-              >
-                <span>{unattachedOpen ? "▾" : "▸"}</span>
-                <span>📂 Unattached</span>
-                <span className="font-normal normal-case text-text-muted/80">
-                  · {unattached.length}
-                </span>
-              </button>
-              {unattachedOpen && (
-                <div className="mt-2 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
-                  {unattached.map((node) => (
-                    <PrimaryWithVariations
-                      key={node.item.id}
-                      node={node}
-                      units={units}
-                      onOpenItem={onOpenItem}
-                      onOpenHomework={onOpenHomework}
-                      onChanged={onChanged}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            <UnattachedSection
+              nodes={unattached}
+              units={units}
+              onOpenItem={onOpenItem}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
           )}
 
           {hwGroups.length === 0 && unattached.length === 0 && (
-            <div className="rounded-[--radius-md] border border-dashed border-border-light px-3 py-6 text-center text-xs italic text-text-muted">
+            <div className="rounded-[--radius-md] border border-dashed border-border-light px-3 py-8 text-center text-xs italic text-text-muted">
               No approved questions in this unit yet.
             </div>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-function HomeworkFolder({
+function HomeworkCard({
   hw,
   units,
   onOpenItem,
@@ -190,38 +145,57 @@ function HomeworkFolder({
 }) {
   const [open, setOpen] = useState(true);
   const isPublished = hw.status === "published";
+
+  // Variation health summary for the HW header — fast at-a-glance
+  // signal of how much practice coverage this homework has.
+  const totalProblems = hw.nodes.length;
+  const problemsWithVariations = hw.nodes.filter((n) => n.children.length > 0).length;
+  const needsAttention = problemsWithVariations < totalProblems;
+
   return (
-    <div>
-      <div className="flex items-center gap-2">
+    <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-bg-base">
+      {/* HW header */}
+      <div className="flex items-center gap-2 bg-bg-subtle/50 px-3 py-2">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs font-semibold text-text-secondary hover:text-text-primary"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span>{open ? "▾" : "▸"}</span>
-          <span className="truncate">📂 {hw.title}</span>
+          <span className="text-text-muted">{open ? "▾" : "▸"}</span>
+          <span className="text-base">📝</span>
+          <span className="min-w-0 truncate font-bold text-text-primary">
+            {hw.title}
+          </span>
           <span
-            className={`shrink-0 rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
               isPublished
                 ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
-                : "border border-dashed border-text-muted/40 text-text-muted"
+                : "border border-text-muted/40 text-text-muted"
             }`}
           >
             {isPublished ? "published" : "draft"}
           </span>
-          <span className="shrink-0 text-text-muted/70">· {hw.nodes.length}</span>
+          <span className="shrink-0 text-[11px] font-semibold text-text-muted">
+            {totalProblems} {totalProblems === 1 ? "problem" : "problems"}
+            {needsAttention && (
+              <span className="ml-1 text-amber-600 dark:text-amber-400">
+                · ⚠️ {totalProblems - problemsWithVariations} need variations
+              </span>
+            )}
+          </span>
         </button>
         <button
           type="button"
           onClick={() => onOpenHomework(hw.id)}
-          className="shrink-0 rounded p-1 text-[10px] font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+          className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[10px] font-bold text-text-secondary hover:bg-bg-subtle hover:text-text-primary"
           title="Open homework"
         >
           Open ↗
         </button>
       </div>
+
       {open && (
-        <div className="ml-4 mt-1 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
+        <div className="divide-y divide-border-light/60">
           {hw.nodes.map((node) => (
             <PrimaryWithVariations
               key={node.item.id}
@@ -238,10 +212,54 @@ function HomeworkFolder({
   );
 }
 
+function UnattachedSection({
+  nodes,
+  units,
+  onOpenItem,
+  onOpenHomework,
+  onChanged,
+}: {
+  nodes: TreeNode[];
+  units: TeacherUnit[];
+  onOpenItem: (item: BankItem) => void;
+  onOpenHomework: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-[--radius-md] border border-dashed border-border-light bg-bg-base">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <span className="text-text-muted">{open ? "▾" : "▸"}</span>
+        <span className="text-base">📂</span>
+        <span className="font-bold text-text-secondary">Unattached</span>
+        <span className="text-[11px] font-semibold text-text-muted">
+          · {nodes.length} not in any homework
+        </span>
+      </button>
+      {open && (
+        <div className="divide-y divide-border-light/60">
+          {nodes.map((node) => (
+            <PrimaryWithVariations
+              key={node.item.id}
+              node={node}
+              units={units}
+              onOpenItem={onOpenItem}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // One primary problem row + an inline expander for its practice
-// variations. The variation badge is the standout new visual: green
-// when there are variations, amber ⚠️ when there are zero (signals
-// the teacher to generate some).
+// variations. The variation badge is the standout new visual element.
 function PrimaryWithVariations({
   node,
   units,
@@ -262,49 +280,53 @@ function PrimaryWithVariations({
   const hasVariations = childrenCount > 0;
 
   return (
-    <div>
+    <div className="bg-surface">
       <BankRow
         item={node.item}
         unitLabel={labelForUnit(units, node.item.unit_id)}
         showUnit={false}
+        hideUsedInPills
         onOpen={() => onOpenItem(node.item)}
         onOpenHomework={onOpenHomework}
         onChanged={onChanged}
       />
-      <div className="ml-7 mb-1.5 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => hasVariations && setVariationsOpen((v) => !v)}
-          disabled={!hasVariations}
-          className={`flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold ${
-            hasVariations
-              ? "bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300"
-              : "border border-dashed border-amber-400 text-amber-700 dark:border-amber-500/40 dark:text-amber-400"
-          }`}
-        >
-          {hasVariations ? (
-            <>
-              {variationsOpen ? "▾" : "▸"} ✨ {approvedChildren} variation
-              {approvedChildren === 1 ? "" : "s"}
-              {pendingChildren > 0 && ` · ${pendingChildren} pending`}
-            </>
-          ) : (
-            <>⚠️ 0 practice variations</>
-          )}
-        </button>
-        {!hasVariations && (
+      {/* Variation badge — sits below the row, indented to align with
+          the question text. Green when variations exist, amber when zero. */}
+      <div className="ml-7 mb-2 flex items-center gap-2">
+        {hasVariations ? (
           <button
             type="button"
-            onClick={() => onOpenItem(node.item)}
-            className="rounded-[--radius-pill] border border-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/10"
-            title="Open the question to generate similar variations"
+            onClick={() => setVariationsOpen((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-[11px] font-bold text-purple-800 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:hover:bg-purple-500/30"
           >
-            Generate →
+            <span>{variationsOpen ? "▾" : "▸"}</span>
+            <span>
+              ✨ {approvedChildren} practice variation{approvedChildren === 1 ? "" : "s"}
+            </span>
+            {pendingChildren > 0 && (
+              <span className="ml-1 rounded-full bg-purple-200 px-1.5 text-[9px] dark:bg-purple-500/30">
+                {pendingChildren} pending
+              </span>
+            )}
           </button>
+        ) : (
+          <>
+            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-400 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
+              ⚠️ No practice variations yet
+            </span>
+            <button
+              type="button"
+              onClick={() => onOpenItem(node.item)}
+              className="rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-amber-700"
+              title="Open the question to generate similar variations"
+            >
+              Generate →
+            </button>
+          </>
         )}
       </div>
       {hasVariations && variationsOpen && (
-        <div className="ml-6 border-l border-border-light">
+        <div className="ml-6 border-l-2 border-purple-200 dark:border-purple-500/30">
           {node.children.map((child) => (
             <BankRow
               key={child.id}
@@ -312,6 +334,7 @@ function PrimaryWithVariations({
               unitLabel={labelForUnit(units, child.unit_id)}
               showUnit={false}
               variation
+              hideUsedInPills
               onOpen={() => onOpenItem(child)}
               onOpenHomework={onOpenHomework}
               onChanged={onChanged}
