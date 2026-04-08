@@ -39,6 +39,11 @@ class Assignment(Base):
     content: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # questions list
     answer_key: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # solutions
     document_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # referenced doc UUIDs
+    # Per-HW toggle for the integrity-checker pipeline. Default true;
+    # the teacher will be able to flip it off in PR 5 once the UI exists.
+    integrity_check_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true",
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -1,8 +1,8 @@
 """Integration tests for the school-student practice/learn loop endpoints.
 
 These exercise the full validation chain on /v1/school/student/... by
-seeding minimal DB state directly: a course, a section, a teacher, a
-student, an enrollment, an assignment, and a small variation tree.
+seeding minimal DB state directly via the shared `world` fixture in
+tests/conftest.py.
 
 No LLM is involved — distractors and solution steps are seeded as plain
 data on QuestionBankItem rows.
@@ -11,165 +11,16 @@ data on QuestionBankItem rows.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
-from api.models.assignment import Assignment, AssignmentSection
-from api.models.course import Course
-from api.models.question_bank import QuestionBankItem
-from api.models.section import Section
-from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
-
-# ── Fixtures ──
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-async def _truncate() -> None:
-    """Wipe the loop-relevant tables before each test. We don't drop the
-    whole schema because the session-level setup_db fixture in conftest
-    already created it once."""
-    async with get_session_factory()() as s:
-        await s.execute(text(
-            "TRUNCATE TABLE bank_consumption, assignment_sections, assignments, "
-            "section_enrollments, sections, question_bank_items, courses, users "
-            "RESTART IDENTITY CASCADE"
-        ))
-        await s.commit()
-
-
-@pytest.fixture
-async def world() -> dict[str, Any]:
-    """Seed a course/section/student/assignment/variation tree and
-    return the ids needed by tests. The HW primary has 3 approved
-    variations + 1 pending (which must be ignored)."""
-    await _truncate()
-    async with get_session_factory()() as s:
-        teacher = User(
-            email=f"teacher_{uuid.uuid4().hex[:6]}@t.com",
-            password_hash=hash_password("x"),
-            grade_level=12,
-            role="teacher",
-            name="T",
-        )
-        student = User(
-            email=f"student_{uuid.uuid4().hex[:6]}@t.com",
-            password_hash=hash_password("x"),
-            grade_level=8,
-            role="student",
-            name="S",
-        )
-        outsider = User(
-            email=f"outsider_{uuid.uuid4().hex[:6]}@t.com",
-            password_hash=hash_password("x"),
-            grade_level=8,
-            role="student",
-            name="O",
-        )
-        s.add_all([teacher, student, outsider])
-        await s.flush()
-
-        course = Course(name="Algebra 1", subject="math")
-        s.add(course)
-        await s.flush()
-
-        section = Section(course_id=course.id, name="Period 1")
-        s.add(section)
-        await s.flush()
-
-        s.add(SectionEnrollment(section_id=section.id, student_id=student.id))
-
-        primary = QuestionBankItem(
-            course_id=course.id,
-            title="Quadratics 1",
-            question="Solve x^2 - 5x + 6 = 0",
-            solution_steps=[{"title": "Factor", "description": "(x-2)(x-3)"}],
-            final_answer="x = 2 or x = 3",
-            distractors=["x=1", "x=-2", "x=5"],
-            status="approved",
-            source="generated",
-        )
-        s.add(primary)
-        await s.flush()
-
-        # 3 approved siblings + 1 pending sibling
-        siblings_approved = []
-        for i, q in enumerate([
-            ("Sib A", "Solve x^2 - 7x + 12 = 0", "x = 3 or x = 4"),
-            ("Sib B", "Solve x^2 - 9x + 20 = 0", "x = 4 or x = 5"),
-            ("Sib C", "Solve x^2 - 11x + 30 = 0", "x = 5 or x = 6"),
-        ]):
-            sib = QuestionBankItem(
-                course_id=course.id,
-                title=q[0],
-                question=q[1],
-                solution_steps=[{"title": "Factor", "description": "..."}],
-                final_answer=q[2],
-                distractors=[f"d{i}a", f"d{i}b", f"d{i}c"],
-                status="approved",
-                source="practice",
-                parent_question_id=primary.id,
-            )
-            s.add(sib)
-            siblings_approved.append(sib)
-
-        pending_sib = QuestionBankItem(
-            course_id=course.id,
-            title="Sib pending",
-            question="Solve x^2 - 13x + 42 = 0",
-            solution_steps=[],
-            final_answer="x = 6 or x = 7",
-            distractors=["a", "b", "c"],
-            status="pending",
-            source="practice",
-            parent_question_id=primary.id,
-        )
-        s.add(pending_sib)
-        await s.flush()
-
-        assignment = Assignment(
-            course_id=course.id,
-            unit_ids=[],
-            teacher_id=teacher.id,
-            title="HW 1",
-            type="homework",
-            status="published",
-            content={"problems": [
-                {"bank_item_id": str(primary.id), "position": 1,
-                 "question": primary.question, "solution_steps": primary.solution_steps,
-                 "final_answer": primary.final_answer, "difficulty": primary.difficulty},
-            ]},
-        )
-        s.add(assignment)
-        await s.flush()
-        s.add(AssignmentSection(
-            assignment_id=assignment.id,
-            section_id=section.id,
-            published_at=datetime.now(UTC),
-        ))
-        await s.commit()
-
-        return {
-            "student_id": student.id,
-            "outsider_id": outsider.id,
-            "teacher_id": teacher.id,
-            "assignment_id": assignment.id,
-            "primary_id": primary.id,
-            "approved_sibling_ids": [s.id for s in siblings_approved],
-            "pending_sibling_id": pending_sib.id,
-            "student_token": create_access_token(str(student.id), "student"),
-            "outsider_token": create_access_token(str(outsider.id), "student"),
-            "teacher_token": create_access_token(str(teacher.id), "teacher"),
-        }
-
+from tests.conftest import TINY_PNG
+from tests.conftest import auth_headers as _auth
 
 # ── Tests ──
 
@@ -371,12 +222,6 @@ async def test_homework_detail_403_for_outsider(client: AsyncClient, world: dict
         headers=_auth(world["outsider_token"]),
     )
     assert r.status_code == 403
-
-
-TINY_PNG = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4"
-    "2mP8/x8AAusB9YpO3vQAAAAASUVORK5CYII="
-)
 
 
 async def test_submit_homework_happy_path(client: AsyncClient, world: dict[str, Any]) -> None:

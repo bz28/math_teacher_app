@@ -18,6 +18,7 @@ from api.routes.auth import router as auth_router
 from api.routes.contact import router as contact_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
+from api.routes.integrity_check import router as integrity_router
 from api.routes.practice import router as practice_router
 from api.routes.promo import router as promo_router
 from api.routes.school_student_practice import router as school_student_router
@@ -113,3 +114,4 @@ app.include_router(promo_router, prefix="/v1")
 app.include_router(contact_router, prefix="/v1")
 app.include_router(teacher_router, prefix="/v1")
 app.include_router(school_student_router, prefix="/v1")
+app.include_router(integrity_router, prefix="/v1")
