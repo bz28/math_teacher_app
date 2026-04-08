@@ -28,6 +28,15 @@ export default function HomePage() {
     document.documentElement.removeAttribute("data-subject");
   }, []);
 
+  // School students belong in the school portal — never on personal /home.
+  // This catches direct nav, page refresh, and the second-click-after-join
+  // case where the join itself 409s but school_id was already stamped.
+  useEffect(() => {
+    if (user?.role === "student" && user.school_id) {
+      router.replace("/school/student");
+    }
+  }, [user, router]);
+
   const loadEnrolledCourses = () => {
     auth
       .enrolledCourses()
