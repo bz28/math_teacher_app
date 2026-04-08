@@ -12,16 +12,20 @@ interface MockTestConfigProps {
   onTimeLimitChange: (minutes: number) => void;
   multipleChoice: boolean;
   onMultipleChoiceChange: (mc: boolean) => void;
+  /** Subject theme color used for active pill background and stepper accents */
+  themeColor?: string;
 }
 
 function PillToggle<T extends string>({
   options,
   value,
   onChange,
+  themeColor,
 }: {
   options: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
+  themeColor: string;
 }) {
   return (
     <View style={styles.pillGroup}>
@@ -30,7 +34,7 @@ function PillToggle<T extends string>({
         return (
           <AnimatedPressable
             key={opt.id}
-            style={[styles.pill, active && styles.pillActive]}
+            style={[styles.pill, active && { backgroundColor: themeColor }]}
             onPress={() => onChange(opt.id)}
             scaleDown={0.95}
           >
@@ -53,6 +57,7 @@ export function MockTestConfig({
   onTimeLimitChange,
   multipleChoice,
   onMultipleChoiceChange,
+  themeColor = colors.primary,
 }: MockTestConfigProps) {
   return (
     <View style={[styles.card, shadows.sm]}>
@@ -66,6 +71,7 @@ export function MockTestConfig({
           ]}
           value={examType}
           onChange={onExamTypeChange}
+          themeColor={themeColor}
         />
       </View>
 
@@ -82,6 +88,7 @@ export function MockTestConfig({
             ]}
             value={untimed ? "untimed" : "timed"}
             onChange={(id) => onUntimedChange(id === "untimed")}
+            themeColor={themeColor}
           />
           {!untimed && (
             <View style={styles.stepper}>
@@ -91,16 +98,16 @@ export function MockTestConfig({
                 scaleDown={0.9}
                 disabled={timeLimitMinutes <= 1}
               >
-                <Ionicons name="remove" size={14} color={timeLimitMinutes <= 1 ? colors.textMuted : colors.primary} />
+                <Ionicons name="remove" size={14} color={timeLimitMinutes <= 1 ? colors.textMuted : themeColor} />
               </AnimatedPressable>
-              <Text style={styles.stepperValue}>{timeLimitMinutes}m</Text>
+              <Text style={[styles.stepperValue, { color: themeColor }]}>{timeLimitMinutes}m</Text>
               <AnimatedPressable
                 style={[styles.stepperBtn, timeLimitMinutes >= 180 && styles.stepperBtnDisabled]}
                 onPress={() => onTimeLimitChange(Math.min(180, timeLimitMinutes + 5))}
                 scaleDown={0.9}
                 disabled={timeLimitMinutes >= 180}
               >
-                <Ionicons name="add" size={14} color={timeLimitMinutes >= 180 ? colors.textMuted : colors.primary} />
+                <Ionicons name="add" size={14} color={timeLimitMinutes >= 180 ? colors.textMuted : themeColor} />
               </AnimatedPressable>
             </View>
           )}
@@ -119,6 +126,7 @@ export function MockTestConfig({
           ]}
           value={multipleChoice ? "mc" : "free"}
           onChange={(id) => onMultipleChoiceChange(id === "mc")}
+          themeColor={themeColor}
         />
       </View>
     </View>

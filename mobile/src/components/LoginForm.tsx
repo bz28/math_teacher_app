@@ -212,9 +212,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
     ...typography.body,
+    lineHeight: 22,
     color: colors.text,
+    includeFontPadding: false,
   },
   eyeButton: {
     paddingHorizontal: 16,

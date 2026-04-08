@@ -133,6 +133,7 @@ function AppRoot() {
       content = (
         <HistoryListScreen
           subject={subject}
+          onSubjectChange={setSubject}
           onBack={() => setScreen("solve")}
           onViewSession={(sessionId) => {
             setReviewSessionId(sessionId);

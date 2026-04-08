@@ -4,18 +4,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
+import { SubjectPills } from "./SubjectPills";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
 import { colors, spacing, typography } from "../theme";
 
 interface HistoryListScreenProps {
   subject: string;
+  onSubjectChange: (s: string) => void;
   onBack: () => void;
   onViewSession: (sessionId: string) => void;
 }
 
 const PAGE_SIZE = 20;
 
-export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryListScreenProps) {
+export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSession }: HistoryListScreenProps) {
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -61,11 +63,8 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
   const completed = items.filter((s) => s.status !== "active");
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AnimatedPressable style={styles.backButton} onPress={onBack}>
-        <Ionicons name="chevron-back" size={20} color={colors.primary} />
-        <Text style={styles.backText}>Back</Text>
-      </AnimatedPressable>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+      <SubjectPills active={subject} onChange={onSubjectChange} />
 
       <Text style={styles.title}>{subjectLabel} History</Text>
 

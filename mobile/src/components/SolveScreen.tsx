@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -27,27 +27,12 @@ import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { MathText } from "./MathText";
+import { SubjectPills, getSubjectMeta } from "./SubjectPills";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
 
-type SubjectKey = "math" | "physics" | "chemistry";
 type Mode = "learn" | "mock_test";
-
-interface SubjectMeta {
-  key: SubjectKey;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  gradient: keyof typeof gradients;
-  primary: string;
-  primaryBg: string;
-}
-
-const SUBJECTS: SubjectMeta[] = [
-  { key: "math",      label: "Math",      icon: "calculator", gradient: "primary",   primary: "#6C5CE7", primaryBg: "#F0EDFF" },
-  { key: "physics",   label: "Physics",   icon: "rocket",     gradient: "physics",   primary: "#0984E3", primaryBg: "#E3F2FD" },
-  { key: "chemistry", label: "Chemistry", icon: "flask",      gradient: "chemistry", primary: "#00B894", primaryBg: "#E8F8F5" },
-];
 
 const MODES: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }[] = [
   { key: "learn", label: "Learn", icon: "book-outline", gradient: "primary" },
@@ -105,7 +90,7 @@ export function SolveScreen({
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
-  const activeSubject = SUBJECTS.find((s) => s.key === subject) ?? SUBJECTS[0];
+  const activeSubject = getSubjectMeta(subject);
 
   const {
     extracting,
@@ -292,50 +277,18 @@ export function SolveScreen({
     return `${verb} (${totalProblems})`;
   })();
 
-  // Subject-aware accent colors that flow through the whole screen
-  const theme = { primary: activeSubject.primary, primaryBg: activeSubject.primaryBg };
+  // Subject-aware accent colors that flow through the whole screen.
+  // MUST be memoized — recomputing on every keystroke caused TextInput
+  // re-renders that interrupted the keyboard in physics/chemistry modes.
+  const theme = useMemo(
+    () => ({ primary: activeSubject.primary, primaryBg: activeSubject.primaryBg }),
+    [activeSubject.primary, activeSubject.primaryBg],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       {/* Subject pill row — OUTSIDE KeyboardAvoidingView so it never reflows */}
-      <View style={styles.subjectRowOuter}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.subjectRow}
-        >
-          {SUBJECTS.map((s) => {
-            const isActive = s.key === subject;
-            return (
-              <AnimatedPressable
-                key={s.key}
-                onPress={() => onSubjectChange(s.key)}
-                scaleDown={0.95}
-                accessibilityRole="button"
-                accessibilityLabel={`${s.label}${isActive ? ", selected" : ""}`}
-                accessibilityState={{ selected: isActive }}
-              >
-                {isActive ? (
-                  <LinearGradient
-                    colors={gradients[s.gradient]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.subjectPill}
-                  >
-                    <Ionicons name={s.icon} size={16} color={colors.white} />
-                    <Text style={styles.subjectPillText}>{s.label}</Text>
-                  </LinearGradient>
-                ) : (
-                  <View style={[styles.subjectPill, styles.subjectPillInactive]}>
-                    <Ionicons name={s.icon} size={16} color={colors.textSecondary} />
-                    <Text style={[styles.subjectPillText, styles.subjectPillTextInactive]}>{s.label}</Text>
-                  </View>
-                )}
-              </AnimatedPressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+      <SubjectPills active={subject} onChange={onSubjectChange} />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -433,10 +386,10 @@ export function SolveScreen({
           <AnimatedPressable
             onPress={() => {
               setTyping(true);
-              setTimeout(() => {
-                inputRef.current?.focus();
-                scrollRef.current?.scrollToEnd({ animated: true });
-              }, 80);
+              // Focus immediately on next tick. KAV +
+              // automaticallyAdjustKeyboardInsets handle scrolling natively
+              // so we don't manually scrollToEnd (caused overshoot).
+              requestAnimationFrame(() => inputRef.current?.focus());
             }}
             disabled={typing}
             scaleDown={0.97}
@@ -460,7 +413,10 @@ export function SolveScreen({
                     ref={inputRef}
                     style={[styles.typeInput, { color: theme.primary }]}
                     value={input}
-                    onChangeText={(t) => { setInput(t); setError(null); }}
+                    onChangeText={(t) => {
+                      setInput(t);
+                      if (error) setError(null);
+                    }}
                     placeholder="Type your problem here…"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
@@ -554,6 +510,7 @@ export function SolveScreen({
               onTimeLimitChange={setTimeLimitMinutes}
               multipleChoice={multipleChoice}
               onMultipleChoiceChange={setMultipleChoice}
+              themeColor={theme.primary}
             />
           )}
 
@@ -678,39 +635,6 @@ function QuotaFooter({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-
-  // Subject pill row
-  subjectRowOuter: {
-    backgroundColor: colors.background,
-  },
-  subjectRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  subjectPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radii.pill,
-  },
-  subjectPillInactive: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  subjectPillText: {
-    ...typography.label,
-    color: colors.white,
-    fontSize: 13,
-  },
-  subjectPillTextInactive: {
-    color: colors.textSecondary,
-  },
 
   // Mode segmented control
   modeRow: {

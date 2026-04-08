@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { MathText } from "./MathText";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface Props {
@@ -125,12 +126,14 @@ export function ExtractionModal({
                     onPress={() => onStartEdit(i)}
                     activeOpacity={0.6}
                   >
-                    <Text
-                      style={[styles.problemText, !selected[i] && styles.deselected]}
+                    <MathText
+                      text={problem}
+                      style={{
+                        ...styles.problemText,
+                        ...(!selected[i] ? styles.deselected : {}),
+                      }}
                       numberOfLines={2}
-                    >
-                      {problem}
-                    </Text>
+                    />
                     <Ionicons name="pencil-outline" size={14} color={colors.textMuted} />
                   </TouchableOpacity>
                 )}

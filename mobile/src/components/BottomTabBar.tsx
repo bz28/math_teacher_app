@@ -13,7 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { key: "solve", label: "Solve", icon: "flash-outline", iconActive: "flash" },
+  { key: "solve", label: "Study", icon: "flash-outline", iconActive: "flash" },
   { key: "history", label: "History", icon: "time-outline", iconActive: "time" },
   { key: "library", label: "Library", icon: "library-outline", iconActive: "library" },
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },

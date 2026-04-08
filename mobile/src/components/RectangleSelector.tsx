@@ -599,11 +599,13 @@ const styles = StyleSheet.create({
   },
   rectDelete: {
     position: "absolute",
-    top: -11,
-    right: -11,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    // Float above the top-right corner so it doesn't overlap the
+    // resize handle that lives at the corner itself.
+    top: -32,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: colors.error,
     alignItems: "center",
     justifyContent: "center",
