@@ -5,6 +5,7 @@ import * as SecureStore from "expo-secure-store";
 export type ThemePref = "system" | "light" | "dark";
 
 const STORAGE_KEY = "theme_preference";
+const CYCLE: ThemePref[] = ["system", "light", "dark"];
 
 let listeners: Array<(p: ThemePref) => void> = [];
 let currentPref: ThemePref = "system";
@@ -34,6 +35,12 @@ export async function setThemePref(pref: ThemePref): Promise<void> {
   listeners.forEach((cb) => cb(pref));
 }
 
+/** Cycle through system → light → dark → system. Matches the web ThemeToggle. */
+export async function toggleThemePref(): Promise<void> {
+  const next = CYCLE[(CYCLE.indexOf(currentPref) + 1) % CYCLE.length];
+  await setThemePref(next);
+}
+
 /** React hook returning the current preference and the resolved color scheme. */
 export function useThemePref() {
   const [pref, setPref] = useState<ThemePref>(currentPref);
@@ -55,5 +62,5 @@ export function useThemePref() {
   const resolved: "light" | "dark" =
     pref === "system" ? (systemScheme === "dark" ? "dark" : "light") : pref;
 
-  return { pref, resolved, setPref: setThemePref };
+  return { pref, resolved, setPref: setThemePref, toggle: toggleThemePref };
 }
