@@ -615,6 +615,23 @@ export function WorkshopModal({
               chatOpen ? "md:border-r md:border-border-light" : ""
             }`}
           >
+            {/* Variation banner — shown only for items with a parent.
+                Makes it obvious the teacher is reviewing practice
+                scaffolding, not a standalone HW problem. */}
+            {liveItem.parent_question_id && (
+              <div className="mb-4 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 text-xs dark:border-amber-500/40 dark:bg-amber-500/10">
+                <div className="font-bold text-amber-900 dark:text-amber-200">
+                  ✨ Generated practice variation
+                </div>
+                <div className="mt-1 text-amber-800 dark:text-amber-300">
+                  Approving this makes it available as practice scaffolding for its
+                  parent problem (the one you generated similar from). Variations are
+                  served via the student practice loop — they&apos;re never added to a
+                  homework as standalone problems.
+                </div>
+              </div>
+            )}
+
             {/* Question */}
             <div
               className={`rounded-[--radius-lg] border p-5 transition-colors ${
@@ -792,6 +809,7 @@ export function WorkshopModal({
           status={liveItem.status}
           editOnly={editOnly}
           courseId={liveItem.course_id}
+          isVariation={!!liveItem.parent_question_id}
           showAddToHomeworkPicker={showAddToHomeworkPicker}
           onOpenAddToHomework={() => setShowAddToHomeworkPicker(true)}
           onCloseAddToHomework={() => setShowAddToHomeworkPicker(false)}
@@ -842,6 +860,7 @@ function ModeLineFooter({
   status,
   editOnly,
   courseId,
+  isVariation,
   showAddToHomeworkPicker,
   onOpenAddToHomework,
   onCloseAddToHomework,
@@ -865,6 +884,7 @@ function ModeLineFooter({
   status: string;
   editOnly: boolean;
   courseId: string;
+  isVariation: boolean;
   showAddToHomeworkPicker: boolean;
   onOpenAddToHomework: () => void;
   onCloseAddToHomework: () => void;
@@ -948,9 +968,16 @@ function ModeLineFooter({
   // regardless — used when opened from inside ReviewModal.
   const showApproveReject = !editOnly && (isQueueMode || status === "pending");
   // Single-mode pending replaces bare Approve with "→ Add to Homework"
-  // (matches the ReviewModal Flow A contract — approval requires a
-  // destination, never a silent fall-through to Unattached).
-  const showAddToHomework = !editOnly && !isQueueMode && status === "pending";
+  // for PRIMARY problems (no parent_question_id). Variations follow
+  // a different rule: they're practice scaffolding, not HW problems,
+  // so they get a plain Approve button instead. The backend's
+  // snapshot_bank_items guard rejects any attempt to add a variation
+  // as a HW primary regardless, but hiding the button removes the
+  // footgun at the source.
+  const showAddToHomework =
+    !editOnly && !isQueueMode && status === "pending" && !isVariation;
+  const showApproveAsVariation =
+    !editOnly && !isQueueMode && status === "pending" && isVariation;
 
   return (
     <div className="border-t border-border-light px-6 py-3">
@@ -1015,6 +1042,19 @@ function ModeLineFooter({
                 onCreateNew={onCreateNewHomework}
               />
             )}
+          </div>
+        )}
+        {showApproveAsVariation && (
+          <div className="ml-auto">
+            <button
+              type="button"
+              onClick={onApprove}
+              disabled={busy}
+              className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+              title="Approves this as practice scaffolding for its parent problem. Practice variations are NOT added to a homework as standalone problems — they're served via the student practice loop."
+            >
+              ✓ Approve as practice
+            </button>
           </div>
         )}
         <button
