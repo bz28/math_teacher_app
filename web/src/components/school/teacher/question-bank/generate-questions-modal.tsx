@@ -21,9 +21,16 @@ export function GenerateQuestionsModal({
 }) {
   const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
-  // Manual override of the auto-defaulted unit. Null until the teacher
-  // explicitly picks. The actual `unitId` value is derived during render
-  // — see `effectiveUnitId` below.
+  // Save-to state machine.
+  //
+  //   undefined = no override, fall through to autoUnitId (smart default)
+  //   null      = teacher EXPLICITLY picked Uncategorized
+  //   string    = teacher EXPLICITLY picked a unit
+  //
+  // The "no choice yet" state is (overrideUnitId === undefined && autoUnitId === null).
+  // We use this to disable Generate so a teacher can't accidentally
+  // dump questions into Uncategorized just because they didn't notice
+  // the picker.
   const [overrideUnitId, setOverrideUnitId] = useState<string | null | undefined>(undefined);
   const [count, setCount] = useState<number>(20);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
@@ -67,6 +74,17 @@ export function GenerateQuestionsModal({
       : null;
   })();
   const unitId = overrideUnitId === undefined ? autoUnitId : overrideUnitId;
+  // True only when the smart default fired AND the teacher hasn't
+  // manually picked anything since. Drives the "auto-picked" hint.
+  const autoApplied = overrideUnitId === undefined && autoUnitId !== null;
+  // True iff the teacher has made (or inherited) a real choice — either
+  // a unit, an explicit Uncategorized, or an auto-default. Drives the
+  // Generate button enable + the placeholder copy.
+  const hasChosenSaveTo =
+    overrideUnitId !== undefined || autoUnitId !== null;
+  // Explicit Uncategorized = teacher actively picked it. We surface a
+  // small warning so they know what they signed up for.
+  const explicitUncategorized = overrideUnitId === null;
 
   const readableSelectedCount = Array.from(selectedDocs).filter((id) => {
     const d = docs.find((x) => x.id === id);
@@ -77,6 +95,10 @@ export function GenerateQuestionsModal({
   const submit = async () => {
     if (count < 1 || count > 50) {
       setError("Pick a quantity");
+      return;
+    }
+    if (!hasChosenSaveTo) {
+      setError("Pick a unit to save these questions to");
       return;
     }
     if (onlyPdfsSelected) {
@@ -207,7 +229,8 @@ export function GenerateQuestionsModal({
             )}
           </div>
 
-          {/* Quantity + Save-to footer row */}
+          {/* Quantity row (just quantity now — Save-to gets its own
+              prominent block below). */}
           <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border-light pt-4">
             <div className="flex items-center gap-2">
               <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
@@ -242,24 +265,79 @@ export function GenerateQuestionsModal({
                 />
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                Save to
+          {/* Save-to: its own prominent block, right above Generate.
+              Chip group instead of a hidden dropdown so the choice
+              never silently falls through to Uncategorized. */}
+          <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-bg-base/40 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <label className="text-sm font-bold text-text-primary">
+                📂 Save to{" "}
+                <span className="font-normal text-text-muted">· required</span>
               </label>
-              <select
-                value={unitId ?? ""}
-                onChange={(e) => setOverrideUnitId(e.target.value || null)}
-                className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
-              >
-                <option value="">Uncategorized</option>
-                {topUnits(units).map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              {autoApplied && (
+                <span className="text-[11px] font-semibold text-text-muted">
+                  💡 Auto-picked from your selected docs
+                </span>
+              )}
             </div>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Pick the unit these questions belong to. They&rsquo;ll be organized under it
+              in the question bank and available when you build a homework for that unit.
+            </p>
+
+            {topUnits(units).length === 0 ? (
+              <div className="mt-3 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-3 text-center text-xs italic text-text-muted">
+                No units yet. Create one in the Materials tab first, then come back to
+                generate questions.
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {topUnits(units).map((u) => {
+                  const active = unitId === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setOverrideUnitId(u.id)}
+                      className={`rounded-[--radius-pill] border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        active
+                          ? "border-primary bg-primary text-white"
+                          : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
+                      }`}
+                    >
+                      {active && <span className="mr-1">✓</span>}
+                      {u.name}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setOverrideUnitId(null)}
+                  className={`rounded-[--radius-pill] border border-dashed px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    explicitUncategorized
+                      ? "border-text-muted bg-bg-subtle text-text-primary"
+                      : "border-text-muted/40 bg-transparent text-text-muted hover:bg-bg-subtle"
+                  }`}
+                >
+                  {explicitUncategorized && <span className="mr-1">✓</span>}
+                  Uncategorized
+                </button>
+              </div>
+            )}
+
+            {!hasChosenSaveTo && topUnits(units).length > 0 && (
+              <p className="mt-2 text-[11px] italic text-text-muted">
+                Pick a unit (or Uncategorized) to enable Generate.
+              </p>
+            )}
+            {explicitUncategorized && (
+              <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                ⚠ These questions won&rsquo;t be organized under any unit and won&rsquo;t
+                show up when filtering by unit. You can move them later.
+              </p>
+            )}
           </div>
 
           {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
@@ -275,7 +353,16 @@ export function GenerateQuestionsModal({
         <div className="flex items-center justify-end border-t border-border-light px-6 py-3">
           <button
             type="submit"
-            disabled={submitting || loading || onlyPdfsSelected}
+            disabled={
+              submitting || loading || onlyPdfsSelected || !hasChosenSaveTo
+            }
+            title={
+              !hasChosenSaveTo
+                ? "Pick a unit to save these questions to"
+                : onlyPdfsSelected
+                  ? "Selected docs are all PDFs — pick at least one image"
+                  : ""
+            }
             className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             {submitting ? "Starting…" : "✨ Generate"}

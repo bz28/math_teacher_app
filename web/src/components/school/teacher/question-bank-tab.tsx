@@ -303,13 +303,18 @@ export function QuestionBankTab({
           {loading ? (
             <BankSkeleton />
           ) : filteredItems.length === 0 ? (
-            <EmptyState
-              text={
-                searchQuery.trim()
-                  ? `No questions match "${searchQuery.trim()}".`
-                  : emptyStateFor(statusFilter, unitSelection, counts)
-              }
-            />
+            searchQuery.trim() ? (
+              <EmptyState text={`No questions match "${searchQuery.trim()}".`} />
+            ) : counts.pending + counts.approved + counts.rejected === 0 ? (
+              <FirstVisitEmptyState
+                hasUnits={units.some((u) => u.parent_id === null)}
+                onGenerate={() => setShowGenerate(true)}
+              />
+            ) : (
+              <EmptyState
+                text={emptyStateFor(statusFilter, unitSelection, counts)}
+              />
+            )
           ) : statusFilter === "pending" || statusFilter === "rejected" ? (
             <div className="space-y-5">
               <SimpleUnitList
@@ -447,4 +452,56 @@ function emptyStateFor(
     return `No rejected questions${where}.`;
   }
   return `No approved questions${where} yet. Review pending ones to add them to a homework.`;
+}
+
+// Rich first-visit empty state — replaces the generic one-line empty
+// for the "zero questions in any status" case so a teacher landing on
+// the tab cold has a concrete next action. Branches on whether they
+// have units yet, because generating without units lands questions in
+// Uncategorized which they then have to migrate later.
+function FirstVisitEmptyState({
+  hasUnits,
+  onGenerate,
+}: {
+  hasUnits: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-[--radius-lg] border border-dashed border-border-light bg-bg-base/30 px-6 py-16 text-center">
+      <div className="text-5xl" aria-hidden>
+        📚
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-text-primary">
+        Your question bank is empty
+      </h3>
+      {hasUnits ? (
+        <>
+          <p className="mt-2 max-w-md text-sm text-text-muted">
+            Generate questions from your materials. They&rsquo;ll land here as
+            pending — review and add each one to a homework when you&rsquo;re
+            ready.
+          </p>
+          <button
+            type="button"
+            onClick={onGenerate}
+            className="mt-5 rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
+          >
+            ✨ Generate your first questions
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 max-w-md text-sm text-text-muted">
+            Before you can generate questions, you need at least one unit to
+            organize them under. Create a unit (like &ldquo;Algebra&rdquo; or
+            &ldquo;Quadratics&rdquo;) in the Materials tab, then come back to
+            generate.
+          </p>
+          <p className="mt-3 text-[11px] italic text-text-muted">
+            Open the Materials tab above ↑ to get started.
+          </p>
+        </>
+      )}
+    </div>
+  );
 }

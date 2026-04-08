@@ -17,6 +17,7 @@ export function DestinationPicker({
   courseId,
   defaultUnitIds = [],
   busy = false,
+  align = "start",
   onClose,
   onPickExisting,
   onCreateNew,
@@ -30,6 +31,13 @@ export function DestinationPicker({
    *  buttons + the form so the teacher can't double-submit during
    *  the network round-trip. */
   busy?: boolean;
+  /** Horizontal anchor relative to the trigger. "start" anchors the
+   *  popover's left edge to the trigger (default — works for left-aligned
+   *  triggers like ReviewModal). "end" anchors the right edge — needed
+   *  when the trigger sits on the right of its container (e.g. workshop's
+   *  ml-auto Add-to-Homework button) so the popover doesn't overflow off
+   *  the right edge of the modal. */
+  align?: "start" | "end";
   onClose: () => void;
   onPickExisting: (assignment: TeacherAssignment) => void;
   onCreateNew: (title: string, unitIds: string[]) => void;
@@ -82,9 +90,9 @@ export function DestinationPicker({
   return (
     <div
       ref={ref}
-      className={`absolute bottom-full left-0 z-30 mb-2 rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-xl ${
-        creating ? "w-80" : "w-72"
-      }`}
+      className={`absolute bottom-full z-30 mb-2 rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-xl ${
+        align === "end" ? "right-0" : "left-0"
+      } ${creating ? "w-80" : "w-72"}`}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="text-xs font-bold uppercase tracking-wider text-text-muted">
