@@ -9,7 +9,8 @@ import { HomeworkDetailModal } from "./homework-tab";
 import { CourseSubjectContext } from "./question-bank/course-subject-context";
 import { STATUS_FILTERS } from "./question-bank/constants";
 import { buildUnitGroups } from "./question-bank/tree";
-import { ApprovedUnitGroup, SimpleUnitList } from "./question-bank/unit-groups";
+import { SimpleUnitList } from "./question-bank/unit-groups";
+import { ApprovedUnitFolder } from "./question-bank/approved-tree";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
 import { PendingTray } from "./question-bank/pending-tray";
@@ -237,7 +238,7 @@ export function QuestionBankTab({
               />
             ) : (
               buildUnitGroups(filteredItems, units).map((group) => (
-                <ApprovedUnitGroup
+                <ApprovedUnitFolder
                   key={group.id}
                   label={group.label}
                   items={group.items}
