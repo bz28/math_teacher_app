@@ -96,20 +96,14 @@ export function ReviewModal({
     advance();
   };
 
-  // Sequential approve + attach. The atomic backend endpoint lands in
-  // a follow-up commit; for now we approve, fetch the homework, and
-  // patch its bank_item_ids.
+  // Atomic approve + attach. The backend `/approve` endpoint takes
+  // an optional `assignment_id` and does both in one transaction.
   const addToExisting = async (assignment: TeacherAssignment) => {
     if (!current || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const full = await teacher.assignment(assignment.id);
-      const existingIds = extractBankItemIds(full.content);
-      await teacher.approveBankItem(current.id);
-      await teacher.updateAssignment(assignment.id, {
-        bank_item_ids: [...existingIds, current.id],
-      });
+      await teacher.approveBankItem(current.id, { assignmentId: assignment.id });
       markResolved("added");
       onChanged();
       advance();
@@ -409,20 +403,3 @@ function CompletionState({
   );
 }
 
-// Pull bank_item_ids out of an assignment's content blob. The shape
-// is `{ problems: [{ bank_item_id, ... }] }` per the homework detail
-// modal — we duplicate the extraction here rather than coupling to
-// that file's private type.
-function extractBankItemIds(content: unknown): string[] {
-  if (!content || typeof content !== "object") return [];
-  if (!("problems" in content)) return [];
-  const problems = (content as { problems: unknown }).problems;
-  if (!Array.isArray(problems)) return [];
-  return problems
-    .map((p) =>
-      p && typeof p === "object" && "bank_item_id" in p
-        ? (p as { bank_item_id: string }).bank_item_id
-        : null,
-    )
-    .filter((id): id is string => typeof id === "string");
-}

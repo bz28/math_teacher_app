@@ -848,8 +848,11 @@ export const teacher = {
   revertBankItem(itemId: string) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/revert`, { method: "POST" });
   },
-  approveBankItem(itemId: string) {
-    return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/approve`, { method: "POST" });
+  approveBankItem(itemId: string, options?: { assignmentId?: string }) {
+    return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ assignment_id: options?.assignmentId ?? null }),
+    });
   },
   rejectBankItem(itemId: string) {
     return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/reject`, { method: "POST" });
