@@ -8,6 +8,7 @@ import { BankPicker } from "./bank-picker";
 import { UnitMultiSelect } from "./unit-multi-select";
 import { SectionMultiSelect } from "./section-multi-select";
 import { InlineSavedHint, type SaveState } from "./inline-saved-hint";
+import { SubmissionsPanel } from "./submissions-panel";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -55,6 +56,7 @@ export function HomeworkDetailModal({
   const [titleDraft, setTitleDraft] = useState("");
   const [editingProblems, setEditingProblems] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showingSubmissions, setShowingSubmissions] = useState(false);
   // Confirm dialog for "publish without due date" — common mistake we
   // catch with a soft confirm rather than blocking, because no-due-date
   // HWs are a real legitimate use case (in-class, untimed practice).
@@ -275,6 +277,13 @@ export function HomeworkDetailModal({
   const canPublish = !isPublished && missingForPublish.length === 0;
 
   return (
+    <>
+    {showingSubmissions && (
+      <SubmissionsPanel
+        assignmentId={assignmentId}
+        onClose={() => setShowingSubmissions(false)}
+      />
+    )}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
@@ -487,9 +496,8 @@ export function HomeworkDetailModal({
                 )}
                 <button
                   type="button"
-                  disabled
-                  title="Coming soon"
-                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-muted disabled:opacity-50"
+                  onClick={() => setShowingSubmissions(true)}
+                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-primary hover:text-primary"
                 >
                   ⚙ Submissions
                 </button>
@@ -534,6 +542,7 @@ export function HomeworkDetailModal({
         )}
       </div>
     </div>
+    </>
   );
 }
 
