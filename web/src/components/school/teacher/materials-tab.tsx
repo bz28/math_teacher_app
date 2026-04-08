@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 import { MATERIAL_UPLOAD_MAX_BYTES } from "@/lib/constants";
 import { subfoldersOf, topUnits } from "@/lib/units";
@@ -60,25 +60,31 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   const lastClickedDocIdRef = useRef<string | null>(null);
   const { busy, error, setError, run } = useAsyncAction();
 
-  const reload = async ({ showSkeleton = false }: { showSkeleton?: boolean } = {}) => {
-    if (showSkeleton) setLoading(true);
-    setError(null);
-    try {
-      const [u, d] = await Promise.all([teacher.units(courseId), teacher.documents(courseId)]);
-      setUnits(u.units);
-      setDocs(d.documents);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load materials");
-    } finally {
-      if (showSkeleton) setLoading(false);
-    }
-  };
+  const reload = useCallback(
+    async ({ showSkeleton = false }: { showSkeleton?: boolean } = {}): Promise<boolean> => {
+      if (showSkeleton) setLoading(true);
+      setError(null);
+      try {
+        const [u, d] = await Promise.all([
+          teacher.units(courseId),
+          teacher.documents(courseId),
+        ]);
+        setUnits(u.units);
+        setDocs(d.documents);
+        return true;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load materials");
+        return false;
+      } finally {
+        if (showSkeleton) setLoading(false);
+      }
+    },
+    [courseId, setError],
+  );
 
   useEffect(() => {
-    setLoading(true);
     reload({ showSkeleton: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId]);
+  }, [reload]);
 
   // Clear multi-selection on Escape.
   useEffect(() => {
@@ -245,8 +251,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       // ── loose files (go into currently-selected folder) ─────────
       await uploadBatch(tree.looseFiles, selected);
 
-      await reload();
-      onChanged();
+      if (await reload()) onChanged();
 
       // Summary toast
       if (okFiles > 0 || okUnits > 0) {
@@ -291,8 +296,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       await teacher.deleteUnit(courseId, unitId);
       if (selected === unitId) setSelected(null);
       setRowState({ kind: "idle" });
-      await reload();
-      onChanged();
+      if (await reload()) onChanged();
     });
 
   /* ── document mutations ── */
@@ -306,8 +310,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       const failed = results.length - ok;
       setBulkMoveOpen(false);
       setSelectedDocIds(new Set());
-      await reload();
-      onChanged();
+      if (await reload()) onChanged();
       if (ok > 0) toast.success(`Moved ${ok} file${ok === 1 ? "" : "s"}`);
       if (failed > 0) toast.error(`Failed to move ${failed} file(s)`);
     });
@@ -320,41 +323,43 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       const ok = results.filter((r) => r.ok).length;
       const failed = results.length - ok;
       setSelectedDocIds(new Set());
-      await reload();
-      onChanged();
+      if (await reload()) onChanged();
       if (ok > 0) toast.success(`Deleted ${ok} file${ok === 1 ? "" : "s"}`);
       if (failed > 0) toast.error(`Failed to delete ${failed} file(s)`);
     });
 
   /* ── selection handling ── */
 
-  const handleCardClick = (doc: TeacherDocument, e: MouseEvent) => {
-    const isMulti = e.metaKey || e.ctrlKey;
-    const isRange = e.shiftKey;
-    setSelectedDocIds((prev) => {
-      const next = new Set(prev);
-      if (isRange && lastClickedDocIdRef.current) {
-        const ids = visibleDocs.map((d) => d.id);
-        const a = ids.indexOf(lastClickedDocIdRef.current);
-        const b = ids.indexOf(doc.id);
-        if (a >= 0 && b >= 0) {
-          const [lo, hi] = a < b ? [a, b] : [b, a];
-          for (let i = lo; i <= hi; i += 1) next.add(ids[i]);
+  const handleCardClick = useCallback(
+    (doc: TeacherDocument, e: MouseEvent) => {
+      const isMulti = e.metaKey || e.ctrlKey;
+      const isRange = e.shiftKey;
+      setSelectedDocIds((prev) => {
+        const next = new Set(prev);
+        if (isRange && lastClickedDocIdRef.current) {
+          const ids = visibleDocs.map((d) => d.id);
+          const a = ids.indexOf(lastClickedDocIdRef.current);
+          const b = ids.indexOf(doc.id);
+          if (a >= 0 && b >= 0) {
+            const [lo, hi] = a < b ? [a, b] : [b, a];
+            for (let i = lo; i <= hi; i += 1) next.add(ids[i]);
+          }
+        } else if (isMulti) {
+          if (next.has(doc.id)) next.delete(doc.id);
+          else next.add(doc.id);
+        } else {
+          if (next.size === 1 && next.has(doc.id)) next.clear();
+          else {
+            next.clear();
+            next.add(doc.id);
+          }
         }
-      } else if (isMulti) {
-        if (next.has(doc.id)) next.delete(doc.id);
-        else next.add(doc.id);
-      } else {
-        if (next.size === 1 && next.has(doc.id)) next.clear();
-        else {
-          next.clear();
-          next.add(doc.id);
-        }
-      }
-      return next;
-    });
-    lastClickedDocIdRef.current = doc.id;
-  };
+        return next;
+      });
+      lastClickedDocIdRef.current = doc.id;
+    },
+    [visibleDocs],
+  );
 
   /* ── derived for delete-folder dialog ── */
 

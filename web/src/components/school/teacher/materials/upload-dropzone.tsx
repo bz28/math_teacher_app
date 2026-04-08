@@ -11,6 +11,8 @@ interface UploadDropzoneProps {
   children: ReactNode;
 }
 
+const isFileDrag = (e: DragEvent) => e.dataTransfer.types.includes("Files");
+
 /**
  * Wraps the right pane and turns it into a drop target. Uses a counter to
  * track nested dragenter/leave events so the overlay doesn't flicker as the
@@ -23,21 +25,21 @@ export function UploadDropzone({ busy, onDropTree, children }: UploadDropzonePro
   const isDragging = dragDepth > 0;
 
   const onDragEnter = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes("Files")) return;
+    if (!isFileDrag(e)) return;
     e.preventDefault();
     setDragDepth((d) => d + 1);
   };
   const onDragOver = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes("Files")) return;
+    if (!isFileDrag(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   };
   const onDragLeave = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes("Files")) return;
+    if (!isFileDrag(e)) return;
     setDragDepth((d) => Math.max(0, d - 1));
   };
   const onDrop = async (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes("Files")) return;
+    if (!isFileDrag(e)) return;
     e.preventDefault();
     setDragDepth(0);
     if (busy) return;

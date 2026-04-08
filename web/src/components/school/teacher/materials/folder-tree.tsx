@@ -8,6 +8,7 @@ import {
   FolderOpenIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  XIcon,
 } from "@/components/ui/icons";
 import type { RowState } from "./types";
 
@@ -56,7 +57,9 @@ export function FolderTree({
         <p className="px-2 py-2 text-xs text-text-muted">No units yet.</p>
       )}
       <ul className="space-y-1">
-        {tops.map((u) => (
+        {tops.map((u) => {
+          const subs = subfoldersOf(units, u.id);
+          return (
           <li key={u.id}>
             <FolderRow
               unit={u}
@@ -71,9 +74,9 @@ export function FolderTree({
               onStartDelete={() => onStartDeleteFolder(u.id)}
               onAddSub={() => onAddSub(u.id)}
             />
-            {subfoldersOf(units, u.id).length > 0 && (
+            {subs.length > 0 && (
               <ul className="ml-4 mt-1 space-y-1 border-l border-border-light pl-2">
-                {subfoldersOf(units, u.id).map((sub) => (
+                {subs.map((sub) => (
                   <li key={sub.id}>
                     <FolderRow
                       unit={sub}
@@ -93,7 +96,8 @@ export function FolderTree({
               </ul>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
@@ -399,9 +403,9 @@ function RenameForm({
         type="button"
         onClick={onCancel}
         aria-label="Cancel rename"
-        className="rounded px-1.5 py-0.5 text-xs text-text-muted hover:bg-surface"
+        className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface"
       >
-        ✕
+        <XIcon className="h-3 w-3" />
       </button>
     </form>
   );

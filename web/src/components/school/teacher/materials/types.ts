@@ -2,16 +2,13 @@ import type { TeacherDocument } from "@/lib/api";
 
 /**
  * One row in the materials tab can be in exactly one transient state at a
- * time. This collapses six independent useState slots into a single
- * discriminated union so impossible combinations (renaming + deleting the
- * same row) can't be expressed.
+ * time. Document move/delete happen through the bulk action bar now, so
+ * only folder rename + folder delete live here.
  */
 export type RowState =
   | { kind: "idle" }
   | { kind: "renaming"; id: string }
-  | { kind: "deletingFolder"; id: string }
-  | { kind: "movingDoc"; id: string }
-  | { kind: "deletingDoc"; id: string };
+  | { kind: "deletingFolder"; id: string };
 
 export type Destination = { id: string | null; label: string };
 
@@ -47,7 +44,8 @@ export function fileKind(doc: TeacherDocument): "pdf" | "image" {
 }
 
 export function formatSize(bytes: number): string {
-  const kb = Math.max(1, Math.round(bytes / 1024));
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = Math.round(bytes / 1024);
   return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
 }
 
