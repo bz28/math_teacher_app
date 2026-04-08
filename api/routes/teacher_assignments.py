@@ -418,6 +418,23 @@ async def update_assignment(
         a.title = title
     if body.status is not None:
         a.status = body.status
+
+    # Configuration fields (units, due_at, late_policy) lock when the
+    # homework is published. Title is intentionally NOT locked — it's
+    # cosmetic and low-risk. The new homework flow has the teacher
+    # unpublish to edit configuration.
+    config_fields_touched = (
+        body.clear_due_at
+        or body.due_at is not None
+        or body.late_policy is not None
+        or body.unit_ids is not None
+    )
+    if config_fields_touched and a.status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unpublish before editing configuration",
+        )
+
     if body.clear_due_at:
         a.due_at = None
     elif body.due_at is not None and body.due_at != "":
@@ -475,10 +492,28 @@ async def publish_assignment(
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
     if a.status == "published":
         return {"status": "ok"}
+    # Defense-in-depth: the frontend gates the Publish button on
+    # these three, but a stale UI or direct API call could bypass.
+    # Enforce the same contract here.
     if not problem_ids_in_content(a.content):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot publish a homework with no problems",
+        )
+    if not (a.unit_ids or []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot publish a homework with no units",
+        )
+    section_count = (await db.execute(
+        select(func.count())
+        .select_from(AssignmentSection)
+        .where(AssignmentSection.assignment_id == a.id)
+    )).scalar_one()
+    if section_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot publish a homework with no sections assigned",
         )
     a.status = "published"
     await db.flush()
@@ -517,6 +552,11 @@ async def assign_to_sections(
     here, which silently flipped drafts to published when teachers
     expected pure config)."""
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if a.status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unpublish before editing sections",
+        )
 
     # Validate every requested section belongs to this course before
     # touching any join rows.

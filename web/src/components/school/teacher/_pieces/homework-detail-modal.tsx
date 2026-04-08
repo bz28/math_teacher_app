@@ -146,34 +146,40 @@ export function HomeworkDetailModal({
       onChanged();
     });
 
-  // Inline auto-save runner. Optimistic — bumps the local hw state
-  // immediately so the UI feels instant, then PATCHes. On failure,
-  // reverts and surfaces the error against the field. The most recent
-  // call wins (debounced via ref) — useful for the date picker which
-  // can fire many onChange events.
+  // Inline auto-save runner. Optimistic — applies the change to the
+  // local hw state immediately, fires the PATCH, and on failure
+  // restores ONLY this field (via the caller-supplied applyRevert).
+  //
+  // Per-field revert (vs replacing the whole hw object) is important:
+  // if two fields are edited concurrently and the second succeeds
+  // before the first fails, a whole-hw revert would wipe out the
+  // second's optimistic update. Field-scoped revert leaves the
+  // unrelated success intact.
+  //
+  // Per-field lastCallRef gives last-write-wins for rapid-fire edits
+  // to the same field (the date picker can fire many onChanges).
   const lastCallRef = useRef<Record<ConfigField, number>>({
     units: 0, dueAt: 0, latePolicy: 0, sections: 0,
   });
   const patchField = async <K extends ConfigField>(
     field: K,
-    optimistic: (prev: TeacherAssignment) => TeacherAssignment,
+    applyOptimistic: () => void,
+    applyRevert: () => void,
     request: () => Promise<void>,
   ) => {
-    if (!hw) return;
     const callId = ++lastCallRef.current[field];
-    const prevHw = hw;
-    setHw({ ...optimistic(hw), content: hw.content });
+    applyOptimistic();
     setSaveStates((s) => ({ ...s, [field]: "saving" }));
     setSaveErrors((s) => ({ ...s, [field]: null }));
     try {
       await request();
-      // If a newer call superseded us, drop our result silently.
+      // If a newer call for this field superseded us, drop silently.
       if (lastCallRef.current[field] !== callId) return;
       setSaveStates((s) => ({ ...s, [field]: "saved" }));
       onChanged();
     } catch (e) {
       if (lastCallRef.current[field] !== callId) return;
-      setHw(prevHw);
+      applyRevert();
       setSaveStates((s) => ({ ...s, [field]: "error" }));
       setSaveErrors((s) => ({
         ...s,
@@ -183,22 +189,29 @@ export function HomeworkDetailModal({
   };
 
   const onChangeUnits = (next: string[]) => {
+    if (!hw) return;
     if (next.length === 0) {
       setSaveStates((s) => ({ ...s, units: "error" }));
       setSaveErrors((s) => ({ ...s, units: "At least one unit is required" }));
       return;
     }
+    const prev = hw.unit_ids;
     void patchField(
       "units",
-      (prev) => ({ ...prev, unit_ids: next }),
-      () => teacher.updateAssignment(assignmentId, { unit_ids: next }).then(() => undefined),
+      () => setHw((h) => (h ? { ...h, unit_ids: next } : h)),
+      () => setHw((h) => (h ? { ...h, unit_ids: prev } : h)),
+      () =>
+        teacher.updateAssignment(assignmentId, { unit_ids: next }).then(() => undefined),
     );
   };
 
   const onChangeDueAt = (next: string | null) => {
+    if (!hw) return;
+    const prev = hw.due_at;
     void patchField(
       "dueAt",
-      (prev) => ({ ...prev, due_at: next }),
+      () => setHw((h) => (h ? { ...h, due_at: next } : h)),
+      () => setHw((h) => (h ? { ...h, due_at: prev } : h)),
       () =>
         teacher
           .updateAssignment(
@@ -210,9 +223,12 @@ export function HomeworkDetailModal({
   };
 
   const onChangeLatePolicy = (next: string) => {
+    if (!hw) return;
+    const prev = hw.late_policy;
     void patchField(
       "latePolicy",
-      (prev) => ({ ...prev, late_policy: next }),
+      () => setHw((h) => (h ? { ...h, late_policy: next } : h)),
+      () => setHw((h) => (h ? { ...h, late_policy: prev } : h)),
       () =>
         teacher
           .updateAssignment(assignmentId, { late_policy: next })
@@ -221,9 +237,12 @@ export function HomeworkDetailModal({
   };
 
   const onChangeSections = (next: string[]) => {
+    if (!hw) return;
+    const prev = hw.section_ids;
     void patchField(
       "sections",
-      (prev) => ({ ...prev, section_ids: next }),
+      () => setHw((h) => (h ? { ...h, section_ids: next } : h)),
+      () => setHw((h) => (h ? { ...h, section_ids: prev } : h)),
       () => teacher.assignToSections(assignmentId, next).then(() => undefined),
     );
   };
