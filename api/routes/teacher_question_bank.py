@@ -260,7 +260,7 @@ async def generate_bank_questions(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Unit not found in this course",
             )
-        if unit.parent_id is not None:
+        if unit.parent_unit_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Generated questions must save into a top-level unit, not a subfolder",
