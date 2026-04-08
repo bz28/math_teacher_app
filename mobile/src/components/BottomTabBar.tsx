@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { Platform, StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography } from "../theme";
 
@@ -24,8 +25,14 @@ interface Props {
 }
 
 export function BottomTabBar({ active, onChange }: Props) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.bar}>
+    <View
+      style={[
+        styles.bar,
+        { paddingBottom: Math.max(insets.bottom, spacing.sm) },
+      ]}
+    >
       {TABS.map((t) => {
         const isActive = t.key === active;
         return (
@@ -36,7 +43,6 @@ export function BottomTabBar({ active, onChange }: Props) {
             accessibilityRole="tab"
             accessibilityLabel={t.label}
             accessibilityState={{ selected: isActive }}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             <Ionicons
               name={isActive ? t.iconActive : t.icon}
@@ -58,17 +64,25 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+      },
+      android: { elevation: 8 },
+    }),
   },
   tab: {
     flex: 1,
     alignItems: "center",
-    gap: 2,
+    gap: 4,
     paddingVertical: spacing.xs,
   },
   label: {
     ...typography.caption,
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textMuted,
   },
   labelActive: {

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -26,16 +25,23 @@ import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
-import { getUserName } from "../services/api";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
 
-const SUBJECT_META: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }> = {
-  math: { label: "Math", icon: "calculator", gradient: "primary" },
-  physics: { label: "Physics", icon: "rocket", gradient: "physics" },
-  chemistry: { label: "Chemistry", icon: "flask", gradient: "chemistry" },
-};
+type SubjectKey = "math" | "physics" | "chemistry";
+type Mode = "learn" | "practice";
+
+const SUBJECTS: { key: SubjectKey; label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }[] = [
+  { key: "math", label: "Math", icon: "calculator", gradient: "primary" },
+  { key: "physics", label: "Physics", icon: "rocket", gradient: "physics" },
+  { key: "chemistry", label: "Chemistry", icon: "flask", gradient: "chemistry" },
+];
+
+const MODES: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "learn", label: "Learn", icon: "book-outline" },
+  { key: "practice", label: "Practice", icon: "barbell-outline" },
+];
 
 interface Props {
   subject: string;
@@ -51,19 +57,19 @@ export function SolveScreen({
   onSubjectChange,
   onSessionStart,
   onSessionError,
-  onAccount,
-  onHistory,
 }: Props) {
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
+  const [mode, setMode] = useState<Mode>("learn");
 
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const problemImages = useSessionStore((s) => s.problemImages);
   const startSession = useSessionStore((s) => s.startSession);
   const startLearnQueue = useSessionStore((s) => s.startLearnQueue);
+  const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
   const setStoreSubject = useSessionStore((s) => s.setSubject);
   const sessionPhase = useSessionStore((s) => s.phase);
   const sessionError = useSessionStore((s) => s.error);
@@ -80,7 +86,7 @@ export function SolveScreen({
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
-  const meta = SUBJECT_META[subject] ?? SUBJECT_META.math;
+  const activeSubject = SUBJECTS.find((s) => s.key === subject) ?? SUBJECTS[0];
 
   const {
     extracting,
@@ -136,15 +142,6 @@ export function SolveScreen({
     fetchEntitlements();
   };
 
-  const handleSubjectPress = () => {
-    Alert.alert("Subject", "Pick a subject", [
-      { text: "Math", onPress: () => onSubjectChange("math") },
-      { text: "Physics", onPress: () => onSubjectChange("physics") },
-      { text: "Chemistry", onPress: () => onSubjectChange("chemistry") },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
-
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text) return;
@@ -193,7 +190,10 @@ export function SolveScreen({
     setQuotaConfirm(false);
 
     onSessionStart();
-    if (allProblems.length === 1) {
+    if (mode === "practice") {
+      // Practice handles one problem at a time; uses first if queue has multiple.
+      await startPracticeBatch(allProblems[0], 1);
+    } else if (allProblems.length === 1) {
       await startSession(allProblems[0], "learn");
     } else {
       await startLearnQueue(allProblems);
@@ -210,7 +210,6 @@ export function SolveScreen({
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const isLoading = sessionPhase === "loading";
   const displayError = error ?? sessionError;
-  const name = getUserName();
 
   // Image preview phase
   if (extractionPhase === "preview" && imageUri) {
@@ -238,53 +237,98 @@ export function SolveScreen({
     );
   }
 
+  // Clamp extraction progress display so it never reads "4 of 3"
+  const progressDone = extractionProgress
+    ? Math.min(extractionProgress.done + 1, extractionProgress.total)
+    : 0;
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Top bar — subject pill + account */}
-        <View style={styles.topBar}>
-          <AnimatedPressable
-            style={styles.subjectPill}
-            onPress={handleSubjectPress}
-            scaleDown={0.96}
-            accessibilityRole="button"
-            accessibilityLabel={`Subject: ${meta.label}. Tap to change.`}
-          >
-            <LinearGradient
-              colors={gradients[meta.gradient]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.subjectPillInner}
-            >
-              <Ionicons name={meta.icon} size={16} color={colors.white} />
-              <Text style={styles.subjectPillText}>{meta.label}</Text>
-              <Ionicons name="chevron-down" size={14} color={colors.white} />
-            </LinearGradient>
-          </AnimatedPressable>
+        {/* Subject pill row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.subjectRow}
+        >
+          {SUBJECTS.map((s) => {
+            const isActive = s.key === subject;
+            const pill = (
+              <View
+                style={[
+                  styles.subjectPill,
+                  !isActive && styles.subjectPillInactive,
+                ]}
+              >
+                <Ionicons
+                  name={s.icon}
+                  size={16}
+                  color={isActive ? colors.white : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.subjectPillText,
+                    !isActive && styles.subjectPillTextInactive,
+                  ]}
+                >
+                  {s.label}
+                </Text>
+              </View>
+            );
+            return (
+              <AnimatedPressable
+                key={s.key}
+                onPress={() => onSubjectChange(s.key)}
+                scaleDown={0.95}
+                accessibilityRole="button"
+                accessibilityLabel={`${s.label}${isActive ? ", selected" : ""}`}
+                accessibilityState={{ selected: isActive }}
+              >
+                {isActive ? (
+                  <LinearGradient
+                    colors={gradients[s.gradient]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.subjectPill}
+                  >
+                    <Ionicons name={s.icon} size={16} color={colors.white} />
+                    <Text style={styles.subjectPillText}>{s.label}</Text>
+                  </LinearGradient>
+                ) : (
+                  pill
+                )}
+              </AnimatedPressable>
+            );
+          })}
+        </ScrollView>
 
-          <View style={styles.topBarRight}>
-            <TouchableOpacity
-              onPress={onHistory}
-              style={styles.iconButton}
-              accessibilityRole="button"
-              accessibilityLabel="History"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="time-outline" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onAccount}
-              style={styles.iconButton}
-              accessibilityRole="button"
-              accessibilityLabel="Account"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="person-circle-outline" size={28} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+        {/* Mode segmented control */}
+        <View style={styles.modeRow}>
+          {MODES.map((m) => {
+            const isActive = m.key === mode;
+            return (
+              <TouchableOpacity
+                key={m.key}
+                onPress={() => setMode(m.key)}
+                style={[styles.modePill, isActive && styles.modePillActive]}
+                accessibilityRole="button"
+                accessibilityLabel={`${m.label} mode${isActive ? ", selected" : ""}`}
+                accessibilityState={{ selected: isActive }}
+              >
+                <Ionicons
+                  name={m.icon}
+                  size={14}
+                  color={isActive ? colors.primary : colors.textMuted}
+                />
+                <Text style={[styles.modePillText, isActive && styles.modePillTextActive]}>
+                  {m.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <ScrollView
@@ -292,11 +336,8 @@ export function SolveScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero greeting */}
-          <View style={styles.greetingSection}>
-            <Text style={styles.greeting}>{name ? `Hi ${name},` : "Hi there,"}</Text>
-            <Text style={styles.greetingTitle}>What can I help you{"\n"}solve today?</Text>
-          </View>
+          {/* Hero */}
+          <Text style={styles.greetingTitle}>What can I help you solve today?</Text>
 
           {/* Big primary capture target */}
           <AnimatedPressable
@@ -307,16 +348,16 @@ export function SolveScreen({
             accessibilityLabel="Snap a photo of a problem"
           >
             <LinearGradient
-              colors={gradients[meta.gradient]}
+              colors={gradients[activeSubject.gradient]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.snapCard, shadows.lg, extracting && styles.cardDisabled]}
             >
               <View style={styles.snapIconWrap}>
-                <Ionicons name="camera" size={36} color={colors.white} />
+                <Ionicons name="camera" size={32} color={colors.white} />
               </View>
               <Text style={styles.snapTitle}>Snap a problem</Text>
-              <Text style={styles.snapSubtitle}>Point your camera at any math problem</Text>
+              <Text style={styles.snapSubtitle}>Point your camera at any problem</Text>
             </LinearGradient>
           </AnimatedPressable>
 
@@ -367,7 +408,7 @@ export function SolveScreen({
                 accessibilityRole="button"
                 accessibilityLabel="Add to queue"
               >
-                <Ionicons name="add" size={16} color={colors.white} />
+                <Ionicons name="add" size={18} color={colors.white} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -377,6 +418,7 @@ export function SolveScreen({
             <View style={styles.queueChips}>
               <Text style={styles.queueChipsLabel}>
                 {problemQueue.length} queued
+                {mode === "practice" && problemQueue.length > 1 && " · practice uses first"}
               </Text>
               <ScrollView
                 horizontal
@@ -406,7 +448,7 @@ export function SolveScreen({
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.extractingText}>
                 {extractionProgress
-                  ? `Reading ${extractionProgress.done + 1} of ${extractionProgress.total}…`
+                  ? `Reading ${progressDone} of ${extractionProgress.total}…`
                   : "Reading your problem…"}
               </Text>
             </View>
@@ -441,24 +483,10 @@ export function SolveScreen({
           )}
 
           {/* Quota footer */}
-          {!isPro && sessionsRemaining() < Infinity && (() => {
-            const remaining = sessionsRemaining();
-            const limit = dailySessionsLimit as number;
-            const pct = limit > 0 ? (limit - remaining) / limit : 0;
-            return (
-              <View style={styles.quotaFooterRow}>
-                <View style={styles.quotaBar}>
-                  <View style={[
-                    styles.quotaBarFill,
-                    { width: `${Math.min(pct * 100, 100)}%` },
-                    pct >= 1 && styles.quotaBarFillDanger,
-                    pct >= 0.8 && pct < 1 && styles.quotaBarFillWarning,
-                  ]} />
-                </View>
-                <Text style={styles.quotaFooterText}>{remaining} of {limit} left today</Text>
-              </View>
-            );
-          })()}
+          {!isPro && sessionsRemaining() < Infinity && <QuotaFooter
+            remaining={sessionsRemaining()}
+            limit={dailySessionsLimit as number}
+          />}
         </ScrollView>
 
         {/* Sticky solve button */}
@@ -467,14 +495,14 @@ export function SolveScreen({
             onPress={handleSolve}
             label={
               totalProblems === 0
-                ? "Solve"
+                ? mode === "practice" ? "Practice" : "Solve"
                 : totalProblems === 1
-                  ? "Solve"
-                  : `Solve ${totalProblems} problems`
+                  ? mode === "practice" ? "Practice" : "Solve"
+                  : `${mode === "practice" ? "Practice" : "Solve"} ${totalProblems} problems`
             }
             loading={isLoading}
             disabled={totalProblems === 0}
-            gradient={meta.gradient}
+            gradient={activeSubject.gradient}
             style={styles.solveButton}
           />
         </View>
@@ -510,69 +538,116 @@ export function SolveScreen({
   );
 }
 
+function QuotaFooter({ remaining, limit }: { remaining: number; limit: number }) {
+  const pct = limit > 0 ? (limit - remaining) / limit : 0;
+  return (
+    <View style={styles.quotaFooterRow}>
+      <View style={styles.quotaBar}>
+        <View
+          style={[
+            styles.quotaBarFill,
+            { width: `${Math.min(pct * 100, 100)}%` },
+            pct >= 1 && styles.quotaBarFillDanger,
+            pct >= 0.8 && pct < 1 && styles.quotaBarFillWarning,
+          ]}
+        />
+      </View>
+      <Text style={styles.quotaFooterText}>{remaining} of {limit} left today</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
 
-  topBar: {
+  // Subject pill row
+  subjectRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gap: spacing.sm,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
-  subjectPill: { borderRadius: radii.pill, overflow: "hidden" },
-  subjectPillInner: {
+  subjectPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.pill,
+  },
+  subjectPillInactive: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   subjectPillText: {
     ...typography.label,
     color: colors.white,
     fontSize: 13,
   },
-  topBarRight: {
+  subjectPillTextInactive: {
+    color: colors.textSecondary,
+  },
+
+  // Mode segmented control
+  modeRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  modePill: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.pill,
+    backgroundColor: colors.inputBg,
   },
-  iconButton: { padding: spacing.xs },
+  modePillActive: {
+    backgroundColor: colors.primaryBg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  modePillText: {
+    ...typography.label,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  modePillTextActive: {
+    color: colors.primary,
+  },
 
   scrollContent: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
   },
 
-  greetingSection: { marginBottom: spacing.xl },
-  greeting: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
+  // Hero
   greetingTitle: {
     ...typography.hero,
     color: colors.text,
-    lineHeight: 36,
+    lineHeight: 38,
+    marginBottom: spacing.xl,
   },
 
   // Big snap card
   snapCard: {
-    borderRadius: radii.xl,
-    paddingVertical: spacing.xxxl + 4,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.xxxl,
     paddingHorizontal: spacing.xl,
     alignItems: "center",
     marginBottom: spacing.md,
   },
   cardDisabled: { opacity: 0.5 },
   snapIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
@@ -584,8 +659,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   snapSubtitle: {
-    ...typography.body,
-    fontSize: 14,
+    ...typography.caption,
+    fontSize: 13,
     color: "rgba(255,255,255,0.85)",
   },
 
@@ -593,7 +668,7 @@ const styles = StyleSheet.create({
   secondaryRow: {
     flexDirection: "row",
     gap: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   secondaryCard: {
     flex: 1,
@@ -602,10 +677,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
     backgroundColor: colors.white,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     paddingVertical: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
   },
   secondaryLabel: {
     ...typography.bodyBold,
@@ -618,26 +691,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.inputBg,
-    borderRadius: radii.md,
-    borderWidth: 1.5,
+    borderRadius: radii.lg,
+    borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     marginBottom: spacing.md,
+    minHeight: 52,
   },
   input: {
     flex: 1,
     ...typography.body,
     color: colors.text,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   addChip: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: spacing.sm,
+    alignSelf: "center",
   },
 
   // Queue chips
@@ -676,8 +752,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     backgroundColor: colors.white,
-    borderRadius: radii.md,
-    padding: spacing.lg,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
   extractingText: {
@@ -696,7 +773,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningBg,
     borderLeftWidth: 4,
     borderLeftColor: colors.warningDark,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
@@ -751,13 +828,13 @@ const styles = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     backgroundColor: colors.background,
   },
   solveButton: {
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.lg,
     alignItems: "center",
   },
