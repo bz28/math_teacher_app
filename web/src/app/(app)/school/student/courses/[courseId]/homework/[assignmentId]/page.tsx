@@ -7,6 +7,7 @@ import {
   schoolStudent,
   type StudentHomeworkDetail,
   type StudentHomeworkProblem,
+  type StudentSubmission,
   type VariationPayload,
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
@@ -17,6 +18,8 @@ import {
 } from "@/components/school/student/practice-loop-surface";
 import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface";
 import { PracticeSummary } from "@/components/school/student/practice-summary";
+import { SubmissionPanel } from "@/components/school/student/submission-panel";
+import { SubmittedView } from "@/components/school/student/submitted-view";
 
 type Mode =
   | { kind: "homework" }
@@ -35,6 +38,7 @@ type Mode =
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
+  const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
@@ -47,7 +51,18 @@ export default function HomeworkPage() {
     if (!assignmentId) return;
     schoolStudent
       .homeworkDetail(assignmentId)
-      .then(setHw)
+      .then(async (detail) => {
+        setHw(detail);
+        if (detail.submitted) {
+          try {
+            const sub = await schoolStudent.getMySubmission(assignmentId);
+            setSubmission(sub);
+          } catch {
+            // Non-fatal — the submitted flag is the source of truth,
+            // we'll just render without the detail.
+          }
+        }
+      })
       .catch(() => setError("Couldn't load this homework. Please try again."));
   }, [assignmentId]);
 
@@ -199,10 +214,6 @@ export default function HomeworkPage() {
                     </span>
                   </div>
 
-                  <div className="mt-3 rounded-[--radius-sm] border border-dashed border-border-light bg-background p-3 text-sm text-text-muted">
-                    Your answer: <span className="italic">(submission coming soon)</span>
-                  </div>
-
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => startLoop(p, "practice")}
@@ -236,6 +247,32 @@ export default function HomeworkPage() {
           );
         })}
       </div>
+
+      {hw.submitted && submission ? (
+        <SubmittedView submission={submission} problems={hw.problems} />
+      ) : !hw.submitted ? (
+        <SubmissionPanel
+          assignmentId={hw.assignment_id}
+          problems={hw.problems}
+          dueAt={hw.due_at}
+          onSubmitted={async (resp) => {
+            // Re-fetch detail + submission so the UI swaps to the
+            // SubmittedView with full data.
+            try {
+              const [detail, sub] = await Promise.all([
+                schoolStudent.homeworkDetail(hw.assignment_id),
+                schoolStudent.getMySubmission(hw.assignment_id),
+              ]);
+              setHw(detail);
+              setSubmission(sub);
+            } catch {
+              // Fall back to a minimal optimistic update so the UI
+              // still flips.
+              setHw({ ...hw, submitted: true, submission_id: resp.submission_id });
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }
