@@ -284,7 +284,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                   </View>
                 ) : (
                   <View style={chatStyles.bubbleTutor}>
-                    <MathText text={msg.text} style={chatStyles.bubbleTutorText} />
+                    <Text style={chatStyles.bubbleTutorText}>{msg.text}</Text>
                   </View>
                 )}
               </View>
