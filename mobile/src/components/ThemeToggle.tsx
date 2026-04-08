@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemePref } from "../stores/themePref";
-import { colors, radii, spacing, typography } from "../theme";
+import { useColors, radii, spacing, typography, type ColorPalette } from "../theme";
 
 /**
  * Single button that cycles system → light → dark → system.
@@ -10,6 +11,8 @@ import { colors, radii, spacing, typography } from "../theme";
  */
 export function ThemeToggle() {
   const { pref, resolved, toggle } = useThemePref();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const iconName: keyof typeof Ionicons.glyphMap =
     pref === "system" ? "phone-portrait-outline" : resolved === "dark" ? "sunny-outline" : "moon-outline";
@@ -32,7 +35,7 @@ export function ThemeToggle() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   button: {
     flexDirection: "row",
     alignItems: "center",

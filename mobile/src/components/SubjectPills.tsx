@@ -1,8 +1,9 @@
+import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii, typography, gradients } from "../theme";
+import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 export type SubjectKey = "math" | "physics" | "chemistry";
 
@@ -31,6 +32,8 @@ interface Props {
 }
 
 export function SubjectPills({ active, onChange }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.outer}>
       <ScrollView
@@ -73,7 +76,7 @@ export function SubjectPills({ active, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   outer: {
     backgroundColor: colors.background,
   },

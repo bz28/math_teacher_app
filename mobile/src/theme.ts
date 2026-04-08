@@ -1,7 +1,47 @@
 import { Platform, ViewStyle } from "react-native";
+import { useThemePref } from "./stores/themePref";
 
 // ── Colors ──────────────────────────────────────────────
-export const colors = {
+//
+// Two palettes (light + dark) with the same shape. The legacy
+// `colors` const stays exported and points at the LIGHT palette so
+// any screen that hasn't been refactored to useColors() yet keeps
+// its current visuals. Refactored screens use `useColors()` to get
+// the active palette and re-render when the theme preference flips.
+
+export interface ColorPalette {
+  primary: string;
+  primaryLight: string;
+  primaryBg: string;
+  primaryDark: string;
+  success: string;
+  successLight: string;
+  successBorder: string;
+  error: string;
+  errorLight: string;
+  errorBorder: string;
+  warning: string;
+  warningDark: string;
+  warningBg: string;
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  textOnPrimary: string;
+  background: string;
+  backgroundDark: string;
+  card: string;
+  inputBg: string;
+  border: string;
+  borderLight: string;
+  white: string;
+  overlay: string;
+  overlayDark: string;
+  primaryOverlay: string;
+  primaryOverlayStrong: string;
+  neutral300: string;
+}
+
+export const lightColors: ColorPalette = {
   // Primary
   primary: "#6C5CE7",
   primaryLight: "#A29BFE",
@@ -46,7 +86,65 @@ export const colors = {
   primaryOverlay: "rgba(108, 92, 231, 0.18)",
   primaryOverlayStrong: "rgba(108, 92, 231, 0.85)",
   neutral300: "#D1D3D9",
-} as const;
+};
+
+export const darkColors: ColorPalette = {
+  // Primary stays vivid in dark mode
+  primary: "#A29BFE",
+  primaryLight: "#C7C0FF",
+  primaryBg: "#2A2542",
+  primaryDark: "#6C5CE7",
+
+  // Success
+  success: "#00D9A0",
+  successLight: "#1B3329",
+  successBorder: "#2D6353",
+
+  // Error
+  error: "#FF8585",
+  errorLight: "#3A1F22",
+  errorBorder: "#6B3A3F",
+
+  // Warning
+  warning: "#FFD580",
+  warningDark: "#FFA060",
+  warningBg: "#3A2C1A",
+
+  // Text — inverted
+  text: "#F5F4FB",
+  textSecondary: "#B2BEC3",
+  textMuted: "#7A8189",
+  textOnPrimary: "#FFFFFF",
+
+  // Backgrounds — dark surfaces
+  background: "#0F0F1A",
+  backgroundDark: "#000000",
+  card: "#1A1A2E",
+  inputBg: "#22223A",
+
+  // Borders
+  border: "#2E2E48",
+  borderLight: "#1F1F36",
+
+  // Misc
+  white: "#1A1A2E", // "white" surfaces become dark cards in dark mode
+  overlay: "rgba(162, 155, 254, 0.12)",
+  overlayDark: "rgba(0, 0, 0, 0.7)",
+  primaryOverlay: "rgba(162, 155, 254, 0.22)",
+  primaryOverlayStrong: "rgba(162, 155, 254, 0.85)",
+  neutral300: "#3A3A52",
+};
+
+/** Legacy export — points at the LIGHT palette. Existing screens
+ * that import `colors` from "../theme" continue to work; they just
+ * won't react to dark mode until refactored to useColors(). */
+export const colors = lightColors;
+
+/** Hook returning the active color palette based on theme preference. */
+export function useColors(): ColorPalette {
+  const { resolved } = useThemePref();
+  return resolved === "dark" ? darkColors : lightColors;
+}
 
 // ── Spacing (4px grid) ──────────────────────────────────
 export const spacing = {

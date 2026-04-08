@@ -1,14 +1,17 @@
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { StepResponse } from "../services/api";
-import { colors, shadows } from "../theme";
-import { sessionScreenStyles as styles } from "./sessionScreenStyles";
+import { useColors, shadows } from "../theme";
+import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface FeedbackCardProps {
   response: StepResponse;
 }
 
 export function FeedbackCard({ response }: FeedbackCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
   const isConversation = response.action === "conversation";
 
   return (

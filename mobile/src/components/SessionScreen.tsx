@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
@@ -34,8 +34,8 @@ import { UpgradePrompt } from "./UpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
-import { sessionScreenStyles as styles } from "./sessionScreenStyles";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface SessionScreenProps {
   onBack: () => void;
@@ -44,6 +44,11 @@ interface SessionScreenProps {
 
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
+  const readerStyles = useMemo(() => makeReaderStyles(colors), [colors]);
+  const chatStyles = useMemo(() => makeChatStyles(colors), [colors]);
+  const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const confettiRef = useRef<ConfettiOverlayRef>(null);
@@ -480,6 +485,8 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 
 function CompletedStepRow({ index, title, description, isLast }: { index: number; title?: string; description: string; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const colors = useColors();
+  const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={compactStyles.historyItem}
@@ -511,7 +518,7 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
   );
 }
 
-const readerStyles = StyleSheet.create({
+const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
   // Slim header
   slimHeader: {
     flexDirection: "row",
@@ -656,7 +663,7 @@ const readerStyles = StyleSheet.create({
 });
 
 // In-body iMessage-style chat thread that renders ABOVE the current step card
-const chatStyles = StyleSheet.create({
+const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
   thread: {
     marginBottom: spacing.md,
     gap: 6,
@@ -700,7 +707,7 @@ const chatStyles = StyleSheet.create({
   },
 });
 
-const compactStyles = StyleSheet.create({
+const makeCompactStyles = (colors: ColorPalette) => StyleSheet.create({
   historyContainer: {
     marginBottom: spacing.md,
   },

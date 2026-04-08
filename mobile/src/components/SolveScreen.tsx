@@ -28,7 +28,7 @@ import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 const MAX_PROBLEMS = 10;
 
@@ -54,6 +54,8 @@ export function SolveScreen({
   onSessionStart,
   onSessionError,
 }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const typeCardRef = useRef<View>(null);
@@ -641,6 +643,8 @@ function QuotaFooter({
   limit: number;
   themeColor: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const pct = limit > 0 ? (limit - remaining) / limit : 0;
   return (
     <View style={styles.quotaFooterRow}>
@@ -659,7 +663,7 @@ function QuotaFooter({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
 

@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { Platform, StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography } from "../theme";
+import { useColors, spacing, typography, type ColorPalette } from "../theme";
 
 export type TabKey = "solve" | "history" | "library" | "account";
 
@@ -26,6 +27,8 @@ interface Props {
 
 export function BottomTabBar({ active, onChange }: Props) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View
       style={[
@@ -57,7 +60,7 @@ export function BottomTabBar({ active, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   bar: {
     flexDirection: "row",
     borderTopWidth: 1,
