@@ -973,6 +973,101 @@ export interface BankJob {
   updated_at: string;
 }
 
+// ── School student endpoints ──
+//
+// All routes are mounted at /v1/school/student. The shape mirrors the
+// pydantic models in api/routes/school_student_practice.py — keep in
+// sync if you change one.
+
+export interface StudentClassSummary {
+  section_id: string;
+  section_name: string;
+  course_id: string;
+  course_name: string;
+  course_subject: string;
+}
+
+export interface StudentHomeworkSummary {
+  assignment_id: string;
+  title: string;
+  type: string;
+  due_at: string | null;
+  problem_count: number;
+}
+
+export interface StudentHomeworkProblem {
+  bank_item_id: string;
+  position: number;
+  question: string;
+  final_answer: string | null;
+  difficulty: string;
+  approved_variation_count: number;
+}
+
+export interface StudentHomeworkDetail {
+  assignment_id: string;
+  title: string;
+  type: string;
+  due_at: string | null;
+  course_id: string;
+  course_name: string;
+  problems: StudentHomeworkProblem[];
+}
+
+export interface VariationPayload {
+  bank_item_id: string;
+  question: string;
+  final_answer: string | null;
+  distractors: string[];
+  solution_steps: { title?: string; description?: string }[] | null;
+  difficulty: string;
+}
+
+export type NextVariationResponse =
+  | { status: "served"; variation: VariationPayload; consumption_id: string; anchor_bank_item_id: string; remaining: number }
+  | { status: "exhausted"; seen: number }
+  | { status: "empty" };
+
+export interface FlaggedConsumption {
+  consumption_id: string;
+  variation: VariationPayload;
+  served_at: string;
+}
+
+export const schoolStudent = {
+  listClasses() {
+    return apiFetch<StudentClassSummary[]>("/school/student/classes");
+  },
+  listHomework(courseId: string) {
+    return apiFetch<StudentHomeworkSummary[]>(`/school/student/courses/${courseId}/homework`);
+  },
+  homeworkDetail(assignmentId: string) {
+    return apiFetch<StudentHomeworkDetail>(`/school/student/homework/${assignmentId}`);
+  },
+  nextVariation(assignmentId: string, bankItemId: string, mode: "practice" | "learn") {
+    return apiFetch<NextVariationResponse>(
+      `/school/student/homework/${assignmentId}/problems/${bankItemId}/next-variation?mode=${mode}`,
+      { method: "POST" },
+    );
+  },
+  completeConsumption(consumptionId: string) {
+    return apiFetch<void>(`/school/student/bank-consumption/${consumptionId}/complete`, {
+      method: "POST",
+    });
+  },
+  flagConsumption(consumptionId: string, flagged: boolean) {
+    return apiFetch<void>(`/school/student/bank-consumption/${consumptionId}/flag`, {
+      method: "POST",
+      body: JSON.stringify({ flagged }),
+    });
+  },
+  flaggedConsumptions(assignmentId: string, bankItemId: string) {
+    return apiFetch<FlaggedConsumption[]>(
+      `/school/student/homework/${assignmentId}/problems/${bankItemId}/flagged`,
+    );
+  },
+};
+
 // ── Contact endpoints ──
 
 export const contact = {
