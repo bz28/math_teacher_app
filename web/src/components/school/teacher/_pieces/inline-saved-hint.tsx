@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-// Tiny inline indicator for auto-saved fields. Shows "saved" briefly
-// after a successful PATCH and fades; shows error + Retry button on
-// failure. Pairs with a parent that runs the actual save and tracks
-// the per-field state.
+// Tiny inline indicator for auto-saved fields. Pure derivation of
+// the visual from the prop — no internal state, no effects. The
+// "saved" indicator persists until the parent moves the field back
+// to "idle" or fires another save (which transitions to "saving").
+// Earlier versions auto-faded "saved" after a couple seconds via
+// useEffect+setTimeout, which violated react-hooks/set-state-in-effect
+// and added complexity for negligible UX gain — a persistent ✓ Saved
+// next to the field is honest about the last action.
 //
 // State machine:
-//   idle → saving → saved (auto-fade) → idle
-//   idle → saving → error → idle (after Retry)
+//   idle → saving → saved → (next interaction) → saving → saved
+//   idle → saving → error → (next interaction) → saving → saved/error
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function InlineSavedHint({
@@ -21,18 +23,6 @@ export function InlineSavedHint({
   errorMessage?: string | null;
   onRetry?: () => void;
 }) {
-  // Auto-fade the "saved" indicator after a couple seconds.
-  const [showSaved, setShowSaved] = useState(false);
-  useEffect(() => {
-    if (state !== "saved") {
-      setShowSaved(false);
-      return;
-    }
-    setShowSaved(true);
-    const t = setTimeout(() => setShowSaved(false), 2500);
-    return () => clearTimeout(t);
-  }, [state]);
-
   if (state === "saving") {
     return (
       <span className="text-[10px] font-semibold text-text-muted">Saving…</span>
@@ -54,7 +44,7 @@ export function InlineSavedHint({
       </span>
     );
   }
-  if (state === "saved" && showSaved) {
+  if (state === "saved") {
     return (
       <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
         ✓ Saved

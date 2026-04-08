@@ -82,7 +82,12 @@ class CreateAssignmentRequest(BaseModel):
 class UpdateAssignmentRequest(BaseModel):
     title: str | None = None
     status: str | None = None
+    # ISO datetime to set, or empty string / "null" sentinel to clear.
+    # We can't use real None to mean "clear" because None already means
+    # "leave unchanged" — that's the cost of an open PATCH shape. The
+    # frontend uses clear_due_at=true for unambiguous clearing.
     due_at: str | None = None
+    clear_due_at: bool = False
     late_policy: str | None = None
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
@@ -413,7 +418,9 @@ async def update_assignment(
         a.title = title
     if body.status is not None:
         a.status = body.status
-    if body.due_at is not None:
+    if body.clear_due_at:
+        a.due_at = None
+    elif body.due_at is not None and body.due_at != "":
         try:
             a.due_at = datetime.fromisoformat(body.due_at)
         except ValueError:
@@ -502,32 +509,44 @@ async def assign_to_sections(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    """Idempotent set-sections operation. Replaces the assignment's
+    section list with exactly the ids in body.section_ids — adds new
+    ones, removes old ones. Does NOT change publish status; the new
+    homework flow has an explicit Publish button gated on this list
+    being non-empty (legacy behavior auto-published as a side effect
+    here, which silently flipped drafts to published when teachers
+    expected pure config)."""
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
+    # Validate every requested section belongs to this course before
+    # touching any join rows.
+    if body.section_ids:
+        found = set((await db.execute(
+            select(Section.id).where(
+                Section.id.in_(body.section_ids), Section.course_id == a.course_id,
+            )
+        )).scalars().all())
+        if len(found) != len(set(body.section_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="One or more sections do not belong to this course",
+            )
+
+    # Read existing assignments and diff against the desired set.
+    existing_rows = (await db.execute(
+        select(AssignmentSection).where(AssignmentSection.assignment_id == a.id)
+    )).scalars().all()
+    existing_ids = {r.section_id for r in existing_rows}
+    desired_ids = set(body.section_ids)
+
     now = datetime.now(UTC)
-    for sid in body.section_ids:
-        # Verify section belongs to assignment's course
-        section = (await db.execute(
-            select(Section).where(Section.id == sid, Section.course_id == a.course_id)
-        )).scalar_one_or_none()
-        if not section:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in this course")
-
-        # Check if already assigned
-        existing = (await db.execute(
-            select(AssignmentSection)
-            .where(AssignmentSection.assignment_id == a.id, AssignmentSection.section_id == sid)
-        )).scalar_one_or_none()
-        if not existing:
-            db.add(AssignmentSection(
-                assignment_id=a.id, section_id=sid, published_at=now,
-            ))
-
-    # Auto-publish if still draft — also locks the bank items it references.
-    if a.status == "draft":
-        a.status = "published"
-        await db.flush()
-        await recompute_bank_locks(db, a.course_id)
+    for row in existing_rows:
+        if row.section_id not in desired_ids:
+            await db.delete(row)
+    for sid in desired_ids - existing_ids:
+        db.add(AssignmentSection(
+            assignment_id=a.id, section_id=sid, published_at=now,
+        ))
 
     await db.commit()
     return {"status": "ok"}

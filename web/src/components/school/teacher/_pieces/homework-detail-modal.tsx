@@ -201,7 +201,10 @@ export function HomeworkDetailModal({
       (prev) => ({ ...prev, due_at: next }),
       () =>
         teacher
-          .updateAssignment(assignmentId, { due_at: next ?? "" })
+          .updateAssignment(
+            assignmentId,
+            next === null ? { clear_due_at: true } : { due_at: next },
+          )
           .then(() => undefined),
     );
   };
@@ -613,9 +616,16 @@ function DueDatePicker({
   onChange: (next: string | null) => void;
   disabled: boolean;
 }) {
+  // Snapshot "now" once at mount so the render stays pure (Date.now()
+  // in render trips react-hooks/purity). The modal is short-lived
+  // enough that a stale snapshot is fine — the warning is informational
+  // and the only edge case is "user picks a future date that becomes
+  // past while the modal stays open for hours," which we don't care
+  // about.
+  const [now] = useState(() => Date.now());
   // datetime-local needs YYYY-MM-DDTHH:mm — drop the timezone suffix.
   const localValue = value ? toLocalDatetimeInputValue(value) : "";
-  const isPast = value !== null && new Date(value).getTime() < Date.now();
+  const isPast = value !== null && new Date(value).getTime() < now;
 
   return (
     <div className="flex items-center gap-2">
