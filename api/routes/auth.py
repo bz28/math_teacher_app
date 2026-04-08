@@ -194,28 +194,6 @@ async def me(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    # Self-heal: a student who joined a section before /teacher/join
-    # learned to stamp school_id (or who was enrolled by a teacher
-    # directly via the roster) ends up with a SectionEnrollment but
-    # school_id=null. Detect that and backfill from the section's
-    # course's school the first time they call /me. One row update,
-    # only when school_id is null and the student has at least one
-    # enrollment with a school-owned course.
-    if user.role == "student" and user.school_id is None:
-        derived = (await db.execute(
-            select(Course.school_id)
-            .join(Section, Section.course_id == Course.id)
-            .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
-            .where(
-                SectionEnrollment.student_id == user.id,
-                Course.school_id.is_not(None),
-            )
-            .limit(1)
-        )).scalar_one_or_none()
-        if derived is not None:
-            user.school_id = derived
-            await db.commit()
-
     school_name = None
     if user.school_id:
         school = (await db.execute(select(School.name).where(School.id == user.school_id))).scalar_one_or_none()
