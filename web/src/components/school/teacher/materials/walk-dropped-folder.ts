@@ -184,3 +184,37 @@ export function fileCountInFolder(folder: DroppedFolder): number {
 export function totalFileCount(tree: DroppedTree): number {
   return tree.looseFiles.length + tree.folders.reduce((acc, f) => acc + fileCountInFolder(f), 0);
 }
+
+/** Strip characters that could be interpreted as paths or nulls. Defensive
+ *  client-side only — the backend is the source of truth for validation. */
+export function sanitizeFolderName(name: string): string {
+  const cleaned = name.replace(/[/\\\x00]/g, "_").trim();
+  if (cleaned === "" || cleaned === "." || cleaned === "..") return "Untitled";
+  return cleaned;
+}
+
+/** Run `fn` over `items` with at most `limit` in flight at once. Preserves
+ *  order of results and never rejects (errors are captured as `{ error }`). */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<({ ok: true; value: R } | { ok: false; error: unknown })[]> {
+  const out: ({ ok: true; value: R } | { ok: false; error: unknown })[] = new Array(items.length);
+  let next = 0;
+  const workers: Promise<void>[] = [];
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next;
+      next += 1;
+      try {
+        out[i] = { ok: true, value: await fn(items[i], i) };
+      } catch (error) {
+        out[i] = { ok: false, error };
+      }
+    }
+  };
+  for (let i = 0; i < Math.min(limit, items.length); i += 1) workers.push(worker());
+  await Promise.all(workers);
+  return out;
+}

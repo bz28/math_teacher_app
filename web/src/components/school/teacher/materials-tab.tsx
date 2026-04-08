@@ -26,6 +26,8 @@ import { CollisionDialog } from "./materials/collision-dialog";
 import {
   detectCollisions,
   fileCountInFolder,
+  mapWithConcurrency,
+  sanitizeFolderName,
   treeFromDirectoryPicker,
   uniqueName,
 } from "./materials/walk-dropped-folder";
@@ -175,16 +177,29 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       }
 
       // Track taken top-level names so "Create new" picks don't collide
-      // with each other (e.g. two dropped "Unit 1" folders both resolve
-      // to "create").
+      // with each other — covers both server-side and same-drop sibling
+      // duplicates (e.g. two dropped "Misc" folders neither on server).
       const taken = new Set(topLevelNames.map((u) => u.name.toLowerCase()));
       const collisionByName = new Map(collisions.map((c) => [c.folder.name, c]));
 
       let okFiles = 0;
       let okUnits = 0;
       let failedFiles = 0;
+      const UPLOAD_CONCURRENCY = 5;
+
+      const uploadBatch = async (files: File[], unitId: string | null) => {
+        const results = await mapWithConcurrency(files, UPLOAD_CONCURRENCY, (file) =>
+          uploadOne(file, unitId),
+        );
+        for (const r of results) {
+          if (r.ok) okFiles += 1;
+          else failedFiles += 1;
+        }
+      };
 
       // ── folders ─────────────────────────────────────────────────
+      // Unit creation stays sequential (order + name dedupe matters),
+      // but files within each folder/subfolder upload in parallel.
       for (const folder of tree.folders) {
         const collision = collisionByName.get(folder.name);
         const choice = collision ? resolutions.get(folder.name) ?? "create" : "create";
@@ -195,8 +210,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           if (choice === "merge" && collision) {
             targetUnitId = collision.existingUnitId;
           } else {
-            const name = collision ? uniqueName(folder.name, taken) : folder.name;
-            if (!collision) taken.add(folder.name.toLowerCase());
+            // Always run through uniqueName so sibling duplicates in the
+            // same drop get numbered suffixes too, not just server ones.
+            const name = sanitizeFolderName(uniqueName(folder.name, taken));
             const created = await teacher.createUnit(courseId, { name });
             targetUnitId = created.id;
             okUnits += 1;
@@ -206,24 +222,15 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           continue;
         }
 
-        // root-level files in the folder
-        for (const file of folder.files) {
-          try {
-            await uploadOne(file, targetUnitId);
-            okFiles += 1;
-          } catch {
-            failedFiles += 1;
-          }
-        }
+        await uploadBatch(folder.files, targetUnitId);
 
-        // level-2 subfolders. On merge, we still create the subfolders
-        // under the existing unit — teachers expect dropped structure to
-        // be preserved even when merging into an existing unit.
+        // level-2 subfolders — on merge we still create them under the
+        // existing unit so dropped structure is preserved.
         for (const sub of folder.subfolders) {
-          let subUnitId: string | null = null;
+          let subUnitId: string;
           try {
             const created = await teacher.createUnit(courseId, {
-              name: sub.name,
+              name: sanitizeFolderName(sub.name),
               parent_id: targetUnitId,
             });
             subUnitId = created.id;
@@ -231,26 +238,12 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             failedFiles += sub.files.length;
             continue;
           }
-          for (const file of sub.files) {
-            try {
-              await uploadOne(file, subUnitId);
-              okFiles += 1;
-            } catch {
-              failedFiles += 1;
-            }
-          }
+          await uploadBatch(sub.files, subUnitId);
         }
       }
 
       // ── loose files (go into currently-selected folder) ─────────
-      for (const file of tree.looseFiles) {
-        try {
-          await uploadOne(file, selected);
-          okFiles += 1;
-        } catch {
-          failedFiles += 1;
-        }
-      }
+      await uploadBatch(tree.looseFiles, selected);
 
       await reload();
       onChanged();
@@ -306,41 +299,31 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
   const moveDocuments = (ids: string[], targetUnitId: string | null) =>
     run(async () => {
-      let ok = 0;
-      const failures: string[] = [];
-      for (const id of ids) {
-        try {
-          await teacher.updateDocument(courseId, id, { unit_id: targetUnitId });
-          ok += 1;
-        } catch (e) {
-          failures.push(e instanceof Error ? e.message : "failed");
-        }
-      }
+      const results = await mapWithConcurrency(ids, 5, (id) =>
+        teacher.updateDocument(courseId, id, { unit_id: targetUnitId }),
+      );
+      const ok = results.filter((r) => r.ok).length;
+      const failed = results.length - ok;
       setBulkMoveOpen(false);
       setSelectedDocIds(new Set());
       await reload();
       onChanged();
       if (ok > 0) toast.success(`Moved ${ok} file${ok === 1 ? "" : "s"}`);
-      if (failures.length > 0) toast.error(`Failed to move ${failures.length} file(s)`);
+      if (failed > 0) toast.error(`Failed to move ${failed} file(s)`);
     });
 
   const deleteDocuments = (ids: string[]) =>
     run(async () => {
-      let ok = 0;
-      const failures: string[] = [];
-      for (const id of ids) {
-        try {
-          await teacher.deleteDocument(courseId, id);
-          ok += 1;
-        } catch (e) {
-          failures.push(e instanceof Error ? e.message : "failed");
-        }
-      }
+      const results = await mapWithConcurrency(ids, 5, (id) =>
+        teacher.deleteDocument(courseId, id),
+      );
+      const ok = results.filter((r) => r.ok).length;
+      const failed = results.length - ok;
       setSelectedDocIds(new Set());
       await reload();
       onChanged();
       if (ok > 0) toast.success(`Deleted ${ok} file${ok === 1 ? "" : "s"}`);
-      if (failures.length > 0) toast.error(`Failed to delete ${failures.length} file(s)`);
+      if (failed > 0) toast.error(`Failed to delete ${failed} file(s)`);
     });
 
   /* ── selection handling ── */
