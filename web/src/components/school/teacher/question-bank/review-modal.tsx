@@ -55,6 +55,12 @@ export function ReviewModal({
   const [showPicker, setShowPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Flow A only: after a primary is approved into a HW, surface a
+  // tiny nudge offering to generate practice variations for it. Stays
+  // visible until the teacher clicks Generate / Skip / approves the
+  // next item (which replaces it). Closed entirely on modal dismiss.
+  const [variationNudge, setVariationNudge] = useState<BankItem | null>(null);
+  const [nudgeBusy, setNudgeBusy] = useState(false);
 
   const current: BankItem | undefined = items[index];
   const total = items.length;
@@ -131,6 +137,7 @@ export function ReviewModal({
     try {
       await teacher.approveBankItem(current.id, { assignmentId: assignment.id });
       markResolved("added");
+      setVariationNudge(current);
       onChanged();
       advance();
     } catch (e) {
@@ -152,6 +159,7 @@ export function ReviewModal({
         bank_item_ids: [current.id],
       });
       markResolved("added");
+      setVariationNudge(current);
       onChanged();
       advance();
     } catch (e) {
@@ -160,6 +168,27 @@ export function ReviewModal({
       setBusy(false);
     }
   };
+
+  // Kick off a generate-similar job in the background. The variations
+  // land in pending and the teacher can review them later via the
+  // pending tray (Flow B). We dismiss the nudge immediately on success
+  // — no need to wait for the job to finish.
+  const generateVariationsForNudge = async () => {
+    if (!variationNudge || nudgeBusy) return;
+    setNudgeBusy(true);
+    setError(null);
+    try {
+      await teacher.generateSimilarBank(variationNudge.id, { count: 5 });
+      setVariationNudge(null);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start variation generation");
+    } finally {
+      setNudgeBusy(false);
+    }
+  };
+
+  const dismissNudge = () => setVariationNudge(null);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -252,6 +281,14 @@ export function ReviewModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
+          {variationNudge && (
+            <VariationNudge
+              item={variationNudge}
+              busy={nudgeBusy}
+              onGenerate={generateVariationsForNudge}
+              onDismiss={dismissNudge}
+            />
+          )}
           {isComplete ? (
             <CompletionState
               total={total}
@@ -415,6 +452,50 @@ function CurrentQuestion({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Tiny inline nudge that appears after a Flow A approve, offering to
+// kick off a generate-similar job for the just-approved primary so
+// the student-side practice loop has problems to pull from.
+function VariationNudge({
+  item,
+  busy,
+  onGenerate,
+  onDismiss,
+}: {
+  item: BankItem;
+  busy: boolean;
+  onGenerate: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-[--radius-md] border border-purple-300 bg-purple-50 px-4 py-2 text-xs dark:border-purple-500/40 dark:bg-purple-500/10">
+      <div className="min-w-0 flex-1">
+        <span className="font-semibold text-purple-900 dark:text-purple-200">
+          ✅ Added &ldquo;{item.title}&rdquo;.
+        </span>{" "}
+        <span className="text-purple-800/80 dark:text-purple-300/80">
+          Generate practice variations for it so students can drill on similar problems?
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onGenerate}
+        disabled={busy}
+        className="shrink-0 rounded-[--radius-md] bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 disabled:opacity-50"
+      >
+        {busy ? "Starting…" : "Generate"}
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        disabled={busy}
+        className="shrink-0 rounded-[--radius-md] px-2 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:text-purple-300 dark:hover:bg-purple-500/20"
+      >
+        Skip
+      </button>
     </div>
   );
 }
