@@ -49,12 +49,18 @@ export function UnitRail({
         active={selected === "all"}
         onSelect={() => onSelect("all")}
       />
-      <RailRow
-        label="Uncategorized"
-        count={uncategorizedCount}
-        active={selected === "uncategorized"}
-        onSelect={() => onSelect("uncategorized")}
-      />
+      {/* Hide Uncategorized when empty so the homework tab doesn't
+          show a permanent zero (HWs require ≥1 unit so the bucket
+          is always empty there). The question bank can still have
+          uncategorized items so the row appears when relevant. */}
+      {(uncategorizedCount > 0 || selected === "uncategorized") && (
+        <RailRow
+          label="Uncategorized"
+          count={uncategorizedCount}
+          active={selected === "uncategorized"}
+          onSelect={() => onSelect("uncategorized")}
+        />
+      )}
 
       <div className="my-2 h-px bg-border-light/60" />
 

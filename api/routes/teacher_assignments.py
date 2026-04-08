@@ -411,20 +411,14 @@ async def update_assignment(
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
-    if body.title is not None:
-        title = body.title.strip()
-        if not title or len(title) > 300:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title must be 1-300 characters")
-        a.title = title
-    if body.status is not None:
-        a.status = body.status
-
-    # Configuration fields (units, due_at, late_policy) lock when the
-    # homework is published. Title is intentionally NOT locked — it's
-    # cosmetic and low-risk. The new homework flow has the teacher
-    # unpublish to edit configuration.
+    # Configuration fields (title, units, due_at, late_policy) all
+    # lock when the homework is published. The frontend already
+    # disables every config control on published HWs and shows the
+    # "Unpublish to edit" banner; this enforces the same contract on
+    # the API so a stale UI or direct call can't bypass it.
     config_fields_touched = (
-        body.clear_due_at
+        body.title is not None
+        or body.clear_due_at
         or body.due_at is not None
         or body.late_policy is not None
         or body.unit_ids is not None
@@ -434,6 +428,14 @@ async def update_assignment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unpublish before editing configuration",
         )
+
+    if body.title is not None:
+        title = body.title.strip()
+        if not title or len(title) > 300:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title must be 1-300 characters")
+        a.title = title
+    if body.status is not None:
+        a.status = body.status
 
     if body.clear_due_at:
         a.due_at = None
