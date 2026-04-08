@@ -24,6 +24,7 @@ approved variation content.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -34,6 +35,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.integrity_pipeline import start_integrity_check
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection, Submission
@@ -48,6 +50,8 @@ from api.services.bank import problem_ids_in_content
 # ~6.7 MB base64; we round up so PNG screenshots from a phone aren't
 # rejected. Real abuse protection lives at the rate-limit / S3 layer.
 MAX_IMAGE_BASE64_LEN = 7_000_000
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/school/student", tags=["school-student"])
 
@@ -475,11 +479,39 @@ async def submit_homework(
         raise HTTPException(status_code=409, detail="Already submitted") from None
     await db.refresh(submission)
 
-    return SubmitHomeworkResponse(
+    # Capture the values we need for the response BEFORE calling the
+    # integrity pipeline. The pipeline either commits (which expires
+    # all session objects) or fails and we rollback (which also
+    # expires) — either way we'd hit MissingGreenlet trying to read
+    # submission.submitted_at later. Locals are immune.
+    response = SubmitHomeworkResponse(
         submission_id=str(submission.id),
         submitted_at=submission.submitted_at,
         is_late=submission.is_late,
     )
+    submission_id_for_log = submission.id
+
+    # Fire the integrity-check pipeline. Stubbed in PR 1 — runs
+    # inline in the same request because the stub is instant. PR 4
+    # will move this to a background task when extract / generate /
+    # score become real Vision + Sonnet calls.
+    #
+    # Wrapped in try/except so a pipeline failure CAN NEVER block
+    # the kid's submission. The submission is already committed; the
+    # worst case is that the integrity rows don't exist and the
+    # teacher view shows no badges for this submission (graceful
+    # degrade, not a hard error).
+    try:
+        await start_integrity_check(submission_id_for_log, db)
+        await db.commit()
+    except Exception:
+        logger.exception(
+            "integrity pipeline failed for submission %s; submission still saved",
+            submission_id_for_log,
+        )
+        await db.rollback()
+
+    return response
 
 
 @router.get("/homework/{assignment_id}/submission")
