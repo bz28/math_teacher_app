@@ -11,6 +11,7 @@ import { STATUS_FILTERS } from "./question-bank/constants";
 import { buildUnitGroups } from "./question-bank/tree";
 import { SimpleUnitList } from "./question-bank/unit-groups";
 import { ApprovedUnitFolder } from "./question-bank/approved-tree";
+import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
 import { PendingTray } from "./question-bank/pending-tray";
@@ -61,6 +62,10 @@ export function QuestionBankTab({
   }, [items, unitSelection]);
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
+  // Separate state for "edit invoked from inside ReviewModal" so we
+  // can force WorkshopModal into editOnly mode (Approve/Reject hidden)
+  // — keeps the two surfaces from fighting over status changes.
+  const [editFromReviewItem, setEditFromReviewItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   // Flow A: full-screen review for fresh primary problems. Captured at
   // open time so mid-review generations don't splice in.
@@ -222,19 +227,9 @@ export function QuestionBankTab({
               Pending and Rejected get a flat dense list. */}
           <div className="mt-4 space-y-5">
             {loading ? (
-              <p className="text-sm text-text-muted">Loading…</p>
+              <BankSkeleton />
             ) : filteredItems.length === 0 ? (
-              <EmptyState
-                text={
-                  counts.pending + counts.approved + counts.rejected === 0
-                    ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
-                    : statusFilter === "pending"
-                      ? "No pending review. New generations land here."
-                      : statusFilter === "rejected"
-                        ? "No rejected questions."
-                        : "No questions match this filter."
-                }
-              />
+              <EmptyState text={emptyStateFor(statusFilter, unitSelection, counts)} />
             ) : statusFilter === "pending" || statusFilter === "rejected" ? (
               <SimpleUnitList
                 items={filteredItems}
@@ -283,7 +278,7 @@ export function QuestionBankTab({
             reload();
           }}
           onChanged={reload}
-          onEditItem={(item) => setOpenItem(item)}
+          onEditItem={(item) => setEditFromReviewItem(item)}
         />
       )}
 
@@ -301,7 +296,7 @@ export function QuestionBankTab({
             reload();
           }}
           onChanged={reload}
-          onEditItem={(item) => setOpenItem(item)}
+          onEditItem={(item) => setEditFromReviewItem(item)}
         />
       )}
 
@@ -323,6 +318,17 @@ export function QuestionBankTab({
         />
       )}
 
+      {editFromReviewItem && (
+        <WorkshopModal
+          item={editFromReviewItem}
+          editOnly
+          onClose={() => setEditFromReviewItem(null)}
+          onChanged={reload}
+          onJobStarted={setActiveJob}
+          activeJob={activeJob}
+        />
+      )}
+
       {openHomeworkId && (
         <HomeworkDetailModal
           courseId={courseId}
@@ -334,4 +340,28 @@ export function QuestionBankTab({
     </div>
     </CourseSubjectContext.Provider>
   );
+}
+
+function emptyStateFor(
+  statusFilter: "pending" | "approved" | "rejected",
+  unitSelection: UnitSelection,
+  counts: { pending: number; approved: number; rejected: number },
+): string {
+  const total = counts.pending + counts.approved + counts.rejected;
+  if (total === 0) {
+    return "No questions yet. Hit \u201cGenerate Questions\u201d to create some.";
+  }
+  const where =
+    unitSelection === "all"
+      ? ""
+      : unitSelection === "uncategorized"
+        ? " in Uncategorized"
+        : " in this unit";
+  if (statusFilter === "pending") {
+    return `No pending review${where}. New generations land here.`;
+  }
+  if (statusFilter === "rejected") {
+    return `No rejected questions${where}.`;
+  }
+  return `No approved questions${where} yet. Review pending ones to add them to a homework.`;
 }

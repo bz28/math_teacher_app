@@ -471,20 +471,24 @@ function VariationNudge({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mb-4 flex items-center gap-3 rounded-[--radius-md] border border-purple-300 bg-purple-50 px-4 py-2 text-xs dark:border-purple-500/40 dark:bg-purple-500/10">
+    <div className="mb-5 flex items-center gap-4 rounded-[--radius-lg] border border-purple-300 bg-purple-50 p-4 text-sm dark:border-purple-500/40 dark:bg-purple-500/10">
+      <span className="text-2xl" aria-hidden>
+        ✨
+      </span>
       <div className="min-w-0 flex-1">
-        <span className="font-semibold text-purple-900 dark:text-purple-200">
-          ✅ Added &ldquo;{item.title}&rdquo;.
-        </span>{" "}
-        <span className="text-purple-800/80 dark:text-purple-300/80">
-          Generate practice variations for it so students can drill on similar problems?
-        </span>
+        <div className="font-bold text-purple-900 dark:text-purple-200">
+          Approved &ldquo;{item.title}&rdquo;
+        </div>
+        <div className="mt-0.5 text-xs text-purple-800/90 dark:text-purple-300/80">
+          Generate 2 practice variations so students can drill on similar problems
+          when they get stuck.
+        </div>
       </div>
       <button
         type="button"
         onClick={onGenerate}
         disabled={busy}
-        className="shrink-0 rounded-[--radius-md] bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 disabled:opacity-50"
+        className="shrink-0 rounded-[--radius-md] bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-50"
       >
         {busy ? "Starting…" : "Generate"}
       </button>
@@ -492,7 +496,7 @@ function VariationNudge({
         type="button"
         onClick={onDismiss}
         disabled={busy}
-        className="shrink-0 rounded-[--radius-md] px-2 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:text-purple-300 dark:hover:bg-purple-500/20"
+        className="shrink-0 rounded-[--radius-md] px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:text-purple-300 dark:hover:bg-purple-500/20"
       >
         Skip
       </button>
