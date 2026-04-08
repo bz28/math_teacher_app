@@ -96,10 +96,25 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     }
   }, [lastResponse, phase]);
 
-  // Scroll to bottom when chat history grows (so the latest bubble is visible)
+  // Scroll to bottom whenever the chat history changes for the current step
+  // (covers user msg appended optimistically, thinking placeholder, and the
+  // tutor reply on success — three scrolls per ask cycle).
+  const stepChatLen = chatHistory[session?.current_step ?? -1]?.length ?? 0;
   useEffect(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-  }, [chatHistory[session?.current_step ?? -1]?.length]);
+    if (stepChatLen === 0) return;
+    // Two scrolls: one immediate after the new bubble mounts, one after
+    // layout settles in case the bubble grew taller than expected.
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+  }, [stepChatLen]);
+
+  // Also scroll when the thinking phase begins/ends (catches cases where the
+  // chat length didn't change but the placeholder bubble appeared/disappeared)
+  useEffect(() => {
+    if (askMode && (phase === "thinking" || phase === "awaiting_input")) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    }
+  }, [phase, askMode]);
 
   // Scroll when the keyboard appears in ask mode
   useEffect(() => {
