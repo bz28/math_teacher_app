@@ -19,10 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
-from api.core.practice import generate_distractors
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import REGENERATE_QA_SCHEMA
+from api.core.practice import generate_distractors
 from api.core.subjects import get_config
 from api.database import get_session_factory
 from api.models.course import Course

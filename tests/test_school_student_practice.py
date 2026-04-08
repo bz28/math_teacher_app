@@ -22,11 +22,10 @@ from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection
 from api.models.course import Course
-from api.models.question_bank import BankConsumption, QuestionBankItem
+from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
-
 
 # ── Fixtures ──
 
