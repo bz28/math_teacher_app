@@ -18,6 +18,7 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
+    "katex": "^0.16.45",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-confetti-cannon": "^1.5.2",

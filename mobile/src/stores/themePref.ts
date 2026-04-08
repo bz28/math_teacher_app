@@ -1,58 +1,56 @@
 import { useEffect, useState } from "react";
 import { Appearance, ColorSchemeName } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { create } from "zustand";
 
 export type ThemePref = "system" | "light" | "dark";
 
 const STORAGE_KEY = "theme_preference";
 const CYCLE: ThemePref[] = ["system", "light", "dark"];
 
-let listeners: Array<(p: ThemePref) => void> = [];
-let currentPref: ThemePref = "system";
+interface ThemePrefStore {
+  pref: ThemePref;
+  setPref: (p: ThemePref) => Promise<void>;
+  toggle: () => Promise<void>;
+  hydrate: () => Promise<void>;
+}
 
-/** Hydrate the saved preference from secure storage on app start. */
-export async function loadThemePref(): Promise<ThemePref> {
-  try {
-    const saved = (await SecureStore.getItemAsync(STORAGE_KEY)) as ThemePref | null;
-    if (saved === "system" || saved === "light" || saved === "dark") {
-      currentPref = saved;
-      return saved;
+export const useThemePrefStore = create<ThemePrefStore>((set, get) => ({
+  pref: "system",
+  setPref: async (p) => {
+    set({ pref: p });
+    try {
+      await SecureStore.setItemAsync(STORAGE_KEY, p);
+    } catch {
+      // Best-effort persistence
     }
-  } catch {
-    // Ignore — fall through to default
-  }
-  currentPref = "system";
-  return "system";
-}
+  },
+  toggle: async () => {
+    const current = get().pref;
+    const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
+    await get().setPref(next);
+  },
+  hydrate: async () => {
+    try {
+      const saved = (await SecureStore.getItemAsync(STORAGE_KEY)) as ThemePref | null;
+      if (saved === "system" || saved === "light" || saved === "dark") {
+        set({ pref: saved });
+      }
+    } catch {
+      // Ignore
+    }
+  },
+}));
 
-export async function setThemePref(pref: ThemePref): Promise<void> {
-  currentPref = pref;
-  try {
-    await SecureStore.setItemAsync(STORAGE_KEY, pref);
-  } catch {
-    // Best-effort persistence
-  }
-  listeners.forEach((cb) => cb(pref));
-}
+/** Convenience: hydrate from storage on app start. */
+export const loadThemePref = () => useThemePrefStore.getState().hydrate();
 
-/** Cycle through system → light → dark → system. Matches the web ThemeToggle. */
-export async function toggleThemePref(): Promise<void> {
-  const next = CYCLE[(CYCLE.indexOf(currentPref) + 1) % CYCLE.length];
-  await setThemePref(next);
-}
-
-/** React hook returning the current preference and the resolved color scheme. */
+/** React hook returning the current preference + resolved color scheme. */
 export function useThemePref() {
-  const [pref, setPref] = useState<ThemePref>(currentPref);
+  const pref = useThemePrefStore((s) => s.pref);
+  const setPref = useThemePrefStore((s) => s.setPref);
+  const toggle = useThemePrefStore((s) => s.toggle);
   const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(Appearance.getColorScheme());
-
-  useEffect(() => {
-    const cb = (next: ThemePref) => setPref(next);
-    listeners.push(cb);
-    return () => {
-      listeners = listeners.filter((l) => l !== cb);
-    };
-  }, []);
 
   useEffect(() => {
     const sub = Appearance.addChangeListener(({ colorScheme }) => setSystemScheme(colorScheme));
@@ -62,5 +60,5 @@ export function useThemePref() {
   const resolved: "light" | "dark" =
     pref === "system" ? (systemScheme === "dark" ? "dark" : "light") : pref;
 
-  return { pref, resolved, setPref: setThemePref, toggle: toggleThemePref };
+  return { pref, resolved, setPref, toggle };
 }
