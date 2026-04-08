@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   schoolStudent,
+  type IntegrityStateResponse,
   type StudentHomeworkDetail,
   type StudentHomeworkProblem,
   type StudentSubmission,
@@ -20,6 +21,8 @@ import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface
 import { PracticeSummary } from "@/components/school/student/practice-summary";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
+import { IntegrityCheckEntry } from "@/components/school/student/integrity-check-entry";
+import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
 
 type Mode =
   | { kind: "homework" }
@@ -33,12 +36,18 @@ type Mode =
       problem: StudentHomeworkProblem;
       initial: { variation: VariationPayload; consumption_id: string; remaining: number };
     }
-  | { kind: "summary"; problem: StudentHomeworkProblem };
+  | { kind: "summary"; problem: StudentHomeworkProblem }
+  | { kind: "integrity_chat" };
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
+  const [integrityState, setIntegrityState] = useState<IntegrityStateResponse | null>(null);
+  // Per-page-load dismissal of the integrity entry prompt. Resets on
+  // refresh — kid can defer for now but the prompt comes back next
+  // visit. Strict 5-minute timer + auto-lock is deferred to PR 5.
+  const [integrityDeferred, setIntegrityDeferred] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
@@ -47,23 +56,30 @@ export default function HomeworkPage() {
   // the practice surface and would otherwise wipe local state.
   const [practiceResults, setPracticeResults] = useState<LoopResult[]>([]);
 
+  // Load (or re-load) the homework + submission + integrity state.
+  // Called on mount, after submit, and after the chat finishes so
+  // the entry prompt visibility / progress indicator stay in sync.
+  async function loadAll(aid: string) {
+    try {
+      const detail = await schoolStudent.homeworkDetail(aid);
+      setHw(detail);
+      if (detail.submitted && detail.submission_id) {
+        const [sub, integrity] = await Promise.all([
+          schoolStudent.getMySubmission(aid).catch(() => null),
+          schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
+        ]);
+        if (sub) setSubmission(sub);
+        if (integrity) setIntegrityState(integrity);
+      }
+    } catch {
+      setError("Couldn't load this homework. Please try again.");
+    }
+  }
+
   useEffect(() => {
     if (!assignmentId) return;
-    schoolStudent
-      .homeworkDetail(assignmentId)
-      .then(async (detail) => {
-        setHw(detail);
-        if (detail.submitted) {
-          try {
-            const sub = await schoolStudent.getMySubmission(assignmentId);
-            setSubmission(sub);
-          } catch {
-            // Non-fatal — the submitted flag is the source of truth,
-            // we'll just render without the detail.
-          }
-        }
-      })
-      .catch(() => setError("Couldn't load this homework. Please try again."));
+    loadAll(assignmentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
   function appendResult(r: LoopResult) {
@@ -173,6 +189,22 @@ export default function HomeworkPage() {
     );
   }
 
+  if (mode.kind === "integrity_chat" && hw.submission_id) {
+    return (
+      <IntegrityCheckChat
+        submissionId={hw.submission_id}
+        onDone={async () => {
+          // Reset the per-page-load defer so a freshly-completed
+          // check vanishes from the entry-prompt slot, and so a
+          // partially-done one shows the "Continue" prompt again.
+          setIntegrityDeferred(false);
+          setMode({ kind: "homework" });
+          if (assignmentId) await loadAll(assignmentId);
+        }}
+      />
+    );
+  }
+
   // mode.kind === "homework"
   return (
     <div className="mx-auto max-w-3xl">
@@ -249,26 +281,28 @@ export default function HomeworkPage() {
       </div>
 
       {hw.submitted && submission ? (
-        <SubmittedView submission={submission} />
+        <>
+          <SubmittedView submission={submission} />
+          {integrityState
+            && integrityState.overall_status === "in_progress"
+            && !integrityDeferred && (
+            <IntegrityCheckEntry
+              state={integrityState}
+              onStart={() => setMode({ kind: "integrity_chat" })}
+              onLater={() => setIntegrityDeferred(true)}
+            />
+          )}
+        </>
       ) : !hw.submitted ? (
         <SubmissionPanel
           assignmentId={hw.assignment_id}
           dueAt={hw.due_at}
-          onSubmitted={async (resp) => {
-            // Re-fetch detail + submission so the UI swaps to the
-            // SubmittedView with full data.
-            try {
-              const [detail, sub] = await Promise.all([
-                schoolStudent.homeworkDetail(hw.assignment_id),
-                schoolStudent.getMySubmission(hw.assignment_id),
-              ]);
-              setHw(detail);
-              setSubmission(sub);
-            } catch {
-              // Fall back to a minimal optimistic update so the UI
-              // still flips.
-              setHw({ ...hw, submitted: true, submission_id: resp.submission_id });
-            }
+          onSubmitted={async (_resp) => {
+            // Re-fetch everything (detail + submission + integrity
+            // state) in one helper so the UI swaps to the
+            // SubmittedView and the integrity entry prompt appears
+            // in the same render.
+            await loadAll(hw.assignment_id);
           }}
         />
       ) : null}
