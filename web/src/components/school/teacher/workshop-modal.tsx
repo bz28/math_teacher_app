@@ -17,6 +17,8 @@ import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 import { InlineTitleEdit } from "./_pieces/inline-title-edit";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
+import { DestinationPicker } from "./question-bank/destination-picker";
+import type { TeacherAssignment } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
@@ -96,6 +98,10 @@ export function WorkshopModal({
   // wanted scan-and-decide focus). Persists across queue items in the same
   // session.
   const [chatOpen, setChatOpen] = useState(!isQueueMode);
+  // "Add to Homework" picker for single-mode pending items. Replaces
+  // the legacy bare Approve button so the workshop's approval path
+  // matches the ReviewModal contract: approval requires a destination.
+  const [showAddToHomeworkPicker, setShowAddToHomeworkPicker] = useState(false);
   const { busy, error, setError, run } = useAsyncAction();
 
   // ── Item sync ────────────────────────────────────────────────────
@@ -333,6 +339,34 @@ export function WorkshopModal({
       }
     });
 
+  // Single-mode pending: clicking "→ Add to Homework" opens the picker;
+  // picking a HW fires the atomic approve+attach call, then closes the
+  // workshop. Same contract as ReviewModal Flow A so the workshop entry
+  // path can't bypass the "approval requires a destination" rule.
+  const addToExistingHomework = (assignment: TeacherAssignment) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      await teacher.approveBankItem(liveItem.id, { assignmentId: assignment.id });
+      onChanged();
+      setShowAddToHomeworkPicker(false);
+      onClose();
+    });
+
+  const createHomeworkAndAdd = (title: string, unitIds: string[]) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      await teacher.approveBankItem(liveItem.id);
+      await teacher.createAssignment(liveItem.course_id, {
+        title,
+        type: "homework",
+        unit_ids: unitIds,
+        bank_item_ids: [liveItem.id],
+      });
+      onChanged();
+      setShowAddToHomeworkPicker(false);
+      onClose();
+    });
+
   const reject = () =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
@@ -378,8 +412,18 @@ export function WorkshopModal({
   // reads at call time. This guarantees the keyboard handler always
   // sees the most recent liveItem state, even when liveItem updates
   // without an id change (e.g. after a manual edit or chat accept).
-  const handlersRef = useRef({ approve, reject, skip });
-  handlersRef.current = { approve, reject, skip };
+  const handlersRef = useRef({
+    approve,
+    reject,
+    skip,
+    openAddToHomework: () => setShowAddToHomeworkPicker(true),
+  });
+  handlersRef.current = {
+    approve,
+    reject,
+    skip,
+    openAddToHomework: () => setShowAddToHomeworkPicker(true),
+  };
 
   useEffect(() => {
     if (allResolved) return;
@@ -398,7 +442,13 @@ export function WorkshopModal({
 
       if (!editOnly && (e.key === "Enter" || e.key === "a" || e.key === "A")) {
         e.preventDefault();
-        handlersRef.current.approve();
+        // Single-mode pending: route Enter/A to the destination picker
+        // instead of bare approve. Same contract as the click handler.
+        if (!isQueueMode && liveItem?.status === "pending") {
+          handlersRef.current.openAddToHomework();
+        } else {
+          handlersRef.current.approve();
+        }
       } else if (!editOnly && (e.key === "x" || e.key === "X")) {
         e.preventDefault();
         handlersRef.current.reject();
@@ -417,7 +467,7 @@ export function WorkshopModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [allResolved, busy, isProposalPending, isQueueMode, editOnly, onClose]);
+  }, [allResolved, busy, isProposalPending, isQueueMode, editOnly, liveItem?.status, onClose]);
 
   // ── Render: empty queue or completion ────────────────────────────
   if (isQueueMode && total === 0) {
@@ -741,6 +791,12 @@ export function WorkshopModal({
           busy={busy}
           status={liveItem.status}
           editOnly={editOnly}
+          courseId={liveItem.course_id}
+          showAddToHomeworkPicker={showAddToHomeworkPicker}
+          onOpenAddToHomework={() => setShowAddToHomeworkPicker(true)}
+          onCloseAddToHomework={() => setShowAddToHomeworkPicker(false)}
+          onPickExistingHomework={addToExistingHomework}
+          onCreateNewHomework={createHomeworkAndAdd}
           onApprove={approve}
           onReject={reject}
           onSkip={skip}
@@ -785,6 +841,12 @@ function ModeLineFooter({
   busy,
   status,
   editOnly,
+  courseId,
+  showAddToHomeworkPicker,
+  onOpenAddToHomework,
+  onCloseAddToHomework,
+  onPickExistingHomework,
+  onCreateNewHomework,
   onApprove,
   onReject,
   onSkip,
@@ -802,6 +864,12 @@ function ModeLineFooter({
   busy: boolean;
   status: string;
   editOnly: boolean;
+  courseId: string;
+  showAddToHomeworkPicker: boolean;
+  onOpenAddToHomework: () => void;
+  onCloseAddToHomework: () => void;
+  onPickExistingHomework: (assignment: TeacherAssignment) => void;
+  onCreateNewHomework: (title: string, unitIds: string[]) => void;
   onApprove: () => void;
   onReject: () => void;
   onSkip: () => void;
@@ -879,6 +947,10 @@ function ModeLineFooter({
   // (since they've already been resolved). editOnly forces them off
   // regardless — used when opened from inside ReviewModal.
   const showApproveReject = !editOnly && (isQueueMode || status === "pending");
+  // Single-mode pending replaces bare Approve with "→ Add to Homework"
+  // (matches the ReviewModal Flow A contract — approval requires a
+  // destination, never a silent fall-through to Unattached).
+  const showAddToHomework = !editOnly && !isQueueMode && status === "pending";
 
   return (
     <div className="border-t border-border-light px-6 py-3">
@@ -910,7 +982,10 @@ function ModeLineFooter({
           shortcut="C"
           label={chatOpen ? "💬 Hide" : "💬 AI"}
         />
-        {showApproveReject && (
+        {/* Queue-mode kept the legacy bare Approve (it's already
+            destination-aware via its parent flow). Single-mode pending
+            uses the destination picker. */}
+        {showApproveReject && isQueueMode && (
           <FooterButton
             onClick={onApprove}
             disabled={busy}
@@ -919,6 +994,27 @@ function ModeLineFooter({
             label="Approve"
             isLast
           />
+        )}
+        {showAddToHomework && (
+          <div className="relative ml-auto">
+            <button
+              type="button"
+              onClick={onOpenAddToHomework}
+              disabled={busy}
+              className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+            >
+              → Add to Homework
+            </button>
+            {showAddToHomeworkPicker && (
+              <DestinationPicker
+                courseId={courseId}
+                busy={busy}
+                onClose={onCloseAddToHomework}
+                onPickExisting={onPickExistingHomework}
+                onCreateNew={onCreateNewHomework}
+              />
+            )}
+          </div>
         )}
         <button
           onClick={onStartDelete}

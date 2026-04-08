@@ -246,6 +246,26 @@ async def generate_bank_questions(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
 
+    # Defense in depth: bank questions only live at the top-unit level.
+    # Frontend gates this in the generate-questions-modal but a stale UI
+    # or direct API call could bypass and save into a subfolder, leaving
+    # an orphaned-looking item the rail filter can't surface naturally.
+    if body.unit_id is not None:
+        from api.models.unit import Unit
+        unit = (await db.execute(
+            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+        )).scalar_one_or_none()
+        if unit is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unit not found in this course",
+            )
+        if unit.parent_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Generated questions must save into a top-level unit, not a subfolder",
+            )
+
     job = QuestionBankGenerationJob(
         course_id=course_id,
         unit_id=body.unit_id,
