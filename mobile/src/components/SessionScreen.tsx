@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  type TextStyle,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -26,6 +25,7 @@ import { PracticeBatchView } from "./PracticeBatchView";
 import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
+import { MathText } from "./MathText";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
@@ -40,23 +40,12 @@ interface SessionScreenProps {
   onHome: () => void;
 }
 
-/** Render text with **bold** markdown into React Native Text elements. */
-function renderBold(text: string, style: TextStyle) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) =>
-    part.startsWith("**") && part.endsWith("**")
-      ? <Text key={i} style={[style, { fontWeight: "700" }]}>{part.slice(2, -2)}</Text>
-      : part,
-  );
-}
-
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const confettiRef = useRef<ConfettiOverlayRef>(null);
   const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [askMode, setAskMode] = useState(false);
 
   const {
@@ -73,6 +62,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     switchToLearnMode,
     finishAsking,
     problemImages,
+    chatHistory,
     reset,
   } = useSessionStore();
 
@@ -163,7 +153,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       return;
     }
     const text = input.trim();
-    setLastQuestion(text);
     setInput("");
     await askAboutStep(text);
     fetchEntitlements();
@@ -195,9 +184,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={readerStyles.problemPill}>
-          <Text style={readerStyles.problemPillText} numberOfLines={1}>
-            {session.problem}
-          </Text>
+          <MathText
+            text={session.problem}
+            style={readerStyles.problemPillText}
+            numberOfLines={1}
+          />
           {problemImages[session.problem] && (
             <Ionicons name="image" size={14} color={colors.textMuted} />
           )}
@@ -238,21 +229,36 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             <Text style={styles.stepDescLabel}>
               Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
             </Text>
-            <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
+            <MathText text={currentStep.description} style={styles.stepDescText} />
+          </View>
+        )}
+
+        {/* Persistent chat history above the current step (Learn mode) */}
+        {isLearn && !isCompleted && (chatHistory[session.current_step]?.length ?? 0) > 0 && (
+          <View style={chatStyles.thread}>
+            {chatHistory[session.current_step].map((msg, i) => (
+              <View
+                key={`chat-${session.current_step}-${i}`}
+                style={msg.role === "user" ? chatStyles.userBubble : chatStyles.tutorBubble}
+              >
+                {msg.role === "user" ? (
+                  <Text style={chatStyles.userText}>{msg.text}</Text>
+                ) : (
+                  <View style={chatStyles.tutorRow}>
+                    <View style={chatStyles.tutorIconWrap}>
+                      <Ionicons name="sparkles" size={12} color={colors.primary} />
+                    </View>
+                    <MathText text={msg.text} style={chatStyles.tutorText} />
+                  </View>
+                )}
+              </View>
+            ))}
           </View>
         )}
 
         {/* Practice mode: prompt */}
         {isPractice && !isCompleted && (
           <Text style={styles.promptText}>Enter your final answer</Text>
-        )}
-
-        {/* User's question bubble (for chat conversations) */}
-        {lastQuestion && lastResponse?.action === "conversation" && (
-          <View style={compactStyles.questionBubble}>
-            <Ionicons name="chatbubble" size={14} color={colors.primary} />
-            <Text style={compactStyles.questionText}>{lastQuestion}</Text>
-          </View>
         )}
 
         {/* Thinking indicator */}
@@ -339,10 +345,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                 placeholderTextColor={colors.textMuted}
                 autoFocus
                 returnKeyType="send"
+                blurOnSubmit
+                textAlignVertical="center"
                 onSubmitEditing={async () => {
-                  if (!input.trim()) { setAskMode(false); return; }
-                  await handleAsk();
+                  inputRef.current?.blur();
                   setAskMode(false);
+                  if (!input.trim()) return;
+                  await handleAsk();
                 }}
                 accessibilityLabel="Ask a question"
               />
@@ -438,9 +447,11 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
         <Text style={compactStyles.historyLabel}>
           Step {index + 1}{title ? ` — ${title}` : ""}
         </Text>
-        <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
-          {renderBold(description, compactStyles.historyText)}
-        </Text>
+        <MathText
+          text={description}
+          style={compactStyles.historyText}
+          numberOfLines={expanded ? undefined : 1}
+        />
       </View>
       <Ionicons
         name={expanded ? "chevron-up" : "chevron-down"}
@@ -585,6 +596,58 @@ const readerStyles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: "center",
     marginTop: spacing.xs,
+  },
+});
+
+const chatStyles = StyleSheet.create({
+  thread: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  userBubble: {
+    alignSelf: "flex-end",
+    maxWidth: "85%",
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.lg,
+    borderBottomRightRadius: 4,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  userText: {
+    ...typography.body,
+    color: colors.primary,
+    fontSize: 14,
+  },
+  tutorBubble: {
+    alignSelf: "flex-start",
+    maxWidth: "92%",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  tutorRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  tutorIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primaryBg,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  tutorText: {
+    ...typography.body,
+    color: colors.text,
+    fontSize: 14,
+    flex: 1,
   },
 });
 

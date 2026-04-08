@@ -27,6 +27,7 @@ import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { MathText } from "./MathText";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
@@ -34,10 +35,19 @@ const MAX_PROBLEMS = 10;
 type SubjectKey = "math" | "physics" | "chemistry";
 type Mode = "learn" | "mock_test";
 
-const SUBJECTS: { key: SubjectKey; label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }[] = [
-  { key: "math", label: "Math", icon: "calculator", gradient: "primary" },
-  { key: "physics", label: "Physics", icon: "rocket", gradient: "physics" },
-  { key: "chemistry", label: "Chemistry", icon: "flask", gradient: "chemistry" },
+interface SubjectMeta {
+  key: SubjectKey;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  gradient: keyof typeof gradients;
+  primary: string;
+  primaryBg: string;
+}
+
+const SUBJECTS: SubjectMeta[] = [
+  { key: "math",      label: "Math",      icon: "calculator", gradient: "primary",   primary: "#6C5CE7", primaryBg: "#F0EDFF" },
+  { key: "physics",   label: "Physics",   icon: "rocket",     gradient: "physics",   primary: "#0984E3", primaryBg: "#E3F2FD" },
+  { key: "chemistry", label: "Chemistry", icon: "flask",      gradient: "chemistry", primary: "#00B894", primaryBg: "#E8F8F5" },
 ];
 
 const MODES: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap; gradient: keyof typeof gradients }[] = [
@@ -95,7 +105,6 @@ export function SolveScreen({
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
   const activeSubject = SUBJECTS.find((s) => s.key === subject) ?? SUBJECTS[0];
-  const activeMode = MODES.find((m) => m.key === mode) ?? MODES[0];
 
   const {
     extracting,
@@ -282,18 +291,18 @@ export function SolveScreen({
 
   // Solve button label
   const solveLabel = (() => {
-    const verb = mode === "mock_test" ? "Start Exam" : "Solve";
+    const verb = mode === "mock_test" ? "Test" : "Learn";
     if (totalProblems === 0 || totalProblems === 1) return verb;
     return `${verb} (${totalProblems})`;
   })();
 
+  // Subject-aware accent colors that flow through the whole screen
+  const theme = { primary: activeSubject.primary, primaryBg: activeSubject.primaryBg };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        {/* Subject pill row */}
+      {/* Subject pill row — OUTSIDE KeyboardAvoidingView so it never reflows */}
+      <View style={styles.subjectRowOuter}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -330,7 +339,12 @@ export function SolveScreen({
             );
           })}
         </ScrollView>
+      </View>
 
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         {/* Mode segmented control */}
         <View style={styles.modeRow}>
           {MODES.map((m) => {
@@ -339,7 +353,10 @@ export function SolveScreen({
               <TouchableOpacity
                 key={m.key}
                 onPress={() => setMode(m.key)}
-                style={[styles.modePill, isActive && styles.modePillActive]}
+                style={[
+                  styles.modePill,
+                  isActive && { backgroundColor: theme.primaryBg, borderWidth: 1, borderColor: theme.primary },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel={`${m.label} mode${isActive ? ", selected" : ""}`}
                 accessibilityState={{ selected: isActive }}
@@ -347,9 +364,9 @@ export function SolveScreen({
                 <Ionicons
                   name={m.icon}
                   size={14}
-                  color={isActive ? colors.primary : colors.textMuted}
+                  color={isActive ? theme.primary : colors.textMuted}
                 />
-                <Text style={[styles.modePillText, isActive && styles.modePillTextActive]}>
+                <Text style={[styles.modePillText, isActive && { color: theme.primary }]}>
                   {m.label}
                 </Text>
               </TouchableOpacity>
@@ -362,9 +379,9 @@ export function SolveScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.greetingTitle}>What can I help you solve today?</Text>
+          <Text style={styles.greetingTitle}>What can I help you solve?</Text>
 
-          {/* Big primary capture target */}
+          {/* SNAP — full-width gradient hero card */}
           <AnimatedPressable
             onPress={() => pickImage("camera")}
             disabled={extracting || problemQueue.length >= maxQueueSize}
@@ -376,87 +393,109 @@ export function SolveScreen({
               colors={gradients[activeSubject.gradient]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[styles.snapCard, shadows.lg, extracting && styles.cardDisabled]}
+              style={[styles.bigCard, shadows.lg, extracting && styles.cardDisabled]}
             >
-              <View style={styles.snapIconWrap}>
+              <View style={styles.bigCardIconWrap}>
                 <Ionicons name="camera" size={32} color={colors.white} />
               </View>
-              <Text style={styles.snapTitle}>Snap a problem</Text>
-              <Text style={styles.snapSubtitle}>Point your camera at any problem</Text>
+              <Text style={styles.bigCardTitle}>Snap a problem</Text>
+              <Text style={styles.bigCardSubtitle}>Point your camera at any problem</Text>
             </LinearGradient>
           </AnimatedPressable>
 
-          {/* Secondary actions row — vertical-stacked for clarity */}
-          <View style={styles.secondaryRow}>
-            <AnimatedPressable
-              style={[styles.secondaryCard, shadows.sm]}
-              onPress={() => pickImage("gallery")}
-              disabled={extracting || problemQueue.length >= maxQueueSize}
-              scaleDown={0.96}
-              accessibilityRole="button"
-              accessibilityLabel="Choose photo from gallery"
+          {/* GALLERY — full-width outlined card, equal size to Snap */}
+          <AnimatedPressable
+            onPress={() => pickImage("gallery")}
+            disabled={extracting || problemQueue.length >= maxQueueSize}
+            scaleDown={0.97}
+            accessibilityRole="button"
+            accessibilityLabel="Choose a photo from gallery"
+          >
+            <View
+              style={[
+                styles.bigCard,
+                styles.bigCardOutlined,
+                shadows.sm,
+                extracting && styles.cardDisabled,
+                { borderColor: theme.primary },
+              ]}
             >
-              <Ionicons name="images-outline" size={24} color={colors.primary} />
-              <Text style={styles.secondaryLabel}>Gallery</Text>
-            </AnimatedPressable>
-            <AnimatedPressable
-              style={[styles.secondaryCard, shadows.sm]}
-              onPress={() => inputRef.current?.focus()}
-              scaleDown={0.96}
-              accessibilityRole="button"
-              accessibilityLabel="Type a problem"
-            >
-              <Ionicons name="create-outline" size={24} color={colors.primary} />
-              <Text style={styles.secondaryLabel}>Type it</Text>
-            </AnimatedPressable>
-          </View>
+              <View style={[styles.bigCardIconWrap, { backgroundColor: theme.primaryBg }]}>
+                <Ionicons name="images" size={32} color={theme.primary} />
+              </View>
+              <Text style={[styles.bigCardTitle, { color: theme.primary }]}>Choose a photo</Text>
+              <Text style={[styles.bigCardSubtitle, { color: colors.textSecondary }]}>
+                Pick a problem from your gallery
+              </Text>
+            </View>
+          </AnimatedPressable>
 
-          {/* Inline text input */}
-          <View style={styles.inputWrap}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              value={input}
-              onChangeText={(t) => { setInput(t); setError(null); }}
-              placeholder="…or type a problem here"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleAddToQueue}
-              inputAccessoryViewID="solve-math-keyboard"
-              accessibilityLabel="Problem text input"
-            />
-            {input.trim() && problemQueue.length < maxQueueSize ? (
-              <TouchableOpacity
-                onPress={handleAddToQueue}
-                style={styles.addChip}
-                accessibilityRole="button"
-                accessibilityLabel="Add to queue"
-              >
-                <Ionicons name="add" size={18} color={colors.white} />
-              </TouchableOpacity>
-            ) : null}
+          {/* TYPE — full-width outlined card with text input inside */}
+          <View
+            style={[
+              styles.bigCard,
+              styles.bigCardOutlined,
+              shadows.sm,
+              { borderColor: theme.primary },
+            ]}
+          >
+            <View style={[styles.bigCardIconWrap, { backgroundColor: theme.primaryBg }]}>
+              <Ionicons name="create" size={28} color={theme.primary} />
+            </View>
+            <View style={styles.typeInputWrap}>
+              <TextInput
+                ref={inputRef}
+                style={styles.typeInput}
+                value={input}
+                onChangeText={(t) => { setInput(t); setError(null); }}
+                placeholder="Type a problem…"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleAddToQueue}
+                inputAccessoryViewID="solve-math-keyboard"
+                accessibilityLabel="Problem text input"
+                multiline
+              />
+              {input.trim() && problemQueue.length < maxQueueSize ? (
+                <TouchableOpacity
+                  onPress={handleAddToQueue}
+                  style={[styles.addChip, { backgroundColor: theme.primary }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add to queue"
+                >
+                  <Ionicons name="add" size={18} color={colors.white} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
 
           {/* Inline queue chips — tap to edit */}
           {problemQueue.length > 0 && (
             <View style={styles.queueChips}>
-              <Text style={styles.queueChipsLabel}>{queueLabel}</Text>
+              <Text style={[styles.queueChipsLabel, { color: theme.primary }]}>{queueLabel}</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.queueChipsRow}
               >
                 {problemQueue.map((p, i) => (
-                  <View key={`${i}-${p}`} style={styles.queueChip}>
+                  <View
+                    key={`${i}-${p}`}
+                    style={[styles.queueChip, { backgroundColor: theme.primaryBg }]}
+                  >
                     <TouchableOpacity
                       onPress={() => handleEditFromQueue(i)}
                       accessibilityRole="button"
                       accessibilityLabel={`Edit problem ${i + 1}`}
                       style={styles.queueChipTextWrap}
                     >
-                      <Text numberOfLines={1} style={styles.queueChipText}>{p}</Text>
+                      <MathText
+                        text={p}
+                        style={{ ...typography.label, color: theme.primary, fontSize: 13 }}
+                        numberOfLines={1}
+                      />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleRemoveFromQueue(i)}
@@ -530,20 +569,21 @@ export function SolveScreen({
           {!isPro && sessionsRemaining() < Infinity && <QuotaFooter
             remaining={sessionsRemaining()}
             limit={dailySessionsLimit as number}
+            themeColor={theme.primary}
           />}
         </ScrollView>
 
         {/* Math keyboard accessory (iOS) */}
         <MathKeyboard onInsert={handleInsert} accessoryID="solve-math-keyboard" />
 
-        {/* Sticky solve button — gradient reflects mode */}
+        {/* Sticky solve button — gradient reflects active subject */}
         <View style={styles.bottomBar}>
           <GradientButton
             onPress={handleSolve}
             label={solveLabel}
             loading={isLoading}
             disabled={totalProblems === 0}
-            gradient={activeMode.gradient}
+            gradient={activeSubject.gradient}
             style={styles.solveButton}
           />
         </View>
@@ -579,7 +619,15 @@ export function SolveScreen({
   );
 }
 
-function QuotaFooter({ remaining, limit }: { remaining: number; limit: number }) {
+function QuotaFooter({
+  remaining,
+  limit,
+  themeColor,
+}: {
+  remaining: number;
+  limit: number;
+  themeColor: string;
+}) {
   const pct = limit > 0 ? (limit - remaining) / limit : 0;
   return (
     <View style={styles.quotaFooterRow}>
@@ -587,7 +635,7 @@ function QuotaFooter({ remaining, limit }: { remaining: number; limit: number })
         <View
           style={[
             styles.quotaBarFill,
-            { width: `${Math.min(pct * 100, 100)}%` },
+            { width: `${Math.min(pct * 100, 100)}%`, backgroundColor: themeColor },
             pct >= 1 && styles.quotaBarFillDanger,
             pct >= 0.8 && pct < 1 && styles.quotaBarFillWarning,
           ]}
@@ -603,6 +651,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   // Subject pill row
+  subjectRowOuter: {
+    backgroundColor: colors.background,
+  },
   subjectRow: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -676,16 +727,22 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
 
-  // Big snap card
-  snapCard: {
+  // Big equal-size cards (snap, gallery, type)
+  bigCard: {
     borderRadius: radii.lg,
     paddingVertical: spacing.xxxl,
     paddingHorizontal: spacing.xl,
     alignItems: "center",
     marginBottom: spacing.md,
+    minHeight: 180,
+    justifyContent: "center",
+  },
+  bigCardOutlined: {
+    backgroundColor: colors.white,
+    borderWidth: 2,
   },
   cardDisabled: { opacity: 0.5 },
-  snapIconWrap: {
+  bigCardIconWrap: {
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -694,67 +751,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.md,
   },
-  snapTitle: {
+  bigCardTitle: {
     ...typography.title,
     color: colors.white,
     marginBottom: spacing.xs,
   },
-  snapSubtitle: {
+  bigCardSubtitle: {
     ...typography.caption,
     fontSize: 13,
     color: "rgba(255,255,255,0.85)",
   },
 
-  // Secondary row — vertical-stacked cards
-  secondaryRow: {
+  // Type input — sits inside the third big card
+  typeInputWrap: {
     flexDirection: "row",
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    alignItems: "flex-end",
+    width: "100%",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-  secondaryCard: {
-    flex: 1,
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.sm,
-  },
-  secondaryLabel: {
-    ...typography.bodyBold,
-    color: colors.text,
-  },
-
-  // Input
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.inputBg,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    marginBottom: spacing.md,
-    minHeight: 52,
-  },
-  input: {
+  typeInput: {
     flex: 1,
     ...typography.body,
     color: colors.text,
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    minHeight: 48,
+    maxHeight: 100,
+    textAlignVertical: "top",
   },
   addChip: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    alignSelf: "center",
   },
 
   // Queue chips

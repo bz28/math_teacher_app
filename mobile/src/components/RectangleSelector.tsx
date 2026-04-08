@@ -60,6 +60,22 @@ export function RectangleSelector({
   const [toast, setToast] = useState<string | null>(null);
   const nextId = useRef(1);
   const toastTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  /**
+   * Container's absolute position on screen, captured via measure() onLayout.
+   * We use pageX/pageY (absolute screen coords) minus this offset to get
+   * container-relative coordinates. nativeEvent.locationX/Y can't be used
+   * here because they're relative to the touched child element, not the
+   * container — touching an existing rectangle returns coords relative to
+   * that rectangle, breaking hit-testing and resize as soon as any rect
+   * exists.
+   */
+  const containerOffset = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<View>(null);
+  const measureContainer = useCallback(() => {
+    containerRef.current?.measure((_x, _y, _w, _h, pageX, pageY) => {
+      containerOffset.current = { x: pageX, y: pageY };
+    });
+  }, []);
 
   // Animations
   const onboardingOpacity = useRef(new Animated.Value(1)).current;
@@ -178,8 +194,12 @@ export function RectangleSelector({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: (e) => {
-          const { locationX, locationY } = e.nativeEvent;
+          const locationX = e.nativeEvent.pageX - containerOffset.current.x;
+          const locationY = e.nativeEvent.pageY - containerOffset.current.y;
 
           const cornerHit = hitTestCorner(locationX, locationY);
           if (cornerHit) {
@@ -230,7 +250,8 @@ export function RectangleSelector({
         },
 
         onPanResponderMove: (e) => {
-          const { locationX, locationY } = e.nativeEvent;
+          const locationX = e.nativeEvent.pageX - containerOffset.current.x;
+          const locationY = e.nativeEvent.pageY - containerOffset.current.y;
           const cur = interactionRef.current;
           if (!cur) return;
 
@@ -346,6 +367,8 @@ export function RectangleSelector({
       {/* Image area */}
       <View style={styles.imageArea}>
         <View
+          ref={containerRef}
+          onLayout={measureContainer}
           style={[styles.imageContainer, { width: screenWidth, height: screenHeight }]}
           {...panResponder.panHandlers}
         >

@@ -184,14 +184,35 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
     },
 
     askAboutStep: async (question: string) => {
-      const { session } = get();
+      const { session, chatHistory } = get();
       if (!session) return;
 
-      set({ phase: "thinking", error: null });
+      const stepIndex = session.current_step;
+      // Optimistically append the user message before the API round-trip
+      const existing = chatHistory[stepIndex] ?? [];
+      set({
+        phase: "thinking",
+        error: null,
+        chatHistory: {
+          ...chatHistory,
+          [stepIndex]: [...existing, { role: "user", text: question }],
+        },
+      });
+
       try {
         const resp = await respondToStep(session.id, question);
         const updated = await getSession(session.id);
-        set({ session: updated, lastResponse: resp, phase: "awaiting_input" });
+        const latest = get().chatHistory;
+        const stepHistory = latest[stepIndex] ?? [];
+        set({
+          session: updated,
+          lastResponse: resp,
+          phase: "awaiting_input",
+          chatHistory: {
+            ...latest,
+            [stepIndex]: [...stepHistory, { role: "tutor", text: resp.feedback }],
+          },
+        });
       } catch (e) {
         set({ phase: "error", error: errorMessage(e) });
       }
