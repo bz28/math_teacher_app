@@ -13,6 +13,7 @@ import { ApprovedUnitGroup, SimpleUnitList } from "./question-bank/unit-groups";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
 import { PendingTray } from "./question-bank/pending-tray";
+import { ReviewModal } from "./question-bank/review-modal";
 
 export function QuestionBankTab({
   courseId,
@@ -60,6 +61,11 @@ export function QuestionBankTab({
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
+  // Flow A: full-screen review for fresh primary problems. Captured at
+  // open time so mid-review generations don't splice in.
+  const [primaryReviewQueue, setPrimaryReviewQueue] = useState<BankItem[] | null>(null);
+  // Flow B (variations) still uses the existing WorkshopModal queue
+  // mode until a follow-up commit replaces it.
   const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
   // When a make-similar review queue completes, we want to drop the
   // teacher back at the parent question. We stash the full BankItem
@@ -89,13 +95,16 @@ export function QuestionBankTab({
     }
   };
 
-  // Open review mode with all currently-pending items in the bank as the
-  // frozen queue. Hits a fresh fetch so we don't accidentally review stale
-  // items if the current filter is hiding pending ones.
+  // Open Flow A review with all currently-pending PRIMARY items
+  // (no parent_question_id) as the frozen queue. Hits a fresh fetch so
+  // we don't accidentally review stale items if the current status
+  // filter is hiding pending ones.
   const startReview = async () => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
-      setReviewQueue(res.items);
+      const primaries = res.items.filter((i) => !i.parent_question_id);
+      if (primaries.length === 0) return;
+      setPrimaryReviewQueue(primaries);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load pending");
     }
@@ -287,6 +296,19 @@ export function QuestionBankTab({
           }}
           onChanged={reload}
           onJobStarted={setActiveJob}
+        />
+      )}
+
+      {primaryReviewQueue && (
+        <ReviewModal
+          courseId={courseId}
+          queue={primaryReviewQueue}
+          onClose={() => {
+            setPrimaryReviewQueue(null);
+            reload();
+          }}
+          onChanged={reload}
+          onEditItem={(item) => setOpenItem(item)}
         />
       )}
 
