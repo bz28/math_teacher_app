@@ -20,8 +20,9 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
-from api.services.bank import used_in_assignments_map, used_in_for_item
+from api.services.bank import snapshot_bank_items, used_in_assignments_map, used_in_for_item
 
 
 def _ensure_unlocked(item: QuestionBankItem) -> None:
@@ -69,6 +70,14 @@ class UpdateBankItemRequest(BaseModel):
 
 class RegenerateRequest(BaseModel):
     instructions: str | None = None
+
+
+class ApproveRequest(BaseModel):
+    """Optional payload for the approve endpoint. When `assignment_id`
+    is provided, the item is approved AND attached to that draft
+    homework in a single round-trip — the act of "approve into a
+    homework" the new review flow expects."""
+    assignment_id: uuid.UUID | None = None
 
 
 class GenerateSimilarRequest(BaseModel):
@@ -351,11 +360,51 @@ async def revert_bank_item(
 
 @router.post("/question-bank/{item_id}/approve")
 async def approve_bank_item(
+    body: ApproveRequest | None = None,
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    """Approve a bank item. If `assignment_id` is provided in the body,
+    also attach the freshly-approved item to that draft homework in
+    one transaction. The new review flow uses this so "approve" and
+    "add to homework" land as a single user-visible action."""
     _ensure_unlocked(item)
     item.status = "approved"
+
+    if body and body.assignment_id is not None:
+        a = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
+        if a.course_id != item.course_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Assignment belongs to a different course",
+            )
+        if a.type != "homework":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Can only attach to homework assignments",
+            )
+        if a.status == "published":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unpublish before adding problems",
+            )
+        existing_ids: list[uuid.UUID] = []
+        content = a.content if isinstance(a.content, dict) else {}
+        for raw in content.get("problem_ids") or []:
+            try:
+                existing_ids.append(raw if isinstance(raw, uuid.UUID) else uuid.UUID(str(raw)))
+            except (ValueError, TypeError):
+                continue
+        if item.id not in existing_ids:
+            existing_ids.append(item.id)
+        # snapshot_bank_items re-validates that every id in the list
+        # belongs to the course and is approved — including the one we
+        # just flipped above (which is fine since we haven't committed
+        # yet but the in-memory state is "approved").
+        await db.flush()
+        a.content = await snapshot_bank_items(db, a.course_id, existing_ids)
+
     await db.commit()
     return {"status": "ok"}
 

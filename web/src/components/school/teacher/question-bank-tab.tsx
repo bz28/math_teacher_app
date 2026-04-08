@@ -1,130 +1,21 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import {
-  teacher,
-  type BankItem,
-  type BankJob,
-  type TeacherDocument,
-  type TeacherUnit,
-} from "@/lib/api";
-// Aliased to avoid colliding with the `unitLabel` prop on BankRow.
-import { subfoldersOf, topUnits, unitLabel as labelForUnit } from "@/lib/units";
+import { useEffect, useMemo, useState } from "react";
+import { teacher, type BankItem, type BankJob } from "@/lib/api";
 import { useBankData } from "./_hooks/use-bank-data";
-
-// Course subject context — read by BankRow's emoji classifier so we
-// don't have to drill the subject prop through 5 layers of components.
-const CourseSubjectContext = createContext<string>("math");
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
-
-const STATUS_FILTERS: { key: "pending" | "approved" | "rejected"; label: string }[] = [
-  { key: "pending", label: "Pending" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Rejected" },
-];
-
-// Tree node = a root question + any practice variations under it.
-// Variations are bank items whose parent_question_id points at the root.
-// Today nothing has a parent (Generate Similar isn't shipped yet), so
-// every approved item is a root with zero children — but the rendering
-// is in place so when variations land they slot in automatically.
-type TreeNode = { item: BankItem; children: BankItem[] };
-
-// Concept emoji classifier — keyword-based, no AI cost. Order matters:
-// more specific sport names check first so "baseball" doesn't fall
-// through to a generic ball bucket. Word boundaries (\b) keep
-// "basketball" from matching inside "basket-shaped" or vice versa.
-//
-// Subject-gated: math courses get all the buckets; physics gets the
-// physics-flavored ones (🚀); chemistry gets a flask. Avoids the
-// chemistry-course-shows-rocket-for-"reagent-cost" mismatch.
-function conceptEmoji(title: string, question: string, subject: string): string {
-  const text = (title + " " + question).toLowerCase();
-
-  if (subject === "chemistry") {
-    if (/\b(reaction|molecule|bond|acid|base|ph|reagent|compound)\b/.test(text)) return "🧪";
-    if (/\b(temperature|heat|kelvin|celsius)\b/.test(text)) return "🌡️";
-    return "⚗️";
-  }
-
-  if (subject === "physics") {
-    if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
-    if (/\b(force|newton|gravity|mass|acceleration|momentum)\b/.test(text)) return "⚙️";
-    if (/\b(wave|frequency|amplitude|wavelength|hertz)\b/.test(text)) return "〰️";
-    if (/\b(circuit|voltage|current|resistance|ohm|watt)\b/.test(text)) return "⚡";
-    return "🔬";
-  }
-
-  // math (default)
-
-  // Sports — each gets its own emoji, checked specific-to-general
-  if (/\bbaseball\b/.test(text)) return "⚾";
-  if (/\bbasketball\b/.test(text)) return "🏀";
-  if (/\bsoccer\b|\bfootball\b/.test(text)) return "⚽";
-  if (/\btennis\b/.test(text)) return "🎾";
-  if (/\bhockey\b|\bpuck\b/.test(text)) return "🏒";
-  if (/\bfrisbee\b/.test(text)) return "🥏";
-
-  // Physics-flavored launches (still useful in math word problems)
-  if (/\brocket\b|\blaunch(ed|ing)?\b|\bprojectile\b/.test(text)) return "🚀";
-  if (/\bball\b|\bthrow(n|ing)?\b|\bkick(ed|ing)?\b/.test(text)) return "🏐";
-
-  // Geometry / measurement
-  if (/\b(triangle|polygon|angle|circle|square|rectangle|geometry|perimeter|area|volume)\b/.test(text)) return "📐";
-
-  // Graphs / functions
-  if (/\b(graph|plot|parabola|curve|axis|coordinate|sketch|function)\b/.test(text)) return "📈";
-
-  // Rates / kinematics
-  if (/\b(distance|speed|velocity|rate|hour|minute|km\/h|mph|seconds?)\b/.test(text)) return "⏱️";
-
-  // Statistics / probability
-  if (/\b(probability|statistic|mean|median|mode|distribution|sample|standard deviation)\b/.test(text)) return "📊";
-
-  // Money
-  if (/\b(money|cost|price|profit|revenue|interest|loan|dollar|salary)\b/.test(text)) return "💰";
-
-  // Real-world catch-all
-  if (/\b(word problem|story|real|scenario|context|practical)\b/.test(text)) return "🌍";
-
-  return "📝";
-}
-
-// Difficulty chip color/label.
-const DIFFICULTY_STYLE: Record<string, { label: string; cls: string }> = {
-  easy: {
-    label: "easy",
-    cls: "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300",
-  },
-  medium: {
-    label: "medium",
-    cls: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
-  },
-  hard: {
-    label: "hard",
-    cls: "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300",
-  },
-};
-
-function buildTree(items: BankItem[]): TreeNode[] {
-  const byId = new Map(items.map((i) => [i.id, i]));
-  const childrenByParent = new Map<string, BankItem[]>();
-  for (const item of items) {
-    const pid = item.parent_question_id;
-    if (pid && byId.has(pid)) {
-      const arr = childrenByParent.get(pid) ?? [];
-      arr.push(item);
-      childrenByParent.set(pid, arr);
-    }
-  }
-  // Roots = items without a parent in this view (orphans get promoted).
-  return items
-    .filter((item) => !item.parent_question_id || !byId.has(item.parent_question_id))
-    .map((item) => ({ item, children: childrenByParent.get(item.id) ?? [] }));
-}
+import { CourseSubjectContext } from "./question-bank/course-subject-context";
+import { STATUS_FILTERS } from "./question-bank/constants";
+import { buildUnitGroups } from "./question-bank/tree";
+import { SimpleUnitList } from "./question-bank/unit-groups";
+import { ApprovedUnitFolder } from "./question-bank/approved-tree";
+import { BankSkeleton } from "./question-bank/skeleton";
+import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
+import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
+import { PendingTray } from "./question-bank/pending-tray";
+import { ReviewModal } from "./question-bank/review-modal";
 
 export function QuestionBankTab({
   courseId,
@@ -149,18 +40,40 @@ export function QuestionBankTab({
   // Pending → fetch counts → flip to Approved). Now we just stay on
   // Pending and show an empty state if there's nothing to review.
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
-  // Unit filter — "all" | "uncategorized" | unit id. Decoupled from
-  // status filter so the teacher can narrow on both axes.
-  const [unitFilter, setUnitFilter] = useState<string>("all");
+  // Unit selection — "all" | "uncategorized" | unit id. Drives the
+  // rail's active state and the client-side filter for the content
+  // area. Decoupled from status filter so the teacher can narrow on
+  // both axes.
+  const [unitSelection, setUnitSelection] = useState<UnitSelection>("all");
   // Data fetching extracted to a custom hook — items/units/counts/
-  // loading/error/reload all live there.
+  // loading/error/reload all live there. The hook now fetches all
+  // items for the current status; unit filtering is client-side so
+  // the rail can show accurate per-unit counts.
   const { items, units, counts, loading, error, reload, setError } = useBankData(
-    courseId, statusFilter, unitFilter,
+    courseId, statusFilter,
   );
+
+  // Client-side unit filter applied to the loaded items.
+  const filteredItems = useMemo(() => {
+    if (unitSelection === "all") return items;
+    if (unitSelection === "uncategorized")
+      return items.filter((i) => i.unit_id === null);
+    return items.filter((i) => i.unit_id === unitSelection);
+  }, [items, unitSelection]);
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
+  // Separate state for "edit invoked from inside ReviewModal" so we
+  // can force WorkshopModal into editOnly mode (Approve/Reject hidden)
+  // — keeps the two surfaces from fighting over status changes.
+  const [editFromReviewItem, setEditFromReviewItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
-  const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
+  // Flow A: full-screen review for fresh primary problems. Captured at
+  // open time so mid-review generations don't splice in.
+  const [primaryReviewQueue, setPrimaryReviewQueue] = useState<BankItem[] | null>(null);
+  // Flow B: full-screen review for variations of a single primary.
+  // Carries the parent so the modal can label itself and the shell
+  // can drop the teacher back at the parent's workshop on close.
+  const [variationReviewQueue, setVariationReviewQueue] = useState<BankItem[] | null>(null);
   // When a make-similar review queue completes, we want to drop the
   // teacher back at the parent question. We stash the full BankItem
   // (not just an id) so restoration works regardless of which status
@@ -168,9 +81,11 @@ export function QuestionBankTab({
   // the parent if it's in a different status bucket.
   const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
 
-  // Open a focused review queue containing only the just-generated
-  // pending children of `parent`. Replaces the global pending pool
-  // with the variations the teacher just made.
+  // Open Flow B: focused review of the just-generated pending children
+  // of `parent`. The modal labels itself with the parent's title and
+  // collapses the action set to plain Approve / Edit / Reject (no
+  // destination picker — variations are implicitly attached to their
+  // parent via parent_question_id).
   const openVariationReview = async (parent: BankItem) => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
@@ -179,7 +94,7 @@ export function QuestionBankTab({
       setActiveJob(null); // dismiss the strip — its job is done
       setOpenItem(null); // close the single-mode workshop
       setReviewQueueParent(parent);
-      setReviewQueue(children);
+      setVariationReviewQueue(children);
     } catch (e) {
       // Close the modal so the bank tab's error message is visible —
       // otherwise the workshop modal keeps the green CTA on screen
@@ -189,13 +104,49 @@ export function QuestionBankTab({
     }
   };
 
-  // Open review mode with all currently-pending items in the bank as the
-  // frozen queue. Hits a fresh fetch so we don't accidentally review stale
-  // items if the current filter is hiding pending ones.
+  // Open the right review flow given the current pending state.
+  // Prefers Flow A (primaries) when any exist; otherwise falls back to
+  // Flow B for the parent with the most pending variations. Avoids the
+  // silent no-op the tray would otherwise hit when only variations are
+  // pending.
   const startReview = async () => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
-      setReviewQueue(res.items);
+      const primaries = res.items.filter((i) => !i.parent_question_id);
+      if (primaries.length > 0) {
+        setPrimaryReviewQueue(primaries);
+        return;
+      }
+      const variations = res.items.filter((i) => i.parent_question_id);
+      if (variations.length === 0) return;
+      // Group variations by parent_question_id and pick the parent
+      // with the most pending children — most efficient batch first.
+      const byParent = new Map<string, BankItem[]>();
+      for (const v of variations) {
+        const pid = v.parent_question_id;
+        if (!pid) continue;
+        const arr = byParent.get(pid) ?? [];
+        arr.push(v);
+        byParent.set(pid, arr);
+      }
+      const sorted = Array.from(byParent.entries()).sort(
+        (a, b) => b[1].length - a[1].length,
+      );
+      if (sorted.length === 0) return;
+      const [parentId, children] = sorted[0];
+      // Need the parent BankItem for the modal header. Generate-similar
+      // requires the parent to be approved, so look there.
+      let parentItem = items.find((i) => i.id === parentId);
+      if (!parentItem) {
+        const approvedRes = await teacher.bank(courseId, { status: "approved" });
+        parentItem = approvedRes.items.find((i) => i.id === parentId);
+      }
+      if (!parentItem) {
+        setError("Couldn't find the parent question for these pending variations.");
+        return;
+      }
+      setReviewQueueParent(parentItem);
+      setVariationReviewQueue(children);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load pending");
     }
@@ -220,25 +171,16 @@ export function QuestionBankTab({
             {counts.approved} approved · {counts.pending} pending · {counts.rejected} rejected
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {counts.pending > 0 && statusFilter !== "pending" && (
-            <button
-              type="button"
-              className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-              onClick={startReview}
-            >
-              Review pending ({counts.pending}) →
-            </button>
-          )}
-          <button
-            type="button"
-            className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
-            onClick={() => setShowGenerate(true)}
-          >
-            + Generate Questions
-          </button>
-        </div>
+        <button
+          type="button"
+          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+          onClick={() => setShowGenerate(true)}
+        >
+          + Generate Questions
+        </button>
       </div>
+
+      <PendingTray pendingCount={counts.pending} onReview={startReview} />
 
       {/* Active job banner — hidden for make-similar jobs since those
           have their own in-modal strip with the "Review them" CTA. */}
@@ -258,18 +200,9 @@ export function QuestionBankTab({
               ? `🔄 Generating questions… ${activeJob.produced_count}/${activeJob.requested_count}`
               : `🔄 Generating ${activeJob.requested_count} questions…`)}
           {activeJob.status === "done" && (
-            <div className="flex items-center justify-between gap-3">
-              <span>
-                ✅ Generated {activeJob.produced_count}/{activeJob.requested_count} questions
-              </span>
-              <button
-                type="button"
-                onClick={startReview}
-                className="rounded-[--radius-sm] bg-green-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-800"
-              >
-                Review now →
-              </button>
-            </div>
+            <span>
+              ✅ Generated {activeJob.produced_count}/{activeJob.requested_count} questions
+            </span>
           )}
           {activeJob.status === "failed" &&
             `❌ Generation failed: ${activeJob.error_message ?? "unknown error"}`}
@@ -278,98 +211,81 @@ export function QuestionBankTab({
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
-      {/* Filter row: status chips + unit dropdown */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="flex gap-2">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => {
-                setStatusFilter(f.key);
-                // Dismiss any open workshop modal so switching tabs
-                // feels like a navigation, not a sticky overlay.
-                setOpenItem(null);
-              }}
-              className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
-                statusFilter === f.key
-                  ? "bg-primary text-white"
-                  : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-              }`}
-            >
-              {f.label}
-              <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Unit
-          </label>
-          <select
-            value={unitFilter}
-            onChange={(e) => setUnitFilter(e.target.value)}
-            className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
-          >
-            <option value="all">All units</option>
-            <option value="uncategorized">Uncategorized</option>
-            {units
-              .filter((u) => u.parent_id === null)
-              .flatMap((top) => [
-                <option key={top.id} value={top.id}>
-                  {top.name}
-                </option>,
-                ...units
-                  .filter((sub) => sub.parent_id === top.id)
-                  .map((sub) => (
-                    <option key={sub.id} value={sub.id}>
-                      &nbsp;&nbsp;{top.name} / {sub.name}
-                    </option>
-                  )),
-              ])}
-          </select>
-        </div>
-      </div>
-
-      {/* List — Approved gets unit grouping + per-unit tabs.
-          Pending and Rejected get a flat dense list. All shows the
-          same grouping as Approved for consistency. */}
-      <div className="mt-4 space-y-5">
-        {loading ? (
-          <p className="text-sm text-text-muted">Loading…</p>
-        ) : items.length === 0 ? (
-          <EmptyState
-            text={
-              counts.pending + counts.approved + counts.rejected === 0
-                ? "No questions yet. Hit \u201cGenerate Questions\u201d to create some."
-                : statusFilter === "pending"
-                  ? "No pending review. New generations land here."
-                  : statusFilter === "rejected"
-                    ? "No rejected questions."
-                    : "No questions match this filter."
-            }
-          />
-        ) : statusFilter === "pending" || statusFilter === "rejected" ? (
-          <SimpleUnitList
-            items={items}
+      {/* Two-pane: unit rail on the left, content on the right. */}
+      <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start">
+        <aside className="md:w-60 md:shrink-0">
+          <UnitRail
             units={units}
-            onOpenItem={setOpenItem}
-            onOpenHomework={setOpenHomeworkId}
-            onChanged={reload}
+            items={items}
+            selected={unitSelection}
+            onSelect={(s) => {
+              setUnitSelection(s);
+              // Dismiss any open workshop modal so switching units
+              // feels like a navigation, not a sticky overlay.
+              setOpenItem(null);
+            }}
           />
-        ) : (
-          buildUnitGroups(items, units).map((group) => (
-            <ApprovedUnitGroup
-              key={group.id}
-              label={group.label}
-              items={group.items}
-              units={units}
-              onOpenItem={setOpenItem}
-              onOpenHomework={setOpenHomeworkId}
-              onChanged={reload}
-            />
-          ))
-        )}
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          {/* Status chips. Rejected is hidden unless there's something
+              there or it's currently selected — keeps the bin out of
+              sight until needed. */}
+          <div className="flex gap-2">
+            {STATUS_FILTERS.filter(
+              (f) =>
+                f.key !== "rejected" ||
+                counts.rejected > 0 ||
+                statusFilter === "rejected",
+            ).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => {
+                  setStatusFilter(f.key);
+                  setOpenItem(null);
+                }}
+                className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
+                  statusFilter === f.key
+                    ? "bg-primary text-white"
+                    : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
+              </button>
+            ))}
+          </div>
+
+          {/* List — Approved gets unit grouping + per-unit tabs.
+              Pending and Rejected get a flat dense list. */}
+          <div className="mt-4 space-y-5">
+            {loading ? (
+              <BankSkeleton />
+            ) : filteredItems.length === 0 ? (
+              <EmptyState text={emptyStateFor(statusFilter, unitSelection, counts)} />
+            ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+              <SimpleUnitList
+                items={filteredItems}
+                units={units}
+                onOpenItem={setOpenItem}
+                onOpenHomework={setOpenHomeworkId}
+                onChanged={reload}
+              />
+            ) : (
+              buildUnitGroups(filteredItems, units).map((group) => (
+                <ApprovedUnitFolder
+                  key={group.id}
+                  label={group.label}
+                  items={group.items}
+                  units={units}
+                  onOpenItem={setOpenItem}
+                  onOpenHomework={setOpenHomeworkId}
+                  onChanged={reload}
+                />
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {showGenerate && (
@@ -380,6 +296,42 @@ export function QuestionBankTab({
             setShowGenerate(false);
             setActiveJob(job);
           }}
+        />
+      )}
+
+      {/* ReviewModals render FIRST so that modals opened from inside
+          them (Edit → WorkshopModal) stack visually on top via DOM
+          order. Both share z-50; later siblings win. */}
+      {primaryReviewQueue && (
+        <ReviewModal
+          courseId={courseId}
+          queue={primaryReviewQueue}
+          active={editFromReviewItem === null}
+          onClose={() => {
+            setPrimaryReviewQueue(null);
+            reload();
+          }}
+          onChanged={reload}
+          onEditItem={(item) => setEditFromReviewItem(item)}
+        />
+      )}
+
+      {variationReviewQueue && reviewQueueParent && (
+        <ReviewModal
+          courseId={courseId}
+          queue={variationReviewQueue}
+          parent={reviewQueueParent}
+          active={editFromReviewItem === null}
+          onClose={() => {
+            setVariationReviewQueue(null);
+            // Drop the teacher back on the parent's workshop so the
+            // mental thread (parent → its variations → back to parent)
+            // stays intact.
+            setOpenItem(reviewQueueParent);
+            reload();
+          }}
+          onChanged={reload}
+          onEditItem={(item) => setEditFromReviewItem(item)}
         />
       )}
 
@@ -401,24 +353,14 @@ export function QuestionBankTab({
         />
       )}
 
-      {reviewQueue && (
+      {editFromReviewItem && (
         <WorkshopModal
-          queue={reviewQueue}
-          onClose={() => {
-            setReviewQueue(null);
-            // If this queue was a focused variation review, drop the
-            // teacher back on the parent question instead of the bare
-            // bank — keeps the mental thread intact. We rely on the
-            // stashed reviewQueueParent (full BankItem) so restoration
-            // works regardless of the current status tab.
-            if (reviewQueueParent) {
-              setOpenItem(reviewQueueParent);
-              // reviewQueueParent stays set; cleared when the modal closes.
-            }
-            reload();
-          }}
+          item={editFromReviewItem}
+          editOnly
+          onClose={() => setEditFromReviewItem(null)}
           onChanged={reload}
           onJobStarted={setActiveJob}
+          activeJob={activeJob}
         />
       )}
 
@@ -435,941 +377,26 @@ export function QuestionBankTab({
   );
 }
 
-// Group items by unit for visual scanning. Top units come first in
-// position order, with their subfolders nested via breadcrumb labels.
-// "Uncategorized" goes last.
-function buildUnitGroups(
-  items: BankItem[],
-  units: TeacherUnit[],
-): { id: string; label: string; items: BankItem[] }[] {
-  const groups: { id: string; label: string; items: BankItem[] }[] = [];
-  const itemsIn = (uid: string | null) => items.filter((i) => i.unit_id === uid);
-  for (const top of topUnits(units)) {
-    const own = itemsIn(top.id);
-    if (own.length > 0) groups.push({ id: top.id, label: top.name, items: own });
-    for (const sub of subfoldersOf(units, top.id)) {
-      const subItems = itemsIn(sub.id);
-      if (subItems.length > 0) {
-        groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, items: subItems });
-      }
-    }
+function emptyStateFor(
+  statusFilter: "pending" | "approved" | "rejected",
+  unitSelection: UnitSelection,
+  counts: { pending: number; approved: number; rejected: number },
+): string {
+  const total = counts.pending + counts.approved + counts.rejected;
+  if (total === 0) {
+    return "No questions yet. Hit \u201cGenerate Questions\u201d to create some.";
   }
-  const uncat = itemsIn(null);
-  if (uncat.length > 0) groups.push({ id: "uncategorized", label: "Uncategorized", items: uncat });
-  return groups;
-}
-
-// Approved view: collapsible unit split into two sections — "Available"
-// (root questions not yet in any homework or test, default expanded)
-// and "In a homework or test" (used roots, default collapsed). Practice
-// variations nest under their parent in either section.
-function ApprovedUnitGroup({
-  label,
-  items,
-  units,
-  onOpenItem,
-  onOpenHomework,
-  onChanged,
-}: {
-  label: string;
-  items: BankItem[];
-  units: TeacherUnit[];
-  onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
-}) {
-  const [open, setOpen] = useState(true);
-  const [storageOpen, setStorageOpen] = useState(false);
-
-  // Memoize the tree + available/in-use split — buildTree is O(n) and
-  // this component re-renders on every parent reload + every poll tick.
-  const { available, inUse } = useMemo(() => {
-    const tree = buildTree(items);
-    return {
-      available: tree.filter((node) => node.item.used_in.length === 0),
-      inUse: tree.filter((node) => node.item.used_in.length > 0),
-    };
-  }, [items]);
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 border-b border-border-light pb-1 text-left text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
-      >
-        <span>{open ? "▾" : "▸"}</span>
-        <span>📁 {label}</span>
-        <span className="font-normal normal-case text-text-muted/80">
-          · {available.length + inUse.length} {available.length + inUse.length === 1 ? "question" : "questions"}
-          {available.length > 0 && ` · ${available.length} available`}
-          {inUse.length > 0 && ` · ${inUse.length} in use`}
-        </span>
-      </button>
-
-      {open && (
-        <div className="mt-3 space-y-3">
-          {/* Available section — default expanded */}
-          <BankSection
-            title="Available"
-            count={available.length}
-            nodes={available}
-            units={units}
-            defaultOpen
-            emptyText="All approved questions in this unit are in a homework or test 🎉"
-            onOpenItem={onOpenItem}
-            onOpenHomework={onOpenHomework}
-            onChanged={onChanged}
-          />
-
-          {/* In-use section — default collapsed, hidden when empty */}
-          {inUse.length > 0 && (
-            <BankSection
-              title="In a homework or test"
-              count={inUse.length}
-              nodes={inUse}
-              units={units}
-              defaultOpen={storageOpen}
-              onToggle={setStorageOpen}
-              onOpenItem={onOpenItem}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
-            />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// One labeled section inside an Approved unit (Available or In-use).
-// Renders a small header with count + caret, then the rows when open.
-function BankSection({
-  title,
-  count,
-  nodes,
-  units,
-  defaultOpen,
-  onToggle,
-  emptyText,
-  onOpenItem,
-  onOpenHomework,
-  onChanged,
-}: {
-  title: string;
-  count: number;
-  nodes: TreeNode[];
-  units: TeacherUnit[];
-  defaultOpen: boolean;
-  onToggle?: (open: boolean) => void;
-  emptyText?: string;
-  onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    onToggle?.(next);
-  };
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={toggle}
-        className="flex w-full items-center gap-2 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
-      >
-        <span>{open ? "▾" : "▸"}</span>
-        <span>{title}</span>
-        <span className="font-normal normal-case text-text-muted/80">· {count}</span>
-      </button>
-      {open && (
-        <div className="mt-1 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
-          {nodes.length === 0 && emptyText ? (
-            <div className="px-3 py-6 text-center text-xs italic text-text-muted">
-              {emptyText}
-            </div>
-          ) : (
-            nodes.map((node) => (
-              <BankRowWithChildren
-                key={node.item.id}
-                node={node}
-                units={units}
-                onOpenItem={onOpenItem}
-                onOpenHomework={onOpenHomework}
-                onChanged={onChanged}
-              />
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// A root row with optional inline-expandable practice variations.
-function BankRowWithChildren({
-  node,
-  units,
-  onOpenItem,
-  onOpenHomework,
-  onChanged,
-}: {
-  node: TreeNode;
-  units: TeacherUnit[];
-  onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
-}) {
-  const [variationsOpen, setVariationsOpen] = useState(false);
-  const childrenCount = node.children.length;
-  const pendingChildren = node.children.filter((c) => c.status === "pending").length;
-
-  return (
-    <div>
-      <BankRow
-        item={node.item}
-        unitLabel={labelForUnit(units,node.item.unit_id)}
-        showUnit={false}
-        onOpen={() => onOpenItem(node.item)}
-        onOpenHomework={onOpenHomework}
-        onChanged={onChanged}
-      />
-      {childrenCount > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setVariationsOpen((v) => !v)}
-            className="ml-7 mb-1 flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:underline dark:text-purple-400"
-          >
-            <span>{variationsOpen ? "▾" : "▸"}</span>
-            <span>
-              ✨ {childrenCount} practice variation{childrenCount === 1 ? "" : "s"}
-              {pendingChildren > 0 && ` · ${pendingChildren} pending`}
-            </span>
-          </button>
-          {variationsOpen && (
-            <div className="ml-6 border-l border-border-light">
-              {node.children.map((child) => (
-                <BankRow
-                  key={child.id}
-                  item={child}
-                  unitLabel={labelForUnit(units,child.unit_id)}
-                  showUnit={false}
-                  variation
-                  onOpen={() => onOpenItem(child)}
-                  onOpenHomework={onOpenHomework}
-                  onChanged={onChanged}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// Pending and Rejected views: same unit grouping as Approved, but no
-// sub-sections. Just a flat dense list of rows per unit. Lets the
-// teacher review/triage one topic at a time.
-function SimpleUnitList({
-  items,
-  units,
-  onOpenItem,
-  onOpenHomework,
-  onChanged,
-}: {
-  items: BankItem[];
-  units: TeacherUnit[];
-  onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
-}) {
-  const groups = buildUnitGroups(items, units);
-  return (
-    <div className="space-y-5">
-      {groups.map((group) => (
-        <SimpleUnitGroup
-          key={group.id}
-          label={group.label}
-          items={group.items}
-          units={units}
-          onOpenItem={onOpenItem}
-          onOpenHomework={onOpenHomework}
-          onChanged={onChanged}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SimpleUnitGroup({
-  label,
-  items,
-  units,
-  onOpenItem,
-  onOpenHomework,
-  onChanged,
-}: {
-  label: string;
-  items: BankItem[];
-  units: TeacherUnit[];
-  onOpenItem: (item: BankItem) => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
-}) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 border-b border-border-light pb-1 text-left text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
-      >
-        <span>{open ? "▾" : "▸"}</span>
-        <span>📁 {label}</span>
-        <span className="font-normal normal-case text-text-muted/80">
-          · {items.length} {items.length === 1 ? "question" : "questions"}
-        </span>
-      </button>
-      {open && (
-        <div className="mt-2 divide-y divide-border-light/60 rounded-[--radius-md] border border-border-light bg-surface">
-          {items.map((item) => (
-            <BankRow
-              key={item.id}
-              item={item}
-              unitLabel={labelForUnit(units,item.unit_id)}
-              showUnit={false}
-              onOpen={() => onOpenItem(item)}
-              onOpenHomework={onOpenHomework}
-              onChanged={onChanged}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Dense one-line row. Status dot, truncated question, Used-in pills,
-// optional unit label, lock badge, kebab menu. Click the question text
-// to open the workshop modal. The `variation` flag styles it slightly
-// smaller + no border so it nests visually under its parent.
-function BankRow({
-  item,
-  unitLabel,
-  showUnit,
-  variation = false,
-  onOpen,
-  onOpenHomework,
-  onChanged,
-}: {
-  item: BankItem;
-  unitLabel: string;
-  showUnit: boolean;
-  variation?: boolean;
-  onOpen: () => void;
-  onOpenHomework: (id: string) => void;
-  onChanged: () => void;
-}) {
-  const { busy, error, run } = useAsyncAction();
-
-  const dotClass =
-    item.status === "approved"
-      ? "bg-green-500"
-      : item.status === "pending"
-        ? "bg-amber-400"
-        : "bg-text-muted/40";
-
-  const approve = () =>
-    run(async () => {
-      await teacher.approveBankItem(item.id);
-      onChanged();
-    });
-  const reject = () =>
-    run(async () => {
-      await teacher.rejectBankItem(item.id);
-      onChanged();
-    });
-  const remove = () =>
-    run(async () => {
-      await teacher.deleteBankItem(item.id);
-      onChanged();
-    });
-
-  return (
-    <div
-      className={`flex items-start gap-3 px-3 transition-colors hover:bg-bg-subtle ${
-        variation ? "py-1.5 text-xs" : "py-2 text-sm"
-      } ${item.status === "rejected" ? "opacity-60" : ""}`}
-    >
-      <span
-        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotClass}`}
-        title={item.status}
-        aria-label={item.status}
-      />
-
-      <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="block w-full text-left text-text-primary hover:text-primary"
-          title={item.question}
-        >
-          <div className="flex items-center gap-2 truncate">
-            <span className="shrink-0" aria-hidden>
-              {conceptEmoji(item.title, item.question, useContext(CourseSubjectContext))}
-            </span>
-            {item.source === "practice" && (
-              <span className="shrink-0 text-purple-500" title="Practice variation">✨</span>
-            )}
-            <span className="truncate font-semibold">{item.title}</span>
-          </div>
-        </button>
-        {/* Mobile: pills + unit label wrap below the question text on
-            narrow screens. Desktop renders them on the right. Lives
-            outside the question button so the nested-button is valid. */}
-        {(showUnit || item.used_in.length > 0) && (
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-text-muted sm:hidden">
-            {showUnit && <span>📁 {unitLabel}</span>}
-            {item.used_in.map((u) => (
-              <UsedInPill
-                key={u.id}
-                entry={u}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenHomework(u.id);
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Desktop: pills sit to the right of the question text */}
-      {item.used_in.length > 0 && (
-        <div className="hidden shrink-0 flex-wrap items-center gap-1 pt-0.5 sm:flex">
-          {item.used_in.map((u) => (
-            <UsedInPill
-              key={u.id}
-              entry={u}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenHomework(u.id);
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {DIFFICULTY_STYLE[item.difficulty] && (
-        <span
-          className={`hidden shrink-0 rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider sm:inline ${DIFFICULTY_STYLE[item.difficulty].cls}`}
-        >
-          {DIFFICULTY_STYLE[item.difficulty].label}
-        </span>
-      )}
-
-      {item.locked && (
-        <span
-          className="shrink-0 pt-0.5 text-amber-600 dark:text-amber-400"
-          title="Locked — in published homework"
-        >
-          🔒
-        </span>
-      )}
-
-      <KebabMenu
-        item={item}
-        busy={busy}
-        onApprove={approve}
-        onReject={reject}
-        onRemove={remove}
-      />
-
-      {error && (
-        <span className="shrink-0 pt-0.5 text-[10px] text-red-600" title={error}>
-          ⚠
-        </span>
-      )}
-    </div>
-  );
-}
-
-// Pill rendering for "used in" entries. Visually distinguishes
-// homework vs test, and draft vs published, so a teacher building a
-// new homework can tell at a glance which references are live.
-function UsedInPill({
-  entry,
-  onClick,
-}: {
-  entry: { id: string; title: string; type: string; status: string };
-  onClick: (e: React.MouseEvent) => void;
-}) {
-  const isTest = entry.type === "test" || entry.type === "quiz";
-  const isDraft = entry.status !== "published";
-  const colorClass = isDraft
-    ? "border border-dashed border-text-muted/40 bg-transparent text-text-muted hover:bg-bg-subtle"
-    : isTest
-      ? "bg-purple-100 text-purple-800 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300"
-      : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-500/20 dark:text-blue-300";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-bold transition-colors ${colorClass}`}
-      title={`Open ${entry.title}${isDraft ? " (draft)" : ""}`}
-    >
-      {entry.title}
-      {isDraft && <span className="ml-1 opacity-70">draft</span>}
-    </button>
-  );
-}
-
-// Action menu — three dots that opens a small dropdown. Replaces the
-// always-visible Approve/Reject/Delete row of buttons. Uses a window
-// click listener for outside-click dismiss.
-function KebabMenu({
-  item,
-  busy,
-  onApprove,
-  onReject,
-  onRemove,
-}: {
-  item: BankItem;
-  busy: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-  onRemove: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setConfirmDelete(false);
-      }
-    };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const lockedTitle = item.locked ? "Locked by published homework" : undefined;
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
-        aria-label="Actions"
-      >
-        ⋯
-      </button>
-      {open && (
-        <div
-          className="absolute right-0 top-full z-20 mt-1 w-40 rounded-[--radius-md] border border-border-light bg-surface py-1 text-xs shadow-lg"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {item.status === "pending" && (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onApprove();
-              }}
-              disabled={busy || item.locked}
-              title={lockedTitle}
-              className="block w-full px-3 py-1.5 text-left font-semibold text-green-700 hover:bg-bg-subtle disabled:opacity-50"
-            >
-              ✓ Approve
-            </button>
-          )}
-          {item.status !== "rejected" && (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onReject();
-              }}
-              disabled={busy || item.locked}
-              title={lockedTitle}
-              className="block w-full px-3 py-1.5 text-left font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              ✕ Reject
-            </button>
-          )}
-          {item.status === "rejected" && (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onApprove();
-              }}
-              disabled={busy}
-              className="block w-full px-3 py-1.5 text-left font-semibold text-green-700 hover:bg-bg-subtle disabled:opacity-50"
-            >
-              ↺ Restore
-            </button>
-          )}
-          {confirmDelete ? (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                setConfirmDelete(false);
-                onRemove();
-              }}
-              disabled={busy}
-              className="block w-full px-3 py-1.5 text-left font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-            >
-              Yes, delete
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              disabled={busy || item.locked}
-              title={lockedTitle}
-              className="block w-full px-3 py-1.5 text-left font-semibold text-red-700 hover:bg-bg-subtle disabled:opacity-50"
-            >
-              🗑 Delete
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const QUANTITY_CHIPS = [1, 5, 10, 20, 50] as const;
-
-function GenerateQuestionsModal({
-  courseId,
-  onClose,
-  onStarted,
-}: {
-  courseId: string;
-  onClose: () => void;
-  onStarted: (job: BankJob) => void;
-}) {
-  const [units, setUnits] = useState<TeacherUnit[]>([]);
-  const [docs, setDocs] = useState<TeacherDocument[]>([]);
-  // Manual override of the auto-defaulted unit. Null until the teacher
-  // explicitly picks. The actual `unitId` value is derived during render
-  // — see `effectiveUnitId` below.
-  const [overrideUnitId, setOverrideUnitId] = useState<string | null | undefined>(undefined);
-  const [count, setCount] = useState<number>(20);
-  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
-  const [constraint, setConstraint] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    Promise.all([teacher.units(courseId), teacher.documents(courseId)])
-      .then(([u, d]) => {
-        setUnits(u.units);
-        setDocs(d.documents);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load materials"))
-      .finally(() => setLoading(false));
-  }, [courseId]);
-
-  const toggleDoc = (id: string) => {
-    setSelectedDocs((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const docsIn = (uid: string | null) => docs.filter((d) => d.unit_id === uid);
-
-  // Smart "Save to" default, derived during render. If the teacher hasn't
-  // explicitly picked a target yet AND all selected docs share a unit, use
-  // that unit. Otherwise fall back to the override (or null/Uncategorized).
-  const autoUnitId: string | null = (() => {
-    if (selectedDocs.size === 0) return null;
-    const selected = docs.filter((d) => selectedDocs.has(d.id));
-    const shared = selected[0]?.unit_id ?? null;
-    return selected.every((d) => d.unit_id === shared) ? shared : null;
-  })();
-  const unitId = overrideUnitId === undefined ? autoUnitId : overrideUnitId;
-
-  const readableSelectedCount = Array.from(selectedDocs).filter((id) => {
-    const d = docs.find((x) => x.id === id);
-    return d && d.file_type !== "application/pdf";
-  }).length;
-  const onlyPdfsSelected = selectedDocs.size > 0 && readableSelectedCount === 0;
-
-  const submit = async () => {
-    if (count < 1 || count > 50) {
-      setError("Pick a quantity");
-      return;
-    }
-    if (onlyPdfsSelected) {
-      setError(
-        "Selected documents are all PDFs (skipped). Pick at least one image, or unselect all to generate from the unit name only.",
-      );
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const job = await teacher.generateBank(courseId, {
-        count,
-        unit_id: unitId,
-        document_ids: Array.from(selectedDocs),
-        constraint: constraint.trim() || null,
-      });
-      onStarted(job);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start generation");
-      setSubmitting(false);
-    }
-  };
-
-  // Build all the doc-display groups upfront. Each group is a unit (or
-  // "Uncategorized") with its docs. Subfolders are flattened with a
-  // breadcrumb in the header.
-  const docGroups = (() => {
-    const groups: { id: string; label: string; docs: TeacherDocument[] }[] = [];
-    const uncategorized = docsIn(null);
-    if (uncategorized.length > 0) {
-      groups.push({ id: "uncategorized", label: "Uncategorized", docs: uncategorized });
-    }
-    for (const top of topUnits(units)) {
-      const topDocs = docsIn(top.id);
-      if (topDocs.length > 0) {
-        groups.push({ id: top.id, label: top.name, docs: topDocs });
-      }
-      for (const sub of subfoldersOf(units, top.id)) {
-        const subDocs = docsIn(sub.id);
-        if (subDocs.length > 0) {
-          groups.push({ id: sub.id, label: `${top.name} / ${sub.name}`, docs: subDocs });
-        }
-      }
-    }
-    return groups;
-  })();
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <form
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-light px-6 py-3">
-          <h2 className="text-base font-bold text-text-primary">Generate Questions</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {/* Constraint — the hero */}
-          <label className="block text-sm font-bold text-text-primary">
-            What kind of questions do you want?
-          </label>
-          <textarea
-            value={constraint}
-            onChange={(e) => setConstraint(e.target.value)}
-            rows={4}
-            maxLength={500}
-            autoFocus
-            placeholder='e.g. "Only word problems with friendly numbers, match the textbook style, mostly medium difficulty"'
-            className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-          />
-
-          {/* Source materials — visual grid */}
-          <div className="mt-6">
-            <div className="flex items-baseline justify-between">
-              <label className="text-sm font-bold text-text-primary">Source materials</label>
-              <span className="text-[11px] text-text-muted">
-                optional but recommended
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] text-text-muted">
-              Pick the materials Claude should read. Without sources, generation falls back to
-              the topic name only. PDFs aren&rsquo;t AI-readable yet.
-            </p>
-
-            {loading ? (
-              <p className="mt-4 text-sm text-text-muted">Loading materials…</p>
-            ) : docGroups.length === 0 ? (
-              <div className="mt-3 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-6 text-center text-xs text-text-muted">
-                No materials uploaded yet. Add some in the Materials tab, or just leave this
-                blank and use instructions only.
-              </div>
-            ) : (
-              <div className="mt-3 space-y-4">
-                {docGroups.map((group) => (
-                  <div key={group.id}>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      📁 {group.label}
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {group.docs.map((d) => (
-                        <DocCard
-                          key={d.id}
-                          doc={d}
-                          selected={selectedDocs.has(d.id)}
-                          onToggle={() => toggleDoc(d.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quantity + Save-to footer row */}
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border-light pt-4">
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                How many?
-              </label>
-              <div className="flex gap-1">
-                {QUANTITY_CHIPS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setCount(n)}
-                    className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
-                      count === n
-                        ? "bg-primary text-white"
-                        : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={count}
-                  onChange={(e) => {
-                    const n = Number.parseInt(e.target.value, 10);
-                    if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
-                  }}
-                  aria-label="Custom quantity"
-                  className="w-14 rounded-[--radius-pill] border border-border-light bg-bg-base px-2 py-1 text-center text-xs font-bold text-text-primary focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                Save to
-              </label>
-              <select
-                value={unitId ?? ""}
-                onChange={(e) => setOverrideUnitId(e.target.value || null)}
-                className="rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs text-text-primary focus:border-primary focus:outline-none"
-              >
-                <option value="">Uncategorized</option>
-                {topUnits(units).map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-                {topUnits(units).flatMap((u) =>
-                  subfoldersOf(units, u.id).map((sf) => (
-                    <option key={sf.id} value={sf.id}>
-                      {u.name} / {sf.name}
-                    </option>
-                  )),
-                )}
-              </select>
-            </div>
-          </div>
-
-          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-          {onlyPdfsSelected && (
-            <p className="mt-3 text-[11px] text-amber-600">
-              Heads up: every selected doc is a PDF, which Claude can&rsquo;t read yet. Pick at
-              least one image or unselect everything.
-            </p>
-          )}
-        </div>
-
-        {/* Footer — single primary action */}
-        <div className="flex items-center justify-end border-t border-border-light px-6 py-3">
-          <button
-            type="submit"
-            disabled={submitting || loading || onlyPdfsSelected}
-            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-          >
-            {submitting ? "Starting…" : "✨ Generate"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function DocCard({
-  doc,
-  selected,
-  onToggle,
-}: {
-  doc: TeacherDocument;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  const isPdf = doc.file_type === "application/pdf";
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      disabled={isPdf}
-      title={isPdf ? "PDFs are not yet AI-readable" : doc.filename}
-      className={`relative flex items-center gap-2 rounded-[--radius-md] border p-3 text-left text-xs transition-colors ${
-        isPdf
-          ? "cursor-not-allowed border-border-light bg-bg-subtle opacity-50"
-          : selected
-            ? "border-primary bg-primary-bg/40 text-primary"
-            : "border-border-light bg-surface hover:border-primary/40 hover:bg-primary-bg/10"
-      }`}
-    >
-      <span className="text-base">📄</span>
-      <span className="min-w-0 flex-1 truncate font-semibold text-text-primary">
-        {doc.filename}
-      </span>
-      {selected && !isPdf && (
-        <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
-          ✓
-        </span>
-      )}
-      {isPdf && (
-        <span className="absolute right-1.5 top-1.5 rounded-[--radius-pill] bg-text-muted/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
-          skip
-        </span>
-      )}
-    </button>
-  );
+  const where =
+    unitSelection === "all"
+      ? ""
+      : unitSelection === "uncategorized"
+        ? " in Uncategorized"
+        : " in this unit";
+  if (statusFilter === "pending") {
+    return `No pending review${where}. New generations land here.`;
+  }
+  if (statusFilter === "rejected") {
+    return `No rejected questions${where}.`;
+  }
+  return `No approved questions${where} yet. Review pending ones to add them to a homework.`;
 }

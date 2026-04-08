@@ -48,6 +48,7 @@ const STATUS_BADGE: Record<string, string> = {
 export function WorkshopModal({
   item: initialItem,
   queue,
+  editOnly = false,
   onClose,
   onChanged,
   onJobStarted,
@@ -56,6 +57,12 @@ export function WorkshopModal({
 }: {
   item?: BankItem;
   queue?: BankItem[];
+  // When true, hide Approve/Reject buttons regardless of status. Used
+  // when the modal is opened from inside the new ReviewModal so the
+  // teacher uses the review surface for status changes (avoids the
+  // two-surfaces-fighting bug where workshop's approve doesn't sync
+  // with review's queue advance).
+  editOnly?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onJobStarted?: (job: BankJob) => void;
@@ -389,13 +396,13 @@ export function WorkshopModal({
       // Most action shortcuts are gated when a proposal is pending
       if (isProposalPending) return;
 
-      if (e.key === "Enter" || e.key === "a" || e.key === "A") {
+      if (!editOnly && (e.key === "Enter" || e.key === "a" || e.key === "A")) {
         e.preventDefault();
         handlersRef.current.approve();
-      } else if (e.key === "x" || e.key === "X") {
+      } else if (!editOnly && (e.key === "x" || e.key === "X")) {
         e.preventDefault();
         handlersRef.current.reject();
-      } else if (e.key === "s" || e.key === "S") {
+      } else if (!editOnly && (e.key === "s" || e.key === "S")) {
         if (isQueueMode) {
           e.preventDefault();
           handlersRef.current.skip();
@@ -410,7 +417,7 @@ export function WorkshopModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [allResolved, busy, isProposalPending, isQueueMode, onClose]);
+  }, [allResolved, busy, isProposalPending, isQueueMode, editOnly, onClose]);
 
   // ── Render: empty queue or completion ────────────────────────────
   if (isQueueMode && total === 0) {
@@ -733,6 +740,7 @@ export function WorkshopModal({
           chatOpen={chatOpen}
           busy={busy}
           status={liveItem.status}
+          editOnly={editOnly}
           onApprove={approve}
           onReject={reject}
           onSkip={skip}
@@ -776,6 +784,7 @@ function ModeLineFooter({
   chatOpen,
   busy,
   status,
+  editOnly,
   onApprove,
   onReject,
   onSkip,
@@ -792,6 +801,7 @@ function ModeLineFooter({
   chatOpen: boolean;
   busy: boolean;
   status: string;
+  editOnly: boolean;
   onApprove: () => void;
   onReject: () => void;
   onSkip: () => void;
@@ -866,8 +876,9 @@ function ModeLineFooter({
 
   // Default: reading mode. Show approve/reject/skip/chat/delete.
   // In single mode, hide Approve/Reject if the question isn't pending
-  // (since they've already been resolved).
-  const showApproveReject = isQueueMode || status === "pending";
+  // (since they've already been resolved). editOnly forces them off
+  // regardless — used when opened from inside ReviewModal.
+  const showApproveReject = !editOnly && (isQueueMode || status === "pending");
 
   return (
     <div className="border-t border-border-light px-6 py-3">
