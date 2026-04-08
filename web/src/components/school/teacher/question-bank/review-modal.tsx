@@ -8,27 +8,34 @@ import { DestinationPicker } from "./destination-picker";
 type Resolution = "added" | "rejected" | "skipped";
 
 /**
- * Full-screen review modal for fresh primary problems (Flow A in
- * plans/question-bank-redesign-v2.md).
+ * Full-screen review modal — supports two flows:
  *
- * Walks the teacher through a queue of pending primary questions one
- * at a time. The action that approves a question is "Add to Homework"
- * — picking a destination is the act of approval. There is no plain
- * "Approve" button: every question must commit to a destination or be
- * rejected/skipped.
+ * Flow A (no `parent` prop): fresh primary problems. The act of
+ * approval is "Add to Homework" — there is no plain Approve button;
+ * every question must commit to a destination or be rejected/skipped.
  *
- * Variation review (Flow B — children of an existing primary) lives in
- * a future commit and may share this shell with simpler buttons.
+ * Flow B (with `parent` prop): practice variations of a single primary
+ * question. Destination is implicit (the parent), so the button set
+ * collapses to plain Approve / Edit / Reject. The header label shows
+ * which parent we're reviewing.
+ *
+ * Both flows share the same shell, queue mechanics, keyboard shortcuts,
+ * and completion state. The shell filters the queue appropriately
+ * (primaries-only or children-of-parent) so the modal trusts what
+ * it's handed.
  */
 export function ReviewModal({
   courseId,
   queue,
+  parent,
   onClose,
   onChanged,
   onEditItem,
 }: {
   courseId: string;
   queue: BankItem[];
+  /** When set, this is Flow B (variation review). */
+  parent?: BankItem;
   onClose: () => void;
   // Bubble after every successful action so the parent can refetch
   // the bank list and counts.
@@ -37,11 +44,11 @@ export function ReviewModal({
   // that surface so it can plug in chat, regenerate, etc.
   onEditItem: (item: BankItem) => void;
 }) {
+  const flow: "primary" | "variation" = parent ? "variation" : "primary";
+
   // Captured-at-open queue. New items generated mid-review don't
   // splice in — they show up in the pending tray for the next pass.
-  const [items] = useState<BankItem[]>(() =>
-    queue.filter((q) => !q.parent_question_id),
-  );
+  const [items] = useState<BankItem[]>(() => queue);
   const [index, setIndex] = useState(0);
   const [resolved, setResolved] = useState<Record<string, Resolution>>({});
   const [showSolution, setShowSolution] = useState(false);
@@ -96,6 +103,25 @@ export function ReviewModal({
     advance();
   };
 
+  // Flow B only: plain approve. The variation is implicitly attached
+  // to its parent question via parent_question_id (already set when
+  // generate-similar created it), so no destination picker needed.
+  const approveVariation = async () => {
+    if (!current || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await teacher.approveBankItem(current.id);
+      markResolved("added");
+      onChanged();
+      advance();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to approve");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Atomic approve + attach. The backend `/approve` endpoint takes
   // an optional `assignment_id` and does both in one transaction.
   const addToExisting = async (assignment: TeacherAssignment) => {
@@ -146,9 +172,18 @@ export function ReviewModal({
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
+      } else if (e.key === "Enter" || e.key === "a" || e.key === "A") {
+        // Flow B only: Enter / A = approve.
+        if (flow === "variation") {
+          e.preventDefault();
+          approveVariation();
+        }
       } else if (e.key === "h" || e.key === "H") {
-        e.preventDefault();
-        setShowPicker(true);
+        // Flow A only.
+        if (flow === "primary") {
+          e.preventDefault();
+          setShowPicker(true);
+        }
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         reject();
@@ -181,9 +216,13 @@ export function ReviewModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-light px-6 py-3">
-          <div>
-            <h2 className="text-base font-bold text-text-primary">
-              {isComplete ? "All caught up" : "Reviewing pending questions"}
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold text-text-primary">
+              {isComplete
+                ? "All caught up"
+                : flow === "variation"
+                  ? `Reviewing variations of "${parent?.title ?? ""}"`
+                  : "Reviewing pending questions"}
             </h2>
             {!isComplete && current && (
               <p className="mt-0.5 text-xs text-text-muted">
@@ -217,6 +256,7 @@ export function ReviewModal({
             <CompletionState
               total={total}
               counts={counts}
+              flow={flow}
               onClose={onClose}
             />
           ) : current ? (
@@ -235,24 +275,35 @@ export function ReviewModal({
         {!isComplete && current && (
           <div className="border-t border-border-light px-6 py-4">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+              {flow === "primary" ? (
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setShowPicker((v) => !v)}
+                    className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                  >
+                    → Add to Homework
+                  </button>
+                  {showPicker && (
+                    <DestinationPicker
+                      courseId={courseId}
+                      onClose={() => setShowPicker(false)}
+                      onPickExisting={addToExisting}
+                      onCreateNew={createAndAdd}
+                    />
+                  )}
+                </div>
+              ) : (
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setShowPicker((v) => !v)}
-                  className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                  onClick={approveVariation}
+                  className="rounded-[--radius-md] bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  → Add to Homework
+                  ✓ Approve
                 </button>
-                {showPicker && (
-                  <DestinationPicker
-                    courseId={courseId}
-                    onClose={() => setShowPicker(false)}
-                    onPickExisting={addToExisting}
-                    onCreateNew={createAndAdd}
-                  />
-                )}
-              </div>
+              )}
               <button
                 type="button"
                 disabled={busy}
@@ -280,7 +331,15 @@ export function ReviewModal({
               </button>
             </div>
             <p className="mt-3 text-[11px] text-text-muted">
-              <kbd className="rounded border border-border-light px-1">H</kbd> homework ·
+              {flow === "primary" ? (
+                <>
+                  <kbd className="rounded border border-border-light px-1">H</kbd> homework ·
+                </>
+              ) : (
+                <>
+                  <kbd className="rounded border border-border-light px-1">A</kbd> approve ·
+                </>
+              )}
               <kbd className="ml-1 rounded border border-border-light px-1">E</kbd> edit ·
               <kbd className="ml-1 rounded border border-border-light px-1">S</kbd> skip ·
               <kbd className="ml-1 rounded border border-border-light px-1">R</kbd> reject ·
@@ -363,10 +422,12 @@ function CurrentQuestion({
 function CompletionState({
   total,
   counts,
+  flow,
   onClose,
 }: {
   total: number;
   counts: { added: number; rejected: number; skipped: number };
+  flow: "primary" | "variation";
   onClose: () => void;
 }) {
   return (
@@ -379,7 +440,9 @@ function CompletionState({
       <div className="mt-4 flex justify-center gap-6 text-sm">
         <div>
           <div className="text-2xl font-bold text-green-600">{counts.added}</div>
-          <div className="text-xs text-text-muted">added to homework</div>
+          <div className="text-xs text-text-muted">
+            {flow === "variation" ? "approved" : "added to homework"}
+          </div>
         </div>
         <div>
           <div className="text-2xl font-bold text-red-600">{counts.rejected}</div>

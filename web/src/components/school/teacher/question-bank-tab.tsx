@@ -64,9 +64,10 @@ export function QuestionBankTab({
   // Flow A: full-screen review for fresh primary problems. Captured at
   // open time so mid-review generations don't splice in.
   const [primaryReviewQueue, setPrimaryReviewQueue] = useState<BankItem[] | null>(null);
-  // Flow B (variations) still uses the existing WorkshopModal queue
-  // mode until a follow-up commit replaces it.
-  const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
+  // Flow B: full-screen review for variations of a single primary.
+  // Carries the parent so the modal can label itself and the shell
+  // can drop the teacher back at the parent's workshop on close.
+  const [variationReviewQueue, setVariationReviewQueue] = useState<BankItem[] | null>(null);
   // When a make-similar review queue completes, we want to drop the
   // teacher back at the parent question. We stash the full BankItem
   // (not just an id) so restoration works regardless of which status
@@ -74,9 +75,11 @@ export function QuestionBankTab({
   // the parent if it's in a different status bucket.
   const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
 
-  // Open a focused review queue containing only the just-generated
-  // pending children of `parent`. Replaces the global pending pool
-  // with the variations the teacher just made.
+  // Open Flow B: focused review of the just-generated pending children
+  // of `parent`. The modal labels itself with the parent's title and
+  // collapses the action set to plain Approve / Edit / Reject (no
+  // destination picker — variations are implicitly attached to their
+  // parent via parent_question_id).
   const openVariationReview = async (parent: BankItem) => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
@@ -85,7 +88,7 @@ export function QuestionBankTab({
       setActiveJob(null); // dismiss the strip — its job is done
       setOpenItem(null); // close the single-mode workshop
       setReviewQueueParent(parent);
-      setReviewQueue(children);
+      setVariationReviewQueue(children);
     } catch (e) {
       // Close the modal so the bank tab's error message is visible —
       // otherwise the workshop modal keeps the green CTA on screen
@@ -260,8 +263,8 @@ export function QuestionBankTab({
         />
       )}
 
-      {/* ReviewModal renders FIRST so that modals opened from inside
-          it (Edit → WorkshopModal) stack visually on top via DOM
+      {/* ReviewModals render FIRST so that modals opened from inside
+          them (Edit → WorkshopModal) stack visually on top via DOM
           order. Both share z-50; later siblings win. */}
       {primaryReviewQueue && (
         <ReviewModal
@@ -276,21 +279,21 @@ export function QuestionBankTab({
         />
       )}
 
-      {reviewQueue && (
-        <WorkshopModal
-          queue={reviewQueue}
+      {variationReviewQueue && reviewQueueParent && (
+        <ReviewModal
+          courseId={courseId}
+          queue={variationReviewQueue}
+          parent={reviewQueueParent}
           onClose={() => {
-            setReviewQueue(null);
-            // If this queue was a focused variation review, drop the
-            // teacher back on the parent question instead of the bare
-            // bank — keeps the mental thread intact.
-            if (reviewQueueParent) {
-              setOpenItem(reviewQueueParent);
-            }
+            setVariationReviewQueue(null);
+            // Drop the teacher back on the parent's workshop so the
+            // mental thread (parent → its variations → back to parent)
+            // stays intact.
+            setOpenItem(reviewQueueParent);
             reload();
           }}
           onChanged={reload}
-          onJobStarted={setActiveJob}
+          onEditItem={(item) => setOpenItem(item)}
         />
       )}
 
