@@ -81,6 +81,10 @@ export function PracticeSummary({
         initial={learnInitial}
         onDone={onBackToHomework}
         onExit={onBackToHomework}
+        // From the practice summary's flagged-learn queue we don't
+        // expose a back-to-Practice toggle — the kid is in a guided
+        // review pass, the practice phase is over for this session.
+        onSwitchToPractice={() => onBackToHomework()}
       />
     );
   }

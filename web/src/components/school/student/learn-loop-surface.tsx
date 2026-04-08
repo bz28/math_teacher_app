@@ -4,16 +4,21 @@ import { useState } from "react";
 import { schoolStudent, type VariationPayload } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
+import type { LoopState } from "./practice-loop-surface";
 
 interface Props {
   assignmentId: string;
   anchorBankItemId: string;
   problemPosition: number;
-  initial: { variation: VariationPayload; consumption_id: string; remaining: number };
+  initial: LoopState;
   /** When the loop ends (exhausted, or student tapped Done). */
   onDone: () => void;
   /** Leave the loop without finishing. */
   onExit: () => void;
+  /** Called when the student wants to switch back to Practice on the
+   *  *current* look-alike. The parent re-renders the Practice surface
+   *  seeded with this state — no new sibling, no new consumption row. */
+  onSwitchToPractice: (state: LoopState) => void;
 }
 
 /**
@@ -33,6 +38,7 @@ export function LearnLoopSurface({
   initial,
   onDone,
   onExit,
+  onSwitchToPractice,
 }: Props) {
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
@@ -86,8 +92,27 @@ export function LearnLoopSurface({
           ← Back to homework
         </button>
         <span className="text-xs font-medium text-text-muted">
-          Learning similar to problem {problemPosition}
+          Working on a similar to problem {problemPosition}
         </span>
+      </div>
+
+      {/* Mode toggle — swaps the lens on the *current* look-alike with
+          no fetch, no new consumption row. */}
+      <div className="mt-4 inline-flex rounded-[--radius-sm] border border-border bg-surface p-1">
+        <button
+          onClick={() =>
+            onSwitchToPractice({ variation, consumption_id: consumptionId, remaining })
+          }
+          className="rounded-[--radius-sm] px-3 py-1 text-xs font-bold text-text-secondary hover:text-primary"
+        >
+          Practice
+        </button>
+        <button
+          disabled
+          className="rounded-[--radius-sm] bg-primary px-3 py-1 text-xs font-bold text-white"
+        >
+          Learn
+        </button>
       </div>
 
       <div className="mt-6 rounded-[--radius-md] border border-border bg-surface p-6">

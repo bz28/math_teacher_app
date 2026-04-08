@@ -13,17 +13,28 @@ export interface LoopResult {
   flagged: boolean;
 }
 
+export interface LoopState {
+  variation: VariationPayload;
+  consumption_id: string;
+  remaining: number;
+}
+
 interface Props {
   assignmentId: string;
   anchorBankItemId: string;
   problemPosition: number;
-  initial: { variation: VariationPayload; consumption_id: string; remaining: number };
+  initial: LoopState;
   /** Called when the loop ends (exhausted, or student tapped Done).
    *  Receives the per-variation results so the parent can show a
    *  practice summary with flag/learn-flagged state. */
   onDone: (results: LoopResult[]) => void;
   /** Called when the student wants to leave the loop without finishing. */
   onExit: () => void;
+  /** Called when the student wants to switch to Learn mode on the
+   *  *current* look-alike. The parent re-renders the Learn surface
+   *  seeded with this state — no new sibling is fetched, no new
+   *  consumption row is created. */
+  onSwitchToLearn: (state: LoopState) => void;
 }
 
 /**
@@ -40,6 +51,7 @@ export function PracticeLoopSurface({
   initial,
   onDone,
   onExit,
+  onSwitchToLearn,
 }: Props) {
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
@@ -143,8 +155,28 @@ export function PracticeLoopSurface({
           ← Back to homework
         </button>
         <span className="text-xs font-medium text-text-muted">
-          Practicing similar to problem {problemPosition}
+          Working on a similar to problem {problemPosition}
         </span>
+      </div>
+
+      {/* Mode toggle — swaps the lens on the *current* look-alike with
+          no fetch, no new consumption row. The bottom footer's "next"
+          buttons are what advance the pool. */}
+      <div className="mt-4 inline-flex rounded-[--radius-sm] border border-border bg-surface p-1">
+        <button
+          disabled
+          className="rounded-[--radius-sm] bg-primary px-3 py-1 text-xs font-bold text-white"
+        >
+          Practice
+        </button>
+        <button
+          onClick={() =>
+            onSwitchToLearn({ variation, consumption_id: consumptionId, remaining })
+          }
+          className="rounded-[--radius-sm] px-3 py-1 text-xs font-bold text-text-secondary hover:text-primary"
+        >
+          Learn
+        </button>
       </div>
 
       <div className="mt-6 rounded-[--radius-md] border border-border bg-surface p-6">

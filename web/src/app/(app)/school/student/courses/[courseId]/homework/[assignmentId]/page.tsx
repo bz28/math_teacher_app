@@ -103,6 +103,9 @@ export default function HomeworkPage() {
         initial={mode.initial}
         onDone={(results) => setMode({ kind: "summary", problem: mode.problem, results })}
         onExit={() => setMode({ kind: "homework" })}
+        onSwitchToLearn={(state) =>
+          setMode({ kind: "learn", problem: mode.problem, initial: state })
+        }
       />
     );
   }
@@ -116,6 +119,9 @@ export default function HomeworkPage() {
         initial={mode.initial}
         onDone={() => setMode({ kind: "homework" })}
         onExit={() => setMode({ kind: "homework" })}
+        onSwitchToPractice={(state) =>
+          setMode({ kind: "practice", problem: mode.problem, initial: state })
+        }
       />
     );
   }
