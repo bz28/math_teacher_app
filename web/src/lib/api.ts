@@ -604,7 +604,7 @@ export interface TeacherUnit {
 export interface TeacherAssignment {
   id: string;
   course_id: string;
-  unit_id: string | null;
+  unit_ids: string[];
   title: string;
   type: string;
   source_type: string | null;
@@ -736,7 +736,9 @@ export const teacher = {
   },
   createAssignment(courseId: string, data: {
     title: string; type: string; source_type?: string; due_at?: string;
-    late_policy?: string; content?: unknown; answer_key?: unknown; unit_id?: string;
+    late_policy?: string; content?: unknown; answer_key?: unknown;
+    /** Required: at least one unit. Multi-unit is for midterms / review HWs. */
+    unit_ids: string[];
     document_ids?: string[]; bank_item_ids?: string[];
   }) {
     return apiFetch<{ id: string; title: string; status: string }>(`/teacher/courses/${courseId}/assignments`, {

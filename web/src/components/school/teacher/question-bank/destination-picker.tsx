@@ -2,35 +2,43 @@
 
 import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherAssignment } from "@/lib/api";
+import { UnitMultiSelect } from "../_pieces/unit-multi-select";
 
 // Popover that lists draft homeworks and lets the teacher pick one,
-// or create a new draft inline (title-only — fields like due date and
-// sections get filled in later from the homework tab; existing publish
-// gating prevents half-baked homeworks from reaching students).
+// or create a new draft inline (title + units; the rest of the HW
+// config — sections, due date, late policy — gets filled in later
+// from the homework tab; existing publish gating prevents half-baked
+// homeworks from reaching students).
 //
 // Pure picker: doesn't perform the attach itself. Returns the chosen
-// assignmentId (or a brand new title to create) via callback so the
+// assignmentId (or a brand new title + unit_ids) via callback so the
 // parent can do the approve + attach in one logical action.
 export function DestinationPicker({
   courseId,
+  defaultUnitIds = [],
   busy = false,
   onClose,
   onPickExisting,
   onCreateNew,
 }: {
   courseId: string;
+  /** Pre-select these units when the inline create form opens. The
+   *  question bank shell passes the currently-filtered unit so a
+   *  one-click create lands in the right place. */
+  defaultUnitIds?: string[];
   /** True while the parent is processing the pick. Disables all
    *  buttons + the form so the teacher can't double-submit during
    *  the network round-trip. */
   busy?: boolean;
   onClose: () => void;
   onPickExisting: (assignment: TeacherAssignment) => void;
-  onCreateNew: (title: string) => void;
+  onCreateNew: (title: string, unitIds: string[]) => void;
 }) {
   const [drafts, setDrafts] = useState<TeacherAssignment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [newUnitIds, setNewUnitIds] = useState<string[]>(defaultUnitIds);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,14 +75,16 @@ export function DestinationPicker({
     e.preventDefault();
     if (busy) return;
     const t = newTitle.trim();
-    if (!t) return;
-    onCreateNew(t);
+    if (!t || newUnitIds.length === 0) return;
+    onCreateNew(t, newUnitIds);
   };
 
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-0 z-30 mb-2 w-72 rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-xl"
+      className={`absolute bottom-full left-0 z-30 mb-2 rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-xl ${
+        creating ? "w-80" : "w-72"
+      }`}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="text-xs font-bold uppercase tracking-wider text-text-muted">
@@ -117,10 +127,21 @@ export function DestinationPicker({
             placeholder="Homework title"
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
           />
+          <div>
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Unit · required
+            </div>
+            <UnitMultiSelect
+              courseId={courseId}
+              selected={newUnitIds}
+              onChange={setNewUnitIds}
+              disabled={busy}
+            />
+          </div>
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={busy || !newTitle.trim()}
+              disabled={busy || !newTitle.trim() || newUnitIds.length === 0}
               className="flex-1 rounded-[--radius-md] bg-primary px-2 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
             >
               {busy ? "Creating…" : "Create & add"}
@@ -130,6 +151,7 @@ export function DestinationPicker({
               onClick={() => {
                 setCreating(false);
                 setNewTitle("");
+                setNewUnitIds(defaultUnitIds);
               }}
               disabled={busy}
               className="rounded-[--radius-md] border border-border-light px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
@@ -138,8 +160,8 @@ export function DestinationPicker({
             </button>
           </div>
           <p className="text-[10px] text-text-muted">
-            Title only for now. Add sections and due date from the Homework tab when you&rsquo;re
-            ready to publish.
+            Sections and due date can be added from the Homework tab when you&rsquo;re ready to
+            publish.
           </p>
         </form>
       ) : (

@@ -306,6 +306,11 @@ export function QuestionBankTab({
         <ReviewModal
           courseId={courseId}
           queue={primaryReviewQueue}
+          defaultUnitIds={
+            unitSelection !== "all" && unitSelection !== "uncategorized"
+              ? [unitSelection]
+              : []
+          }
           active={editFromReviewItem === null}
           onClose={() => {
             setPrimaryReviewQueue(null);
