@@ -199,7 +199,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                     src={
                       detail.image_data.startsWith("data:")
                         ? detail.image_data
-                        : `data:image/png;base64,${detail.image_data}`
+                        : `data:image/jpeg;base64,${detail.image_data}`
                     }
                     alt={`${detail.student_name}'s submitted homework`}
                     className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"

@@ -54,13 +54,16 @@ export function SubmittedView({ submission, problems }: Props) {
       {submission.image_data && (
         <div className="mt-5">
           <div className="text-sm font-semibold text-text-primary">Your work</div>
-          {/* The backend stores raw base64 (no data: prefix). */}
+          {/* image_data is now a full data URL (data:image/<type>;base64,...)
+              so MIME round-trips correctly. The startsWith fallback covers
+              any legacy rows that stored raw base64 — those default to
+              JPEG since browser sniffing handles the actual format. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={
               submission.image_data.startsWith("data:")
                 ? submission.image_data
-                : `data:image/png;base64,${submission.image_data}`
+                : `data:image/jpeg;base64,${submission.image_data}`
             }
             alt="Your submitted homework"
             className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"

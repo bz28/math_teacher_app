@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   schoolStudent,
   type StudentHomeworkProblem,
@@ -38,7 +38,6 @@ export function SubmissionPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
   const hasAnyAnswer = Object.values(answers).some((v) => v.trim().length > 0);
@@ -56,11 +55,11 @@ export function SubmissionPanel({
     }
     const reader = new FileReader();
     reader.onload = () => {
-      // Strip the data: prefix — backend accepts both but raw base64
-      // is smaller and matches the personal /work flow.
-      const result = reader.result as string;
-      const base64 = result.includes(",") ? result.split(",")[1] : result;
-      setImageBase64(base64);
+      // Keep the full `data:image/...;base64,...` URL intact so the
+      // MIME type round-trips end-to-end. The renderer can then use
+      // it as-is without guessing PNG vs JPEG. Backend accepts both
+      // raw and data-URL forms.
+      setImageBase64(reader.result as string);
       setImageFilename(file.name);
     };
     reader.onerror = () => setError("Couldn't read that file. Try another.");
@@ -133,7 +132,6 @@ export function SubmissionPanel({
           One picture of your full completed homework. PNG or JPEG, under 5 MB.
         </p>
         <input
-          ref={fileInputRef}
           type="file"
           accept="image/png,image/jpeg"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}

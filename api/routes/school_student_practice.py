@@ -31,6 +31,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -469,7 +470,15 @@ async def submit_homework(
         is_late=is_late,
     )
     db.add(submission)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Two parallel submits both passed the SELECT-existing check
+        # but only one INSERT can satisfy the unique constraint on
+        # (assignment_id, student_id). Convert the raw 500 into the
+        # same 409 the application-layer check returns.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Already submitted") from None
     await db.refresh(submission)
 
     return SubmitHomeworkResponse(
@@ -488,10 +497,12 @@ async def get_my_submission(
     """Return this student's own submission for an HW. 404 if not yet
     submitted. Used by the HW page to render the submitted read-only
     view (image + typed answers).
-    """
-    # Re-validate enrollment + publish state via the helper.
-    await _load_assignment_for_student(db, assignment_id, user.id)
 
+    Deliberately does NOT call _load_assignment_for_student: a student
+    must be able to see their own submission even if the teacher
+    unpublishes the homework after they turned it in. Ownership is
+    enforced by the (student_id == user.id) WHERE clause.
+    """
     sub = (await db.execute(
         select(Submission).where(
             Submission.assignment_id == assignment_id,
