@@ -3,15 +3,12 @@
 import { useState } from "react";
 import {
   schoolStudent,
-  type StudentHomeworkProblem,
   type SubmitHomeworkResponse,
 } from "@/lib/api";
-import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 
 interface Props {
   assignmentId: string;
-  problems: StudentHomeworkProblem[];
   dueAt: string | null;
   /** Called after a successful submit so the parent can swap into
    *  the submitted read-only view. */
@@ -22,17 +19,16 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * The "Submit Homework" section that appears at the bottom of the
- * locked HW page. Per-problem text inputs for final answers + a
- * single image upload of the whole completed homework, plus a Submit
- * button. One-shot — once submitted the parent swaps to <SubmittedView>.
+ * locked HW page. Required: a single image upload of the whole
+ * completed homework. The image is the source of truth — the
+ * upcoming integrity checker (next PR) will read it to extract per-
+ * problem answers and run the understanding-check chat.
  */
 export function SubmissionPanel({
   assignmentId,
-  problems,
   dueAt,
   onSubmitted,
 }: Props) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageFilename, setImageFilename] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -40,8 +36,7 @@ export function SubmissionPanel({
   const [confirming, setConfirming] = useState(false);
 
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
-  const hasAnyAnswer = Object.values(answers).some((v) => v.trim().length > 0);
-  const canSubmit = hasAnyAnswer || imageBase64 !== null;
+  const canSubmit = imageBase64 !== null;
 
   function handleFile(file: File) {
     setError(null);
@@ -67,14 +62,11 @@ export function SubmissionPanel({
   }
 
   async function doSubmit() {
-    if (!canSubmit || submitting) return;
+    if (!canSubmit || submitting || imageBase64 === null) return;
     setSubmitting(true);
     setError(null);
     try {
       const resp = await schoolStudent.submitHomework(assignmentId, {
-        final_answers: Object.fromEntries(
-          Object.entries(answers).filter(([, v]) => v.trim().length > 0),
-        ),
         image_base64: imageBase64,
       });
       onSubmitted(resp);
@@ -90,8 +82,8 @@ export function SubmissionPanel({
     <div className="mt-8 rounded-[--radius-md] border-2 border-dashed border-primary bg-primary-bg/20 p-6">
       <h2 className="text-lg font-bold text-text-primary">Submit your homework</h2>
       <p className="mt-1 text-sm text-text-secondary">
-        Type your final answers below and upload a picture of your completed work. Both are
-        optional individually, but you need at least one.
+        Upload one clear picture of your completed work. Your teacher will see exactly what
+        you turn in.
       </p>
 
       {isLate && (
@@ -99,32 +91,6 @@ export function SubmissionPanel({
           ⚠ This homework is past due. You can still submit, but it will be marked late.
         </div>
       )}
-
-      <div className="mt-6 space-y-3">
-        {problems.map((p) => (
-          <div key={p.bank_item_id}>
-            <label className="flex items-start gap-3">
-              <span className="mt-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                {p.position}
-              </span>
-              <div className="flex-1">
-                <div className="text-xs text-text-muted">
-                  <MathText text={p.question} />
-                </div>
-                <input
-                  type="text"
-                  value={answers[p.bank_item_id] || ""}
-                  onChange={(e) =>
-                    setAnswers((a) => ({ ...a, [p.bank_item_id]: e.target.value }))
-                  }
-                  placeholder="Your final answer"
-                  className="mt-1 w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
-                />
-              </div>
-            </label>
-          </div>
-        ))}
-      </div>
 
       <div className="mt-6">
         <div className="text-sm font-semibold text-text-primary">Upload your work</div>

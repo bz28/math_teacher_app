@@ -253,7 +253,6 @@ export default function HomeworkPage() {
       ) : !hw.submitted ? (
         <SubmissionPanel
           assignmentId={hw.assignment_id}
-          problems={hw.problems}
           dueAt={hw.due_at}
           onSubmitted={async (resp) => {
             // Re-fetch detail + submission so the UI swaps to the

@@ -1133,7 +1133,7 @@ export const schoolStudent = {
   },
   submitHomework(
     assignmentId: string,
-    body: { final_answers: Record<string, string>; image_base64: string | null },
+    body: { image_base64: string },
   ) {
     return apiFetch<SubmitHomeworkResponse>(`/school/student/homework/${assignmentId}/submit`, {
       method: "POST",

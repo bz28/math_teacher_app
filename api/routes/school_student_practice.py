@@ -137,12 +137,11 @@ class StudentHomeworkDetail(BaseModel):
 
 
 class SubmitHomeworkRequest(BaseModel):
-    # {bank_item_id: text answer}. Optional per problem; the image is
-    # the source of truth.
-    final_answers: dict[str, str] = {}
-    # base64-encoded image of the completed homework. Optional only if
-    # at least one final_answer is provided — see the validation below.
-    image_base64: str | None = None
+    # base64-encoded image of the completed homework. Required —
+    # the work is the source of truth for both the teacher view and
+    # the upcoming integrity-checker pipeline (which will extract
+    # per-problem answers from the image).
+    image_base64: str
 
 
 class SubmitHomeworkResponse(BaseModel):
@@ -412,36 +411,21 @@ async def submit_homework(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Already submitted")
 
-    # Validate the payload contains *something*.
-    has_image = bool(body.image_base64)
-    has_any_answer = any(v.strip() for v in body.final_answers.values())
-    if not has_image and not has_any_answer:
-        raise HTTPException(
-            status_code=400,
-            detail="Submission must include an image or at least one answer",
-        )
-
-    # Validate image size + magic bytes if present.
-    if body.image_base64 is not None:
-        if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
-            raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
-        # Accept either a data URL or a raw base64 PNG/JPEG.
-        head = body.image_base64[:32]
-        if not (
-            head.startswith("data:image/")
-            or head.startswith("iVBOR")  # PNG
-            or head.startswith("/9j/")    # JPEG
-        ):
-            raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
-
-    # Validate final_answers keys are actual primary problem ids.
-    primary_ids = set(problem_ids_in_content(assignment.content))
-    cleaned: dict[str, str] = {}
-    for k, v in body.final_answers.items():
-        if k not in primary_ids:
-            raise HTTPException(status_code=400, detail=f"Unknown problem id: {k}")
-        if v and v.strip():
-            cleaned[k] = v.strip()
+    # The image is required and is the source of truth — the work is
+    # what the teacher reviews and what the integrity checker will
+    # eventually read for per-problem answer extraction.
+    if not body.image_base64:
+        raise HTTPException(status_code=400, detail="An image of your work is required")
+    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
+        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
+    # Accept either a data URL or a raw base64 PNG/JPEG.
+    head = body.image_base64[:32]
+    if not (
+        head.startswith("data:image/")
+        or head.startswith("iVBOR")  # PNG
+        or head.startswith("/9j/")    # JPEG
+    ):
+        raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
 
     # Find which section this student is enrolled in for this assignment.
     # We need a section_id on the row; the existing schema requires it.
@@ -466,7 +450,11 @@ async def submit_homework(
         section_id=section_id,
         status="submitted",
         image_data=body.image_base64,
-        final_answers=cleaned or None,
+        # final_answers is left null on new submissions; the next PR
+        # (integrity checker) populates it from a Vision-extracted
+        # confirm-and-edit step. The column is preserved so legacy
+        # submissions render correctly on the read side.
+        final_answers=None,
         is_late=is_late,
     )
     db.add(submission)
