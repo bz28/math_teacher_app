@@ -12,7 +12,7 @@ import { SimpleUnitList } from "./question-bank/unit-groups";
 import { ApprovedView } from "./question-bank/approved-tree";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
-import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
+import { UnitRail, type UnitSelection } from "./_pieces/unit-rail";
 import { PendingTray } from "./question-bank/pending-tray";
 import { ReviewModal } from "./question-bank/review-modal";
 
@@ -272,7 +272,8 @@ export function QuestionBankTab({
         <aside className="md:w-52 md:shrink-0">
           <UnitRail
             units={units}
-            items={items}
+            totalCount={items.length}
+            countFor={(uid) => items.filter((i) => i.unit_id === uid).length}
             selected={unitSelection}
             onSelect={(s) => {
               setUnitSelection(s);

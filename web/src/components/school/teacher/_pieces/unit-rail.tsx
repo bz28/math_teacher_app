@@ -1,6 +1,6 @@
 "use client";
 
-import type { BankItem, TeacherUnit } from "@/lib/api";
+import type { TeacherUnit } from "@/lib/api";
 import { subfoldersOf, topUnits } from "@/lib/units";
 import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 
@@ -10,22 +10,27 @@ export type UnitSelection = "all" | "uncategorized" | string;
 
 interface UnitRailProps {
   units: TeacherUnit[];
-  items: BankItem[];
   selected: UnitSelection;
   onSelect: (selection: UnitSelection) => void;
+  /** Compute the count for a given unit (or null for uncategorized).
+   *  Caller-provided so the rail works for both bank items (single
+   *  unit_id) and assignments (unit_ids array). */
+  countFor: (unitId: string | null) => number;
+  totalCount: number;
 }
 
-// Sidebar that lets the teacher pick which unit to view. Mirrors the
-// materials FolderTree visual language exactly so the two surfaces feel
-// like siblings: rounded card container, indented sub-units, purple
-// accent on the selected row, count pill on the right. Read-only —
-// unit creation/rename/delete lives in the materials tab.
-export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
+// Filter-by-unit sidebar shared by Question Bank and Homework tabs.
+// Mirrors the materials FolderTree visual language: rounded rows,
+// purple accent on the selected row, count pill on the right. Read-
+// only — unit creation/rename/delete lives in the materials tab.
+export function UnitRail({
+  units,
+  selected,
+  onSelect,
+  countFor,
+  totalCount,
+}: UnitRailProps) {
   const tops = topUnits(units);
-
-  const countFor = (uid: string | null) =>
-    items.filter((i) => i.unit_id === uid).length;
-  const totalCount = items.length;
   const uncategorizedCount = countFor(null);
 
   return (

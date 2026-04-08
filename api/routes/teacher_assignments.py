@@ -262,6 +262,9 @@ def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str,
         "late_policy": a.late_policy,
         "document_ids": a.document_ids,
         "section_names": section_names,
+        # Cheap from-content count so the list view can show "5 problems"
+        # without round-tripping each assignment's detail.
+        "problem_count": len(problem_ids_in_content(a.content)),
         "total_students": stats["total_students"],
         "submitted": stats["submitted"],
         "graded": stats["graded"],
