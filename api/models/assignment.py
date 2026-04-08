@@ -75,6 +75,11 @@ class Submission(Base):
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")
     image_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # base64, S3 later
+    # Per-HW-primary final answers the student typed alongside the
+    # whole-HW image upload. Flat {bank_item_id: text} map. Optional
+    # per problem; the image is the source of truth, the typed
+    # answers are a quick-scan view for the teacher.
+    final_answers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
