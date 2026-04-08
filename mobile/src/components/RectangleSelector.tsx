@@ -81,16 +81,17 @@ export function RectangleSelector({
   const onboardingOpacity = useRef(new Animated.Value(1)).current;
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
-  // Auto-dismiss onboarding on first draw
+  // Auto-dismiss onboarding the moment the user starts drawing or has rectangles
   useEffect(() => {
-    if (rectangles.length > 0 && showOnboarding) {
+    const drawing = interaction?.type === "draw";
+    if ((drawing || rectangles.length > 0) && showOnboarding) {
       Animated.timing(onboardingOpacity, {
         toValue: 0,
-        duration: 300,
+        duration: 200,
         useNativeDriver: true,
       }).start(() => setShowOnboarding(false));
     }
-  }, [rectangles.length]);
+  }, [interaction?.type, rectangles.length, showOnboarding, onboardingOpacity]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -193,10 +194,11 @@ export function RectangleSelector({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        // Don't capture — let children (the X delete button) claim
+        // their own touches. The parent only takes the responder if no
+        // child wants it.
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: (e) => {
           const locationX = e.nativeEvent.pageX - containerOffset.current.x;
           const locationY = e.nativeEvent.pageY - containerOffset.current.y;
@@ -599,10 +601,11 @@ const styles = StyleSheet.create({
   },
   rectDelete: {
     position: "absolute",
-    // Float above the top-right corner so it doesn't overlap the
-    // resize handle that lives at the corner itself.
-    top: -32,
-    right: 0,
+    // Sit inside the top-right corner of the rect, inset enough to
+    // clear the resize handle at -7/-7. The X is on top of the
+    // rect's interior and inside its frame so taps register reliably.
+    top: 6,
+    right: 6,
     width: 26,
     height: 26,
     borderRadius: 13,
@@ -610,6 +613,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     ...shadows.sm,
+    zIndex: 10,
   },
 
   // Corner handles

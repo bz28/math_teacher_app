@@ -324,7 +324,12 @@ export function SolveScreen({
 
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            // Extra bottom space so the type card sits above the keyboard
+            // when in typing mode without overshooting.
+            typing && { paddingBottom: 320 },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -383,10 +388,13 @@ export function SolveScreen({
           <AnimatedPressable
             onPress={() => {
               setTyping(true);
-              // Focus immediately on next tick. KAV +
-              // automaticallyAdjustKeyboardInsets handle scrolling natively
-              // so we don't manually scrollToEnd (caused overshoot).
-              requestAnimationFrame(() => inputRef.current?.focus());
+              // Focus on next tick, then scroll the type card into view.
+              // The extra paddingBottom (set when typing=true) gives the
+              // ScrollView room to scroll past the keyboard.
+              requestAnimationFrame(() => {
+                inputRef.current?.focus();
+                setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
+              });
             }}
             disabled={typing}
             scaleDown={0.97}
