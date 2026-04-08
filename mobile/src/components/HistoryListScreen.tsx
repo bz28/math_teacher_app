@@ -136,9 +136,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingHorizontal: spacing.xxl + 4,
   },
   scrollContent: {
+    paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxxl,
   },
   backButton: {
@@ -147,6 +147,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
     marginBottom: spacing.sm,
   },
   backText: { color: colors.primary, ...typography.bodyBold },
@@ -154,6 +155,7 @@ const styles = StyleSheet.create({
     ...typography.hero,
     color: colors.text,
     marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.xl,
   },
   centered: {
     flex: 1,

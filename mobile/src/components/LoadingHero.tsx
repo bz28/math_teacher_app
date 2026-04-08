@@ -52,11 +52,14 @@ export function LoadingHero({ subject, mode }: Props) {
     ).start();
   }, [scale, opacity]);
 
-  // Rotate subtitle phrases every 1.4s
+  // Rotate subtitle phrases slowly, stopping at the last phrase ("Almost ready…")
   useEffect(() => {
     const t = setInterval(() => {
-      setPhraseIdx((i) => (i + 1) % phrases.length);
-    }, 1400);
+      setPhraseIdx((i) => {
+        if (i >= phrases.length - 1) return i; // hold at last phrase
+        return i + 1;
+      });
+    }, 2400);
     return () => clearInterval(t);
   }, [phrases.length]);
 

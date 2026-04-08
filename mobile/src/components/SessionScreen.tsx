@@ -96,6 +96,23 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     }
   }, [lastResponse, phase]);
 
+  // Scroll to bottom when chat history grows (so the latest bubble is visible)
+  useEffect(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  }, [chatHistory[session?.current_step ?? -1]?.length]);
+
+  // Scroll when the keyboard appears in ask mode
+  useEffect(() => {
+    if (!askMode) return;
+    const sub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+      },
+    );
+    return () => sub.remove();
+  }, [askMode]);
+
   // Confetti on learn completion
   useEffect(() => {
     if (phase === "completed") confettiRef.current?.fire();
@@ -281,7 +298,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         )}
 
         {/* Feedback */}
-        {lastResponse && phase !== "thinking" && (
+        {/* FeedbackCard for practice-mode answer feedback only.
+            Learn-mode chat replies render as tutor bubbles in the chat
+            thread above the step — showing the FeedbackCard for them too
+            would duplicate the most recent reply. */}
+        {isPractice && lastResponse && phase !== "thinking" && (
           <FeedbackCard response={lastResponse} />
         )}
 
