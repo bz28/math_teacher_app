@@ -14,6 +14,7 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -168,7 +169,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     # decide how to render that case.
     distractors_sem = asyncio.Semaphore(5)
 
-    async def make_distractors(idx: int, q: dict, s: dict) -> list[str]:
+    async def make_distractors(idx: int, q: dict[str, Any], s: dict[str, Any]) -> list[str]:
         final = s.get("final_answer")
         if not final or final.startswith("(solution failed"):
             return []
