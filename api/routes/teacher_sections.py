@@ -214,6 +214,25 @@ async def join_section(
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already in this section")
     db.add(SectionEnrollment(section_id=section.id, student_id=current_user.user_id))
+
+    # Stamp school_id on the joining user (if not already set) by walking
+    # section → course → school. This is what flips a personal student
+    # into a school student so the frontend role gate routes them to the
+    # /school/student portal. We don't overwrite an existing school_id
+    # to avoid silently moving someone between schools.
+    from api.models.course import Course
+    from api.models.user import User as UserModel
+
+    user = (await db.execute(
+        select(UserModel).where(UserModel.id == current_user.user_id)
+    )).scalar_one_or_none()
+    if user is not None and user.school_id is None:
+        course = (await db.execute(
+            select(Course).where(Course.id == section.course_id)
+        )).scalar_one_or_none()
+        if course is not None and course.school_id is not None:
+            user.school_id = course.school_id
+
     await db.commit()
     return {"status": "ok", "section_id": str(section.id)}
 

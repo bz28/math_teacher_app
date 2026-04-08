@@ -45,6 +45,15 @@ export default function HomePage() {
     try {
       await student.joinSection(joinCode.trim());
       setJoinCode("");
+      // Reload the user object — the join endpoint stamps school_id
+      // on the user, which flips them into a school student. Then
+      // route them to the school student portal.
+      await useAuthStore.getState().loadUser();
+      const refreshed = useAuthStore.getState().user;
+      if (refreshed?.role === "student" && refreshed.school_id) {
+        router.push("/school/student");
+        return;
+      }
       loadEnrolledCourses();
     } catch (err) {
       setJoinError((err as Error).message || "Invalid code");
