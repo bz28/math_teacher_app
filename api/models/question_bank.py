@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
@@ -38,6 +38,11 @@ class QuestionBankItem(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     solution_steps: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 3 MCQ wrong-answer options, generated at the same time as the
+    # solution. Populated by question_bank_generation; consumed by the
+    # school-student practice loop so it can serve MCQs with zero LLM
+    # calls per kid.
+    distractors: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     # status: pending / approved / rejected / archived
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
@@ -119,4 +124,61 @@ class QuestionBankGenerationJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class BankConsumption(Base):
+    """Records each approved variation served to a school student from a
+    homework practice/learn loop. One row per (student, look-alike).
+
+    The anchor is the HW primary the kid launched the loop from. Loops
+    always key off the anchor — never the current variation id — which
+    is what structurally prevents recursion (variations of variations).
+
+    `flagged` lets the in-loop flag button live on the existing row
+    rather than a separate table. `completed_at IS NULL` means "served
+    but not yet finished," which we use for refresh-safe re-serve so a
+    page reload doesn't burn through the variation pool.
+    """
+
+    __tablename__ = "bank_consumption"
+    __mapper_args__ = {"eager_defaults": True}
+    __table_args__ = (
+        Index("ix_bank_consumption_student_anchor", "student_id", "anchor_bank_item_id"),
+        Index("ix_bank_consumption_student_assignment", "student_id", "assignment_id"),
+        Index("ix_bank_consumption_bank_item", "bank_item_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+    )
+    bank_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank_items.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    anchor_bank_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank_items.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assignments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # context: homework_loop / direct_practice / direct_learn
+    # Only homework_loop is written by this PR; the others are reserved
+    # for the future direct (non-HW-anchored) practice flows.
+    context: Mapped[str] = mapped_column(String(32), nullable=False)
+    served_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

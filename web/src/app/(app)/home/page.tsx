@@ -28,6 +28,15 @@ export default function HomePage() {
     document.documentElement.removeAttribute("data-subject");
   }, []);
 
+  // School students belong in the school portal — never on personal /home.
+  // This catches direct nav, page refresh, and the second-click-after-join
+  // case where the join itself 409s but school_id was already stamped.
+  useEffect(() => {
+    if (user?.role === "student" && user.school_id) {
+      router.replace("/school/student");
+    }
+  }, [user, router]);
+
   const loadEnrolledCourses = () => {
     auth
       .enrolledCourses()
@@ -45,6 +54,15 @@ export default function HomePage() {
     try {
       await student.joinSection(joinCode.trim());
       setJoinCode("");
+      // Reload the user object — the join endpoint stamps school_id
+      // on the user, which flips them into a school student. Then
+      // route them to the school student portal.
+      await useAuthStore.getState().loadUser();
+      const refreshed = useAuthStore.getState().user;
+      if (refreshed?.role === "student" && refreshed.school_id) {
+        router.push("/school/student");
+        return;
+      }
       loadEnrolledCourses();
     } catch (err) {
       setJoinError((err as Error).message || "Invalid code");

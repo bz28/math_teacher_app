@@ -20,6 +20,7 @@ from api.routes.health import router as health_router
 from api.routes.image import router as image_router
 from api.routes.practice import router as practice_router
 from api.routes.promo import router as promo_router
+from api.routes.school_student_practice import router as school_student_router
 from api.routes.session import router as session_router
 from api.routes.teacher import router as teacher_router
 from api.routes.webhook import router as webhook_router
@@ -111,3 +112,4 @@ app.include_router(webhook_router, prefix="/v1")
 app.include_router(promo_router, prefix="/v1")
 app.include_router(contact_router, prefix="/v1")
 app.include_router(teacher_router, prefix="/v1")
+app.include_router(school_student_router, prefix="/v1")
