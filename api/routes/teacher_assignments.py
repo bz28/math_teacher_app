@@ -232,24 +232,28 @@ async def bulk_assignment_stats(
     return out
 
 
-async def bulk_section_names(
+async def bulk_section_assignments(
     db: AsyncSession, assignment_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, list[str]]:
-    """Bulk version of _get_section_names. One query, grouped in Python."""
+) -> dict[uuid.UUID, list[tuple[uuid.UUID, str]]]:
+    """One query, grouped in Python. Returns the (id, name) tuples for
+    every section attached to each assignment so callers can serialize
+    both section_ids (for editing) and section_names (for display)."""
     if not assignment_ids:
         return {}
     rows = (await db.execute(
-        select(AssignmentSection.assignment_id, Section.name)
+        select(AssignmentSection.assignment_id, Section.id, Section.name)
         .join(Section, Section.id == AssignmentSection.section_id)
         .where(AssignmentSection.assignment_id.in_(assignment_ids))
     )).all()
-    out: dict[uuid.UUID, list[str]] = {aid: [] for aid in assignment_ids}
-    for aid, name in rows:
-        out[aid].append(name)
+    out: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {aid: [] for aid in assignment_ids}
+    for aid, sid, name in rows:
+        out[aid].append((sid, name))
     return out
 
 
-def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str, Any]) -> dict[str, Any]:
+def assignment_to_dict(
+    a: Assignment, sections: list[tuple[uuid.UUID, str]], stats: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "id": str(a.id),
         "course_id": str(a.course_id),
@@ -261,7 +265,8 @@ def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str,
         "due_at": a.due_at.isoformat() if a.due_at else None,
         "late_policy": a.late_policy,
         "document_ids": a.document_ids,
-        "section_names": section_names,
+        "section_ids": [str(sid) for sid, _ in sections],
+        "section_names": [name for _, name in sections],
         # Cheap from-content count so the list view can show "5 problems"
         # without round-tripping each assignment's detail.
         "problem_count": len(problem_ids_in_content(a.content)),
@@ -340,9 +345,9 @@ async def _serialize_assignment_list(
         return []
     ids = [a.id for a in assignments]
     stats_map = await bulk_assignment_stats(db, ids)
-    section_names_map = await bulk_section_names(db, ids)
+    sections_map = await bulk_section_assignments(db, ids)
     return [
-        assignment_to_dict(a, section_names_map.get(a.id, []), stats_map.get(a.id, _EMPTY_STATS))
+        assignment_to_dict(a, sections_map.get(a.id, []), stats_map.get(a.id, _EMPTY_STATS))
         for a in assignments
     ]
 
@@ -385,9 +390,9 @@ async def get_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    section_names = (await bulk_section_names(db, [a.id])).get(a.id, [])
+    sections = (await bulk_section_assignments(db, [a.id])).get(a.id, [])
     stats = (await bulk_assignment_stats(db, [a.id])).get(a.id, _EMPTY_STATS)
-    result = assignment_to_dict(a, section_names, stats)
+    result = assignment_to_dict(a, sections, stats)
     result["content"] = await hydrate_assignment_content(db, a)
     result["answer_key"] = a.answer_key
     return result
