@@ -1,127 +1,23 @@
-import React from "react";
-import { Text, TextStyle } from "react-native";
+import React, { useMemo, useState } from "react";
+import { StyleSheet, Text, TextStyle, View } from "react-native";
+import { WebView } from "react-native-webview";
+import { colors, typography } from "../theme";
 
 /**
- * Lightweight math text renderer for mobile.
+ * Mobile MathText — renders a string that may contain inline LaTeX
+ * (`$...$`), display LaTeX (`$$...$$`), and bold markdown (`**...**`)
+ * the same way the web MathText component does, by injecting the
+ * content into a WebView with KaTeX from a CDN.
  *
- * Strips $...$ and $$...$$ delimiters and substitutes the most common LaTeX
- * commands with unicode equivalents so students stop seeing literal dollar
- * signs around symbols. This is intentionally a pure-JS approach with zero
- * native deps so it works in Expo Go without ejecting.
- *
- * Coverage:
- * - $...$, $$...$$, \(...\), \[...\] delimiters
- * - **bold** markdown
- * - Greek letters (\alpha, \beta, \pi, etc.)
- * - Common operators (\times, \div, \pm, \leq, \geq, \neq, \approx, \infty)
- * - Superscripts (x^2, x^{12})
- * - Subscripts (x_i, x_{12})
- * - \sqrt{x} and \sqrt[n]{x}
- * - \frac{a}{b}  →  a/b   (visual hack, not pretty but readable)
- *
- * Anything more complex (matrices, integrals with bounds, etc.) falls through
- * as cleaned-up text. A real KaTeX-via-WebView renderer is the next step if
- * we need pretty rendering.
+ * Implementation notes:
+ * - One WebView per MathText instance. The HTML uses KaTeX from jsdelivr
+ *   and reports its rendered content height back to React Native via
+ *   window.ReactNativeWebView.postMessage so the WebView can be sized
+ *   precisely (no internal scroll, no extra whitespace).
+ * - If the input contains no math/bold markers, we fall back to a
+ *   plain `<Text>` to avoid the cost of spinning up a WebView for
+ *   simple text (e.g. queue chips).
  */
-
-const GREEK: Record<string, string> = {
-  alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", zeta: "ζ",
-  eta: "η", theta: "θ", iota: "ι", kappa: "κ", lambda: "λ", mu: "μ",
-  nu: "ν", xi: "ξ", omicron: "ο", pi: "π", rho: "ρ", sigma: "σ",
-  tau: "τ", upsilon: "υ", phi: "φ", chi: "χ", psi: "ψ", omega: "ω",
-  Alpha: "Α", Beta: "Β", Gamma: "Γ", Delta: "Δ", Epsilon: "Ε", Zeta: "Ζ",
-  Eta: "Η", Theta: "Θ", Iota: "Ι", Kappa: "Κ", Lambda: "Λ", Mu: "Μ",
-  Nu: "Ν", Xi: "Ξ", Omicron: "Ο", Pi: "Π", Rho: "Ρ", Sigma: "Σ",
-  Tau: "Τ", Upsilon: "Υ", Phi: "Φ", Chi: "Χ", Psi: "Ψ", Omega: "Ω",
-};
-
-const OPERATORS: Record<string, string> = {
-  times: "×", div: "÷", pm: "±", mp: "∓", cdot: "·",
-  leq: "≤", geq: "≥", neq: "≠", approx: "≈", equiv: "≡", sim: "∼",
-  infty: "∞", partial: "∂", nabla: "∇", forall: "∀", exists: "∃",
-  in: "∈", notin: "∉", subset: "⊂", supset: "⊃", cup: "∪", cap: "∩",
-  sum: "∑", prod: "∏", int: "∫", to: "→", rightarrow: "→", leftarrow: "←",
-  Rightarrow: "⇒", Leftarrow: "⇐", leftrightarrow: "↔", degree: "°",
-};
-
-const SUPER_DIGITS: Record<string, string> = {
-  "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
-  "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
-  "+": "⁺", "-": "⁻", "(": "⁽", ")": "⁾", "n": "ⁿ", "i": "ⁱ",
-};
-
-const SUB_DIGITS: Record<string, string> = {
-  "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
-  "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
-  "+": "₊", "-": "₋", "(": "₍", ")": "₎",
-  "a": "ₐ", "e": "ₑ", "i": "ᵢ", "j": "ⱼ", "o": "ₒ", "x": "ₓ", "n": "ₙ",
-};
-
-function toSuper(s: string): string {
-  return s.split("").map((c) => SUPER_DIGITS[c] ?? c).join("");
-}
-
-function toSub(s: string): string {
-  return s.split("").map((c) => SUB_DIGITS[c] ?? c).join("");
-}
-
-/** Replace LaTeX inside a math segment with unicode-friendly text. */
-function renderMathSegment(input: string): string {
-  let s = input;
-
-  // \frac{a}{b} → (a)/(b) — recursive in case of nested
-  for (let i = 0; i < 3; i++) {
-    const before = s;
-    s = s.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "($1)/($2)");
-    if (s === before) break;
-  }
-
-  // \sqrt[n]{x} → ⁿ√(x)
-  s = s.replace(/\\sqrt\s*\[([^\]]*)\]\s*\{([^{}]*)\}/g, (_m, n, x) => `${toSuper(n)}√(${x})`);
-  // \sqrt{x} → √(x)
-  s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, "√($1)");
-
-  // x^{...} → x followed by superscript-substituted braces
-  s = s.replace(/\^\{([^{}]*)\}/g, (_m, body) => toSuper(body));
-  // x^c (single char/digit, no braces)
-  s = s.replace(/\^(\w)/g, (_m, c) => toSuper(c));
-
-  // x_{...}
-  s = s.replace(/_\{([^{}]*)\}/g, (_m, body) => toSub(body));
-  // x_c
-  s = s.replace(/_(\w)/g, (_m, c) => toSub(c));
-
-  // Greek letters
-  s = s.replace(/\\([A-Za-z]+)/g, (m, name) => {
-    if (GREEK[name]) return GREEK[name];
-    if (OPERATORS[name]) return OPERATORS[name];
-    return m; // leave unknown commands alone
-  });
-
-  // Strip stray braces from grouping
-  s = s.replace(/[{}]/g, "");
-
-  return s;
-}
-
-/** Split bold markdown into parts; bold parts are wrapped. */
-function renderBoldRuns(text: string, baseStyle: TextStyle): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  parts.forEach((part, i) => {
-    if (!part) return;
-    if (part.startsWith("**") && part.endsWith("**")) {
-      out.push(
-        <Text key={`b${i}`} style={[baseStyle, { fontWeight: "700" }]}>
-          {part.slice(2, -2)}
-        </Text>,
-      );
-    } else {
-      out.push(part);
-    }
-  });
-  return out;
-}
 
 interface MathTextProps {
   text: string;
@@ -129,45 +25,149 @@ interface MathTextProps {
   numberOfLines?: number;
 }
 
-/**
- * Render text with embedded math.
- *
- * Splits on $...$, $$...$$, \(...\), and \[...\] delimiters. Math segments are
- * passed through `renderMathSegment` for unicode substitution. Plain segments
- * additionally support **bold** markdown.
- */
+const HAS_MATH_OR_BOLD = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*)/;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function buildHtml(text: string, color: string, fontSize: number, fontWeight: string): string {
+  // Escape HTML in non-math segments only; pass math segments through verbatim
+  // so KaTeX can parse them.
+  const parts: string[] = [];
+  const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*)/g;
+  let last = 0;
+  for (const m of text.matchAll(pattern)) {
+    const idx = m.index!;
+    if (idx > last) parts.push(escapeHtml(text.slice(last, idx)));
+    const seg = m[0];
+    if (seg.startsWith("$$") && seg.endsWith("$$")) {
+      parts.push(`<span class="m-display">$$${seg.slice(2, -2)}$$</span>`);
+    } else if (seg.startsWith("$") && seg.endsWith("$")) {
+      parts.push(`<span class="m-inline">$${seg.slice(1, -1)}$</span>`);
+    } else if (seg.startsWith("**") && seg.endsWith("**")) {
+      parts.push(`<strong>${escapeHtml(seg.slice(2, -2))}</strong>`);
+    }
+    last = idx + seg.length;
+  }
+  if (last < text.length) parts.push(escapeHtml(text.slice(last)));
+  const body = parts.join("");
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body {
+    color: ${color};
+    font-size: ${fontSize}px;
+    font-weight: ${fontWeight};
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.4;
+    overflow: hidden;
+    word-wrap: break-word;
+  }
+  .m-display { display: block; margin: 6px 0; overflow-x: auto; }
+  .katex { font-size: 1em !important; }
+  .katex-display { margin: 6px 0 !important; }
+</style>
+</head>
+<body>
+<div id="content">${body}</div>
+<script>
+  function postHeight() {
+    var h = document.getElementById('content').getBoundingClientRect().height;
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(String(Math.ceil(h)));
+    }
+  }
+  function render() {
+    if (window.renderMathInElement) {
+      window.renderMathInElement(document.body, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+    }
+    setTimeout(postHeight, 30);
+    setTimeout(postHeight, 200);
+  }
+  if (document.readyState === 'complete') render();
+  else window.addEventListener('load', render);
+</script>
+</body>
+</html>`;
+}
+
 export function MathText({ text, style, numberOfLines }: MathTextProps) {
+  const [height, setHeight] = useState(20);
+
   if (!text) return null;
 
-  // Split on $$...$$, $...$, \(...\), \[...\]
-  // We use a single regex with alternation; capture groups identify delimiters.
-  const splitter = /(\$\$[^$]+\$\$|\$[^$]+\$|\\\([^)]*\\\)|\\\[[^\]]*\\\])/g;
-  const parts = text.split(splitter);
+  const hasMath = HAS_MATH_OR_BOLD.test(text);
 
-  const baseStyle: TextStyle = style ?? {};
+  // Plain text fast path — no WebView, just a Text node
+  if (!hasMath) {
+    return (
+      <Text style={style ?? defaultTextStyle} numberOfLines={numberOfLines}>
+        {text}
+      </Text>
+    );
+  }
+
+  const color = (style?.color as string) ?? colors.text;
+  const fontSize = (style?.fontSize as number) ?? 14;
+  const fontWeight = String(style?.fontWeight ?? "400");
+
+  const html = useMemo(
+    () => buildHtml(text, color, fontSize, fontWeight),
+    [text, color, fontSize, fontWeight],
+  );
 
   return (
-    <Text style={baseStyle} numberOfLines={numberOfLines}>
-      {parts.map((part, i) => {
-        if (!part) return null;
-        // Detect math delimiters and strip them
-        let inner: string | null = null;
-        if (part.startsWith("$$") && part.endsWith("$$")) inner = part.slice(2, -2);
-        else if (part.startsWith("$") && part.endsWith("$")) inner = part.slice(1, -1);
-        else if (part.startsWith("\\(") && part.endsWith("\\)")) inner = part.slice(2, -2);
-        else if (part.startsWith("\\[") && part.endsWith("\\]")) inner = part.slice(2, -2);
-
-        if (inner !== null) {
-          return (
-            <Text key={i} style={[baseStyle, { fontStyle: "italic" }]}>
-              {renderMathSegment(inner)}
-            </Text>
-          );
-        }
-
-        // Non-math text — handle bold
-        return <React.Fragment key={i}>{renderBoldRuns(part, baseStyle)}</React.Fragment>;
-      })}
-    </Text>
+    <View style={[styles.webviewWrap, { height }]}>
+      <WebView
+        source={{ html }}
+        style={styles.webview}
+        scrollEnabled={false}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+        javaScriptEnabled
+        domStorageEnabled
+        originWhitelist={["*"]}
+        backgroundColor="transparent"
+        onMessage={(e) => {
+          const h = parseInt(e.nativeEvent.data, 10);
+          if (!isNaN(h) && h > 0 && Math.abs(h - height) > 1) setHeight(h);
+        }}
+      />
+    </View>
   );
 }
+
+const defaultTextStyle: TextStyle = {
+  ...typography.body,
+  color: colors.text,
+};
+
+const styles = StyleSheet.create({
+  webviewWrap: {
+    width: "100%",
+    backgroundColor: "transparent",
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+});
