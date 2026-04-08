@@ -260,6 +260,40 @@ export function QuestionBankTab({
         />
       )}
 
+      {/* ReviewModal renders FIRST so that modals opened from inside
+          it (Edit → WorkshopModal) stack visually on top via DOM
+          order. Both share z-50; later siblings win. */}
+      {primaryReviewQueue && (
+        <ReviewModal
+          courseId={courseId}
+          queue={primaryReviewQueue}
+          onClose={() => {
+            setPrimaryReviewQueue(null);
+            reload();
+          }}
+          onChanged={reload}
+          onEditItem={(item) => setOpenItem(item)}
+        />
+      )}
+
+      {reviewQueue && (
+        <WorkshopModal
+          queue={reviewQueue}
+          onClose={() => {
+            setReviewQueue(null);
+            // If this queue was a focused variation review, drop the
+            // teacher back on the parent question instead of the bare
+            // bank — keeps the mental thread intact.
+            if (reviewQueueParent) {
+              setOpenItem(reviewQueueParent);
+            }
+            reload();
+          }}
+          onChanged={reload}
+          onJobStarted={setActiveJob}
+        />
+      )}
+
       {openItem && (
         // Prefer the freshest copy from items (in case reload brought
         // updated content); fall back to the stashed openItem so the
@@ -275,40 +309,6 @@ export function QuestionBankTab({
           onJobStarted={setActiveJob}
           activeJob={activeJob}
           onReviewVariations={openVariationReview}
-        />
-      )}
-
-      {reviewQueue && (
-        <WorkshopModal
-          queue={reviewQueue}
-          onClose={() => {
-            setReviewQueue(null);
-            // If this queue was a focused variation review, drop the
-            // teacher back on the parent question instead of the bare
-            // bank — keeps the mental thread intact. We rely on the
-            // stashed reviewQueueParent (full BankItem) so restoration
-            // works regardless of the current status tab.
-            if (reviewQueueParent) {
-              setOpenItem(reviewQueueParent);
-              // reviewQueueParent stays set; cleared when the modal closes.
-            }
-            reload();
-          }}
-          onChanged={reload}
-          onJobStarted={setActiveJob}
-        />
-      )}
-
-      {primaryReviewQueue && (
-        <ReviewModal
-          courseId={courseId}
-          queue={primaryReviewQueue}
-          onClose={() => {
-            setPrimaryReviewQueue(null);
-            reload();
-          }}
-          onChanged={reload}
-          onEditItem={(item) => setOpenItem(item)}
         />
       )}
 
