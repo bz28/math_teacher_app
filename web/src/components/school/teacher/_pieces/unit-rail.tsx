@@ -1,7 +1,7 @@
 "use client";
 
 import type { TeacherUnit } from "@/lib/api";
-import { subfoldersOf, topUnits } from "@/lib/units";
+import { topUnits } from "@/lib/units";
 import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 
 // Selection model for the rail. "all" = no filter; "uncategorized" =
@@ -23,6 +23,11 @@ interface UnitRailProps {
 // Mirrors the materials FolderTree visual language: rounded rows,
 // purple accent on the selected row, count pill on the right. Read-
 // only — unit creation/rename/delete lives in the materials tab.
+//
+// Only top-level units are listed. Subfolders are an organizational
+// concept INSIDE a unit (used by the materials tab) and don't make
+// sense as filters here — a HW or question is in a unit, not in a
+// "math / algebra" subfolder of math.
 export function UnitRail({
   units,
   selected,
@@ -57,34 +62,16 @@ export function UnitRail({
         <p className="px-2 py-2 text-xs text-text-muted">No units yet.</p>
       )}
       <ul className="space-y-0.5">
-        {tops.map((u) => {
-          const subs = subfoldersOf(units, u.id);
-          return (
-            <li key={u.id}>
-              <RailRow
-                label={u.name}
-                count={countFor(u.id)}
-                active={selected === u.id}
-                onSelect={() => onSelect(u.id)}
-              />
-              {subs.length > 0 && (
-                <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border-light pl-2">
-                  {subs.map((sub) => (
-                    <li key={sub.id}>
-                      <RailRow
-                        label={sub.name}
-                        count={countFor(sub.id)}
-                        active={selected === sub.id}
-                        isSub
-                        onSelect={() => onSelect(sub.id)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
+        {tops.map((u) => (
+          <li key={u.id}>
+            <RailRow
+              label={u.name}
+              count={countFor(u.id)}
+              active={selected === u.id}
+              onSelect={() => onSelect(u.id)}
+            />
+          </li>
+        ))}
       </ul>
     </div>
   );
@@ -94,13 +81,11 @@ function RailRow({
   label,
   count,
   active,
-  isSub,
   onSelect,
 }: {
   label: string;
   count: number;
   active: boolean;
-  isSub?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -119,14 +104,12 @@ function RailRow({
           className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-primary"
         />
       )}
-      {active && !isSub ? (
+      {active ? (
         <FolderOpenIcon className="h-4 w-4 shrink-0 text-primary" />
       ) : (
-        <FolderIcon
-          className={`h-4 w-4 shrink-0 ${active ? "text-primary" : "text-text-muted"}`}
-        />
+        <FolderIcon className="h-4 w-4 shrink-0 text-text-muted" />
       )}
-      <span className={`min-w-0 flex-1 truncate ${isSub ? "text-[13px]" : ""}`}>{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       <span
         className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
           active

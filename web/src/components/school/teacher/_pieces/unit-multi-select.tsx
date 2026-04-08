@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { teacher, type TeacherUnit } from "@/lib/api";
-import { subfoldersOf, topUnits } from "@/lib/units";
+import { topUnits } from "@/lib/units";
 
 // Compact multi-select for picking 1+ units. Used by the homework
 // creation flows. Single-select is the dominant case (a HW for one
 // unit) but multi-select supports midterms / review HWs that span
 // units. Required: enforces ≥1 unit at submit time via the parent's
 // validation.
+//
+// Only top-level units are pickable. Subfolders inside a unit are
+// organizational (like "math / algebra") and don't make sense as
+// standalone HW targets — a homework belongs to "math", not to
+// "math / algebra".
 export function UnitMultiSelect({
   courseId,
   selected,
@@ -66,27 +71,15 @@ export function UnitMultiSelect({
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      {tops.flatMap((top) => {
-        const subs = subfoldersOf(units, top.id);
-        return [
-          <UnitChip
-            key={top.id}
-            label={top.name}
-            active={selected.includes(top.id)}
-            disabled={disabled}
-            onToggle={() => toggle(top.id)}
-          />,
-          ...subs.map((sub) => (
-            <UnitChip
-              key={sub.id}
-              label={`${top.name} / ${sub.name}`}
-              active={selected.includes(sub.id)}
-              disabled={disabled}
-              onToggle={() => toggle(sub.id)}
-            />
-          )),
-        ];
-      })}
+      {tops.map((top) => (
+        <UnitChip
+          key={top.id}
+          label={top.name}
+          active={selected.includes(top.id)}
+          disabled={disabled}
+          onToggle={() => toggle(top.id)}
+        />
+      ))}
     </div>
   );
 }

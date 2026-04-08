@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BankItem, TeacherUnit } from "@/lib/api";
-import { unitLabel as labelForUnit } from "@/lib/units";
+import { unitLabel as labelForUnit, topUnitIdOf } from "@/lib/units";
 import { MathText } from "@/components/shared/math-text";
 import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 import { DIFFICULTY_STYLE } from "./constants";
@@ -343,9 +343,12 @@ function ProblemCard({
   const pendingChildren = node.children.filter((c) => c.status === "pending").length;
   const hasVariations = childrenCount > 0;
 
-  // Borrowed = the problem's unit isn't in the HW's units list.
+  // Borrowed = the problem's TOP unit isn't in the HW's units list.
+  // Roll the item's unit_id up to its top so a question saved into a
+  // subfolder of the HW's unit isn't mistakenly flagged as borrowed.
+  const itemTopUnit = topUnitIdOf(units, item.unit_id);
   const borrowed =
-    item.unit_id !== null && hwUnitIds.length > 0 && !hwUnitIds.includes(item.unit_id);
+    itemTopUnit !== null && hwUnitIds.length > 0 && !hwUnitIds.includes(itemTopUnit);
   const itemUnitLabel = labelForUnit(units, item.unit_id);
 
   // Outer wrapper is a <div>, not a <button>, so we can nest the
