@@ -104,16 +104,49 @@ export function QuestionBankTab({
     }
   };
 
-  // Open Flow A review with all currently-pending PRIMARY items
-  // (no parent_question_id) as the frozen queue. Hits a fresh fetch so
-  // we don't accidentally review stale items if the current status
-  // filter is hiding pending ones.
+  // Open the right review flow given the current pending state.
+  // Prefers Flow A (primaries) when any exist; otherwise falls back to
+  // Flow B for the parent with the most pending variations. Avoids the
+  // silent no-op the tray would otherwise hit when only variations are
+  // pending.
   const startReview = async () => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
       const primaries = res.items.filter((i) => !i.parent_question_id);
-      if (primaries.length === 0) return;
-      setPrimaryReviewQueue(primaries);
+      if (primaries.length > 0) {
+        setPrimaryReviewQueue(primaries);
+        return;
+      }
+      const variations = res.items.filter((i) => i.parent_question_id);
+      if (variations.length === 0) return;
+      // Group variations by parent_question_id and pick the parent
+      // with the most pending children — most efficient batch first.
+      const byParent = new Map<string, BankItem[]>();
+      for (const v of variations) {
+        const pid = v.parent_question_id;
+        if (!pid) continue;
+        const arr = byParent.get(pid) ?? [];
+        arr.push(v);
+        byParent.set(pid, arr);
+      }
+      const sorted = Array.from(byParent.entries()).sort(
+        (a, b) => b[1].length - a[1].length,
+      );
+      if (sorted.length === 0) return;
+      const [parentId, children] = sorted[0];
+      // Need the parent BankItem for the modal header. Generate-similar
+      // requires the parent to be approved, so look there.
+      let parentItem = items.find((i) => i.id === parentId);
+      if (!parentItem) {
+        const approvedRes = await teacher.bank(courseId, { status: "approved" });
+        parentItem = approvedRes.items.find((i) => i.id === parentId);
+      }
+      if (!parentItem) {
+        setError("Couldn't find the parent question for these pending variations.");
+        return;
+      }
+      setReviewQueueParent(parentItem);
+      setVariationReviewQueue(children);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load pending");
     }
@@ -273,6 +306,7 @@ export function QuestionBankTab({
         <ReviewModal
           courseId={courseId}
           queue={primaryReviewQueue}
+          active={editFromReviewItem === null}
           onClose={() => {
             setPrimaryReviewQueue(null);
             reload();
@@ -287,6 +321,7 @@ export function QuestionBankTab({
           courseId={courseId}
           queue={variationReviewQueue}
           parent={reviewQueueParent}
+          active={editFromReviewItem === null}
           onClose={() => {
             setVariationReviewQueue(null);
             // Drop the teacher back on the parent's workshop so the

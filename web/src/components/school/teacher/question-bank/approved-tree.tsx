@@ -35,44 +35,56 @@ export function ApprovedUnitFolder({
 }) {
   const [unitOpen, setUnitOpen] = useState(true);
 
-  const { hwGroups, unattached } = useMemo(() => {
+  const { hwGroups, inTestOrQuiz, unattached } = useMemo(() => {
     const tree = buildTree(items);
     const hwMap = new Map<
       string,
       { id: string; title: string; status: string; nodes: TreeNode[] }
     >();
+    const inTestOrQuiz: TreeNode[] = [];
     const unattached: TreeNode[] = [];
     for (const node of tree) {
       const homeworkRefs = node.item.used_in.filter(
         (u) => u.type === "homework",
       );
-      if (homeworkRefs.length === 0) {
-        unattached.push(node);
+      if (homeworkRefs.length > 0) {
+        for (const hw of homeworkRefs) {
+          const existing = hwMap.get(hw.id);
+          if (existing) {
+            existing.nodes.push(node);
+          } else {
+            hwMap.set(hw.id, {
+              id: hw.id,
+              title: hw.title,
+              status: hw.status,
+              nodes: [node],
+            });
+          }
+        }
         continue;
       }
-      for (const hw of homeworkRefs) {
-        const existing = hwMap.get(hw.id);
-        if (existing) {
-          existing.nodes.push(node);
-        } else {
-          hwMap.set(hw.id, {
-            id: hw.id,
-            title: hw.title,
-            status: hw.status,
-            nodes: [node],
-          });
-        }
+      // Not in any homework. Distinguish "in a test/quiz only" (a real
+      // attachment, just not the scope of this redesign) from truly
+      // orphaned questions — labelling the former as "Unattached"
+      // would mislead the teacher.
+      if (node.item.used_in.length > 0) {
+        inTestOrQuiz.push(node);
+      } else {
+        unattached.push(node);
       }
     }
     return {
       hwGroups: Array.from(hwMap.values()).sort((a, b) =>
         a.title.localeCompare(b.title),
       ),
+      inTestOrQuiz,
       unattached,
     };
   }, [items]);
 
-  const totalCount = items.length;
+  // Total count for the unit header — count primaries only. A unit
+  // with 1 primary and 5 approved variations has 1 *question*, not 6.
+  const totalCount = items.filter((i) => !i.parent_question_id).length;
 
   return (
     <section className="rounded-[--radius-lg] border border-border-light bg-surface shadow-sm">
@@ -109,8 +121,24 @@ export function ApprovedUnitFolder({
             />
           ))}
 
+          {inTestOrQuiz.length > 0 && (
+            <SecondarySection
+              icon="📊"
+              label="In a test or quiz"
+              hint="not in any homework"
+              nodes={inTestOrQuiz}
+              units={units}
+              onOpenItem={onOpenItem}
+              onOpenHomework={onOpenHomework}
+              onChanged={onChanged}
+            />
+          )}
+
           {unattached.length > 0 && (
-            <UnattachedSection
+            <SecondarySection
+              icon="📂"
+              label="Unattached"
+              hint="not in any assignment"
               nodes={unattached}
               units={units}
               onOpenItem={onOpenItem}
@@ -119,7 +147,7 @@ export function ApprovedUnitFolder({
             />
           )}
 
-          {hwGroups.length === 0 && unattached.length === 0 && (
+          {hwGroups.length === 0 && inTestOrQuiz.length === 0 && unattached.length === 0 && (
             <div className="rounded-[--radius-md] border border-dashed border-border-light px-3 py-8 text-center text-xs italic text-text-muted">
               No approved questions in this unit yet.
             </div>
@@ -212,13 +240,22 @@ function HomeworkCard({
   );
 }
 
-function UnattachedSection({
+// Generic non-HW section: holds primaries that are either in a test/
+// quiz only (test scope is deferred) or truly orphaned. Same shape as
+// HomeworkCard but without the draft/published pill or "Open ↗" link.
+function SecondarySection({
+  icon,
+  label,
+  hint,
   nodes,
   units,
   onOpenItem,
   onOpenHomework,
   onChanged,
 }: {
+  icon: string;
+  label: string;
+  hint: string;
   nodes: TreeNode[];
   units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
@@ -234,10 +271,10 @@ function UnattachedSection({
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
         <span className="text-text-muted">{open ? "▾" : "▸"}</span>
-        <span className="text-base">📂</span>
-        <span className="font-bold text-text-secondary">Unattached</span>
+        <span className="text-base">{icon}</span>
+        <span className="font-bold text-text-secondary">{label}</span>
         <span className="text-[11px] font-semibold text-text-muted">
-          · {nodes.length} not in any homework
+          · {nodes.length} {hint}
         </span>
       </button>
       {open && (

@@ -13,11 +13,16 @@ import { teacher, type TeacherAssignment } from "@/lib/api";
 // parent can do the approve + attach in one logical action.
 export function DestinationPicker({
   courseId,
+  busy = false,
   onClose,
   onPickExisting,
   onCreateNew,
 }: {
   courseId: string;
+  /** True while the parent is processing the pick. Disables all
+   *  buttons + the form so the teacher can't double-submit during
+   *  the network round-trip. */
+  busy?: boolean;
   onClose: () => void;
   onPickExisting: (assignment: TeacherAssignment) => void;
   onCreateNew: (title: string) => void;
@@ -29,16 +34,24 @@ export function DestinationPicker({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
     teacher
       .assignments(courseId)
       .then((res) => {
+        if (cancelled) return;
         setDrafts(
           res.assignments.filter(
             (a) => a.type === "homework" && a.status !== "published",
           ),
         );
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load homeworks"));
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Failed to load homeworks");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]);
 
   // Click-outside dismiss.
@@ -52,6 +65,7 @@ export function DestinationPicker({
 
   const submitNew = (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     const t = newTitle.trim();
     if (!t) return;
     onCreateNew(t);
@@ -78,7 +92,8 @@ export function DestinationPicker({
               <button
                 type="button"
                 onClick={() => onPickExisting(a)}
-                className="block w-full rounded-[--radius-md] px-2 py-1.5 text-left text-sm text-text-primary hover:bg-bg-subtle"
+                disabled={busy}
+                className="block w-full rounded-[--radius-md] px-2 py-1.5 text-left text-sm text-text-primary hover:bg-bg-subtle disabled:opacity-50"
               >
                 <span className="font-semibold">{a.title}</span>
                 <span className="ml-2 text-[10px] uppercase tracking-wider text-text-muted">
@@ -98,16 +113,17 @@ export function DestinationPicker({
             autoFocus
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
+            disabled={busy}
             placeholder="Homework title"
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
           />
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={!newTitle.trim()}
+              disabled={busy || !newTitle.trim()}
               className="flex-1 rounded-[--radius-md] bg-primary px-2 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
             >
-              Create &amp; add
+              {busy ? "Creating…" : "Create & add"}
             </button>
             <button
               type="button"
@@ -115,7 +131,8 @@ export function DestinationPicker({
                 setCreating(false);
                 setNewTitle("");
               }}
-              className="rounded-[--radius-md] border border-border-light px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-subtle"
+              disabled={busy}
+              className="rounded-[--radius-md] border border-border-light px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
             >
               Cancel
             </button>

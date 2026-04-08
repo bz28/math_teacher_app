@@ -228,7 +228,9 @@ function KebabMenu({
   // Confirm-on-reject only when the item is currently in some draft
   // HW — yanking it out has a side effect the teacher should
   // acknowledge. Plain pending items reject without ceremony.
-  const draftRefs = item.used_in.filter((u) => u.status !== "published");
+  // Match draft explicitly so future statuses (archived, etc.) don't
+  // accidentally trip the confirm path.
+  const draftRefs = item.used_in.filter((u) => u.status === "draft");
   const needsRejectConfirm = draftRefs.length > 0;
 
   return (
@@ -285,7 +287,7 @@ function KebabMenu({
             <div className="border-t border-border-light bg-amber-50 px-3 py-2 text-[10px] text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
               Will be removed from{" "}
               {draftRefs.map((r, i) => (
-                <span key={r.id}>
+                <span key={`${r.id}-${i}`}>
                   <span className="font-bold">{r.title}</span>
                   {i < draftRefs.length - 1 ? ", " : ""}
                 </span>

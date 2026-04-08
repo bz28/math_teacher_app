@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 import { teacher, type BankItem, type TeacherAssignment } from "@/lib/api";
 import { DestinationPicker } from "./destination-picker";
@@ -28,6 +28,7 @@ export function ReviewModal({
   courseId,
   queue,
   parent,
+  active = true,
   onClose,
   onChanged,
   onEditItem,
@@ -36,6 +37,10 @@ export function ReviewModal({
   queue: BankItem[];
   /** When set, this is Flow B (variation review). */
   parent?: BankItem;
+  /** False when another modal (e.g. WorkshopModal opened via Edit) is
+   *  layered on top. Suspends the keyboard handler so global shortcuts
+   *  don't fire on the obscured modal underneath. */
+  active?: boolean;
   onClose: () => void;
   // Bubble after every successful action so the parent can refetch
   // the bank list and counts.
@@ -191,46 +196,66 @@ export function ReviewModal({
   const dismissNudge = () => setVariationNudge(null);
 
   // ── Keyboard shortcuts ──
+  // Stash the latest action handlers in a ref so the keydown listener
+  // always sees fresh closures without re-binding the listener on every
+  // render. The listener itself only re-binds when `active` flips.
+  const handlersRef = useRef({
+    reject,
+    skip,
+    approveVariation,
+    onEditItem,
+    onClose,
+    setShowPicker,
+    setShowSolution,
+  });
+  handlersRef.current = {
+    reject,
+    skip,
+    approveVariation,
+    onEditItem,
+    onClose,
+    setShowPicker,
+    setShowSolution,
+  };
+
   useEffect(() => {
+    if (!active) return;
     const handler = (e: KeyboardEvent) => {
       if (showPicker || busy || isComplete || !current) return;
       // Don't fire on inputs (the destination picker has its own).
       const tgt = e.target as HTMLElement;
       if (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA") return;
 
+      const h = handlersRef.current;
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
-      } else if (e.key === "Enter" || e.key === "a" || e.key === "A") {
-        // Flow B only: Enter / A = approve.
-        if (flow === "variation") {
-          e.preventDefault();
-          approveVariation();
-        }
-      } else if (e.key === "h" || e.key === "H") {
-        // Flow A only.
-        if (flow === "primary") {
-          e.preventDefault();
-          setShowPicker(true);
-        }
+        h.onClose();
+      } else if (
+        flow === "variation" &&
+        (e.key === "Enter" || e.key === "a" || e.key === "A")
+      ) {
+        e.preventDefault();
+        h.approveVariation();
+      } else if (flow === "primary" && (e.key === "h" || e.key === "H")) {
+        e.preventDefault();
+        h.setShowPicker(true);
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
-        reject();
+        h.reject();
       } else if (e.key === "s" || e.key === "S") {
         e.preventDefault();
-        skip();
+        h.skip();
       } else if (e.key === "e" || e.key === "E") {
         e.preventDefault();
-        onEditItem(current);
+        h.onEditItem(current);
       } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
-        setShowSolution((v) => !v);
+        h.setShowSolution((v) => !v);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, showPicker, busy, isComplete]);
+  }, [active, current, showPicker, busy, isComplete, flow]);
 
   // ── Render ──
 
@@ -325,6 +350,7 @@ export function ReviewModal({
                   {showPicker && (
                     <DestinationPicker
                       courseId={courseId}
+                      busy={busy}
                       onClose={() => setShowPicker(false)}
                       onPickExisting={addToExisting}
                       onCreateNew={createAndAdd}

@@ -396,13 +396,13 @@ export function WorkshopModal({
       // Most action shortcuts are gated when a proposal is pending
       if (isProposalPending) return;
 
-      if (e.key === "Enter" || e.key === "a" || e.key === "A") {
+      if (!editOnly && (e.key === "Enter" || e.key === "a" || e.key === "A")) {
         e.preventDefault();
         handlersRef.current.approve();
-      } else if (e.key === "x" || e.key === "X") {
+      } else if (!editOnly && (e.key === "x" || e.key === "X")) {
         e.preventDefault();
         handlersRef.current.reject();
-      } else if (e.key === "s" || e.key === "S") {
+      } else if (!editOnly && (e.key === "s" || e.key === "S")) {
         if (isQueueMode) {
           e.preventDefault();
           handlersRef.current.skip();
@@ -417,7 +417,7 @@ export function WorkshopModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [allResolved, busy, isProposalPending, isQueueMode, onClose]);
+  }, [allResolved, busy, isProposalPending, isQueueMode, editOnly, onClose]);
 
   // ── Render: empty queue or completion ────────────────────────────
   if (isQueueMode && total === 0) {
