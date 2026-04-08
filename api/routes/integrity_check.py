@@ -19,7 +19,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.integrity_pipeline import compute_badge
+from api.core.integrity_pipeline import (
+    STATUS_COMPLETE,
+    STATUS_DISMISSED,
+    STATUS_SKIPPED_UNREADABLE,
+    TERMINAL_STATUSES,
+    VERDICT_BAD,
+    VERDICT_GOOD,
+    VERDICT_SKIPPED,
+    VERDICT_WEAK,
+    compute_badge,
+)
 from api.core.integrity_stub import rephrase_question, score_answer
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
@@ -135,8 +145,8 @@ def _derive_overall_status(
 ) -> str:
     if not problems:
         return "no_check"
-    if all(p.status in ("complete", "dismissed", "skipped_unreadable") for p, _ in problems):
-        return "complete"
+    if all(p.status in TERMINAL_STATUSES for p, _ in problems):
+        return STATUS_COMPLETE
     return "in_progress"
 
 
@@ -186,7 +196,7 @@ async def get_next_question(
 
     total_problems = len(grouped)
     for p, responses in grouped:
-        if p.status == "dismissed" or p.status == "skipped_unreadable":
+        if p.status in (STATUS_DISMISSED, STATUS_SKIPPED_UNREADABLE):
             continue
         for r in responses:
             if r.student_answer is None:
@@ -263,16 +273,16 @@ async def submit_answer(
     )).scalars().all()
     all_answered = all(r.student_answer is not None for r in siblings)
     if all_answered:
-        verdicts = [r.answer_verdict or "skipped" for r in siblings]
+        verdicts = [r.answer_verdict or VERDICT_SKIPPED for r in siblings]
         # Stub doesn't emit flags yet; PR 4 will populate them.
         badge, raw = compute_badge(verdicts, [])
-        problem.status = "complete"
+        problem.status = STATUS_COMPLETE
         problem.badge = badge
         problem.raw_score = raw
         problem.ai_reasoning = (
-            f"Stub: {sum(1 for v in verdicts if v == 'good')}/{len(verdicts)} good, "
-            f"{sum(1 for v in verdicts if v == 'weak')} weak, "
-            f"{sum(1 for v in verdicts if v == 'bad')} bad"
+            f"Stub: {sum(1 for v in verdicts if v == VERDICT_GOOD)}/{len(verdicts)} good, "
+            f"{sum(1 for v in verdicts if v == VERDICT_WEAK)} weak, "
+            f"{sum(1 for v in verdicts if v == VERDICT_BAD)} bad"
         )
 
     await db.commit()
@@ -431,8 +441,11 @@ async def teacher_dismiss_problem(
     if problem is None or problem.submission_id != submission_id:
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    if not problem.teacher_dismissed:
-        problem.teacher_dismissed = True
-        problem.teacher_dismissal_reason = body.reason or None
-        problem.status = "dismissed"
-        await db.commit()
+    # Always apply: a teacher who re-dismisses with a different
+    # reason should be able to update it (the previous behavior
+    # silently dropped the new reason). The status flip is
+    # idempotent — re-setting to dismissed is a no-op write.
+    problem.teacher_dismissed = True
+    problem.teacher_dismissal_reason = body.reason or None
+    problem.status = STATUS_DISMISSED
+    await db.commit()

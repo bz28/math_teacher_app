@@ -556,13 +556,23 @@ async def test_teacher_dismiss_marks_problem(
     assert p["teacher_dismissal_reason"] == "AI question was bad"
     assert p["status"] == "dismissed"
 
-    # Idempotent — dismissing again is a no-op (still 204)
+    # Re-dismiss with a different reason updates the reason (the
+    # earlier impl silently dropped the new value via an `if not
+    # already_dismissed` guard — reverted that to allow updates).
     r = await client.post(
         f"/v1/teacher/integrity/submissions/{submission_id}/dismiss",
         headers=_auth(world["teacher_token"]),
-        json={"problem_id": problem_id, "reason": "again"},
+        json={"problem_id": problem_id, "reason": "actually it was a typo in the rubric"},
     )
     assert r.status_code == 204
+
+    detail3 = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    p = detail3["problems"][0]
+    assert p["teacher_dismissed"] is True
+    assert p["teacher_dismissal_reason"] == "actually it was a typo in the rubric"
 
 
 async def test_pipeline_idempotent_on_direct_re_call(

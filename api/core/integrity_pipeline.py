@@ -1,4 +1,4 @@
-"""Integrity-checker pipeline orchestrator.
+"""Integrity-checker pipeline orchestrator + shared constants.
 
 The single entry point is `start_integrity_check(submission_id, db)`,
 called from `submit_homework` immediately after the submission row
@@ -42,6 +42,38 @@ logger = logging.getLogger(__name__)
 
 MAX_SAMPLE = 5
 
+# Per-problem status state machine. Centralized so a typo anywhere
+# in the codebase fails at import time, not silently at runtime.
+STATUS_PENDING = "pending"
+STATUS_GENERATING = "generating"
+STATUS_AWAITING_STUDENT = "awaiting_student"
+STATUS_SCORING = "scoring"
+STATUS_COMPLETE = "complete"
+STATUS_DISMISSED = "dismissed"
+STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
+
+# "Done" set: a problem in any of these states does NOT contribute
+# to in_progress and is skipped by the next-question walker.
+TERMINAL_STATUSES = frozenset({
+    STATUS_COMPLETE,
+    STATUS_DISMISSED,
+    STATUS_SKIPPED_UNREADABLE,
+})
+
+# Verdicts the scorer can emit. Stub uses good/weak/bad; PR 4 will
+# add skipped + rephrased.
+VERDICT_GOOD = "good"
+VERDICT_WEAK = "weak"
+VERDICT_BAD = "bad"
+VERDICT_SKIPPED = "skipped"
+VERDICT_REPHRASED = "rephrased"
+
+# Badge values surfaced to the teacher.
+BADGE_LIKELY = "likely"
+BADGE_UNCERTAIN = "uncertain"
+BADGE_UNLIKELY = "unlikely"
+BADGE_UNREADABLE = "unreadable"
+
 
 def compute_badge(verdicts: list[str], flags: list[str]) -> tuple[str, float]:
     """Map a set of per-question verdicts + flags onto a per-problem
@@ -57,20 +89,26 @@ def compute_badge(verdicts: list[str], flags: list[str]) -> tuple[str, float]:
     boundaries.
     """
     if not verdicts:
-        return ("uncertain", 0.0)
+        return (BADGE_UNCERTAIN, 0.0)
 
-    weights = {"good": 1.0, "weak": 0.5, "bad": 0.0, "skipped": 0.0, "rephrased": 0.8}
+    weights = {
+        VERDICT_GOOD: 1.0,
+        VERDICT_WEAK: 0.5,
+        VERDICT_BAD: 0.0,
+        VERDICT_SKIPPED: 0.0,
+        VERDICT_REPHRASED: 0.8,
+    }
     score = sum(weights.get(v, 0.0) for v in verdicts) / len(verdicts)
 
     hard_flags = {"contradicts_own_work", "acknowledges_cheating"}
     if any(f in hard_flags for f in flags):
-        return ("unlikely", score)
+        return (BADGE_UNLIKELY, score)
 
     if score >= 0.75:
-        return ("likely", score)
+        return (BADGE_LIKELY, score)
     if score >= 0.40:
-        return ("uncertain", score)
-    return ("unlikely", score)
+        return (BADGE_UNCERTAIN, score)
+    return (BADGE_UNLIKELY, score)
 
 
 async def start_integrity_check(
@@ -159,7 +197,7 @@ async def start_integrity_check(
             submission_id=submission_id,
             bank_item_id=bid,
             sample_position=sample_position,
-            status="awaiting_student",
+            status=STATUS_AWAITING_STUDENT,
             student_work_extraction=extraction,
         )
         db.add(problem_row)
