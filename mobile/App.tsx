@@ -18,6 +18,7 @@ import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSession
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
 import { useSessionStore } from "./src/stores/session";
+import { loadThemePref } from "./src/stores/themePref";
 
 const ONBOARDING_KEY = "onboarding_completed";
 
@@ -52,6 +53,9 @@ function AppRoot() {
       setScreen("auth");
       setFromOnboarding(false);
     });
+
+    // Hydrate theme preference from secure storage (best-effort)
+    loadThemePref().catch(() => {});
 
     SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
       if (!done) {

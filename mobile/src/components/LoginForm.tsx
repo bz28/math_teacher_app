@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Platform,
@@ -16,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { useFadeInUp } from "../hooks/useFadeInUp";
-import { login, saveTokens } from "../services/api";
+import { forgotPassword, login, saveTokens } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
 import { colors, spacing, radii, typography, gradients } from "../theme";
 
@@ -50,6 +51,24 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      Alert.alert("Email required", "Enter your email address above first.");
+      return;
+    }
+    try {
+      await forgotPassword(trimmed);
+      Alert.alert(
+        "Check your email",
+        "If an account exists for that email, we've sent a password reset link.",
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Error", errorMessage(e));
     }
   };
 
@@ -119,6 +138,15 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
               <Text style={styles.error}>{error}</Text>
             </View>
           )}
+
+          <TouchableOpacity
+            onPress={handleForgotPassword}
+            style={styles.forgotButton}
+            accessibilityRole="button"
+            accessibilityLabel="Forgot password"
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
 
           <AnimatedPressable
             style={(loading || !email || !password) && styles.buttonDisabled}
@@ -218,6 +246,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: colors.text,
     includeFontPadding: false,
+  },
+  forgotButton: {
+    alignSelf: "flex-end",
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  forgotText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 13,
   },
   eyeButton: {
     paddingHorizontal: 16,

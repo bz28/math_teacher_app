@@ -20,6 +20,7 @@ import { BackButton } from "./BackButton";
 import { PaywallScreen } from "./PaywallScreen";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
+import { useThemePref, type ThemePref } from "../stores/themePref";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface AccountScreenProps {
@@ -62,6 +63,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
   const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
   const [paywallVisible, setPaywallVisible] = useState(false);
+  const { pref: themePref, setPref: setThemePref } = useThemePref();
 
   // Delete account state
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -206,6 +208,43 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
             </LinearGradient>
           </AnimatedPressable>
         )}
+
+        {/* Appearance */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>APPEARANCE</Text>
+          <View style={[styles.appearanceCard, shadows.sm]}>
+            {([
+              { key: "system" as ThemePref, label: "System", icon: "phone-portrait-outline" as IoniconsName },
+              { key: "light" as ThemePref, label: "Light", icon: "sunny-outline" as IoniconsName },
+              { key: "dark" as ThemePref, label: "Dark", icon: "moon-outline" as IoniconsName },
+            ]).map((opt) => {
+              const active = opt.key === themePref;
+              return (
+                <AnimatedPressable
+                  key={opt.key}
+                  style={[styles.appearanceOption, active && styles.appearanceOptionActive]}
+                  onPress={() => setThemePref(opt.key)}
+                  scaleDown={0.96}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${opt.label} theme${active ? ", selected" : ""}`}
+                  accessibilityState={{ selected: active }}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={18}
+                    color={active ? colors.primary : colors.textMuted}
+                  />
+                  <Text style={[styles.appearanceText, active && styles.appearanceTextActive]}>
+                    {opt.label}
+                  </Text>
+                </AnimatedPressable>
+              );
+            })}
+          </View>
+          <Text style={styles.appearanceHint}>
+            Defaults to system. Dark mode color rendering ships in a follow-up update.
+          </Text>
+        </View>
 
         {/* Delete Account */}
         <AnimatedPressable style={styles.deleteButton} onPress={handleDeleteAccount} scaleDown={0.97}>
@@ -446,6 +485,48 @@ const styles = StyleSheet.create({
   upgradeButtonText: {
     ...typography.button,
     color: colors.white,
+  },
+  // Appearance section
+  section: {
+    marginTop: spacing.xl,
+  },
+  sectionLabel: {
+    ...typography.small,
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
+  appearanceCard: {
+    flexDirection: "row",
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    padding: spacing.xs,
+    gap: spacing.xs,
+  },
+  appearanceOption: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+  },
+  appearanceOptionActive: {
+    backgroundColor: colors.primaryBg,
+  },
+  appearanceText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  appearanceTextActive: {
+    color: colors.primary,
+  },
+  appearanceHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    textAlign: "center",
   },
   deleteButton: {
     flexDirection: "row",
