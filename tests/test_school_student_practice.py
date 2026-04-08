@@ -308,6 +308,66 @@ async def test_complete_consumption_not_yours(client: AsyncClient, world: dict[s
     assert r2.status_code == 403
 
 
+async def test_list_classes(client: AsyncClient, world: dict[str, Any]) -> None:
+    r = await client.get("/v1/school/student/classes", headers=_auth(world["student_token"]))
+    assert r.status_code == 200
+    out = r.json()
+    assert len(out) == 1
+    assert out[0]["course_name"] == "Algebra 1"
+    assert out[0]["section_name"] == "Period 1"
+
+    # Outsider sees nothing
+    r = await client.get("/v1/school/student/classes", headers=_auth(world["outsider_token"]))
+    assert r.json() == []
+
+
+async def test_list_homework_for_course(client: AsyncClient, world: dict[str, Any]) -> None:
+    # Get course id from classes
+    classes = (await client.get(
+        "/v1/school/student/classes", headers=_auth(world["student_token"])
+    )).json()
+    course_id = classes[0]["course_id"]
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/homework",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    out = r.json()
+    assert len(out) == 1
+    assert out[0]["title"] == "HW 1"
+    assert out[0]["problem_count"] == 1
+
+    # Outsider sees nothing for this course
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/homework",
+        headers=_auth(world["outsider_token"]),
+    )
+    assert r.json() == []
+
+
+async def test_homework_detail(client: AsyncClient, world: dict[str, Any]) -> None:
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    out = r.json()
+    assert out["title"] == "HW 1"
+    assert out["course_name"] == "Algebra 1"
+    assert len(out["problems"]) == 1
+    assert out["problems"][0]["bank_item_id"] == str(world["primary_id"])
+    # 3 approved siblings (pending one excluded)
+    assert out["problems"][0]["approved_variation_count"] == 3
+
+
+async def test_homework_detail_403_for_outsider(client: AsyncClient, world: dict[str, Any]) -> None:
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}",
+        headers=_auth(world["outsider_token"]),
+    )
+    assert r.status_code == 403
+
+
 async def test_flag_and_list_flagged(client: AsyncClient, world: dict[str, Any]) -> None:
     # Serve + flag two siblings, complete one without flag
     served_ids = []

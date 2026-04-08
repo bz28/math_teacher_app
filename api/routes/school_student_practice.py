@@ -36,7 +36,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection
+from api.models.course import Course
 from api.models.question_bank import BankConsumption, QuestionBankItem
+from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from api.services.bank import problem_ids_in_content
@@ -83,6 +85,41 @@ class FlaggedConsumption(BaseModel):
     consumption_id: str
     variation: VariationPayload
     served_at: datetime
+
+
+class StudentClassSummary(BaseModel):
+    section_id: str
+    section_name: str
+    course_id: str
+    course_name: str
+    course_subject: str
+
+
+class StudentHomeworkSummary(BaseModel):
+    assignment_id: str
+    title: str
+    type: str
+    due_at: datetime | None
+    problem_count: int
+
+
+class StudentHomeworkProblem(BaseModel):
+    bank_item_id: str
+    position: int
+    question: str
+    final_answer: str | None
+    difficulty: str
+    approved_variation_count: int
+
+
+class StudentHomeworkDetail(BaseModel):
+    assignment_id: str
+    title: str
+    type: str
+    due_at: datetime | None
+    course_id: str
+    course_name: str
+    problems: list[StudentHomeworkProblem]
 
 
 # ── Helpers ──
@@ -141,6 +178,148 @@ def _bank_item_id_belongs_to_assignment(assignment: Assignment, bank_item_id: uu
 
 
 # ── Endpoints ──
+
+@router.get("/classes")
+async def list_classes(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> list[StudentClassSummary]:
+    """Return every section the student is enrolled in, joined with the
+    parent course. Used by the school-student class picker."""
+    rows = (await db.execute(
+        select(Section, Course)
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .join(Course, Course.id == Section.course_id)
+        .where(SectionEnrollment.student_id == user.id)
+        .order_by(Course.name.asc(), Section.name.asc())
+    )).all()
+    return [
+        StudentClassSummary(
+            section_id=str(section.id),
+            section_name=section.name,
+            course_id=str(course.id),
+            course_name=course.name,
+            course_subject=course.subject,
+        )
+        for section, course in rows
+    ]
+
+
+@router.get("/courses/{course_id}/homework")
+async def list_homework(
+    course_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> list[StudentHomeworkSummary]:
+    """Return every published assignment for a course that the student
+    has access to via at least one section enrollment. Drafts are
+    invisible to students."""
+    # Find sections this student is enrolled in for this course
+    section_rows = (await db.execute(
+        select(SectionEnrollment.section_id)
+        .join(Section, Section.id == SectionEnrollment.section_id)
+        .where(
+            SectionEnrollment.student_id == user.id,
+            Section.course_id == course_id,
+        )
+    )).scalars().all()
+    if not section_rows:
+        return []
+
+    # Two-step to avoid DISTINCT on a row containing the JSON content
+    # column (Postgres has no equality operator for json).
+    aid_rows = (await db.execute(
+        select(Assignment.id)
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.status == "published",
+            AssignmentSection.section_id.in_(section_rows),
+        )
+        .distinct()
+    )).scalars().all()
+    rows = (await db.execute(
+        select(Assignment)
+        .where(Assignment.id.in_(aid_rows))
+        .order_by(Assignment.due_at.asc().nullslast(), Assignment.created_at.desc())
+    )).scalars().all() if aid_rows else []
+
+    return [
+        StudentHomeworkSummary(
+            assignment_id=str(a.id),
+            title=a.title,
+            type=a.type,
+            due_at=a.due_at,
+            problem_count=len(problem_ids_in_content(a.content)),
+        )
+        for a in rows
+    ]
+
+
+@router.get("/homework/{assignment_id}")
+async def homework_detail(
+    assignment_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentHomeworkDetail:
+    """Return the full HW detail for the student view: each primary
+    problem with its question text and an approved-variation count
+    (used by the HW page to disable the loop button when zero)."""
+    assignment = await _load_assignment_for_student(db, assignment_id, user.id)
+    course = (await db.execute(
+        select(Course).where(Course.id == assignment.course_id)
+    )).scalar_one()
+
+    primary_ids = [uuid.UUID(p) for p in problem_ids_in_content(assignment.content)]
+    primaries: dict[str, QuestionBankItem] = {}
+    if primary_ids:
+        items = (await db.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id.in_(primary_ids))
+        )).scalars().all()
+        primaries = {str(it.id): it for it in items}
+
+    # Approved variation counts per primary, in one query
+    counts: dict[str, int] = dict.fromkeys((str(pid) for pid in primary_ids), 0)
+    if primary_ids:
+        from sqlalchemy import func as sqlfunc
+        rows = (await db.execute(
+            select(
+                QuestionBankItem.parent_question_id,
+                sqlfunc.count(QuestionBankItem.id),
+            )
+            .where(
+                QuestionBankItem.parent_question_id.in_(primary_ids),
+                QuestionBankItem.status == "approved",
+            )
+            .group_by(QuestionBankItem.parent_question_id)
+        )).all()
+        for parent_id, n in rows:
+            counts[str(parent_id)] = int(n)
+
+    problems: list[StudentHomeworkProblem] = []
+    for pos, pid in enumerate(primary_ids, start=1):
+        item = primaries.get(str(pid))
+        if not item:
+            continue  # silently drop deleted refs
+        problems.append(StudentHomeworkProblem(
+            bank_item_id=str(item.id),
+            position=pos,
+            question=item.question,
+            final_answer=item.final_answer,
+            difficulty=item.difficulty,
+            approved_variation_count=counts.get(str(pid), 0),
+        ))
+
+    return StudentHomeworkDetail(
+        assignment_id=str(assignment.id),
+        title=assignment.title,
+        type=assignment.type,
+        due_at=assignment.due_at,
+        course_id=str(course.id),
+        course_name=course.name,
+        problems=problems,
+    )
+
 
 @router.post("/homework/{assignment_id}/problems/{bank_item_id}/next-variation")
 async def next_variation(
