@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { schoolStudent, type FlaggedConsumption, type VariationPayload } from "@/lib/api";
+import { schoolStudent, type FlaggedConsumption } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
 import { LearnLoopSurface } from "./learn-loop-surface";
-import type { LoopResult } from "./practice-loop-surface";
+import type { LoopResult, LoopState } from "./practice-loop-surface";
 
 interface Props {
   assignmentId: string;
@@ -29,11 +29,7 @@ export function PracticeSummary({
   results,
   onBackToHomework,
 }: Props) {
-  const [learnInitial, setLearnInitial] = useState<{
-    variation: VariationPayload;
-    consumption_id: string;
-    remaining: number;
-  } | null>(null);
+  const [learnQueue, setLearnQueue] = useState<LoopState[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,19 +48,17 @@ export function PracticeSummary({
         setError("No flagged problems to learn.");
         return;
       }
-      // Seed the learn surface with the first flagged variation. The
-      // Learn surface advances via next-variation, which serves the
-      // next unseen sibling — *not* specifically a flagged one. For v1
-      // this is acceptable: the student gets a full Learn pass over
-      // the anchor's pool starting from the flagged seed. Tightening
-      // to "only flagged in order" requires a dedicated learn-queue
-      // endpoint and is deferred.
-      const first = flaggedRows[0];
-      setLearnInitial({
-        variation: first.variation,
-        consumption_id: first.consumption_id,
-        remaining: flaggedRows.length - 1,
-      });
+      // Build an explicit queue of every flagged variation. We hand
+      // it to LearnLoopSurface so it walks through them locally
+      // instead of calling next-variation — which would exhaust
+      // immediately because all siblings are already in this
+      // student's consumption history at this point.
+      const queue: LoopState[] = flaggedRows.map((r, i) => ({
+        variation: r.variation,
+        consumption_id: r.consumption_id,
+        remaining: flaggedRows.length - i - 1,
+      }));
+      setLearnQueue(queue);
     } catch {
       setError("Couldn't load your flagged problems. Try again.");
     } finally {
@@ -72,13 +66,14 @@ export function PracticeSummary({
     }
   }
 
-  if (learnInitial) {
+  if (learnQueue) {
     return (
       <LearnLoopSurface
         assignmentId={assignmentId}
         anchorBankItemId={anchorBankItemId}
         problemPosition={problemPosition}
-        initial={learnInitial}
+        initial={learnQueue[0]}
+        queue={learnQueue}
         onDone={onBackToHomework}
         onExit={onBackToHomework}
         // From the practice summary's flagged-learn queue we don't

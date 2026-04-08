@@ -19,6 +19,13 @@ interface Props {
    *  *current* look-alike. The parent re-renders the Practice surface
    *  seeded with this state — no new sibling, no new consumption row. */
   onSwitchToPractice: (state: LoopState) => void;
+  /** Optional explicit walk-list. When set, "Learn similar (next)"
+   *  pops the next item from this queue instead of calling
+   *  next-variation. Used by the practice summary's "Learn N flagged"
+   *  flow so we walk through ALL flagged variations in order — the
+   *  default next-variation path would exhaust after the first one
+   *  because all siblings are already in the consumption history. */
+  queue?: LoopState[];
 }
 
 /**
@@ -39,10 +46,14 @@ export function LearnLoopSurface({
   onDone,
   onExit,
   onSwitchToPractice,
+  queue,
 }: Props) {
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
-  const [remaining, setRemaining] = useState<number>(initial.remaining);
+  const [remaining, setRemaining] = useState<number>(
+    queue ? queue.length : initial.remaining,
+  );
+  const [queueIdx, setQueueIdx] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +68,24 @@ export function LearnLoopSurface({
     setError(null);
     try {
       await schoolStudent.completeConsumption(consumptionId);
+
+      // Queue-walk path: pop the next pre-fetched item. Used by the
+      // "Learn N flagged" flow where next-variation would exhaust.
+      if (queue) {
+        const nextIdx = queueIdx + 1;
+        if (nextIdx >= queue.length) {
+          onDone();
+          return;
+        }
+        const next = queue[nextIdx];
+        setVariation(next.variation);
+        setConsumptionId(next.consumption_id);
+        setRemaining(queue.length - nextIdx - 1);
+        setQueueIdx(nextIdx);
+        setStepIdx(0);
+        return;
+      }
+
       const resp = await schoolStudent.nextVariation(assignmentId, anchorBankItemId, "learn");
       if (resp.status === "served") {
         setVariation(resp.variation);

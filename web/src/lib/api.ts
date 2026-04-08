@@ -999,7 +999,8 @@ export interface StudentHomeworkProblem {
   bank_item_id: string;
   position: number;
   question: string;
-  final_answer: string | null;
+  // final_answer is intentionally omitted: the HW primary is locked
+  // and the student must not be able to read the answer client-side.
   difficulty: string;
   approved_variation_count: number;
 }

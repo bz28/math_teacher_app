@@ -30,7 +30,7 @@ type Mode =
       problem: StudentHomeworkProblem;
       initial: { variation: VariationPayload; consumption_id: string; remaining: number };
     }
-  | { kind: "summary"; problem: StudentHomeworkProblem; results: LoopResult[] };
+  | { kind: "summary"; problem: StudentHomeworkProblem };
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
@@ -38,6 +38,10 @@ export default function HomeworkPage() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
+  // Practice results live here (not in PracticeLoopSurface) so they
+  // survive a Practice → Learn → Practice lens swap, which re-mounts
+  // the practice surface and would otherwise wipe local state.
+  const [practiceResults, setPracticeResults] = useState<LoopResult[]>([]);
 
   useEffect(() => {
     if (!assignmentId) return;
@@ -47,12 +51,25 @@ export default function HomeworkPage() {
       .catch(() => setError("Couldn't load this homework. Please try again."));
   }, [assignmentId]);
 
+  function appendResult(r: LoopResult) {
+    setPracticeResults((rs) => [...rs, r]);
+  }
+
+  function updateResult(consumptionId: string, patch: Partial<LoopResult>) {
+    setPracticeResults((rs) =>
+      rs.map((r) => (r.consumption_id === consumptionId ? { ...r, ...patch } : r)),
+    );
+  }
+
   async function startLoop(problem: StudentHomeworkProblem, kind: "practice" | "learn") {
     if (!assignmentId) return;
     setLoadingProblemId(problem.bank_item_id);
     try {
       const resp = await schoolStudent.nextVariation(assignmentId, problem.bank_item_id, kind);
       if (resp.status === "served") {
+        // Fresh entry from the HW page = new loop session, so reset
+        // any prior practice results from a previous problem.
+        setPracticeResults([]);
         setMode({
           kind,
           problem,
@@ -101,7 +118,10 @@ export default function HomeworkPage() {
         anchorBankItemId={mode.problem.bank_item_id}
         problemPosition={mode.problem.position}
         initial={mode.initial}
-        onDone={(results) => setMode({ kind: "summary", problem: mode.problem, results })}
+        results={practiceResults}
+        onAppendResult={appendResult}
+        onUpdateResult={updateResult}
+        onDone={() => setMode({ kind: "summary", problem: mode.problem })}
         onExit={() => setMode({ kind: "homework" })}
         onSwitchToLearn={(state) =>
           setMode({ kind: "learn", problem: mode.problem, initial: state })
@@ -132,7 +152,7 @@ export default function HomeworkPage() {
         assignmentId={hw.assignment_id}
         anchorBankItemId={mode.problem.bank_item_id}
         problemPosition={mode.problem.position}
-        results={mode.results}
+        results={practiceResults}
         onBackToHomework={() => setMode({ kind: "homework" })}
       />
     );

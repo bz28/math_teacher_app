@@ -357,6 +357,10 @@ async def test_homework_detail(client: AsyncClient, world: dict[str, Any]) -> No
     assert out["problems"][0]["bank_item_id"] == str(world["primary_id"])
     # 3 approved siblings (pending one excluded)
     assert out["problems"][0]["approved_variation_count"] == 3
+    # SECURITY: the locked HW primary's final_answer must NOT be sent
+    # to the student. Otherwise opening DevTools reveals the answer.
+    assert "final_answer" not in out["problems"][0]
+    assert "solution_steps" not in out["problems"][0]
 
 
 async def test_homework_detail_403_for_outsider(client: AsyncClient, world: dict[str, Any]) -> None:

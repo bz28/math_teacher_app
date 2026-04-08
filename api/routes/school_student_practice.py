@@ -30,7 +30,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -107,7 +107,11 @@ class StudentHomeworkProblem(BaseModel):
     bank_item_id: str
     position: int
     question: str
-    final_answer: str | None
+    # NOTE: final_answer and solution_steps are deliberately NOT exposed
+    # for HW primaries — the homework problem is locked and the student
+    # is not supposed to be able to read the answer (or any AI-assisted
+    # walkthrough) before submitting. Look-alikes are different and DO
+    # ship answer + steps because that's the whole point of practice.
     difficulty: str
     approved_variation_count: int
 
@@ -305,7 +309,6 @@ async def homework_detail(
             bank_item_id=str(item.id),
             position=pos,
             question=item.question,
-            final_answer=item.final_answer,
             difficulty=item.difficulty,
             approved_variation_count=counts.get(str(pid), 0),
         ))
@@ -433,23 +436,21 @@ async def next_variation(
 
 
 async def _seen_count(db: AsyncSession, student_id: uuid.UUID, anchor_id: uuid.UUID) -> int:
-    rows = (await db.execute(
-        select(BankConsumption.id).where(
+    return int((await db.execute(
+        select(func.count(BankConsumption.id)).where(
             BankConsumption.student_id == student_id,
             BankConsumption.anchor_bank_item_id == anchor_id,
         )
-    )).scalars().all()
-    return len(rows)
+    )).scalar_one())
 
 
 async def _approved_sibling_count(db: AsyncSession, anchor_id: uuid.UUID) -> int:
-    rows = (await db.execute(
-        select(QuestionBankItem.id).where(
+    return int((await db.execute(
+        select(func.count(QuestionBankItem.id)).where(
             QuestionBankItem.parent_question_id == anchor_id,
             QuestionBankItem.status == "approved",
         )
-    )).scalars().all()
-    return len(rows)
+    )).scalar_one())
 
 
 @router.post("/bank-consumption/{consumption_id}/complete", status_code=204)

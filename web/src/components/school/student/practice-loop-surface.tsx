@@ -1,9 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { schoolStudent, type VariationPayload } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
+
+/**
+ * Deterministic shuffle seeded by a string. Same seed → same order,
+ * so the MCQ choices don't reshuffle on every render but DO differ
+ * across look-alikes. Without this the correct answer would always
+ * be option A and kids would spot the pattern instantly.
+ */
+function shuffleStable<T>(arr: T[], seed: string): T[] {
+  // Simple deterministic hash → mulberry32 PRNG
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const rand = () => {
+    h |= 0;
+    h = (h + 0x6d2b79f5) | 0;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 export interface LoopResult {
   consumption_id: string;
@@ -24,10 +52,14 @@ interface Props {
   anchorBankItemId: string;
   problemPosition: number;
   initial: LoopState;
-  /** Called when the loop ends (exhausted, or student tapped Done).
-   *  Receives the per-variation results so the parent can show a
-   *  practice summary with flag/learn-flagged state. */
-  onDone: (results: LoopResult[]) => void;
+  /** Per-variation results live in the parent so they survive a
+   *  Practice → Learn → Practice lens swap (which re-mounts this
+   *  surface). The parent owns the array; we append via a callback. */
+  results: LoopResult[];
+  onAppendResult: (r: LoopResult) => void;
+  onUpdateResult: (consumptionId: string, patch: Partial<LoopResult>) => void;
+  /** Called when the loop ends (exhausted, or student tapped Done). */
+  onDone: () => void;
   /** Called when the student wants to leave the loop without finishing. */
   onExit: () => void;
   /** Called when the student wants to switch to Learn mode on the
@@ -49,6 +81,9 @@ export function PracticeLoopSurface({
   anchorBankItemId,
   problemPosition,
   initial,
+  results,
+  onAppendResult,
+  onUpdateResult,
   onDone,
   onExit,
   onSwitchToLearn,
@@ -58,19 +93,23 @@ export function PracticeLoopSurface({
   const [remaining, setRemaining] = useState<number>(initial.remaining);
   const [picked, setPicked] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
-  const [results, setResults] = useState<LoopResult[]>([]);
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const correctAnswer = (variation.final_answer || "").trim();
 
-  // Build the option set: shuffle the correct answer in with the
-  // teacher-pre-stored distractors. Stable ordering per render via
-  // the variation id as a key in the parent.
-  const choices: string[] = (() => {
-    const out = [correctAnswer, ...(variation.distractors || [])].filter(Boolean);
-    return out;
-  })();
+  // Build the option set: correct answer + teacher-pre-stored
+  // distractors, deterministically shuffled by the variation id so
+  // the order is stable across re-renders but the correct answer
+  // isn't always option A.
+  const choices = useMemo(
+    () =>
+      shuffleStable(
+        [correctAnswer, ...(variation.distractors || [])].filter(Boolean),
+        variation.bank_item_id,
+      ),
+    [variation.bank_item_id, correctAnswer, variation.distractors],
+  );
 
   function handlePick(choice: string) {
     if (revealed) return;
@@ -80,26 +119,24 @@ export function PracticeLoopSurface({
 
   async function pushResultAndAdvance(nextAction: "next" | "done") {
     if (!picked) return;
-    const result: LoopResult = {
-      consumption_id: consumptionId,
-      variation,
-      picked,
-      correct: picked.trim() === correctAnswer,
-      flagged: false, // toggled separately via flag button
-    };
-    const allResults = [...results, result];
-    setResults(allResults);
+    // Only append a result row the first time this consumption is
+    // resolved — guard against double-appends if the user double-taps
+    // or if a lens swap re-mounts us with a result already recorded.
+    if (!results.some((r) => r.consumption_id === consumptionId)) {
+      onAppendResult({
+        consumption_id: consumptionId,
+        variation,
+        picked,
+        correct: picked.trim() === correctAnswer,
+        flagged: false, // toggled separately via flag button
+      });
+    }
 
     // Mark current consumption complete
     try {
       await schoolStudent.completeConsumption(consumptionId);
     } catch {
       /* non-fatal */
-    }
-
-    if (nextAction === "done") {
-      onDone(allResults);
-      return;
     }
 
     // Pull next variation
@@ -115,7 +152,7 @@ export function PracticeLoopSurface({
         setRevealed(false);
       } else {
         // Exhausted or empty → done
-        onDone(allResults);
+        onDone();
       }
     } catch {
       setError("Couldn't load the next problem. Try again.");
@@ -125,18 +162,25 @@ export function PracticeLoopSurface({
   }
 
   async function toggleFlag() {
-    // Flag toggles persist on the in-flight consumption row directly.
-    // We track a local "this row is currently flagged" by re-fetching
-    // would be overkill — flip the latest result entry too if present.
-    const wasFlagged = results.find((r) => r.consumption_id === consumptionId)?.flagged ?? false;
-    const next = !wasFlagged;
+    if (!picked) return; // shouldn't happen — button is gated on `revealed`
+    const existing = results.find((r) => r.consumption_id === consumptionId);
+    const next = !(existing?.flagged ?? false);
     try {
       await schoolStudent.flagConsumption(consumptionId, next);
-      setResults((rs) =>
-        rs.some((r) => r.consumption_id === consumptionId)
-          ? rs.map((r) => (r.consumption_id === consumptionId ? { ...r, flagged: next } : r))
-          : rs,
-      );
+      // If the kid flags before tapping "next", we don't yet have a
+      // result row for this consumption. Append one now so the flag
+      // is reflected in the eventual practice summary.
+      if (!existing) {
+        onAppendResult({
+          consumption_id: consumptionId,
+          variation,
+          picked,
+          correct: picked.trim() === correctAnswer,
+          flagged: next,
+        });
+      } else {
+        onUpdateResult(consumptionId, { flagged: next });
+      }
     } catch {
       /* non-fatal */
     }
