@@ -226,6 +226,13 @@ export function SolveScreen({
   const isLoading = sessionPhase === "loading";
   const displayError = error ?? sessionError;
 
+  // Subject-aware accent colors. MUST be declared BEFORE any early returns
+  // (rules of hooks — useMemo cannot be skipped between renders).
+  const theme = useMemo(
+    () => ({ primary: activeSubject.primary, primaryBg: activeSubject.primaryBg }),
+    [activeSubject.primary, activeSubject.primaryBg],
+  );
+
   // Image preview phase
   if (extractionPhase === "preview" && imageUri) {
     return (
@@ -277,14 +284,6 @@ export function SolveScreen({
     return `${verb} (${totalProblems})`;
   })();
 
-  // Subject-aware accent colors that flow through the whole screen.
-  // MUST be memoized — recomputing on every keystroke caused TextInput
-  // re-renders that interrupted the keyboard in physics/chemistry modes.
-  const theme = useMemo(
-    () => ({ primary: activeSubject.primary, primaryBg: activeSubject.primaryBg }),
-    [activeSubject.primary, activeSubject.primaryBg],
-  );
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       {/* Subject pill row — OUTSIDE KeyboardAvoidingView so it never reflows */}
@@ -292,8 +291,7 @@ export function SolveScreen({
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Mode segmented control */}
         <View style={styles.modeRow}>
@@ -329,7 +327,6 @@ export function SolveScreen({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          automaticallyAdjustKeyboardInsets
         >
           <Text style={styles.greetingTitle}>What can I help you solve?</Text>
 
