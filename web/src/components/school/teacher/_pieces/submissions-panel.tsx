@@ -29,11 +29,11 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
-  // Derived: we're loading the detail iff a row is open and the
-  // detail object hasn't arrived yet. Avoids a separate state slice
-  // (and the cascading-render lint rule that comes with setting it
-  // synchronously inside the fetch effect).
-  const detailLoading = openId !== null && detail === null;
+  // Derived: we're loading the detail iff a row is open, the detail
+  // object hasn't arrived, AND no error has been recorded. Excluding
+  // the error state prevents the spinner from getting stuck "Loading…"
+  // forever next to the error message when the fetch fails.
+  const detailLoading = openId !== null && detail === null && error === null;
 
   useEffect(() => {
     teacher
@@ -66,6 +66,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   function closeDetail() {
     setOpenId(null);
     setDetail(null);
+    setError(null);
   }
 
   return (
@@ -148,7 +149,16 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                 )}
               </div>
 
-              {detail.problems.length > 0 && (
+              {/* Only render the per-problem table if the student
+                  actually has typed answers for at least one problem.
+                  New submissions (post-`require image` change) have
+                  null for every student_answer until the integrity
+                  checker fills them in, and rendering 10 rows of
+                  "blank" is noise that adds no signal. Once the
+                  integrity checker ships, this section will light
+                  up automatically. */}
+              {detail.problems.length > 0 &&
+                detail.problems.some((p) => p.student_answer) && (
                 <div>
                   <div className="text-sm font-semibold text-text-primary">Per-problem answers</div>
                   <ul className="mt-2 space-y-3">

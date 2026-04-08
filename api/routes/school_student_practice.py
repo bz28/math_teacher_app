@@ -418,12 +418,18 @@ async def submit_homework(
         raise HTTPException(status_code=400, detail="An image of your work is required")
     if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
         raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
-    # Accept either a data URL or a raw base64 PNG/JPEG.
+    # Accept PNG or JPEG only — both as raw base64 magic bytes or as
+    # an explicit data URL. Tighter than `data:image/*` to keep SVG
+    # (and any other image type that might land later) out of the
+    # storage path. The frontend file picker filters to these two
+    # types but a tampered client could bypass that.
     head = body.image_base64[:32]
     if not (
-        head.startswith("data:image/")
-        or head.startswith("iVBOR")  # PNG
-        or head.startswith("/9j/")    # JPEG
+        head.startswith("data:image/png;base64,")
+        or head.startswith("data:image/jpeg;base64,")
+        or head.startswith("data:image/jpg;base64,")
+        or head.startswith("iVBOR")  # PNG raw
+        or head.startswith("/9j/")    # JPEG raw
     ):
         raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
 

@@ -471,6 +471,33 @@ async def test_submit_homework_400_bad_image_format(
     assert r.status_code == 400
 
 
+async def test_submit_homework_400_rejects_svg(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # Even though browsers don't execute scripts in SVGs loaded via
+    # <img src=...>, we tighten the magic check to PNG/JPEG only so
+    # nothing exotic ends up in the storage path.
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="},
+    )
+    assert r.status_code == 400
+
+
+async def test_submit_homework_accepts_data_url_png(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    # Confirm the data URL form (what the frontend now sends after the
+    # MIME-preservation fix) is accepted alongside raw base64.
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": f"data:image/png;base64,{TINY_PNG}"},
+    )
+    assert r.status_code == 200
+
+
 async def test_submit_homework_403_for_outsider(client: AsyncClient, world: dict[str, Any]) -> None:
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",

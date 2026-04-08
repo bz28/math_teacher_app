@@ -97,14 +97,39 @@ export function SubmissionPanel({
         <p className="text-xs text-text-muted">
           One picture of your full completed homework. PNG or JPEG, under 5 MB.
         </p>
-        <input
-          type="file"
-          accept="image/png,image/jpeg"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-[--radius-sm] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-white hover:file:bg-primary/90"
-        />
-        {imageFilename && (
-          <div className="mt-2 text-xs text-green-600">✓ {imageFilename} attached</div>
+        {imageBase64 ? (
+          // Visual preview so the kid can verify the right file
+          // before committing — the image is the only thing they're
+          // turning in, so they should see it.
+          <div className="mt-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageBase64}
+              alt="Preview of your work"
+              className="max-h-[400px] w-full rounded-[--radius-sm] border border-border object-contain"
+            />
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-green-600">✓ {imageFilename}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setImageBase64(null);
+                  setImageFilename(null);
+                }}
+                disabled={submitting}
+                className="rounded-[--radius-sm] border border-border px-2 py-1 font-medium text-text-secondary hover:border-error hover:text-error disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-[--radius-sm] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-white hover:file:bg-primary/90"
+          />
         )}
       </div>
 
