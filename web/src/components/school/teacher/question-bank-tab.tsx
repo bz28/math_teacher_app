@@ -12,6 +12,7 @@ import { buildUnitGroups } from "./question-bank/tree";
 import { ApprovedUnitGroup, SimpleUnitList } from "./question-bank/unit-groups";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UnitRail, type UnitSelection } from "./question-bank/unit-rail";
+import { PendingTray } from "./question-bank/pending-tray";
 
 export function QuestionBankTab({
   courseId,
@@ -119,25 +120,16 @@ export function QuestionBankTab({
             {counts.approved} approved · {counts.pending} pending · {counts.rejected} rejected
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {counts.pending > 0 && statusFilter !== "pending" && (
-            <button
-              type="button"
-              className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-              onClick={startReview}
-            >
-              Review pending ({counts.pending}) →
-            </button>
-          )}
-          <button
-            type="button"
-            className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
-            onClick={() => setShowGenerate(true)}
-          >
-            + Generate Questions
-          </button>
-        </div>
+        <button
+          type="button"
+          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+          onClick={() => setShowGenerate(true)}
+        >
+          + Generate Questions
+        </button>
       </div>
+
+      <PendingTray pendingCount={counts.pending} onReview={startReview} />
 
       {/* Active job banner — hidden for make-similar jobs since those
           have their own in-modal strip with the "Review them" CTA. */}
@@ -157,18 +149,9 @@ export function QuestionBankTab({
               ? `🔄 Generating questions… ${activeJob.produced_count}/${activeJob.requested_count}`
               : `🔄 Generating ${activeJob.requested_count} questions…`)}
           {activeJob.status === "done" && (
-            <div className="flex items-center justify-between gap-3">
-              <span>
-                ✅ Generated {activeJob.produced_count}/{activeJob.requested_count} questions
-              </span>
-              <button
-                type="button"
-                onClick={startReview}
-                className="rounded-[--radius-sm] bg-green-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-800"
-              >
-                Review now →
-              </button>
-            </div>
+            <span>
+              ✅ Generated {activeJob.produced_count}/{activeJob.requested_count} questions
+            </span>
           )}
           {activeJob.status === "failed" &&
             `❌ Generation failed: ${activeJob.error_message ?? "unknown error"}`}
