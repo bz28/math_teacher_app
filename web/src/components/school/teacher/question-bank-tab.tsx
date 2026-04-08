@@ -102,7 +102,15 @@ export function QuestionBankTab({
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
       const children = res.items.filter((i) => i.parent_question_id === parent.id);
-      if (children.length === 0) return;
+      if (children.length === 0) {
+        // Pending children were all resolved since the job tracker
+        // last cared (e.g. another tab approved them). Dismiss the
+        // stale strip and surface a clear message instead of silently
+        // no-op'ing.
+        setActiveJob(null);
+        setError("All variations for this question have already been reviewed.");
+        return;
+      }
       setActiveJob(null); // dismiss the strip — its job is done
       setOpenItem(null); // close the single-mode workshop
       setReviewQueueParent(parent);
