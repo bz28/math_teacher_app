@@ -178,7 +178,7 @@ export function ReviewModal({
     setNudgeBusy(true);
     setError(null);
     try {
-      await teacher.generateSimilarBank(variationNudge.id, { count: 5 });
+      await teacher.generateSimilarBank(variationNudge.id, { count: 2 });
       setVariationNudge(null);
       onChanged();
     } catch (e) {
