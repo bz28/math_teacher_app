@@ -333,7 +333,9 @@ export function SolveScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.greetingTitle}>What can I help you solve?</Text>
+          <Text style={styles.greetingTitle}>
+            {mode === "mock_test" ? "What can I help you test?" : "What can I help you learn?"}
+          </Text>
 
           {/* SNAP — full-width gradient hero card */}
           <AnimatedPressable
