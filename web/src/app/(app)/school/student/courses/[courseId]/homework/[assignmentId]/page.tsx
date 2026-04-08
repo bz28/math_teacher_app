@@ -249,7 +249,7 @@ export default function HomeworkPage() {
       </div>
 
       {hw.submitted && submission ? (
-        <SubmittedView submission={submission} problems={hw.problems} />
+        <SubmittedView submission={submission} />
       ) : !hw.submitted ? (
         <SubmissionPanel
           assignmentId={hw.assignment_id}

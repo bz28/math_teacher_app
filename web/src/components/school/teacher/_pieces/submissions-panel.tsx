@@ -6,7 +6,6 @@ import {
   type TeacherSubmissionDetail,
   type TeacherSubmissionRow,
 } from "@/lib/api";
-import { MathText } from "@/components/shared/math-text";
 
 interface Props {
   assignmentId: string;
@@ -149,77 +148,19 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                 )}
               </div>
 
-              {/* Only render the per-problem table if the student
-                  actually has typed answers for at least one problem.
-                  New submissions (post-`require image` change) have
-                  null for every student_answer until the integrity
-                  checker fills them in, and rendering 10 rows of
-                  "blank" is noise that adds no signal. Once the
-                  integrity checker ships, this section will light
-                  up automatically. */}
-              {detail.problems.length > 0 &&
-                detail.problems.some((p) => p.student_answer) && (
-                <div>
-                  <div className="text-sm font-semibold text-text-primary">Per-problem answers</div>
-                  <ul className="mt-2 space-y-3">
-                    {detail.problems.map((p) => (
-                      <li
-                        key={p.bank_item_id}
-                        className="rounded-[--radius-sm] border border-border bg-background p-3"
-                      >
-                        <div className="text-xs font-bold text-text-muted">
-                          Problem {p.position}
-                        </div>
-                        <div className="mt-1 text-sm text-text-primary">
-                          <MathText text={p.question} />
-                        </div>
-                        <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                          <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                              Student answered
-                            </div>
-                            <div className="mt-0.5 text-text-secondary">
-                              {p.student_answer ? (
-                                <MathText text={p.student_answer} />
-                              ) : (
-                                <span className="italic text-text-muted">— blank —</span>
-                              )}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                              Answer key
-                            </div>
-                            <div className="mt-0.5 text-text-secondary">
-                              {p.final_answer ? <MathText text={p.final_answer} /> : "—"}
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {detail.image_data && (
-                <div>
-                  <div className="text-sm font-semibold text-text-primary">Submitted work</div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={
-                      detail.image_data.startsWith("data:")
-                        ? detail.image_data
-                        : `data:image/jpeg;base64,${detail.image_data}`
-                    }
-                    alt={`${detail.student_name}'s submitted homework`}
-                    className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
-                  />
-                </div>
-              )}
-
-              {!detail.image_data && detail.problems.every((p) => !p.student_answer) && (
-                <p className="text-sm text-text-muted">No content was submitted.</p>
-              )}
+              <div>
+                <div className="text-sm font-semibold text-text-primary">Submitted work</div>
+                {/* image_data is always a full data URL — the
+                    SubmissionPanel keeps the prefix intact and the
+                    backend's magic-byte check rejects anything that
+                    isn't PNG or JPEG. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={detail.image_data ?? ""}
+                  alt={`${detail.student_name}'s submitted homework`}
+                  className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
+                />
+              </div>
             </div>
           )}
         </div>

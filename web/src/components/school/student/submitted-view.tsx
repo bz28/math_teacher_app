@@ -1,19 +1,22 @@
 "use client";
 
-import type { StudentHomeworkProblem, StudentSubmission } from "@/lib/api";
-import { MathText } from "@/components/shared/math-text";
+import type { StudentSubmission } from "@/lib/api";
 
 interface Props {
   submission: StudentSubmission;
-  problems: StudentHomeworkProblem[];
 }
 
 /**
- * Read-only view of a submitted homework. Renders below the locked
- * problem cards. Shows the uploaded image, the per-problem typed
- * answers, and the submission timestamp + late badge if applicable.
+ * Read-only view of a submitted homework. Renders the uploaded work
+ * image (the only thing the student turns in v1) plus the submission
+ * timestamp and late badge.
+ *
+ * The integrity-checker PR will add a per-problem section here for
+ * the Vision-extracted answers + the understanding-check chat
+ * results — that's why StudentSubmission.final_answers is still on
+ * the API shape even though we don't render it yet.
  */
-export function SubmittedView({ submission, problems }: Props) {
+export function SubmittedView({ submission }: Props) {
   const submittedAt = new Date(submission.submitted_at);
   return (
     <div className="mt-8 rounded-[--radius-md] border border-green-500 bg-green-50 p-6 dark:bg-green-500/10">
@@ -29,51 +32,17 @@ export function SubmittedView({ submission, problems }: Props) {
         </div>
       </div>
 
-      {Object.keys(submission.final_answers).length > 0 && (
-        <div className="mt-5">
-          <div className="text-sm font-semibold text-text-primary">Your final answers</div>
-          <ul className="mt-2 space-y-2">
-            {problems.map((p) => {
-              const ans = submission.final_answers[p.bank_item_id];
-              if (!ans) return null;
-              return (
-                <li key={p.bank_item_id} className="flex items-start gap-3 text-sm">
-                  <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
-                    {p.position}
-                  </span>
-                  <span className="text-text-secondary">
-                    <MathText text={ans} />
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {submission.image_data && (
-        <div className="mt-5">
-          <div className="text-sm font-semibold text-text-primary">Your work</div>
-          {/* image_data is now a full data URL (data:image/<type>;base64,...)
-              so MIME round-trips correctly. The startsWith fallback covers
-              any legacy rows that stored raw base64 — those default to
-              JPEG since browser sniffing handles the actual format. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={
-              submission.image_data.startsWith("data:")
-                ? submission.image_data
-                : `data:image/jpeg;base64,${submission.image_data}`
-            }
-            alt="Your submitted homework"
-            className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
-          />
-        </div>
-      )}
-
-      {!submission.image_data && Object.keys(submission.final_answers).length === 0 && (
-        <p className="mt-4 text-sm text-text-muted">No content was submitted.</p>
-      )}
+      <div className="mt-5">
+        <div className="text-sm font-semibold text-text-primary">Your work</div>
+        {/* image_data is always a full data URL (data:image/<type>;base64,...)
+            since the SubmissionPanel now keeps the prefix intact. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={submission.image_data ?? ""}
+          alt="Your submitted homework"
+          className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
+        />
+      </div>
     </div>
   );
 }
