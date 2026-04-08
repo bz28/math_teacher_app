@@ -28,6 +28,7 @@ export function ReviewModal({
   courseId,
   queue,
   parent,
+  defaultUnitIds = [],
   active = true,
   onClose,
   onChanged,
@@ -37,6 +38,8 @@ export function ReviewModal({
   queue: BankItem[];
   /** When set, this is Flow B (variation review). */
   parent?: BankItem;
+  /** Pre-select these unit ids on the inline "+ New homework" form. */
+  defaultUnitIds?: string[];
   /** False when another modal (e.g. WorkshopModal opened via Edit) is
    *  layered on top. Suspends the keyboard handler so global shortcuts
    *  don't fire on the obscured modal underneath. */
@@ -152,7 +155,7 @@ export function ReviewModal({
     }
   };
 
-  const createAndAdd = async (title: string) => {
+  const createAndAdd = async (title: string, unitIds: string[]) => {
     if (!current || busy) return;
     setBusy(true);
     setError(null);
@@ -161,6 +164,7 @@ export function ReviewModal({
       await teacher.createAssignment(courseId, {
         title,
         type: "homework",
+        unit_ids: unitIds,
         bank_item_ids: [current.id],
       });
       markResolved("added");
@@ -350,6 +354,7 @@ export function ReviewModal({
                   {showPicker && (
                     <DestinationPicker
                       courseId={courseId}
+                      defaultUnitIds={defaultUnitIds}
                       busy={busy}
                       onClose={() => setShowPicker(false)}
                       onPickExisting={addToExisting}

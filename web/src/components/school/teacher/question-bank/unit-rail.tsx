@@ -29,7 +29,10 @@ export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
   const uncategorizedCount = countFor(null);
 
   return (
-    <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-sm">
+    <div>
+      <div className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        Filter by unit
+      </div>
       <RailRow
         label="All units"
         count={totalCount}
@@ -43,7 +46,7 @@ export function UnitRail({ units, items, selected, onSelect }: UnitRailProps) {
         onSelect={() => onSelect("uncategorized")}
       />
 
-      <div className="my-2 h-px bg-border-light" />
+      <div className="my-2 h-px bg-border-light/60" />
 
       {tops.length === 0 && (
         <p className="px-2 py-2 text-xs text-text-muted">No units yet.</p>

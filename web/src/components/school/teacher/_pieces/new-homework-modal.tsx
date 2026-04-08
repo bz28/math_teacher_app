@@ -4,21 +4,28 @@ import { useState } from "react";
 import { teacher } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { BankPicker } from "./bank-picker";
+import { UnitMultiSelect } from "./unit-multi-select";
 
 /**
- * Modal for creating a new (draft) homework — title + bank picker.
- * Saves the picked bank_item_ids as the assignment's content.
+ * Modal for creating a new (draft) homework — title + units + bank
+ * picker. Every HW must belong to ≥1 unit so the question bank can
+ * group everything by unit.
  */
 export function NewHomeworkModal({
   courseId,
+  defaultUnitIds = [],
   onClose,
   onCreated,
 }: {
   courseId: string;
+  /** Pre-select these units (e.g. the unit currently filtered in the
+   *  question bank rail). Teacher can change the selection. */
+  defaultUnitIds?: string[];
   onClose: () => void;
   onCreated: () => void;
 }) {
   const [title, setTitle] = useState("");
+  const [unitIds, setUnitIds] = useState<string[]>(defaultUnitIds);
   const [picked, setPicked] = useState<string[]>([]);
   const { busy, error, setError, run } = useAsyncAction();
 
@@ -29,6 +36,10 @@ export function NewHomeworkModal({
         setError("Title is required");
         return;
       }
+      if (unitIds.length === 0) {
+        setError("Pick at least one unit");
+        return;
+      }
       if (picked.length === 0) {
         setError("Pick at least one question");
         return;
@@ -36,6 +47,7 @@ export function NewHomeworkModal({
       await teacher.createAssignment(courseId, {
         title: t,
         type: "homework",
+        unit_ids: unitIds,
         bank_item_ids: picked,
       });
       onCreated();
@@ -76,6 +88,24 @@ export function NewHomeworkModal({
             placeholder="e.g. Quadratics HW #1"
             className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
+
+          {/* Units */}
+          <div className="mt-5">
+            <label className="block text-sm font-bold text-text-primary">
+              Units <span className="font-normal text-text-muted">· required</span>
+            </label>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Pick one. Multi-select for midterms or review HWs that span topics.
+            </p>
+            <div className="mt-2">
+              <UnitMultiSelect
+                courseId={courseId}
+                selected={unitIds}
+                onChange={setUnitIds}
+                disabled={busy}
+              />
+            </div>
+          </div>
 
           {/* Bank picker */}
           <div className="mt-6">

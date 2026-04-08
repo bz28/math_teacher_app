@@ -15,6 +15,7 @@ from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
+from api.models.unit import Unit
 from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import (
     hydrate_assignment_content,
@@ -36,7 +37,11 @@ class CreateAssignmentRequest(BaseModel):
     late_policy: str = "none"
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
-    unit_id: uuid.UUID | None = None
+    # An assignment belongs to one or more units. Required at create
+    # time so the question bank can group everything by unit. Single-
+    # unit is the common case; multi-unit is for midterms / review HWs
+    # that span topics.
+    unit_ids: list[uuid.UUID]
     document_ids: list[uuid.UUID] | None = None
     # New: list of approved question bank item IDs to snapshot into the
     # assignment's `content` column. The snapshot freezes the question
@@ -59,6 +64,20 @@ class CreateAssignmentRequest(BaseModel):
             raise ValueError("Type must be homework, quiz, or test")
         return v
 
+    @field_validator("unit_ids")
+    @classmethod
+    def validate_unit_ids(cls, v: list[uuid.UUID]) -> list[uuid.UUID]:
+        if not v:
+            raise ValueError("At least one unit is required")
+        # Dedupe while preserving order.
+        seen: set[uuid.UUID] = set()
+        out: list[uuid.UUID] = []
+        for u in v:
+            if u not in seen:
+                seen.add(u)
+                out.append(u)
+        return out
+
 
 class UpdateAssignmentRequest(BaseModel):
     title: str | None = None
@@ -67,9 +86,27 @@ class UpdateAssignmentRequest(BaseModel):
     late_policy: str | None = None
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
+    # Reassign units. Same validation rules as create — must contain at
+    # least one unit if provided. Pass None to leave unchanged.
+    unit_ids: list[uuid.UUID] | None = None
     # When provided, re-snapshot the picked bank items into content.
     # Useful for the "edit problems" flow on a draft homework.
     bank_item_ids: list[uuid.UUID] | None = None
+
+    @field_validator("unit_ids")
+    @classmethod
+    def validate_unit_ids(cls, v: list[uuid.UUID] | None) -> list[uuid.UUID] | None:
+        if v is None:
+            return None
+        if not v:
+            raise ValueError("At least one unit is required")
+        seen: set[uuid.UUID] = set()
+        out: list[uuid.UUID] = []
+        for u in v:
+            if u not in seen:
+                seen.add(u)
+                out.append(u)
+        return out
 
 
 class AssignSectionsRequest(BaseModel):
@@ -77,6 +114,24 @@ class AssignSectionsRequest(BaseModel):
 
 
 # ── Helpers ──
+
+async def _validate_units_in_course(
+    db: AsyncSession, course_id: uuid.UUID, unit_ids: list[uuid.UUID],
+) -> None:
+    """Verify every id in `unit_ids` is a unit owned by `course_id`.
+    Raises 404 with a generic message (no id echo) on the first failure
+    so a teacher can't enumerate units across other courses."""
+    if not unit_ids:
+        return
+    found = set((await db.execute(
+        select(Unit.id).where(Unit.id.in_(unit_ids), Unit.course_id == course_id)
+    )).scalars().all())
+    if len(found) != len(unit_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more units do not belong to this course",
+        )
+
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
     assignment = (await db.execute(
@@ -198,7 +253,7 @@ def assignment_to_dict(a: Assignment, section_names: list[str], stats: dict[str,
     return {
         "id": str(a.id),
         "course_id": str(a.course_id),
-        "unit_id": str(a.unit_id) if a.unit_id else None,
+        "unit_ids": [str(u) for u in (a.unit_ids or [])],
         "title": a.title,
         "type": a.type,
         "source_type": a.source_type,
@@ -232,14 +287,9 @@ async def create_assignment(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
 
-    # Validate unit belongs to this course
-    if body.unit_id is not None:
-        from api.models.unit import Unit
-        unit_check = (await db.execute(
-            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
-        )).scalar_one_or_none()
-        if not unit_check:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
+    # Validate every unit belongs to this course. Required ≥1 by the
+    # request validator.
+    await _validate_units_in_course(db, course_id, body.unit_ids)
 
     # Validate document_ids belong to this course
     doc_id_strings: list[str] | None = None
@@ -269,7 +319,7 @@ async def create_assignment(
         title=body.title, type=body.type, source_type=body.source_type,
         due_at=due_at, late_policy=body.late_policy,
         content=content, answer_key=body.answer_key,
-        unit_id=body.unit_id, document_ids=doc_id_strings,
+        unit_ids=body.unit_ids, document_ids=doc_id_strings,
     )
     db.add(assignment)
     await db.commit()
@@ -362,6 +412,9 @@ async def update_assignment(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
     if body.late_policy is not None:
         a.late_policy = body.late_policy
+    if body.unit_ids is not None:
+        await _validate_units_in_course(db, a.course_id, body.unit_ids)
+        a.unit_ids = body.unit_ids
     # Re-snapshotting bank items takes precedence over a raw content blob.
     if body.bank_item_ids is not None or body.content is not None:
         if a.status == "published":
