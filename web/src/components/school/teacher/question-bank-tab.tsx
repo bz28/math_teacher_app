@@ -45,6 +45,7 @@ export function QuestionBankTab({
   // area. Decoupled from status filter so the teacher can narrow on
   // both axes.
   const [unitSelection, setUnitSelection] = useState<UnitSelection>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   // Data fetching extracted to a custom hook — items/units/counts/
   // loading/error/reload all live there. The hook now fetches all
   // items for the current status; unit filtering is client-side so
@@ -53,13 +54,25 @@ export function QuestionBankTab({
     courseId, statusFilter,
   );
 
-  // Client-side unit filter applied to the loaded items.
+  // Client-side unit + search filter applied to the loaded items.
+  // Search matches title and question text, case-insensitive.
   const filteredItems = useMemo(() => {
-    if (unitSelection === "all") return items;
-    if (unitSelection === "uncategorized")
-      return items.filter((i) => i.unit_id === null);
-    return items.filter((i) => i.unit_id === unitSelection);
-  }, [items, unitSelection]);
+    let out = items;
+    if (unitSelection === "uncategorized") {
+      out = out.filter((i) => i.unit_id === null);
+    } else if (unitSelection !== "all") {
+      out = out.filter((i) => i.unit_id === unitSelection);
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      out = out.filter(
+        (i) =>
+          i.title.toLowerCase().includes(q) ||
+          i.question.toLowerCase().includes(q),
+      );
+    }
+    return out;
+  }, [items, unitSelection, searchQuery]);
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
   // Separate state for "edit invoked from inside ReviewModal" so we
@@ -164,12 +177,35 @@ export function QuestionBankTab({
   return (
     <CourseSubjectContext.Provider value={courseSubject}>
     <div>
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      {/* Header row: title + status chips inline + Generate. The chips
+          are primary nav, not chrome — they belong up top. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-4">
           <h2 className="text-lg font-bold text-text-primary">Question Bank</h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            {counts.approved} approved · {counts.pending} pending · {counts.rejected} rejected
-          </p>
+          <div className="flex gap-1">
+            {STATUS_FILTERS.filter(
+              (f) =>
+                f.key !== "rejected" ||
+                counts.rejected > 0 ||
+                statusFilter === "rejected",
+            ).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => {
+                  setStatusFilter(f.key);
+                  setOpenItem(null);
+                }}
+                className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
+                  statusFilter === f.key
+                    ? "bg-primary text-white"
+                    : "border border-border-light text-text-secondary hover:bg-bg-subtle"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"
@@ -211,59 +247,54 @@ export function QuestionBankTab({
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
-      {/* Two-pane: unit rail on the left, content on the right. */}
-      <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start">
-        <aside className="md:w-60 md:shrink-0">
+      {/* Search bar — primary "find a question" affordance. */}
+      <div className="mt-4">
+        <div className="relative">
+          <span
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-text-muted"
+            aria-hidden
+          >
+            🔍
+          </span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search ${counts[statusFilter] ?? 0} ${statusFilter} questions…`}
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Two-pane: slim unit rail on the left, content on the right.
+          The rail no longer has its own card chrome — it visually
+          retreats so the content area is the focal point. */}
+      <div className="mt-4 flex flex-col gap-6 md:flex-row md:items-start">
+        <aside className="md:w-52 md:shrink-0">
           <UnitRail
             units={units}
             items={items}
             selected={unitSelection}
             onSelect={(s) => {
               setUnitSelection(s);
-              // Dismiss any open workshop modal so switching units
-              // feels like a navigation, not a sticky overlay.
               setOpenItem(null);
             }}
           />
         </aside>
 
         <div className="min-w-0 flex-1">
-          {/* Status chips. Rejected is hidden unless there's something
-              there or it's currently selected — keeps the bin out of
-              sight until needed. */}
-          <div className="flex gap-2">
-            {STATUS_FILTERS.filter(
-              (f) =>
-                f.key !== "rejected" ||
-                counts.rejected > 0 ||
-                statusFilter === "rejected",
-            ).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => {
-                  setStatusFilter(f.key);
-                  setOpenItem(null);
-                }}
-                className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
-                  statusFilter === f.key
-                    ? "bg-primary text-white"
-                    : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-                }`}
-              >
-                {f.label}
-                <span className="ml-1 opacity-70">({counts[f.key] ?? 0})</span>
-              </button>
-            ))}
-          </div>
-
-          {/* List — Approved gets unit grouping + per-unit tabs.
-              Pending and Rejected get a flat dense list. */}
-          <div className="mt-4 space-y-5">
-            {loading ? (
-              <BankSkeleton />
-            ) : filteredItems.length === 0 ? (
-              <EmptyState text={emptyStateFor(statusFilter, unitSelection, counts)} />
-            ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+          {loading ? (
+            <BankSkeleton />
+          ) : filteredItems.length === 0 ? (
+            <EmptyState
+              text={
+                searchQuery.trim()
+                  ? `No questions match "${searchQuery.trim()}".`
+                  : emptyStateFor(statusFilter, unitSelection, counts)
+              }
+            />
+          ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+            <div className="space-y-5">
               <SimpleUnitList
                 items={filteredItems}
                 units={units}
@@ -271,8 +302,10 @@ export function QuestionBankTab({
                 onOpenHomework={setOpenHomeworkId}
                 onChanged={reload}
               />
-            ) : (
-              buildUnitGroups(filteredItems, units).map((group) => (
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {buildUnitGroups(filteredItems, units).map((group) => (
                 <ApprovedUnitFolder
                   key={group.id}
                   label={group.label}
@@ -282,9 +315,9 @@ export function QuestionBankTab({
                   onOpenHomework={setOpenHomeworkId}
                   onChanged={reload}
                 />
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
