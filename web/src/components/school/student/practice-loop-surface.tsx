@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { schoolStudent, type VariationPayload } from "@/lib/api";
-import { MathText } from "@/components/shared/math-text";
+import { MCQCard } from "@/components/shared/mcq-card";
+import { ProgressBar } from "@/components/shared/progress-bar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -209,8 +210,27 @@ export function PracticeLoopSurface({
   const currentFlagged =
     results.find((r) => r.consumption_id === consumptionId)?.flagged ?? false;
 
+  // Adapt the school's (picked, revealed) state to the MCQCard's
+  // (selectedChoice, feedback) shape. The school flow is one-shot:
+  // disable choices as soon as something is picked, and reveal the
+  // correct answer in the wrong-feedback box (vs personal's retry).
+  const selectedChoice = picked === null ? null : choices.indexOf(picked);
+  const feedback: "correct" | "wrong" | null = !revealed
+    ? null
+    : picked && picked.trim() === correctAnswer
+      ? "correct"
+      : "wrong";
+  // Progress: how far through the approved sibling pool. (totalSeen / totalApproved)
+  // We approximate from `remaining`: total = (results so far + 1) + remaining
+  // because the current one is the "+1". This stays consistent across
+  // refresh-safe re-serves and exhausted states.
+  const totalApprox = results.length + 1 + remaining;
+  const progress = totalApprox > 0
+    ? Math.min(100, Math.round(((results.length + (revealed ? 1 : 0)) / totalApprox) * 100))
+    : 0;
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <button
           onClick={onExit}
@@ -219,14 +239,14 @@ export function PracticeLoopSurface({
           ← Back to homework
         </button>
         <span className="text-xs font-medium text-text-muted">
-          Working on a similar to problem {problemPosition}
+          Practicing similar to problem {problemPosition}
         </span>
       </div>
 
       {/* Mode toggle — swaps the lens on the *current* look-alike with
           no fetch, no new consumption row. The bottom footer's "next"
           buttons are what advance the pool. */}
-      <div className="mt-4 inline-flex rounded-[--radius-sm] border border-border bg-surface p-1">
+      <div className="inline-flex rounded-[--radius-sm] border border-border bg-surface p-1">
         <button
           disabled
           className="rounded-[--radius-sm] bg-primary px-3 py-1 text-xs font-bold text-white"
@@ -243,69 +263,31 @@ export function PracticeLoopSurface({
         </button>
       </div>
 
-      <div className="mt-6 rounded-[--radius-md] border border-border bg-surface p-6">
-        <div className="text-base text-text-primary">
-          <MathText text={variation.question} />
+      <ProgressBar value={progress} />
+
+      {choices.length < 2 ? (
+        // Defensive fallback: a variation whose distractors weren't
+        // generated (LLM failure → stored as null) would otherwise
+        // render a single button and trap the student. Surface the
+        // problem clearly and let them advance via the footer.
+        <div className="rounded-[--radius-md] border border-amber-500 bg-amber-50 p-4 text-sm text-amber-700 dark:bg-amber-500/10">
+          This practice problem doesn&apos;t have multiple-choice options yet. Try the
+          next one or switch to Learn mode to see the worked solution.
         </div>
+      ) : (
+        <MCQCard
+          question={variation.question}
+          choices={choices}
+          selectedChoice={selectedChoice}
+          feedback={feedback}
+          onSelectChoice={handlePick}
+          // No inline advance — school uses external footer for next/done.
+          disableChoices={revealed}
+          correctAnswer={correctAnswer}
+        />
+      )}
 
-        {choices.length < 2 ? (
-          // Defensive fallback: a variation whose distractors weren't
-          // generated (LLM failure → stored as null) would otherwise
-          // render a single button and trap the student. Surface the
-          // problem clearly and let them advance via the footer.
-          <div className="mt-6 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-4 text-sm text-amber-700 dark:bg-amber-500/10">
-            This practice problem doesn&apos;t have multiple-choice options yet. Try the
-            next one or switch to Learn mode to see the worked solution.
-          </div>
-        ) : (
-        <div className="mt-6 flex flex-col gap-2">
-          {choices.map((choice, i) => {
-            const isPicked = picked === choice;
-            const isCorrect = revealed && choice.trim() === correctAnswer;
-            const isWrongPick = revealed && isPicked && !isCorrect;
-            return (
-              <button
-                key={`${i}-${choice}`}
-                onClick={() => handlePick(choice)}
-                disabled={revealed}
-                className={cn(
-                  "flex items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left transition-colors",
-                  !revealed && "border-border bg-surface hover:border-primary",
-                  isCorrect && "border-green-500 bg-green-50 dark:bg-green-500/10",
-                  isWrongPick && "border-error bg-error-light text-error",
-                  revealed && !isPicked && !isCorrect && "border-border bg-surface opacity-60",
-                )}
-              >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current text-xs font-bold">
-                  {String.fromCharCode(65 + i)}
-                </span>
-                <span className="flex-1">
-                  <MathText text={choice} />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        )}
-
-        {revealed && choices.length >= 2 && (
-          <div className="mt-4 text-sm font-medium">
-            {picked && picked.trim() === correctAnswer ? (
-              <span className="text-green-600">Nice — that&apos;s correct.</span>
-            ) : (
-              <span className="text-error">
-                Not quite. The correct answer was{" "}
-                <span className="font-bold">
-                  <MathText text={correctAnswer} />
-                </span>
-                .
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <button
