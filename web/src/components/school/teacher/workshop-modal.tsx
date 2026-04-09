@@ -339,6 +339,19 @@ export function WorkshopModal({
       }
     });
 
+  // Variation single-mode flow: approve + refresh parent + close.
+  // Mirrors addToExistingHomework's lifecycle (the primary flow that
+  // closes the modal). Without this, an approved variation would
+  // leave the workshop open showing the now-approved item with no
+  // affordances, and the parent question-bank list wouldn't refresh.
+  const approveAsVariation = () =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      await teacher.approveBankItem(liveItem.id);
+      onChanged();
+      onClose();
+    });
+
   // Single-mode pending: clicking "→ Add to Homework" opens the picker;
   // picking a HW fires the atomic approve+attach call, then closes the
   // workshop. Same contract as ReviewModal Flow A so the workshop entry
@@ -816,6 +829,7 @@ export function WorkshopModal({
           onPickExistingHomework={addToExistingHomework}
           onCreateNewHomework={createHomeworkAndAdd}
           onApprove={approve}
+          onApproveAsVariation={approveAsVariation}
           onReject={reject}
           onSkip={skip}
           onToggleChat={() => setChatOpen((v) => !v)}
@@ -867,6 +881,7 @@ function ModeLineFooter({
   onPickExistingHomework,
   onCreateNewHomework,
   onApprove,
+  onApproveAsVariation,
   onReject,
   onSkip,
   onToggleChat,
@@ -891,6 +906,7 @@ function ModeLineFooter({
   onPickExistingHomework: (assignment: TeacherAssignment) => void;
   onCreateNewHomework: (title: string, unitIds: string[]) => void;
   onApprove: () => void;
+  onApproveAsVariation: () => void;
   onReject: () => void;
   onSkip: () => void;
   onToggleChat: () => void;
@@ -1048,7 +1064,7 @@ function ModeLineFooter({
           <div className="ml-auto">
             <button
               type="button"
-              onClick={onApprove}
+              onClick={onApproveAsVariation}
               disabled={busy}
               className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
               title="Approves this as practice scaffolding for its parent problem. Practice variations are NOT added to a homework as standalone problems — they're served via the student practice loop."
