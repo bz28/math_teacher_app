@@ -289,7 +289,7 @@ export function PracticeLoopSurface({
 
       {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           onClick={toggleFlag}
           disabled={!revealed}
