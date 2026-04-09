@@ -184,6 +184,50 @@ export function QuestionBankTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.status, activeJob?.id]);
 
+  // Auto-clear activeJob when its variations have all been resolved.
+  // Without this, the "Review N pending variations" CTA in the parent's
+  // workshop modal (and the flashing dot on the Question Bank tab)
+  // stays stale after a teacher approves the variations via a
+  // different surface — e.g. clicking each pending variation in the
+  // Pending tab and approving via "Approve as practice". The user
+  // would then click the stale CTA and hit a confusing "All variations
+  // already reviewed" error.
+  //
+  // One small extra fetch per reload, only when activeJob is in a
+  // state that could be stale.
+  useEffect(() => {
+    if (!activeJob || !activeJob.parent_question_id || activeJob.status !== "done") return;
+    let cancelled = false;
+    const parentId = activeJob.parent_question_id;
+    teacher
+      .bank(courseId, { status: "pending" })
+      .then((res) => {
+        if (cancelled) return;
+        const stillPending = res.items.some(
+          (i) => i.parent_question_id === parentId,
+        );
+        if (!stillPending) {
+          setActiveJob(null);
+        }
+      })
+      .catch(() => {
+        // Transient errors are fine — the next reload retries.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeJob, items, courseId, setActiveJob]);
+
+  // Clear the bank error banner whenever the user navigates (switches
+  // tabs, changes status filter, or activeJob clears). Without this,
+  // a stale error like "All variations for this question have already
+  // been reviewed" sticks around after the underlying state has moved
+  // on, and only a hard refresh clears it.
+  useEffect(() => {
+    if (error) setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, unitSelection, activeJob?.id]);
+
   return (
     <CourseSubjectContext.Provider value={courseSubject}>
     <div>

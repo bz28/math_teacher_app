@@ -50,12 +50,40 @@ async def snapshot_bank_items(
             QuestionBankItem.id.in_(bank_item_ids),
             QuestionBankItem.course_id == course_id,
             QuestionBankItem.status == "approved",
+            # Variations (parent_question_id NOT NULL) are practice
+            # scaffolding for their parent — they're served via the
+            # student practice loop, NEVER as standalone HW primaries.
+            # This is the single choke point for everything that
+            # writes assignment.content.problem_ids: create assignment,
+            # update assignment, approve+attach. Locking the rule here
+            # closes every path at once.
+            QuestionBankItem.parent_question_id.is_(None),
         )
     )).scalars().all()
 
     found = set(rows)
     missing = [str(i) for i in bank_item_ids if i not in found]
     if missing:
+        # Disambiguate the error: if any of the missing ids exist as
+        # variations, say so explicitly. Helps the teacher understand
+        # *why* a generated similar can't be a HW primary.
+        variation_ids = (await db.execute(
+            select(QuestionBankItem.id).where(
+                QuestionBankItem.id.in_(
+                    [uuid.UUID(m) if isinstance(m, str) else m for m in missing],
+                ),
+                QuestionBankItem.parent_question_id.is_not(None),
+            )
+        )).scalars().all()
+        if variation_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Generated practice variations can't be added to a homework as "
+                    "standalone problems. They're automatically used as practice "
+                    "scaffolding for their parent problem when approved."
+                ),
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(

@@ -1143,7 +1143,79 @@ export const schoolStudent = {
   getMySubmission(assignmentId: string) {
     return apiFetch<StudentSubmission>(`/school/student/homework/${assignmentId}/submission`);
   },
+  // ── Integrity check ──
+  // The understanding-check chat that fires after a homework
+  // submission. PR 1 shipped the backend with stubbed AI; this is
+  // the client surface PR 2 wires up.
+  getIntegrityState(submissionId: string) {
+    return apiFetch<IntegrityStateResponse>(
+      `/school/student/integrity/submissions/${submissionId}`,
+    );
+  },
+  getNextIntegrityQuestion(submissionId: string) {
+    return apiFetch<NextIntegrityQuestionResponse>(
+      `/school/student/integrity/submissions/${submissionId}/next`,
+    );
+  },
+  submitIntegrityAnswer(
+    submissionId: string,
+    body: { question_id: string; answer: string; seconds_on_question?: number; tab_switch_count?: number },
+  ) {
+    return apiFetch<NextIntegrityQuestionResponse>(
+      `/school/student/integrity/submissions/${submissionId}/answer`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    );
+  },
+  rephraseIntegrityQuestion(submissionId: string, questionId: string) {
+    return apiFetch<RephraseIntegrityResponse>(
+      `/school/student/integrity/submissions/${submissionId}/rephrase`,
+      {
+        method: "POST",
+        body: JSON.stringify({ question_id: questionId }),
+      },
+    );
+  },
 };
+
+// ── Integrity check types (mirror api/routes/integrity_check.py) ──
+
+export interface IntegrityProblemSummary {
+  problem_id: string;
+  sample_position: number;
+  status: string;
+  question_count: number;
+  answered_count: number;
+}
+
+export interface IntegrityStateResponse {
+  submission_id: string;
+  /** "in_progress" | "complete" | "no_check" */
+  overall_status: string;
+  problems: IntegrityProblemSummary[];
+}
+
+export type NextIntegrityQuestionResponse =
+  | { done: true }
+  | {
+      done: false;
+      problem_id: string;
+      problem_position: number;  // 1-based for UI
+      total_problems: number;
+      question_id: string;
+      question_index: number;  // 0-based; UI shows index+1
+      questions_in_problem: number;
+      question_text: string;
+      rephrase_used: boolean;
+    };
+
+export interface RephraseIntegrityResponse {
+  question_id: string;
+  question_text: string;
+  rephrase_used: true;
+}
 
 // ── Contact endpoints ──
 
