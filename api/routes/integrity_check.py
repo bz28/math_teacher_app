@@ -19,18 +19,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.integrity_ai import score_answer
 from api.core.integrity_pipeline import (
     STATUS_COMPLETE,
     STATUS_DISMISSED,
     STATUS_SKIPPED_UNREADABLE,
     TERMINAL_STATUSES,
-    VERDICT_BAD,
-    VERDICT_GOOD,
     VERDICT_SKIPPED,
-    VERDICT_WEAK,
     compute_badge,
 )
-from api.core.integrity_stub import rephrase_question, score_answer
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.models.assignment import Submission
@@ -81,16 +78,6 @@ class AnswerRequest(BaseModel):
     answer: str
     seconds_on_question: int | None = None
     tab_switch_count: int = 0
-
-
-class RephraseRequest(BaseModel):
-    question_id: uuid.UUID
-
-
-class RephraseResponse(BaseModel):
-    question_id: str
-    question_text: str
-    rephrase_used: bool = True
 
 
 class DismissRequest(BaseModel):
@@ -249,13 +236,17 @@ async def submit_answer(
             detail=f"Answer must be at least {MIN_ANSWER_CHARS} characters",
         )
 
-    score = score_answer(
+    # Pass the student's work extraction so the scorer can check
+    # answers against what the student actually wrote.
+    extraction = problem.student_work_extraction or {}
+    score = await score_answer(
         {
             "question_text": response.question_text,
             "expected_shape": response.expected_shape,
             "rubric_hint": response.rubric_hint,
         },
         body.answer,
+        extraction=extraction,
     )
     now = datetime.now(UTC)
     response.student_answer = body.answer
@@ -274,16 +265,12 @@ async def submit_answer(
     all_answered = all(r.student_answer is not None for r in siblings)
     if all_answered:
         verdicts = [r.answer_verdict or VERDICT_SKIPPED for r in siblings]
-        # Stub doesn't emit flags yet; PR 4 will populate them.
-        badge, raw = compute_badge(verdicts, [])
+        flags = score.get("flags", [])
+        badge, raw = compute_badge(verdicts, flags)
         problem.status = STATUS_COMPLETE
         problem.badge = badge
         problem.raw_score = raw
-        problem.ai_reasoning = (
-            f"Stub: {sum(1 for v in verdicts if v == VERDICT_GOOD)}/{len(verdicts)} good, "
-            f"{sum(1 for v in verdicts if v == VERDICT_WEAK)} weak, "
-            f"{sum(1 for v in verdicts if v == VERDICT_BAD)} bad"
-        )
+        problem.ai_reasoning = score.get("reasoning", "")
 
     await db.commit()
 
@@ -291,47 +278,6 @@ async def submit_answer(
     # one round trip per answer.
     return await get_next_question(submission_id, user, db)
 
-
-@router.post("/school/student/integrity/submissions/{submission_id}/rephrase")
-async def rephrase_question_endpoint(
-    submission_id: uuid.UUID,
-    body: RephraseRequest,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> RephraseResponse:
-    """Mark the question as rephrased and return the alternate
-    phrasing. One-shot per question — calling twice still returns
-    the alternate but rephrase_used is already true."""
-    await _load_my_submission(db, submission_id, user.id)
-
-    response = (await db.execute(
-        select(IntegrityCheckResponse).where(IntegrityCheckResponse.id == body.question_id)
-    )).scalar_one_or_none()
-    if response is None:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    problem = (await db.execute(
-        select(IntegrityCheckProblem).where(
-            IntegrityCheckProblem.id == response.integrity_check_problem_id,
-        )
-    )).scalar_one_or_none()
-    if problem is None or problem.submission_id != submission_id:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    alternate = rephrase_question({
-        "question_text": response.question_text,
-        "expected_shape": response.expected_shape,
-        "rubric_hint": response.rubric_hint,
-    })
-    if not response.rephrase_used:
-        response.rephrase_used = True
-        await db.commit()
-
-    return RephraseResponse(
-        question_id=str(response.id),
-        question_text=alternate,
-        rephrase_used=True,
-    )
 
 
 # ── Teacher endpoints ──

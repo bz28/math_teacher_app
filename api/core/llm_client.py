@@ -44,6 +44,9 @@ class LLMMode:
     GENERATE_QUESTIONS = "generate_questions"
     REGENERATE_BANK_ITEM = "regenerate_bank_item"
     BANK_CHAT = "bank_chat"
+    INTEGRITY_EXTRACT = "integrity_extract"
+    INTEGRITY_GENERATE = "integrity_generate"
+    INTEGRITY_SCORE = "integrity_score"
 
 _client: anthropic.AsyncAnthropic | None = None
 

@@ -6,11 +6,6 @@ test_integrity_check.py since they need the seeded fixtures.
 from __future__ import annotations
 
 from api.core.integrity_pipeline import compute_badge
-from api.core.integrity_stub import (
-    generate_questions,
-    rephrase_question,
-    score_answer,
-)
 
 # ── compute_badge ──
 
@@ -90,36 +85,3 @@ class TestComputeBadge:
         assert score == 0.5
 
 
-# ── stub helpers ──
-
-class TestStub:
-    def test_generate_questions_returns_two(self) -> None:
-        qs = generate_questions("Solve x^2 - 5x + 6 = 0", {"steps": []})
-        assert len(qs) == 2
-        assert all("question_text" in q for q in qs)
-        assert all("expected_shape" in q for q in qs)
-
-    def test_score_answer_thresholds(self) -> None:
-        q = {"question_text": "x"}
-        # < 5 chars → bad
-        assert score_answer(q, "abc")["verdict"] == "bad"
-        assert score_answer(q, "")["verdict"] == "bad"
-        assert score_answer(q, "    ")["verdict"] == "bad"  # whitespace stripped
-        # 5..29 chars → weak
-        assert score_answer(q, "12345")["verdict"] == "weak"
-        assert score_answer(q, "x" * 29)["verdict"] == "weak"
-        # >= 30 → good
-        assert score_answer(q, "x" * 30)["verdict"] == "good"
-        assert score_answer(q, "x" * 100)["verdict"] == "good"
-
-    def test_score_answer_emits_required_fields(self) -> None:
-        out = score_answer({"question_text": "x"}, "decent answer here")
-        assert "verdict" in out
-        assert "reasoning" in out
-        assert "flags" in out
-        assert isinstance(out["flags"], list)
-
-    def test_rephrase_marks_alternative(self) -> None:
-        text = rephrase_question({"question_text": "What was your first step?"})
-        assert "first step" in text
-        assert text != "What was your first step?"
