@@ -131,12 +131,16 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
     set({ ...initialState, phase: "loading" as PracticePhase });
     try {
-      const allProblems: PracticeProblem[] = [];
-      for (const problem of flaggedProblems) {
-        const { problems } = await practiceApi.generate({ problem, count: 1, subject });
-        allProblems.push(...problems);
-      }
-      const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0]);
+      // Phase 1: batch generate similar question texts for all flagged problems
+      const { problems: generated } = await practiceApi.generate({ problems: flaggedProblems, subject });
+      const similarQuestions = generated.map((p) => p.question);
+
+      // Phase 2: solve each generated question in parallel (get answer + distractors)
+      const [solvedResults, { id: sessionId }] = await Promise.all([
+        Promise.all(similarQuestions.map((q) => practiceApi.generate({ problem: q, count: 0, subject }))),
+        sessionApi.createPracticeBatch(flaggedProblems[0]),
+      ]);
+      const allProblems = solvedResults.flatMap((r) => r.problems);
       set({
         practiceBatch: createPracticeBatch(allProblems, sessionId),
         phase: "awaiting_input" as PracticePhase,
