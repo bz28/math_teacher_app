@@ -1,0 +1,108 @@
+"""Teacher preview-as-student endpoint.
+
+Creates (or reuses) a shadow student account for the calling teacher,
+syncs section enrollments, and returns a JWT pair so the frontend can
+swap into the student experience.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.auth import create_access_token, create_refresh_token, hash_password
+from api.database import get_db
+from api.middleware.auth import CurrentUser, require_teacher
+from api.models.course import CourseTeacher
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
+from api.models.user import User
+
+router = APIRouter()
+
+
+class PreviewTokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+@router.post("/preview-student")
+async def get_or_create_preview_student(
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> PreviewTokenResponse:
+    """Find or create a shadow student for this teacher, sync
+    enrollments, and return a JWT pair for the shadow account."""
+
+    teacher = (await db.execute(
+        select(User).where(User.id == current_user.user_id)
+    )).scalar_one_or_none()
+    if teacher is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Teacher not found")
+
+    # Find existing shadow student
+    shadow = (await db.execute(
+        select(User).where(
+            User.preview_owner_id == current_user.user_id,
+            User.is_preview.is_(True),
+        )
+    )).scalar_one_or_none()
+
+    if shadow is None:
+        # Create the shadow student
+        short_id = current_user.user_id.hex[:8]
+        shadow = User(
+            email=f"preview+{short_id}@veradic.ai",
+            name=f"{teacher.name or teacher.email} (Preview)",
+            password_hash=hash_password(uuid.uuid4().hex),
+            grade_level=teacher.grade_level if hasattr(teacher, "grade_level") else 9,
+            role="student",
+            school_id=teacher.school_id,
+            is_preview=True,
+            preview_owner_id=current_user.user_id,
+        )
+        db.add(shadow)
+        await db.flush()
+
+    # Sync enrollments: enroll shadow in all sections the teacher owns.
+    # First, find all sections under the teacher's courses.
+    teacher_course_ids = (await db.execute(
+        select(CourseTeacher.course_id).where(
+            CourseTeacher.teacher_id == current_user.user_id,
+        )
+    )).scalars().all()
+
+    if teacher_course_ids:
+        all_section_ids = set((await db.execute(
+            select(Section.id).where(Section.course_id.in_(teacher_course_ids))
+        )).scalars().all())
+
+        # Existing enrollments for the shadow
+        existing_enrollment_ids = set((await db.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == shadow.id,
+            )
+        )).scalars().all())
+
+        # Add missing enrollments
+        for sid in all_section_ids - existing_enrollment_ids:
+            db.add(SectionEnrollment(
+                student_id=shadow.id,
+                section_id=sid,
+            ))
+
+    await db.commit()
+
+    # Issue tokens for the shadow student
+    access_token = create_access_token(str(shadow.id), "student")
+    refresh_token = await create_refresh_token(db, shadow.id)
+
+    return PreviewTokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
