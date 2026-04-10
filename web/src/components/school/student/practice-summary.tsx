@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { schoolStudent, type FlaggedConsumption } from "@/lib/api";
+import { AnimatedCounter, Button, Card } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
+import { cn } from "@/lib/utils";
 import { LearnLoopSurface } from "./learn-loop-surface";
 import type { LoopResult, LoopState } from "./practice-loop-surface";
 
@@ -35,6 +38,16 @@ export function PracticeSummary({
 
   const correct = results.filter((r) => r.correct).length;
   const flagged = results.filter((r) => r.flagged).length;
+  const total = results.length;
+  const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const encouragement =
+    percentage === 100
+      ? "Perfect score!"
+      : percentage >= 80
+        ? "Great job!"
+        : percentage >= 50
+          ? "Good effort, keep practicing!"
+          : "Keep going, you'll get there!";
 
   async function startLearnFlagged() {
     setLoading(true);
@@ -85,56 +98,82 @@ export function PracticeSummary({
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h2 className="text-xl font-bold text-text-primary">Practice summary</h2>
-      <p className="mt-1 text-sm text-text-secondary">
-        Problem {problemPosition} · {correct} of {results.length} correct
-      </p>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <h1 className="text-2xl font-extrabold text-text-primary">Results</h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          Problem {problemPosition} · practice summary
+        </p>
+      </motion.div>
 
-      <ul className="mt-6 space-y-2">
+      {/* Score card — same shape as the personal practice summary so
+          the visual feels like one app. */}
+      <Card variant="elevated" className="space-y-3 text-center">
+        <p className="text-4xl font-extrabold text-primary">
+          <AnimatedCounter to={correct} />/{total}
+        </p>
+        <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <p className="text-sm font-medium text-text-secondary">{encouragement}</p>
+      </Card>
+
+      {/* Per-result breakdown */}
+      <div className="space-y-2">
         {results.map((r, i) => (
-          <li
+          <div
             key={`${i}-${r.consumption_id}`}
-            className="flex items-center justify-between gap-4 rounded-[--radius-sm] border border-border bg-surface p-4"
+            className={cn(
+              "flex items-start gap-3 rounded-[--radius-md] border px-4 py-3",
+              r.correct
+                ? "border-success-border bg-success-light"
+                : "border-error-border bg-error-light",
+            )}
           >
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="text-sm font-bold text-text-muted">{i + 1}.</span>
-              <div className="min-w-0 flex-1 truncate text-sm text-text-secondary">
+            <span
+              className={cn(
+                "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                r.correct ? "bg-success" : "bg-error",
+              )}
+            >
+              {r.correct ? "\u2713" : "\u2717"}
+            </span>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="text-sm font-medium text-text-primary">
                 <MathText text={r.variation.question} />
               </div>
+              <div className="text-xs text-text-secondary">
+                Your answer: <MathText text={r.picked} />
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs font-bold">
-              {r.flagged && <span className="text-amber-600">★ Flagged</span>}
-              {r.correct ? (
-                <span className="text-green-600">✓</span>
-              ) : (
-                <span className="text-error">✗</span>
-              )}
-            </div>
-          </li>
+            {r.flagged && (
+              <span className="rounded-[--radius-pill] border border-warning-dark/30 bg-warning-bg px-3 py-1 text-xs font-semibold text-warning-dark">
+                ★ Flagged
+              </span>
+            )}
+          </div>
         ))}
-      </ul>
+      </div>
 
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-        <button
-          onClick={onBackToHomework}
-          className="rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:border-primary hover:text-primary"
-        >
-          Back to homework
-        </button>
+      <div className="flex flex-col gap-2">
         {flagged > 0 && (
-          <button
+          <Button
+            gradient
+            loading={loading}
             onClick={startLearnFlagged}
-            disabled={loading}
-            className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+            className="w-full"
           >
-            {loading
-              ? "Loading…"
-              : `Learn ${flagged} flagged ${flagged === 1 ? "problem" : "problems"}`}
-          </button>
+            Learn {flagged} Flagged Problem{flagged > 1 ? "s" : ""}
+          </Button>
         )}
+        <Button variant="secondary" onClick={onBackToHomework} className="w-full">
+          Back to homework
+        </Button>
       </div>
     </div>
   );

@@ -2,19 +2,17 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { session as sessionApi } from "@/lib/api";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
-import { MathText } from "@/components/shared/math-text";
-import { cn } from "@/lib/utils";
-import DOMPurify from "dompurify";
+import { MCQCard } from "@/components/shared/mcq-card";
+import { ProgressBar } from "@/components/shared/progress-bar";
 import { PracticeSummary } from "./_components/practice-summary";
 
 export default function PracticePage() {
@@ -118,6 +116,7 @@ export default function PracticePage() {
   const isThinking = phase === "thinking";
   const feedback = practiceBatch.currentFeedback;
   const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
+  const isLast = practiceBatch.currentIndex >= practiceBatch.problems.length - 1;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -128,89 +127,30 @@ export default function PracticePage() {
         </Badge>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-2 w-full overflow-hidden rounded-full bg-border-light">
-        <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-          animate={{ width: `${progress}%` }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        />
-      </div>
+      <ProgressBar value={progress} />
 
-      <Card variant="elevated" className="space-y-4">
-        <div className="text-base font-medium text-text-primary">
-          <MathText text={current.question} />
-        </div>
-
-        {feedback === "correct" ? (
-          <div className="space-y-3">
-            <div className="rounded-[--radius-md] p-3 bg-success-light border border-success-border">
-              <p className="text-sm font-medium">Correct!</p>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => { setSelectedChoice(null); nextPracticeProblem(); }}>
-              {practiceBatch.currentIndex < practiceBatch.problems.length - 1
-                ? "Next Problem"
-                : "See Results"}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {feedback === "wrong" && (
-              <div className="rounded-[--radius-md] p-3 bg-error-light border border-error-border">
-                <p className="text-sm font-medium">Not quite, try again!</p>
-              </div>
-            )}
-
-            {/* MC choices */}
-            {choices.length > 0 ? (
-              <div className="space-y-2">
-                {choices.map((choice, i) => {
-                  const isSelected = selectedChoice === i;
-                  const isWrong = isSelected && feedback === "wrong";
-                  const isSvg = choice.trim().startsWith("<svg");
-
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => handleChoiceSelect(choice)}
-                      disabled={isThinking}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-all",
-                        isWrong && "border-error bg-error-light text-error",
-                        !isWrong && "border-border bg-surface text-text-primary hover:border-primary hover:bg-primary-bg",
-                        isThinking && !isSelected && "opacity-50",
-                      )}
-                    >
-                      <span className={cn(
-                        "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                        isWrong && "bg-error text-white",
-                        !isWrong && "bg-input-bg text-text-secondary",
-                      )}>
-                        {isWrong ? "\u2717" : String.fromCharCode(65 + i)}
-                      </span>
-                      {isSvg ? (
-                        <div className="rounded bg-white p-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(choice, { USE_PROFILES: { svg: true } }) }} />
-                      ) : (
-                        <MathText text={choice} />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-text-muted">Loading choices...</p>
-            )}
-
-            <button
-              onClick={skipPracticeProblem}
-              disabled={isThinking}
-              className="text-xs font-medium text-text-muted hover:text-text-secondary transition-colors"
-            >
-              Skip this problem
-            </button>
-          </div>
-        )}
-      </Card>
+      <MCQCard
+        question={current.question}
+        choices={choices}
+        selectedChoice={selectedChoice}
+        feedback={feedback}
+        isThinking={isThinking}
+        onSelectChoice={handleChoiceSelect}
+        onAdvance={() => {
+          setSelectedChoice(null);
+          nextPracticeProblem();
+        }}
+        advanceLabel={isLast ? "See Results" : "Next Problem"}
+        belowChoices={
+          <button
+            onClick={skipPracticeProblem}
+            disabled={isThinking}
+            className="text-xs font-medium text-text-muted hover:text-text-secondary transition-colors"
+          >
+            Skip this problem
+          </button>
+        }
+      />
       {UpgradeModal}
     </div>
   );

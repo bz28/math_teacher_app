@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { schoolStudent, type VariationPayload } from "@/lib/api";
+import { Card } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
+import { ProgressBar } from "@/components/shared/progress-bar";
 import { cn } from "@/lib/utils";
 import type { LoopState } from "./practice-loop-surface";
 
@@ -51,7 +53,7 @@ export function LearnLoopSurface({
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
   const [remaining, setRemaining] = useState<number>(
-    queue ? queue.length : initial.remaining,
+    queue ? queue.length - 1 : initial.remaining,
   );
   const [queueIdx, setQueueIdx] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);
@@ -112,8 +114,15 @@ export function LearnLoopSurface({
     onDone();
   }
 
+  // Progress through the current variation's steps. Per-variation,
+  // not per-pool — the kid's mental model in Learn mode is "where am
+  // I in walking through this solution".
+  const stepProgress = totalSteps > 0
+    ? Math.round(((stepIdx + 1) / totalSteps) * 100)
+    : 0;
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <button
           onClick={onExit}
@@ -122,13 +131,13 @@ export function LearnLoopSurface({
           ← Back to homework
         </button>
         <span className="text-xs font-medium text-text-muted">
-          Working on a similar to problem {problemPosition}
+          Learning similar to problem {problemPosition}
         </span>
       </div>
 
       {/* Mode toggle — swaps the lens on the *current* look-alike with
           no fetch, no new consumption row. */}
-      <div className="mt-4 inline-flex rounded-[--radius-sm] border border-border bg-surface p-1">
+      <div className="inline-flex rounded-[--radius-sm] border border-border bg-surface p-1">
         <button
           onClick={() =>
             onSwitchToPractice({ variation, consumption_id: consumptionId, remaining })
@@ -145,21 +154,23 @@ export function LearnLoopSurface({
         </button>
       </div>
 
-      <div className="mt-6 rounded-[--radius-md] border border-border bg-surface p-6">
-        <div className="text-base text-text-primary">
+      <ProgressBar value={stepProgress} />
+
+      <Card variant="elevated" className="space-y-4">
+        <div className="text-base font-medium text-text-primary">
           <MathText text={variation.question} />
         </div>
 
         {totalSteps === 0 ? (
-          <div className="mt-6 rounded-[--radius-sm] border border-border-light bg-background p-4 text-sm text-text-muted">
+          <div className="rounded-[--radius-sm] border border-border-light bg-background p-4 text-sm text-text-muted">
             No worked solution available for this one.
           </div>
         ) : (
-          <div className="mt-6">
+          <>
             <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">
               Step {stepIdx + 1} of {totalSteps}
             </div>
-            <div className="mt-2 rounded-[--radius-sm] border border-border-light bg-background p-4">
+            <div className="rounded-[--radius-sm] border border-border-light bg-background p-4">
               {currentStep?.title && (
                 <div className="mb-1 text-sm font-bold text-text-primary">
                   <MathText text={currentStep.title} />
@@ -172,7 +183,7 @@ export function LearnLoopSurface({
               )}
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
+            <div className="flex items-center justify-between">
               <button
                 onClick={() => setStepIdx((i) => Math.max(0, i - 1))}
                 disabled={stepIdx === 0}
@@ -193,13 +204,13 @@ export function LearnLoopSurface({
                 </span>
               ) : null}
             </div>
-          </div>
+          </>
         )}
-      </div>
+      </Card>
 
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <span className={cn("text-xs font-medium text-text-muted")}>
           {remaining} more available
         </span>
