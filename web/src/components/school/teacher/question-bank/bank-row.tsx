@@ -10,7 +10,7 @@ import { DIFFICULTY_STYLE } from "./constants";
 // Dense one-line row. Status dot, truncated question, Used-in pills,
 // optional unit label, lock badge, kebab menu. Click the question text
 // to open the workshop modal. Used by SimpleUnitList for the
-// Pending/Rejected views (Approved uses approved-tree's ProblemCard).
+// Pending/Rejected views (Approved uses approved-table's expandable rows).
 export function BankRow({
   item,
   unitLabel,
