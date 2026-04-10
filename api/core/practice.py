@@ -15,29 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Problem generation
+# Distractor generation
 # ---------------------------------------------------------------------------
-
-_GENERATE_QUESTIONS_TEMPLATE = """You are a {professor_role} generating practice problems.
-
-Given one or more {problems_noun}, generate similar problems that test the SAME
-concepts and require the SAME approach to solve.
-
-Rules:
-- Identify the concept and solving approach from the problem text alone
-- Each generated problem must be solvable with the same method as its source
-- Do NOT repeat or rephrase the originals — generate entirely new problems
-- Vary the numbers, names, and context while keeping the same difficulty
-- Return ONLY the problem text — do NOT include answers"""
-
-
-def _build_generate_prompt(subject: str) -> str:
-    cfg = get_config(subject)
-    return _GENERATE_QUESTIONS_TEMPLATE.format(
-        professor_role=cfg["professor_role"],
-        problems_noun=cfg["problems_noun"],
-    )
-
 
 _DISTRACTOR_PROMPT = """\
 You are a worldclass {professor_role} designing multiple choice test options.
@@ -97,57 +76,87 @@ async def generate_distractors(
     return []
 
 
-async def generate_practice_problems(
-    problems: list[str] | str,
-    count: int = 0,
+# ---------------------------------------------------------------------------
+# Solve a single problem (decompose + distractors)
+# ---------------------------------------------------------------------------
+
+async def solve_problem(
+    problem: str,
     *,
     user_id: str | None = None,
     subject: str = Subject.MATH,
     image_base64: str | None = None,
-) -> list[dict[str, object]]:
-    """Generate similar problems for one or more source problems.
+) -> dict[str, object]:
+    """Solve a single problem: decompose into steps, extract answer, generate distractors.
 
-    When a single problem string (or list of one) is passed with count=0,
-    solves the original using step-by-step decomposition and returns the answer.
-
-    When a list of problems is passed (or count>0 for legacy single-problem
-    callers), sends all source problems in one batched Claude call — one
-    generated similar problem per source — then solves each in parallel.
-
-    Returns list of {"question": ..., "answer": ..., "distractors": [...]} dicts.
+    Returns {"question": ..., "answer": ..., "distractors": [...]}.
     """
-    # Normalise: always work with a list internally
-    if isinstance(problems, str):
-        problems = [problems]
+    decomposition = await decompose_problem(
+        problem, user_id=user_id, subject=subject, image_base64=image_base64,
+    )
+    distractors = await generate_distractors(
+        problem, decomposition.final_answer, decomposition.answer_type,
+        user_id=user_id, subject=subject,
+    )
+    return {
+        "question": problem,
+        "answer": decomposition.final_answer,
+        "distractors": distractors,
+    }
 
-    # count=0 path: solve the single original problem (no generation)
-    if count == 0 and len(problems) == 1:
-        problem = problems[0]
-        decomposition = await decompose_problem(
-            problem, user_id=user_id, subject=subject, image_base64=image_base64,
-        )
-        distractors = await generate_distractors(
-            problem, decomposition.final_answer, decomposition.answer_type,
-            user_id=user_id, subject=subject,
-        )
-        return [{"question": problem, "answer": decomposition.final_answer, "distractors": distractors}]
 
+# ---------------------------------------------------------------------------
+# Generate similar question texts (batch, no solving)
+# ---------------------------------------------------------------------------
+
+_GENERATE_QUESTIONS_TEMPLATE = """You are a {professor_role} generating practice problems.
+
+Given one or more {problems_noun}, generate similar problems that test the SAME
+concepts and require the SAME approach to solve.
+
+Rules:
+- Identify the concept and solving approach from the problem text alone
+- Each generated problem must be solvable with the same method as its source
+- Do NOT repeat or rephrase the originals — generate entirely new problems
+- Vary the numbers, names, and context while keeping the same difficulty
+- Return ONLY the problem text — do NOT include answers"""
+
+
+def _build_generate_prompt(subject: str) -> str:
+    cfg = get_config(subject)
+    return _GENERATE_QUESTIONS_TEMPLATE.format(
+        professor_role=cfg["professor_role"],
+        problems_noun=cfg["problems_noun"],
+    )
+
+
+async def generate_similar_questions(
+    problems: list[str],
+    *,
+    user_id: str | None = None,
+    subject: str = Subject.MATH,
+) -> list[str]:
+    """Generate one similar question text per source problem (batch, Haiku).
+
+    Sends all source problems in a single Claude call and returns the generated
+    question texts in the same order. Does NOT solve or add answers — that is
+    handled separately by solve_problem().
+
+    Returns a list of question text strings.
+    """
     # Mini-batch cap: split into chunks of 5 to avoid token limits
     _BATCH_SIZE = 5
     if len(problems) > _BATCH_SIZE:
-        results: list[dict[str, object]] = []
+        results: list[str] = []
         for i in range(0, len(problems), _BATCH_SIZE):
             chunk = problems[i:i + _BATCH_SIZE]
-            results.extend(await generate_practice_problems(
-                chunk, count=0, user_id=user_id, subject=subject,
-            ))
+            results.extend(await generate_similar_questions(chunk, user_id=user_id, subject=subject))
         return results
 
-    # Build batched user message — numbered list, one similar per source
     has_diagram = any("[" in p for p in problems)
+
     if len(problems) == 1:
-        # Legacy single-problem path (count > 0): generate `count` variations
-        user_msg = f"{problems[0]}\n\nGenerate {count} similar problems (do not include the originals)."
+        user_msg = f"{problems[0]}\n\nGenerate 1 similar problem (do not include the original)."
     else:
         numbered = "\n\n".join(f"Problem {i + 1}: {p}" for i, p in enumerate(problems))
         user_msg = (
@@ -165,7 +174,6 @@ async def generate_practice_problems(
             "- Physics/other: use <svg> blocks"
         )
 
-    expected_count = len(problems) if len(problems) > 1 else count
     try:
         result = await call_claude_json(
             _build_generate_prompt(subject),
@@ -185,17 +193,43 @@ async def generate_practice_problems(
             raise RuntimeError("No valid questions generated")
 
         # If Claude returned fewer than expected, pad with source problems as fallback
-        if len(questions) < expected_count and len(problems) > 1:
+        if len(questions) < len(problems):
             logger.warning(
                 "Batch generation returned %d problems, expected %d — padding with sources",
-                len(questions), expected_count,
+                len(questions), len(problems),
             )
             questions += problems[len(questions):]
-    except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
-        logger.exception("Failed to generate practice problems")
-        raise RuntimeError("Failed to generate practice problems")
 
-    # Return question texts only — caller is responsible for solving asynchronously
+        return questions
+    except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
+        logger.exception("Failed to generate similar questions")
+        raise RuntimeError("Failed to generate similar questions")
+
+
+# ---------------------------------------------------------------------------
+# Legacy wrapper — kept for backwards compatibility
+# ---------------------------------------------------------------------------
+
+async def generate_practice_problems(
+    problems: list[str] | str,
+    count: int = 0,
+    *,
+    user_id: str | None = None,
+    subject: str = Subject.MATH,
+    image_base64: str | None = None,
+) -> list[dict[str, object]]:
+    """Backwards-compatible wrapper.
+
+    - Single problem + count=0 → solve_problem()
+    - List of problems or count>0 → generate_similar_questions() (texts only, no answers)
+    """
+    if isinstance(problems, str):
+        problems = [problems]
+
+    if count == 0 and len(problems) == 1:
+        return [await solve_problem(problems[0], user_id=user_id, subject=subject, image_base64=image_base64)]
+
+    questions = await generate_similar_questions(problems, user_id=user_id, subject=subject)
     return [{"question": q, "answer": "", "distractors": []} for q in questions]
 
 
