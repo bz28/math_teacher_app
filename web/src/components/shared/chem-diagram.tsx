@@ -46,7 +46,12 @@ export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDi
 
     render();
     return () => { cancelled = true; };
-  }, [smiles, width, height]);
+    // canvasId is stable by construction (useState with a lazy
+    // initializer that never re-computes), so the render call's
+    // `#${canvasId}` selector is constant for the component's
+    // lifetime. Adding it to the deps is harmless and silences
+    // the exhaustive-deps warning.
+  }, [smiles, width, height, canvasId]);
 
   if (error) {
     return (
