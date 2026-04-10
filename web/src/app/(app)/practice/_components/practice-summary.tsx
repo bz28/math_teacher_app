@@ -9,7 +9,6 @@ import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
 import type { PracticeBatch } from "@/stores/practice";
 import type { Subject } from "@/stores/learn";
-import { FREE_DAILY_SESSION_LIMIT } from "@/lib/constants";
 
 interface PracticeSummaryProps {
   practiceBatch: PracticeBatch;

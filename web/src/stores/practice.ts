@@ -6,7 +6,6 @@ import {
   practice as practiceApi,
   work as workApi,
   type PracticeProblem,
-  type PracticeCheckResponse,
   type DiagnosisResult,
 } from "@/lib/api";
 import { pollForState } from "@/lib/poll";
