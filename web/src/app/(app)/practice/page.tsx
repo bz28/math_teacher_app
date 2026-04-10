@@ -66,7 +66,7 @@ export default function PracticePage() {
         sessionApi.completePracticeBatch(practiceBatch.sessionId, {
           total_questions: practiceBatch.results.length,
           correct_count: correct,
-        }).catch(console.error);
+        }).catch(() => { /* session may already be completed — safe to ignore */ });
       }
     }
   }, [phase, practiceBatch, fireConfetti]);
