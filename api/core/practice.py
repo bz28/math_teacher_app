@@ -207,33 +207,6 @@ async def generate_similar_questions(
 
 
 # ---------------------------------------------------------------------------
-# Legacy wrapper — kept for backwards compatibility
-# ---------------------------------------------------------------------------
-
-async def generate_practice_problems(
-    problems: list[str] | str,
-    count: int = 0,
-    *,
-    user_id: str | None = None,
-    subject: str = Subject.MATH,
-    image_base64: str | None = None,
-) -> list[dict[str, object]]:
-    """Backwards-compatible wrapper.
-
-    - Single problem + count=0 → solve_problem()
-    - List of problems or count>0 → generate_similar_questions() (texts only, no answers)
-    """
-    if isinstance(problems, str):
-        problems = [problems]
-
-    if count == 0 and len(problems) == 1:
-        return [await solve_problem(problems[0], user_id=user_id, subject=subject, image_base64=image_base64)]
-
-    questions = await generate_similar_questions(problems, user_id=user_id, subject=subject)
-    return [{"question": q, "answer": "", "distractors": []} for q in questions]
-
-
-# ---------------------------------------------------------------------------
 # Answer checking
 # ---------------------------------------------------------------------------
 
