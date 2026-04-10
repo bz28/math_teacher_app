@@ -149,12 +149,17 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   async startPracticeBatch(problem, count, subject) {
     set({ phase: "loading", error: null });
     try {
-      const [{ problems }, { id: sessionId }] = await Promise.all([
-        practiceApi.generate({ problem, count, subject }),
+      // Phase 1: generate a similar question text (not the original)
+      const { problems: generated } = await practiceApi.generate({ problems: [problem], subject });
+      const similarQuestion = generated[0]?.question ?? problem;
+
+      // Phase 2: solve the generated question (get answer + distractors) + create session in parallel
+      const [{ problems: solved }, { id: sessionId }] = await Promise.all([
+        practiceApi.generate({ problem: similarQuestion, count: 0, subject }),
         sessionApi.createPracticeBatch(problem),
       ]);
       set({
-        practiceBatch: createPracticeBatch(problems, sessionId),
+        practiceBatch: createPracticeBatch(solved, sessionId),
         phase: "awaiting_input",
       });
     } catch (err) {
