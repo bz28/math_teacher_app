@@ -148,7 +148,7 @@ async def generate_similar_questions(
     if len(problems) > batch_size:
         results: list[str] = []
         for i in range(0, len(problems), batch_size):
-            chunk = problems[i:i + _BATCH_SIZE]
+            chunk = problems[i:i + batch_size]
             results.extend(await generate_similar_questions(chunk, user_id=user_id, subject=subject))
         return results
 
