@@ -392,3 +392,107 @@ WORK_DIAGNOSIS_SCHEMA: ToolSchema = {
         "additionalProperties": False,
     },
 }
+
+# ---------------------------------------------------------------------------
+# Integrity checker
+# ---------------------------------------------------------------------------
+
+INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
+    "name": "return_extraction",
+    "description": "Return the structured extraction of the student's handwritten work.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "steps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "step_num": {"type": "integer"},
+                        "latex": {"type": "string", "description": "LaTeX representation of this step."},
+                        "plain_english": {
+                            "type": "string",
+                            "description": "Plain-language description of what the student did.",
+                        },
+                    },
+                    "required": ["step_num", "latex", "plain_english"],
+                    "additionalProperties": False,
+                },
+                "description": "Ordered list of work steps the student wrote, from top to bottom of the page.",
+            },
+            "confidence": {
+                "type": "number",
+                "description": (
+                    "0.0 to 1.0 — how confident you are that the extraction "
+                    "is accurate. Below 0.3 means the handwriting is unreadable."
+                ),
+            },
+        },
+        "required": ["steps", "confidence"],
+        "additionalProperties": False,
+    },
+}
+
+INTEGRITY_GENERATE_SCHEMA: ToolSchema = {
+    "name": "return_questions",
+    "description": "Return 2-3 short follow-up questions to check student understanding.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question_text": {"type": "string", "description": "The question to ask the student."},
+                        "expected_shape": {
+                            "type": "string",
+                            "description": "What a good answer looks like (1-2 sentences).",
+                        },
+                        "rubric_hint": {
+                            "type": "string",
+                            "description": "Scoring guidance: what to look for in the answer.",
+                        },
+                    },
+                    "required": ["question_text", "expected_shape", "rubric_hint"],
+                    "additionalProperties": False,
+                },
+                "description": "2-3 questions that test whether the student understands their own work.",
+            },
+        },
+        "required": ["questions"],
+        "additionalProperties": False,
+    },
+}
+
+INTEGRITY_SCORE_SCHEMA: ToolSchema = {
+    "name": "return_score",
+    "description": "Return a verdict on whether the student's answer demonstrates understanding.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "verdict": {
+                "type": "string",
+                "enum": ["good", "weak", "bad"],
+                "description": (
+                    "good = clearly understands, weak = partially understands "
+                    "or vague, bad = does not understand or contradicts their work."
+                ),
+            },
+            "reasoning": {
+                "type": "string",
+                "description": "One-line explanation of why this verdict was chosen.",
+            },
+            "flags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional flags: 'vague', 'contradicts_own_work', "
+                    "'generic_textbook', 'acknowledges_cheating'. Empty list if none."
+                ),
+            },
+        },
+        "required": ["verdict", "reasoning", "flags"],
+        "additionalProperties": False,
+    },
+}
