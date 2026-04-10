@@ -30,7 +30,7 @@ from api.core.integrity_pipeline import (
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
-from api.models.assignment import Submission
+from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckResponse
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
@@ -146,8 +146,17 @@ async def get_my_integrity_state(
     db: AsyncSession = Depends(get_db),
 ) -> IntegrityStateResponse:
     """Resume / progress endpoint. Returns the per-problem status
-    summary so the chat UI knows what's done and what's pending."""
-    await _load_my_submission(db, submission_id, user.id)
+    summary so the chat UI knows what's done and what's pending.
+
+    Overall status:
+    - "complete": all problems in a terminal state
+    - "in_progress": problem rows exist but not all terminal
+    - "pending": no problem rows yet AND the HW has integrity
+      checks enabled (pipeline is running in the background)
+    - "no_check": no problem rows AND the HW has integrity checks
+      disabled (nothing to do — pipeline will never run)
+    """
+    submission = await _load_my_submission(db, submission_id, user.id)
     grouped = await _load_problems_with_responses(db, submission_id)
 
     summaries: list[IntegrityProblemSummary] = []
@@ -160,9 +169,23 @@ async def get_my_integrity_state(
             question_count=len(responses),
             answered_count=answered,
         ))
+
+    # When there are no problem rows, we have to disambiguate between
+    # "the pipeline is still running in the background" and "this HW
+    # doesn't have integrity checks enabled." One extra query only on
+    # the empty path.
+    if not grouped:
+        enabled = (await db.execute(
+            select(Assignment.integrity_check_enabled)
+            .where(Assignment.id == submission.assignment_id)
+        )).scalar_one_or_none()
+        overall_status = "pending" if enabled else "no_check"
+    else:
+        overall_status = _derive_overall_status(grouped)
+
     return IntegrityStateResponse(
         submission_id=str(submission_id),
-        overall_status=_derive_overall_status(grouped),
+        overall_status=overall_status,
         problems=summaries,
     )
 

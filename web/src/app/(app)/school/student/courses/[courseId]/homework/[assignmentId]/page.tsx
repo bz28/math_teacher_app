@@ -22,6 +22,7 @@ import { PracticeSummary } from "@/components/school/student/practice-summary";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
+import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
 
 type Mode =
   | { kind: "homework" }
@@ -36,6 +37,8 @@ type Mode =
       initial: { variation: VariationPayload; consumption_id: string; remaining: number };
     }
   | { kind: "summary"; problem: StudentHomeworkProblem }
+  | { kind: "integrity_pending" }
+  | { kind: "integrity_pending_timeout" }
   | { kind: "integrity_chat" };
 
 export default function HomeworkPage() {
@@ -66,9 +69,13 @@ export default function HomeworkPage() {
         if (sub) setSubmission(sub);
         if (integrity) {
           setIntegrityState(integrity);
-          // Auto-redirect: if the integrity check is still in progress,
-          // send the student straight into the chat — no opt-out.
-          if (integrity.overall_status === "in_progress") {
+          // Auto-route based on integrity state:
+          //   "pending"     → show the preparing screen + poll
+          //   "in_progress" → open the chat
+          //   "complete" / "no_check" → stay on homework view
+          if (integrity.overall_status === "pending") {
+            setMode({ kind: "integrity_pending" });
+          } else if (integrity.overall_status === "in_progress") {
             setMode({ kind: "integrity_chat" });
           }
         }
@@ -188,6 +195,45 @@ export default function HomeworkPage() {
         results={practiceResults}
         onBackToHomework={() => setMode({ kind: "homework" })}
       />
+    );
+  }
+
+  if (mode.kind === "integrity_pending" && hw.submission_id) {
+    return (
+      <IntegrityPendingView
+        submissionId={hw.submission_id}
+        onReady={async () => {
+          // Re-fetch state and let loadAll decide where to route
+          // next (chat, submitted view, etc.).
+          if (assignmentId) await loadAll(assignmentId);
+        }}
+        onTimeout={() => setMode({ kind: "integrity_pending_timeout" })}
+      />
+    );
+  }
+
+  if (mode.kind === "integrity_pending_timeout") {
+    return (
+      <div className="mx-auto max-w-2xl py-12 text-center">
+        <h1 className="text-2xl font-bold text-text-primary">
+          Couldn&apos;t prepare your check
+        </h1>
+        <p className="mt-3 text-sm text-text-secondary">
+          Your homework submission was saved successfully — your teacher has
+          it. Refresh the page to try again.
+        </p>
+        <button
+          onClick={() => {
+            if (assignmentId) {
+              setMode({ kind: "homework" });
+              loadAll(assignmentId);
+            }
+          }}
+          className="mt-6 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
+        >
+          Refresh
+        </button>
+      </div>
     );
   }
 

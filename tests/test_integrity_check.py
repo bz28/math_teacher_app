@@ -19,90 +19,41 @@ Tests cover:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
 
 from api.database import get_session_factory
 from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckResponse
 from api.models.question_bank import QuestionBankItem
+from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import TINY_PNG
 from tests.conftest import auth_headers as _auth
 
-# ── Mock AI helpers ──
-# These replicate the old stub behavior so integration tests run
-# without real Claude calls. The mocks are applied globally via
-# the autouse fixture below.
-
-_MOCK_EXTRACTION = {
-    "steps": [
-        {"step_num": 1, "latex": "mock", "plain_english": "mocked extraction"},
-    ],
-    "confidence": 0.9,
-}
-
-_MOCK_QUESTIONS = [
-    {
-        "question_text": "What was the first step you took to solve this?",
-        "expected_shape": "Brief description of an actual operation",
-        "rubric_hint": "Should reference a concrete operation",
-    },
-    {
-        "question_text": "Walk me through how you got the final answer.",
-        "expected_shape": "1-2 sentences connecting work to answer",
-        "rubric_hint": "Should mention the last step or transformation",
-    },
-]
+# AI mocks (extract / generate / score) are applied globally via the
+# autouse `_mock_integrity_ai` fixture in conftest.py so every test
+# that hits the submit endpoint — including ones outside this file —
+# doesn't make real Claude calls through the background task.
 
 
-def _mock_score(question: Any, answer: str, **kwargs: Any) -> dict[str, Any]:
-    """Length-based scoring matching the old stub behavior."""
-    n = len(answer.strip())
-    if n < 5:
-        verdict = "bad"
-    elif n < 30:
-        verdict = "weak"
-    else:
-        verdict = "good"
-    return {"verdict": verdict, "reasoning": f"Mock: length {n}", "flags": []}
+async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
+    """Submit the HW and wait for the background integrity pipeline to
+    finish.
 
-
-@pytest.fixture(autouse=True)
-def _mock_integrity_ai() -> Any:
-    """Mock all integrity AI calls so tests don't hit Claude."""
-    with (
-        patch(
-            "api.core.integrity_pipeline.extract_student_work",
-            new_callable=AsyncMock,
-            return_value=_MOCK_EXTRACTION,
-        ),
-        patch(
-            "api.core.integrity_pipeline.generate_integrity_questions",
-            new_callable=AsyncMock,
-            return_value=_MOCK_QUESTIONS,
-        ),
-        patch(
-            "api.core.integrity_ai.score_answer",
-            new_callable=AsyncMock,
-            side_effect=_mock_score,
-        ),
-        patch(
-            "api.routes.integrity_check.score_answer",
-            new_callable=AsyncMock,
-            side_effect=_mock_score,
-        ),
-    ):
-        yield
-
-
-def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
-    return client.post(
+    The pipeline runs as a fire-and-forget asyncio task in prod (so
+    the kid's submit doesn't block on 20–60s of LLM calls). Tests
+    still need to assert on the resulting integrity rows, so we
+    drain the task set before returning — mocked AI means the drain
+    completes instantly.
+    """
+    response = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
         json={"image_base64": TINY_PNG},
     )
+    await drain_integrity_background_tasks()
+    return response
 
 
 async def test_submit_creates_integrity_rows(
@@ -310,6 +261,72 @@ async def test_get_state_after_submit_returns_in_progress(
     assert p["question_count"] == 2
     assert p["answered_count"] == 0
     assert p["status"] == "awaiting_student"
+
+
+async def test_get_state_returns_pending_when_enabled_but_no_rows(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When the background pipeline has not yet inserted rows and the
+    HW has integrity enabled, the state endpoint should report
+    "pending" so the frontend can show a preparing screen and poll."""
+    # Create a Submission row directly (simulating the brief window
+    # after submit but before the background task has committed).
+    # We do NOT call _submit here — that would drain background
+    # tasks and we'd never observe the pending state.
+    from api.models.assignment import Submission
+    async with get_session_factory()() as s:
+        sub = Submission(
+            assignment_id=world["assignment_id"],
+            student_id=world["student_id"],
+            section_id=(await s.execute(
+                text("SELECT id FROM sections LIMIT 1"),
+            )).scalar_one(),
+            status="submitted",
+            image_data=TINY_PNG,
+            final_answers=None,
+            is_late=False,
+        )
+        s.add(sub)
+        await s.commit()
+        submission_id = str(sub.id)
+
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["overall_status"] == "pending"
+    assert body["problems"] == []
+
+
+async def test_get_state_returns_no_check_when_disabled_and_no_rows(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When integrity is disabled on the HW and there are no rows, the
+    state endpoint should report "no_check" — NOT "pending". The
+    distinction matters because the frontend would poll forever on
+    "pending" but go straight to the submitted view on "no_check"."""
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE assignments SET integrity_check_enabled=false WHERE id=:id"),
+            {"id": world["assignment_id"]},
+        )
+        await s.commit()
+
+    # With integrity disabled, _submit will skip the background task
+    # entirely (see submit_homework), so no rows get created.
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["overall_status"] == "no_check"
+    assert body["problems"] == []
 
 
 async def test_get_state_404_for_outsider(
