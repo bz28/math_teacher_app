@@ -147,7 +147,7 @@ def _format_extraction(extraction: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def generate_questions(
+async def generate_integrity_questions(
     problem_text: str, extraction: dict[str, Any],
 ) -> list[dict[str, str]]:
     """Call Claude Sonnet to generate 2-3 targeted follow-up questions."""

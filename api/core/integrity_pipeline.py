@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_ai import (
     extract_student_work,
-    generate_questions,
+    generate_integrity_questions,
 )
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckResponse
@@ -210,7 +210,7 @@ async def start_integrity_check(
             # Skip silently — there's nothing to ask about.
             continue
 
-        questions = await generate_questions(item.question, extraction)
+        questions = await generate_integrity_questions(item.question, extraction)
 
         problem_row = IntegrityCheckProblem(
             submission_id=submission_id,
