@@ -3,12 +3,14 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
+import { exitPreviewMode, isInPreviewMode } from "@/lib/api";
 
 /**
  * Role guard for the school-student section. Sends users who aren't
- * school-affiliated students back to the personal home. The auth check
- * itself is done one level up by AuthGuard in (app)/layout.tsx, so we
- * only need to enforce the role+school_id check here.
+ * school-affiliated students back to the personal home.
+ *
+ * When the teacher is in preview mode (shadow student), a sticky banner
+ * renders at the top with a "Back to teacher view" button.
  */
 export default function SchoolStudentLayout({
   children,
@@ -16,7 +18,8 @@ export default function SchoolStudentLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, loading } = useAuthStore();
+  const { user, loading, loadUser } = useAuthStore();
+  const preview = typeof window !== "undefined" && isInPreviewMode();
 
   useEffect(() => {
     if (loading || !user) return;
@@ -33,5 +36,24 @@ export default function SchoolStudentLayout({
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {preview && (
+        <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-primary px-4 py-2 text-sm font-medium text-white">
+          <span>Previewing as student</span>
+          <button
+            onClick={async () => {
+              exitPreviewMode();
+              await loadUser();
+              router.push("/school/teacher");
+            }}
+            className="rounded-full border border-white/30 px-3 py-0.5 text-xs font-bold hover:bg-white/20"
+          >
+            Back to teacher view
+          </button>
+        </div>
+      )}
+      {children}
+    </>
+  );
 }

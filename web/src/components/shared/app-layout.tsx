@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
+import { teacher, enterPreviewMode } from "@/lib/api";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
@@ -137,7 +139,9 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
 
 function TeacherLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
+  const router = useRouter();
+  const { user, logout, loadUser } = useAuthStore();
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   return (
     <div className="flex flex-1">
@@ -177,13 +181,27 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 
           <div className="my-3 border-t border-border-light" />
 
-          <Link
-            href="/home"
-            className="flex items-center gap-3 rounded-[--radius-sm] px-3 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-primary-bg/50 hover:text-primary"
+          <button
+            onClick={async () => {
+              if (previewLoading) return;
+              setPreviewLoading(true);
+              try {
+                const tokens = await teacher.previewAsStudent();
+                enterPreviewMode(tokens);
+                await loadUser();
+                router.push("/school/student");
+              } catch {
+                // Silently fail — teacher stays where they are
+              } finally {
+                setPreviewLoading(false);
+              }
+            }}
+            disabled={previewLoading}
+            className="flex w-full items-center gap-3 rounded-[--radius-sm] px-3 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-primary-bg/50 hover:text-primary disabled:opacity-50"
           >
             <SwitchIcon />
-            Try as Student
-          </Link>
+            {previewLoading ? "Switching…" : "Try as Student"}
+          </button>
         </nav>
 
         {/* Bottom */}

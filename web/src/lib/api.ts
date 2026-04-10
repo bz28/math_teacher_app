@@ -210,6 +210,37 @@ export function hasStoredTokens(): boolean {
   return !!getAccessToken() && !!getRefreshToken();
 }
 
+// ── Preview mode token stash ──
+
+const TEACHER_TOKEN_KEY = "veradic_teacher_access_token";
+const TEACHER_REFRESH_KEY = "veradic_teacher_refresh_token";
+
+/** Stash teacher tokens and swap to the preview student tokens. */
+export function enterPreviewMode(studentTokens: TokenPair) {
+  const teacherAccess = getAccessToken();
+  const teacherRefresh = getRefreshToken();
+  if (teacherAccess) localStorage.setItem(TEACHER_TOKEN_KEY, teacherAccess);
+  if (teacherRefresh) localStorage.setItem(TEACHER_REFRESH_KEY, teacherRefresh);
+  saveTokens(studentTokens);
+}
+
+/** Restore teacher tokens and clear the stash. Returns true if stash existed. */
+export function exitPreviewMode(): boolean {
+  const teacherAccess = localStorage.getItem(TEACHER_TOKEN_KEY);
+  const teacherRefresh = localStorage.getItem(TEACHER_REFRESH_KEY);
+  if (!teacherAccess || !teacherRefresh) return false;
+  localStorage.setItem(TOKEN_KEY, teacherAccess);
+  localStorage.setItem(REFRESH_KEY, teacherRefresh);
+  localStorage.removeItem(TEACHER_TOKEN_KEY);
+  localStorage.removeItem(TEACHER_REFRESH_KEY);
+  return true;
+}
+
+/** Check if we're currently in preview mode (teacher tokens stashed). */
+export function isInPreviewMode(): boolean {
+  return !!localStorage.getItem(TEACHER_TOKEN_KEY);
+}
+
 // ── Refresh deduplication ──
 
 let refreshPromise: Promise<boolean> | null = null;
@@ -918,6 +949,10 @@ export const teacher = {
       method: "POST",
       body: JSON.stringify({ problem_id: problemId, reason }),
     });
+  },
+  /** Create or reuse a shadow student, return its JWT pair. */
+  previewAsStudent() {
+    return apiFetch<TokenPair>("/teacher/preview-student", { method: "POST" });
   },
 };
 
