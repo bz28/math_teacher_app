@@ -100,7 +100,8 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           hw.due_at !== null &&
           new Date(hw.due_at).getTime() < Date.now() &&
           hw.graded > 0 &&
-          hw.submitted === hw.graded,
+          hw.submitted === hw.graded &&
+          hw.submitted >= hw.total_students,
       );
     }
 
