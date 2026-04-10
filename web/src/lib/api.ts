@@ -910,7 +910,23 @@ export const teacher = {
   submissionDetail(submissionId: string) {
     return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
   },
+  integrityDetail(submissionId: string) {
+    return apiFetch<TeacherIntegrityDetail>(`/teacher/integrity/submissions/${submissionId}`);
+  },
+  dismissIntegrityProblem(submissionId: string, problemId: string, reason: string) {
+    return apiFetch<void>(`/teacher/integrity/submissions/${submissionId}/dismiss`, {
+      method: "POST",
+      body: JSON.stringify({ problem_id: problemId, reason }),
+    });
+  },
 };
+
+export interface IntegrityOverview {
+  overall_status: "complete" | "in_progress";
+  overall_badge: "likely" | "uncertain" | "unlikely" | null;
+  problem_count: number;
+  complete_count: number;
+}
 
 export interface TeacherSubmissionRow {
   id: string;
@@ -926,6 +942,7 @@ export interface TeacherSubmissionRow {
   teacher_notes: string | null;
   final_score: number | null;
   reviewed_at: string | null;
+  integrity_overview: IntegrityOverview | null;
 }
 
 export interface TeacherSubmissionDetailProblem {
@@ -1215,6 +1232,38 @@ export interface RephraseIntegrityResponse {
   question_id: string;
   question_text: string;
   rephrase_used: true;
+}
+
+// ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──
+
+export interface TeacherIntegrityResponseRow {
+  response_id: string;
+  question_index: number;
+  question_text: string;
+  student_answer: string | null;
+  answer_verdict: "good" | "weak" | "bad" | "skipped" | "rephrased" | null;
+  seconds_on_question: number | null;
+  tab_switch_count: number;
+  rephrase_used: boolean;
+}
+
+export interface TeacherIntegrityProblemRow {
+  problem_id: string;
+  bank_item_id: string;
+  sample_position: number;
+  status: string;
+  badge: "likely" | "uncertain" | "unlikely" | "unreadable" | null;
+  raw_score: number | null;
+  ai_reasoning: string | null;
+  teacher_dismissed: boolean;
+  teacher_dismissal_reason: string | null;
+  responses: TeacherIntegrityResponseRow[];
+}
+
+export interface TeacherIntegrityDetail {
+  submission_id: string;
+  overall_status: string;
+  problems: TeacherIntegrityProblemRow[];
 }
 
 // ── Contact endpoints ──
