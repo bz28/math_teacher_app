@@ -19,8 +19,9 @@ Tests cover:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
 
@@ -29,6 +30,71 @@ from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckResp
 from api.models.question_bank import QuestionBankItem
 from tests.conftest import TINY_PNG
 from tests.conftest import auth_headers as _auth
+
+# ── Mock AI helpers ──
+# These replicate the old stub behavior so integration tests run
+# without real Claude calls. The mocks are applied globally via
+# the autouse fixture below.
+
+_MOCK_EXTRACTION = {
+    "steps": [
+        {"step_num": 1, "latex": "mock", "plain_english": "mocked extraction"},
+    ],
+    "confidence": 0.9,
+}
+
+_MOCK_QUESTIONS = [
+    {
+        "question_text": "What was the first step you took to solve this?",
+        "expected_shape": "Brief description of an actual operation",
+        "rubric_hint": "Should reference a concrete operation",
+    },
+    {
+        "question_text": "Walk me through how you got the final answer.",
+        "expected_shape": "1-2 sentences connecting work to answer",
+        "rubric_hint": "Should mention the last step or transformation",
+    },
+]
+
+
+def _mock_score(question: Any, answer: str, **kwargs: Any) -> dict[str, Any]:
+    """Length-based scoring matching the old stub behavior."""
+    n = len(answer.strip())
+    if n < 5:
+        verdict = "bad"
+    elif n < 30:
+        verdict = "weak"
+    else:
+        verdict = "good"
+    return {"verdict": verdict, "reasoning": f"Mock: length {n}", "flags": []}
+
+
+@pytest.fixture(autouse=True)
+def _mock_integrity_ai() -> Any:
+    """Mock all integrity AI calls so tests don't hit Claude."""
+    with (
+        patch(
+            "api.core.integrity_pipeline.extract_student_work",
+            new_callable=AsyncMock,
+            return_value=_MOCK_EXTRACTION,
+        ),
+        patch(
+            "api.core.integrity_pipeline.generate_integrity_questions",
+            new_callable=AsyncMock,
+            return_value=_MOCK_QUESTIONS,
+        ),
+        patch(
+            "api.core.integrity_ai.score_answer",
+            new_callable=AsyncMock,
+            side_effect=_mock_score,
+        ),
+        patch(
+            "api.routes.integrity_check.score_answer",
+            new_callable=AsyncMock,
+            side_effect=_mock_score,
+        ),
+    ):
+        yield
 
 
 def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
@@ -416,34 +482,20 @@ async def test_answer_404_for_outsider(
     assert r.status_code == 404
 
 
-async def test_rephrase_marks_used_and_returns_alternate(
+async def test_rephrase_endpoint_removed(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    """The rephrase endpoint was removed in PR 4."""
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
-
-    nxt = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-    original_text = nxt["question_text"]
 
     r = await client.post(
         f"/v1/school/student/integrity/submissions/{submission_id}/rephrase",
         headers=_auth(world["student_token"]),
-        json={"question_id": nxt["question_id"]},
+        json={"question_id": "00000000-0000-0000-0000-000000000000"},
     )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["rephrase_used"] is True
-    assert body["question_text"] != original_text
-
-    # Re-fetching `next` shows rephrase_used=true
-    nxt2 = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-    assert nxt2["rephrase_used"] is True
+    # Expect 404 or 405 — the route no longer exists
+    assert r.status_code in (404, 405)
 
 
 async def test_resume_returns_same_question_after_partial(
