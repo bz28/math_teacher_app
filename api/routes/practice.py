@@ -34,9 +34,10 @@ async def generate(
 ) -> PracticeGenerateResponse:
     """Generate similar practice problems for a given problem."""
     await check_entitlement(db, user, Entitlement.CREATE_SESSION)
+    source = body.problems if body.problems else (body.problem or "")
     try:
         problems = await generate_practice_problems(
-            body.problem, body.count,
+            source, body.count,
             user_id=str(user.id), subject=body.subject,
             image_base64=body.image_base64,
         )

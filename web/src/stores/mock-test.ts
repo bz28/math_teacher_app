@@ -103,19 +103,54 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
     set({ phase: "loading", error: null });
     try {
       if (generateCount > 0) {
-        const image = imageMap.get(problems[0]);
-        const { problems: generated } = await practiceApi.generate({
-          problem: problems[0],
-          count: generateCount,
-          subject,
-          ...(image && { image_base64: image }),
-        });
-        const allQuestionTexts = generated.map((g) => g.question);
-        const { id } = await sessionApi.createMockTest(problems[0], allQuestionTexts);
-        set({
-          mockTest: createMockTest(generated, id, timeLimitMinutes, multipleChoice),
-          phase: "mock_test_active",
-        });
+        // Phase 1: batch generate question texts (1 Claude call)
+        // If any problem has an image, fall back to parallel individual calls
+        const hasImages = problems.some((p) => !!imageMap.get(p));
+        let questionTexts: string[];
+        if (hasImages) {
+          const results = await Promise.all(
+            problems.map((p) => {
+              const image = imageMap.get(p);
+              return practiceApi.generate({
+                problem: p, count: 1, subject,
+                ...(image && { image_base64: image }),
+              });
+            }),
+          );
+          questionTexts = results.flatMap((r) => r.problems.map((p) => p.question));
+        } else {
+          const res = await practiceApi.generate({ problems, subject });
+          questionTexts = res.problems.map((p) => p.question);
+        }
+
+        // Phase 2: show exam immediately with placeholders, solve in parallel
+        const placeholders: PracticeProblem[] = questionTexts.map((q) => ({
+          question: q,
+          answer: "",
+        }));
+        const { id } = await sessionApi.createMockTest(problems[0], questionTexts);
+        const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
+        set({ mockTest: mt });
+
+        // Fire solve calls for all generated questions in parallel
+        const solvePromises = questionTexts.map((q, i) =>
+          practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
+            if (res.problems.length > 0) {
+              const { mockTest: current } = get();
+              if (!current) return;
+              const updated = [...current.questions];
+              updated[i] = res.problems[0];
+              set({ mockTest: { ...current, questions: updated } });
+            }
+          }),
+        );
+
+        // Wait for Q1 to be solved before showing exam (so timed exams start with at least 1 answer ready)
+        try { await solvePromises[0]; } catch { /* continue even if Q1 fails */ }
+        set({ phase: "mock_test_active" });
+
+        // Q2+ continue solving in the background
+        Promise.allSettled(solvePromises.slice(1));
       } else {
         const placeholders: PracticeProblem[] = problems.map((p) => ({
           question: p,

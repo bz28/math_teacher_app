@@ -98,23 +98,31 @@ async def generate_distractors(
 
 
 async def generate_practice_problems(
-    problem: str,
-    count: int,
+    problems: list[str] | str,
+    count: int = 0,
     *,
     user_id: str | None = None,
     subject: str = Subject.MATH,
     image_base64: str | None = None,
 ) -> list[dict[str, object]]:
-    """Generate the original + count similar problems with answers.
+    """Generate similar problems for one or more source problems.
 
-    When count=0, solves the original problem using step-by-step decomposition
-    for accuracy, then returns the answer.
-    When count>0, generates count new similar problems (excluding original),
-    then verifies each answer via decompose_problem for accuracy.
+    When a single problem string (or list of one) is passed with count=0,
+    solves the original using step-by-step decomposition and returns the answer.
 
-    Returns list of {"question": ..., "answer": ...} dicts.
+    When a list of problems is passed (or count>0 for legacy single-problem
+    callers), sends all source problems in one batched Claude call — one
+    generated similar problem per source — then solves each in parallel.
+
+    Returns list of {"question": ..., "answer": ..., "distractors": [...]} dicts.
     """
-    if count == 0:
+    # Normalise: always work with a list internally
+    if isinstance(problems, str):
+        problems = [problems]
+
+    # count=0 path: solve the single original problem (no generation)
+    if count == 0 and len(problems) == 1:
+        problem = problems[0]
         decomposition = await decompose_problem(
             problem, user_id=user_id, subject=subject, image_base64=image_base64,
         )
@@ -124,18 +132,40 @@ async def generate_practice_problems(
         )
         return [{"question": problem, "answer": decomposition.final_answer, "distractors": distractors}]
 
-    # Generate question text only (no answers — they'd be unreliable)
-    has_diagram = "[" in problem
-    user_msg = f"{problem}\n\nGenerate {count} similar problems (do not include the originals)."
+    # Mini-batch cap: split into chunks of 5 to avoid token limits
+    _BATCH_SIZE = 5
+    if len(problems) > _BATCH_SIZE:
+        results: list[dict[str, object]] = []
+        for i in range(0, len(problems), _BATCH_SIZE):
+            chunk = problems[i:i + _BATCH_SIZE]
+            results.extend(await generate_practice_problems(
+                chunk, count=0, user_id=user_id, subject=subject,
+            ))
+        return results
+
+    # Build batched user message — numbered list, one similar per source
+    has_diagram = any("[" in p for p in problems)
+    if len(problems) == 1:
+        # Legacy single-problem path (count > 0): generate `count` variations
+        user_msg = f"{problems[0]}\n\nGenerate {count} similar problems (do not include the originals)."
+    else:
+        numbered = "\n\n".join(f"Problem {i + 1}: {p}" for i, p in enumerate(problems))
+        user_msg = (
+            f"{numbered}\n\n"
+            f"Generate exactly 1 similar problem for each of the {len(problems)} problems above. "
+            f"Return them in the same order as a list of {len(problems)} items."
+        )
+
     if has_diagram:
         user_msg += (
-            "\n\nIMPORTANT: The original problem included a diagram. Each generated problem "
-            "MUST include a diagram using structured notation:\n"
+            "\n\nIMPORTANT: Any problem that included a diagram requires a diagram in its "
+            "generated version, using structured notation:\n"
             '- Chemistry: @@{"diagram_type": "smiles", "smiles": "SMILES_STRING", "label": "description"}@@\n'
             '- Math graphs: @@{"diagram_type": "graph", "functions": [...], "xRange": [...], "yRange": [...]}@@\n'
             "- Physics/other: use <svg> blocks"
         )
 
+    expected_count = len(problems) if len(problems) > 1 else count
     try:
         result = await call_claude_json(
             _build_generate_prompt(subject),
@@ -143,8 +173,8 @@ async def generate_practice_problems(
             mode=LLMMode.PRACTICE_GENERATE,
             tool_schema=PRACTICE_GENERATE_SCHEMA,
             user_id=user_id,
-            model=MODEL_REASON,
-            max_tokens=4096 if has_diagram else 2048,
+            model=MODEL_REASON if has_diagram else MODEL_HAIKU,
+            max_tokens=4096 if has_diagram else min(1024 * len(problems), 4096),
         )
         raw_problems = result.get("problems")
         if not isinstance(raw_problems, list) or len(raw_problems) == 0:
@@ -153,30 +183,20 @@ async def generate_practice_problems(
         questions = [str(p) for p in raw_problems if isinstance(p, str) and p.strip()]
         if not questions:
             raise RuntimeError("No valid questions generated")
+
+        # If Claude returned fewer than expected, pad with source problems as fallback
+        if len(questions) < expected_count and len(problems) > 1:
+            logger.warning(
+                "Batch generation returned %d problems, expected %d — padding with sources",
+                len(questions), expected_count,
+            )
+            questions += problems[len(questions):]
     except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
         logger.exception("Failed to generate practice problems")
         raise RuntimeError("Failed to generate practice problems")
 
-    # Step 2: Solve each generated problem via decompose_problem for accuracy
-    async def solve_one(q: str) -> dict[str, object] | None:
-        try:
-            decomp = await decompose_problem(q, user_id=user_id, subject=subject)
-            distractors = await generate_distractors(
-                q, decomp.final_answer, decomp.answer_type,
-                user_id=user_id, subject=subject,
-            )
-            return {"question": q, "answer": decomp.final_answer, "distractors": distractors}
-        except RuntimeError:
-            logger.warning("Failed to solve generated problem: %s", q[:80])
-            return None
-
-    solved = await asyncio.gather(*[solve_one(q) for q in questions])
-    problems = [p for p in solved if p is not None]
-
-    if not problems:
-        raise RuntimeError("Failed to generate practice problems")
-
-    return problems
+    # Return question texts only — caller is responsible for solving asynchronously
+    return [{"question": q, "answer": "", "distractors": []} for q in questions]
 
 
 # ---------------------------------------------------------------------------
