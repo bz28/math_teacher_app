@@ -126,19 +126,10 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   return (
     <div className="mx-auto max-w-2xl">
       {/* Progress header — "Problem 1 of 5 · Question 1 of 2" */}
-      <div className="flex items-center justify-between text-xs font-medium text-text-muted">
-        <span>
-          Problem {current.problem_position} of {current.total_problems}
-          {" · "}
-          Question {current.question_index + 1} of {current.questions_in_problem}
-        </span>
-        <button
-          onClick={onDone}
-          className="text-text-muted hover:text-primary"
-          title="Save your progress and come back later"
-        >
-          Save & exit
-        </button>
+      <div className="text-xs font-medium text-text-muted">
+        Problem {current.problem_position} of {current.total_problems}
+        {" · "}
+        Question {current.question_index + 1} of {current.questions_in_problem}
       </div>
 
       <div className="mt-6 rounded-[--radius-md] border border-border bg-surface p-6">

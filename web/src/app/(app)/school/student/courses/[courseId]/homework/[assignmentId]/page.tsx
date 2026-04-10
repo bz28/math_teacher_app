@@ -21,7 +21,6 @@ import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface
 import { PracticeSummary } from "@/components/school/student/practice-summary";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
-import { IntegrityCheckEntry } from "@/components/school/student/integrity-check-entry";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
 
 type Mode =
@@ -44,10 +43,6 @@ export default function HomeworkPage() {
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [integrityState, setIntegrityState] = useState<IntegrityStateResponse | null>(null);
-  // Per-page-load dismissal of the integrity entry prompt. Resets on
-  // refresh — kid can defer for now but the prompt comes back next
-  // visit. Strict 5-minute timer + auto-lock is deferred to PR 5.
-  const [integrityDeferred, setIntegrityDeferred] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
@@ -69,7 +64,14 @@ export default function HomeworkPage() {
           schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
         ]);
         if (sub) setSubmission(sub);
-        if (integrity) setIntegrityState(integrity);
+        if (integrity) {
+          setIntegrityState(integrity);
+          // Auto-redirect: if the integrity check is still in progress,
+          // send the student straight into the chat — no opt-out.
+          if (integrity.overall_status === "in_progress") {
+            setMode({ kind: "integrity_chat" });
+          }
+        }
       }
     } catch {
       setError("Couldn't load this homework. Please try again.");
@@ -194,10 +196,6 @@ export default function HomeworkPage() {
       <IntegrityCheckChat
         submissionId={hw.submission_id}
         onDone={async () => {
-          // Reset the per-page-load defer so a freshly-completed
-          // check vanishes from the entry-prompt slot, and so a
-          // partially-done one shows the "Continue" prompt again.
-          setIntegrityDeferred(false);
           setMode({ kind: "homework" });
           if (assignmentId) await loadAll(assignmentId);
         }}
@@ -281,18 +279,7 @@ export default function HomeworkPage() {
       </div>
 
       {hw.submitted && submission ? (
-        <>
-          <SubmittedView submission={submission} />
-          {integrityState
-            && integrityState.overall_status === "in_progress"
-            && !integrityDeferred && (
-            <IntegrityCheckEntry
-              state={integrityState}
-              onStart={() => setMode({ kind: "integrity_chat" })}
-              onLater={() => setIntegrityDeferred(true)}
-            />
-          )}
-        </>
+        <SubmittedView submission={submission} />
       ) : !hw.submitted ? (
         <SubmissionPanel
           assignmentId={hw.assignment_id}
