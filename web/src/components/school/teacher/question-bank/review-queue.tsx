@@ -1,23 +1,27 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { teacher, type BankItem, type TeacherUnit } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { teacher, type BankItem, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { unitLabel as labelForUnit } from "@/lib/units";
 import { MathText } from "@/components/shared/math-text";
 import { DIFFICULTY_STYLE } from "./constants";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 
 // Focused one-at-a-time review queue. Shows pending items in sequence,
-// with Reject / Edit / Approve actions. Auto-advances after each
-// action. Shows a completion screen when all items are reviewed.
+// with Reject / Edit / Approve actions + a sticky destination picker
+// so approved primaries auto-attach to a homework. Variations (items
+// with parent_question_id) are approved without a destination since
+// they implicitly belong to their parent.
 
 export function ReviewQueue({
+  courseId,
   queue,
   units,
   onBack,
   onChanged,
   onEditItem,
 }: {
+  courseId: string;
   queue: BankItem[];
   units: TeacherUnit[];
   /** Return to the approved table view. */
@@ -32,13 +36,51 @@ export function ReviewQueue({
   const total = queue.length;
   const current = queue[index];
 
+  // ── Destination picker state ──
+  // "none" = approve without assigning, string = assignmentId
+  const [destinationId, setDestinationId] = useState<string | "none">("none");
+  const [drafts, setDrafts] = useState<TeacherAssignment[] | null>(null);
+
+  // Fetch draft homeworks on mount for the destination dropdown.
+  useEffect(() => {
+    let cancelled = false;
+    teacher.assignments(courseId).then((res) => {
+      if (cancelled) return;
+      const draftHWs = res.assignments.filter(
+        (a) => a.type === "homework" && a.status !== "published",
+      );
+      setDrafts(draftHWs);
+
+      // Smart default: if queue items share a unit and exactly one draft
+      // HW matches that unit, auto-select it.
+      const unitIds = new Set(queue.map((i) => i.unit_id).filter(Boolean));
+      if (unitIds.size === 1) {
+        const queueUnit = [...unitIds][0]!;
+        const matching = draftHWs.filter((d) =>
+          d.unit_ids.includes(queueUnit),
+        );
+        if (matching.length === 1) {
+          setDestinationId(matching[0].id);
+        }
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [courseId, queue]);
+
+  const selectedDraft = useMemo(
+    () => drafts?.find((d) => d.id === destinationId) ?? null,
+    [drafts, destinationId],
+  );
+
   const advance = useCallback(() => {
     setIndex((i) => Math.min(i + 1, total));
   }, [total]);
 
   const handleApprove = () =>
     run(async () => {
-      await teacher.approveBankItem(current.id);
+      const isVariation = !!current.parent_question_id;
+      const assignmentId = !isVariation && destinationId !== "none" ? destinationId : undefined;
+      await teacher.approveBankItem(current.id, assignmentId ? { assignmentId } : undefined);
       setReviewed((r) => r + 1);
       onChanged();
       advance();
@@ -116,6 +158,32 @@ export function ReviewQueue({
           style={{ width: `${progressPct}%` }}
         />
       </div>
+
+      {/* Destination picker — only for primary questions */}
+      {!current.parent_question_id && drafts !== null && (
+        <div className="flex items-center gap-2 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-sm">
+          <span className="shrink-0 text-xs font-bold uppercase tracking-wider text-text-muted">
+            Assigning to:
+          </span>
+          <select
+            value={destinationId}
+            onChange={(e) => setDestinationId(e.target.value)}
+            className="min-w-0 flex-1 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none"
+          >
+            <option value="none">Don&apos;t assign</option>
+            {drafts.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.title}
+              </option>
+            ))}
+          </select>
+          {selectedDraft && (
+            <span className="shrink-0 text-[10px] uppercase tracking-wider text-text-muted">
+              draft
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Card */}
       <div className="overflow-hidden rounded-[--radius-lg] border border-border-light bg-surface shadow-sm">
@@ -197,7 +265,11 @@ export function ReviewQueue({
               disabled={busy}
               className="rounded-[--radius-md] bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50"
             >
-              Approve
+              {current.parent_question_id
+                ? "Approve"
+                : destinationId !== "none"
+                  ? `Approve \u2192 ${selectedDraft?.title ?? "HW"}`
+                  : "Approve"}
             </button>
           </div>
         </div>

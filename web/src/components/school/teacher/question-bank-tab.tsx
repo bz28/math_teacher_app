@@ -185,6 +185,7 @@ export function QuestionBankTab({
       <CourseSubjectContext.Provider value={courseSubject}>
         <div>
           <ReviewQueue
+            courseId={courseId}
             queue={inlineReviewQueue}
             units={units}
             onBack={() => {
