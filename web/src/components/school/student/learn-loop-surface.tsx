@@ -53,7 +53,7 @@ export function LearnLoopSurface({
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
   const [remaining, setRemaining] = useState<number>(
-    queue ? queue.length : initial.remaining,
+    queue ? queue.length - 1 : initial.remaining,
   );
   const [queueIdx, setQueueIdx] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);

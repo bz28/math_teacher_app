@@ -229,6 +229,8 @@ export function PracticeLoopSurface({
     ? Math.min(100, Math.round(((results.length + (revealed ? 1 : 0)) / totalApprox) * 100))
     : 0;
 
+  const footerDisabled = (!revealed && choices.length >= 2) || advancing;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
@@ -308,14 +310,14 @@ export function PracticeLoopSurface({
           <span className="text-xs font-medium text-text-muted">{remaining} more available</span>
           <button
             onClick={() => pushResultAndAdvance("done")}
-            disabled={(!revealed && choices.length >= 2) || advancing}
+            disabled={footerDisabled}
             className="rounded-[--radius-sm] border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50"
           >
             Done practicing
           </button>
           <button
             onClick={() => pushResultAndAdvance("next")}
-            disabled={(!revealed && choices.length >= 2) || advancing}
+            disabled={footerDisabled}
             className="rounded-[--radius-sm] bg-primary px-4 py-1.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {advancing ? "Loading…" : choices.length < 2 ? "Skip" : "Practice similar"}
