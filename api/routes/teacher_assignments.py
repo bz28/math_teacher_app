@@ -10,9 +10,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
+from api.core.integrity_pipeline import (
+    BADGE_LIKELY,
+    BADGE_UNCERTAIN,
+    BADGE_UNLIKELY,
+    TERMINAL_STATUSES,
+)
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.integrity_check import IntegrityCheckProblem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
@@ -620,8 +627,45 @@ async def list_submissions(
         .order_by(Submission.submitted_at.desc())
     )).all()
 
+    # Batch-load integrity problems for all submissions in one query
+    # so the list page doesn't N+1.
+    sub_ids = [sub.id for sub, *_ in rows]
+    integrity_rows = (await db.execute(
+        select(IntegrityCheckProblem)
+        .where(IntegrityCheckProblem.submission_id.in_(sub_ids))
+    )).scalars().all() if sub_ids else []
+
+    # Group by submission_id → list of problems
+    integrity_by_sub: dict[uuid.UUID, list[IntegrityCheckProblem]] = {}
+    for ip in integrity_rows:
+        integrity_by_sub.setdefault(ip.submission_id, []).append(ip)
+
     submissions = []
     for sub, grade, student_name, student_email in rows:
+        # Derive a lightweight integrity overview for the list pill.
+        problems = integrity_by_sub.get(sub.id, [])
+        if not problems:
+            integrity_overview = None
+        else:
+            all_terminal = all(p.status in TERMINAL_STATUSES for p in problems)
+            badges = [p.badge for p in problems if p.badge is not None]
+            # "Worst badge" logic: unlikely > uncertain > likely.
+            # Teacher cares about flags, not averages.
+            if BADGE_UNLIKELY in badges:
+                worst = BADGE_UNLIKELY
+            elif BADGE_UNCERTAIN in badges:
+                worst = BADGE_UNCERTAIN
+            elif badges:
+                worst = BADGE_LIKELY
+            else:
+                worst = None
+            integrity_overview = {
+                "overall_status": "complete" if all_terminal else "in_progress",
+                "overall_badge": worst if all_terminal else None,
+                "problem_count": len(problems),
+                "complete_count": sum(1 for p in problems if p.status in TERMINAL_STATUSES),
+            }
+
         submissions.append({
             "id": str(sub.id),
             "student_name": student_name or "",
@@ -635,6 +679,7 @@ async def list_submissions(
             "teacher_notes": grade.teacher_notes if grade else None,
             "final_score": grade.final_score if grade else None,
             "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
+            "integrity_overview": integrity_overview,
         })
 
     return {"submissions": submissions}
