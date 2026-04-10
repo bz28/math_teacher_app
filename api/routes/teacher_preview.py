@@ -60,7 +60,7 @@ async def get_or_create_preview_student(
             email=f"preview+{short_id}@veradic.ai",
             name=f"{teacher.name or teacher.email} (Preview)",
             password_hash=hash_password(uuid.uuid4().hex),
-            grade_level=teacher.grade_level if hasattr(teacher, "grade_level") else 9,
+            grade_level=teacher.grade_level,
             role="student",
             school_id=teacher.school_id,
             is_preview=True,
