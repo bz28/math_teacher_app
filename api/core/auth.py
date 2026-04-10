@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import JWTError, jwt  # type: ignore[import-untyped]
+from jose import JWTError, jwt
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
