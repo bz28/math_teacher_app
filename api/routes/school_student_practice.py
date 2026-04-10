@@ -67,6 +67,21 @@ logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
 
+async def drain_integrity_background_tasks() -> None:
+    """Test helper: wait for all outstanding integrity background tasks
+    to finish.
+
+    Lives in prod code (not conftest) because it needs direct access
+    to the private task set, and exposing that set to tests via an
+    import would tempt ad-hoc usage. A named helper makes the intent
+    explicit. This is the only external contract — tests call this,
+    nothing else should.
+    """
+    tasks = list(_BACKGROUND_TASKS)
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def _run_integrity_pipeline_background(submission_id: uuid.UUID) -> None:
     """Run the integrity pipeline for a submission in the background.
 

@@ -12,6 +12,7 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -28,6 +29,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session  # noqa: F401 — register models with Base
 from api.models.user import User
+from api.routes.school_student_practice import drain_integrity_background_tasks
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -68,6 +70,95 @@ TINY_PNG = (
 def auth_headers(token: str) -> dict[str, str]:
     """Build a Bearer Authorization header for an access token."""
     return {"Authorization": f"Bearer {token}"}
+
+
+# ── Global integrity AI mocks ──
+#
+# The integrity pipeline now runs as a fire-and-forget asyncio task
+# spawned from submit_homework. Any test that hits the submit
+# endpoint will therefore kick off a background task that calls
+# Claude Vision + Sonnet unless we mock the three AI helpers here.
+#
+# The mocks replicate the old stub behavior: a fixed extraction, a
+# fixed pair of questions, and length-based scoring. Tests that care
+# about specific AI output override these locally with their own
+# patches (pytest merges the innermost patch).
+#
+# Scoped to every test in the repo via autouse so we never
+# accidentally make real API calls from CI.
+
+_MOCK_EXTRACTION = {
+    "steps": [
+        {"step_num": 1, "latex": "mock", "plain_english": "mocked extraction"},
+    ],
+    "confidence": 0.9,
+}
+
+_MOCK_QUESTIONS = [
+    {
+        "question_text": "What was the first step you took to solve this?",
+        "expected_shape": "Brief description of an actual operation",
+        "rubric_hint": "Should reference a concrete operation",
+    },
+    {
+        "question_text": "Walk me through how you got the final answer.",
+        "expected_shape": "1-2 sentences connecting work to answer",
+        "rubric_hint": "Should mention the last step or transformation",
+    },
+]
+
+
+def _mock_score(question: Any, answer: str, **kwargs: Any) -> dict[str, Any]:
+    """Length-based scoring matching the old stub behavior."""
+    n = len(answer.strip())
+    if n < 5:
+        verdict = "bad"
+    elif n < 30:
+        verdict = "weak"
+    else:
+        verdict = "good"
+    return {"verdict": verdict, "reasoning": f"Mock: length {n}", "flags": []}
+
+
+@pytest.fixture(autouse=True)
+def _mock_integrity_ai() -> Any:
+    """Mock all integrity AI calls so tests don't hit Claude."""
+    with (
+        patch(
+            "api.core.integrity_pipeline.extract_student_work",
+            new_callable=AsyncMock,
+            return_value=_MOCK_EXTRACTION,
+        ),
+        patch(
+            "api.core.integrity_pipeline.generate_integrity_questions",
+            new_callable=AsyncMock,
+            return_value=_MOCK_QUESTIONS,
+        ),
+        patch(
+            "api.core.integrity_ai.score_answer",
+            new_callable=AsyncMock,
+            side_effect=_mock_score,
+        ),
+        patch(
+            "api.routes.integrity_check.score_answer",
+            new_callable=AsyncMock,
+            side_effect=_mock_score,
+        ),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+async def _drain_integrity_tasks() -> AsyncIterator[None]:
+    """Drain any integrity background tasks spawned during the test.
+
+    Runs AFTER the test body so any fire-and-forget tasks from the
+    submit endpoint finish (or fail) cleanly before the next test
+    starts. Prevents tasks from leaking across tests and hitting a
+    session that's about to be truncated.
+    """
+    yield
+    await drain_integrity_background_tasks()
 
 
 async def _truncate_world_tables() -> None:
