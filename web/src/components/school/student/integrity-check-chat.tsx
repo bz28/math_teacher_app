@@ -21,9 +21,7 @@ const MIN_ANSWER_CHARS = 5;
  *      threshold the backend enforces)
  *   3. Tap Next → POST /answer → backend scores it, returns the
  *      next question in the same response (one round-trip)
- *   4. "I don't get this" → /rephrase, returns alternate phrasing,
- *      one-shot per question
- *   5. When /next or /answer returns {done: true} → render the done
+ *   4. When /next or /answer returns {done: true} → render the done
  *      state and let the kid tap Back to homework
  *
  * Tone is friendly throughout. Never "verification" / "checking
@@ -77,28 +75,6 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
       setQuestionStartedAt(Date.now());
     } catch {
       setError("Couldn't save your answer. Try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleRephrase() {
-    if (!current || current.done || submitting || current.rephrase_used) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const rephrased = await schoolStudent.rephraseIntegrityQuestion(
-        submissionId,
-        current.question_id,
-      );
-      // Patch the current question text in place; mark rephrase used.
-      setCurrent({
-        ...current,
-        question_text: rephrased.question_text,
-        rephrase_used: true,
-      });
-    } catch {
-      setError("Couldn't rephrase. Try answering as best you can.");
     } finally {
       setSubmitting(false);
     }
@@ -188,15 +164,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
 
       {error && <p className="mt-3 text-sm text-error">{error}</p>}
 
-      <div className="mt-4 flex items-center justify-between">
-        <button
-          onClick={handleRephrase}
-          disabled={current.rephrase_used || submitting}
-          className="rounded-[--radius-sm] border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50"
-          title={current.rephrase_used ? "Already rephrased once" : "Get an alternate phrasing"}
-        >
-          {current.rephrase_used ? "Rephrased ✓" : "I don't get this"}
-        </button>
+      <div className="mt-4 flex justify-end">
         <button
           onClick={handleNext}
           disabled={!canSubmit}

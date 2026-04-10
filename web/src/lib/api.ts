@@ -1186,15 +1186,6 @@ export const schoolStudent = {
       },
     );
   },
-  rephraseIntegrityQuestion(submissionId: string, questionId: string) {
-    return apiFetch<RephraseIntegrityResponse>(
-      `/school/student/integrity/submissions/${submissionId}/rephrase`,
-      {
-        method: "POST",
-        body: JSON.stringify({ question_id: questionId }),
-      },
-    );
-  },
 };
 
 // ── Integrity check types (mirror api/routes/integrity_check.py) ──
@@ -1225,14 +1216,7 @@ export type NextIntegrityQuestionResponse =
       question_index: number;  // 0-based; UI shows index+1
       questions_in_problem: number;
       question_text: string;
-      rephrase_used: boolean;
     };
-
-export interface RephraseIntegrityResponse {
-  question_id: string;
-  question_text: string;
-  rephrase_used: true;
-}
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──
 
