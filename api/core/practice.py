@@ -1,6 +1,5 @@
 """Practice mode: generate similar problems and check answers."""
 
-import asyncio
 import logging
 
 import anthropic
@@ -145,10 +144,10 @@ async def generate_similar_questions(
     Returns a list of question text strings.
     """
     # Mini-batch cap: split into chunks of 5 to avoid token limits
-    _BATCH_SIZE = 5
-    if len(problems) > _BATCH_SIZE:
+    batch_size = 5
+    if len(problems) > batch_size:
         results: list[str] = []
-        for i in range(0, len(problems), _BATCH_SIZE):
+        for i in range(0, len(problems), batch_size):
             chunk = problems[i:i + _BATCH_SIZE]
             results.extend(await generate_similar_questions(chunk, user_id=user_id, subject=subject))
         return results
