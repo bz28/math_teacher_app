@@ -207,7 +207,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     });
   },
 
-  async submitPracticeAnswer(answer, subject) {
+  async submitPracticeAnswer(answer, _subject) {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
     const idx = practiceBatch.currentIndex;

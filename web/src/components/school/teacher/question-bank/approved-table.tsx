@@ -315,7 +315,6 @@ function TableRow({
       {expanded && (
         <ExpandedDetail
           node={node}
-          units={units}
           onOpenItem={onOpenItem}
           onOpenHomework={onOpenHomework}
         />
@@ -328,12 +327,10 @@ function TableRow({
 
 function ExpandedDetail({
   node,
-  units,
   onOpenItem,
   onOpenHomework,
 }: {
   node: TreeNode;
-  units: TeacherUnit[];
   onOpenItem: (item: BankItem) => void;
   onOpenHomework: (id: string) => void;
 }) {
