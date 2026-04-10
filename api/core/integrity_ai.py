@@ -76,15 +76,15 @@ async def extract_student_work(
 ) -> dict[str, Any]:
     """Call Claude Vision to extract the student's work steps from
     their uploaded homework photo."""
-    sub = (await db.execute(
+    image_data: str | None = (await db.execute(
         select(Submission.image_data).where(Submission.id == submission_id)
     )).scalar_one_or_none()
 
-    if not sub:
+    if not image_data:
         logger.warning("extract_student_work: no image for submission %s", submission_id)
         return {"steps": [], "confidence": 0.0}
 
-    base64_data, media_type = _strip_data_url_prefix(sub)
+    base64_data, media_type = _strip_data_url_prefix(image_data)
 
     content: list[dict[str, Any]] = [
         {

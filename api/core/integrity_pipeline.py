@@ -9,7 +9,7 @@ is committed. The pipeline:
 3. Picks the first N (cap MAX_SAMPLE) primary problems from
    `assignment.content`. The order is deterministic so a student
    resuming gets the same set.
-4. For each picked problem: calls the (stubbed) extraction +
+4. For each picked problem: calls Vision extraction +
    question generation, inserts an IntegrityCheckProblem row at
    status `awaiting_student`, and one IntegrityCheckResponse row
    per generated question.
@@ -30,6 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_ai import (
+    UNREADABLE_THRESHOLD,
     extract_student_work,
     generate_integrity_questions,
 )
@@ -115,7 +116,7 @@ async def start_integrity_check(
     submission_id: uuid.UUID,
     db: AsyncSession,
 ) -> None:
-    """Run the (stubbed) integrity check pipeline for a fresh
+    """Run the integrity check pipeline for a fresh
     submission. Idempotent in the sense that if rows already exist
     for this submission (e.g. a retry), it bails — the unique
     constraint on (submission_id, bank_item_id) backs this up at the
@@ -187,7 +188,7 @@ async def start_integrity_check(
     # If the Vision model couldn't read the handwriting, mark all
     # sampled problems as unreadable and bail — no questions to ask.
     confidence = extraction.get("confidence", 0.0)
-    if confidence < 0.3:
+    if confidence < UNREADABLE_THRESHOLD:
         logger.info(
             "Handwriting unreadable (confidence=%.2f) for submission %s",
             confidence, submission_id,
@@ -211,6 +212,12 @@ async def start_integrity_check(
             continue
 
         questions = await generate_integrity_questions(item.question, extraction)
+        if not questions:
+            logger.warning(
+                "No questions generated for problem %s in submission %s",
+                bid, submission_id,
+            )
+            continue
 
         problem_row = IntegrityCheckProblem(
             submission_id=submission_id,
