@@ -29,7 +29,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.integrity_stub import (
+from api.core.integrity_ai import (
     extract_student_work,
     generate_questions,
 )
@@ -182,7 +182,26 @@ async def start_integrity_check(
     for it in rows:
         items_by_id[it.id] = it
 
-    extraction = await extract_student_work(submission_id)
+    extraction = await extract_student_work(submission_id, db)
+
+    # If the Vision model couldn't read the handwriting, mark all
+    # sampled problems as unreadable and bail — no questions to ask.
+    confidence = extraction.get("confidence", 0.0)
+    if confidence < 0.3:
+        logger.info(
+            "Handwriting unreadable (confidence=%.2f) for submission %s",
+            confidence, submission_id,
+        )
+        for sample_position, bid in enumerate(sampled_uuids):
+            db.add(IntegrityCheckProblem(
+                submission_id=submission_id,
+                bank_item_id=bid,
+                sample_position=sample_position,
+                status=STATUS_SKIPPED_UNREADABLE,
+                student_work_extraction=extraction,
+                badge=BADGE_UNREADABLE,
+            ))
+        return
 
     for sample_position, bid in enumerate(sampled_uuids):
         item = items_by_id.get(bid)
@@ -191,7 +210,7 @@ async def start_integrity_check(
             # Skip silently — there's nothing to ask about.
             continue
 
-        questions = generate_questions(item.question, extraction)
+        questions = await generate_questions(item.question, extraction)
 
         problem_row = IntegrityCheckProblem(
             submission_id=submission_id,
