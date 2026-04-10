@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
-import { useEntitlementStore } from "@/stores/entitlements";
 import { session as sessionApi } from "@/lib/api";
 import { Button, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
@@ -24,19 +23,14 @@ export default function PracticePage() {
     error,
     submitPracticeAnswer,
     skipPracticeProblem,
-    submitPracticeWork,
     nextPracticeProblem,
     togglePracticeFlag,
-    retryFlaggedProblems,
     reset,
   } = usePracticeStore();
 
-  const { isPro, dailySessionsUsed, dailySessionsLimit } = useEntitlementStore();
-  const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
-
   const { fire: fireConfetti } = useConfetti();
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
-  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+  const { UpgradeModal } = useUpgradePrompt();
 
   // Build MC choices — must be before early returns (rules of hooks)
   const currentProblem = practiceBatch?.problems[practiceBatch.currentIndex];
@@ -101,11 +95,8 @@ export default function PracticePage() {
     return (
       <PracticeSummary
         practiceBatch={practiceBatch}
-        subject={subject}
-        sessionsRemaining={remainingSessions}
         onToggleFlag={togglePracticeFlag}
         onStartLearnQueue={startLearnQueue}
-        onUpgradeNeeded={showUpgrade}
         onReset={reset}
       />
     );

@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   schoolStudent,
-  type IntegrityStateResponse,
   type StudentHomeworkDetail,
   type StudentHomeworkProblem,
   type StudentSubmission,
@@ -45,7 +44,6 @@ export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
-  const [integrityState, setIntegrityState] = useState<IntegrityStateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
@@ -68,7 +66,6 @@ export default function HomeworkPage() {
         ]);
         if (sub) setSubmission(sub);
         if (integrity) {
-          setIntegrityState(integrity);
           // Auto-route based on integrity state:
           //   "pending"     → show the preparing screen + poll
           //   "in_progress" → open the chat
@@ -88,7 +85,6 @@ export default function HomeworkPage() {
   useEffect(() => {
     if (!assignmentId) return;
     loadAll(assignmentId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
   function appendResult(r: LoopResult) {
