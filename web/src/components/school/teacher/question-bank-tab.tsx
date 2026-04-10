@@ -9,11 +9,11 @@ import { HomeworkDetailModal } from "./homework-tab";
 import { CourseSubjectContext } from "./question-bank/course-subject-context";
 import { STATUS_FILTERS } from "./question-bank/constants";
 import { SimpleUnitList } from "./question-bank/unit-groups";
-import { ApprovedView } from "./question-bank/approved-tree";
+import { ApprovedTable } from "./question-bank/approved-table";
+import { ReviewBanner } from "./question-bank/review-banner";
+import { ReviewQueue } from "./question-bank/review-queue";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
-import { UnitRail, type UnitSelection } from "./_pieces/unit-rail";
-import { topUnitIdOf } from "@/lib/units";
 import { PendingTray } from "./question-bank/pending-tray";
 import { ReviewModal } from "./question-bank/review-modal";
 
@@ -24,47 +24,20 @@ export function QuestionBankTab({
   setActiveJob,
 }: {
   courseId: string;
-  // Used by the concept emoji classifier to gate math/physics/chem
-  // buckets so a chem course doesn't render 🚀 for "reagent" word
-  // problems.
   courseSubject: string;
-  // Lifted to the course page so the active job survives tab switches.
-  // Polling + auto-clear also live there. This component just consumes
-  // the state and triggers updates.
   activeJob: BankJob | null;
   setActiveJob: (job: BankJob | null) => void;
 }) {
-  // Default to Pending — the actionable view a teacher lands on most
-  // often after generating. We used to auto-flip to Approved when
-  // pending was empty, but that caused a visible flicker (render
-  // Pending → fetch counts → flip to Approved). Now we just stay on
-  // Pending and show an empty state if there's nothing to review.
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "rejected">("pending");
-  // Unit selection — "all" | "uncategorized" | unit id. Drives the
-  // rail's active state and the client-side filter for the content
-  // area. Decoupled from status filter so the teacher can narrow on
-  // both axes.
-  const [unitSelection, setUnitSelection] = useState<UnitSelection>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  // Data fetching extracted to a custom hook — items/units/counts/
-  // loading/error/reload all live there. The hook now fetches all
-  // items for the current status; unit filtering is client-side so
-  // the rail can show accurate per-unit counts.
   const { items, units, counts, loading, error, reload, setError } = useBankData(
     courseId, statusFilter,
   );
 
-  // Client-side unit + search filter applied to the loaded items.
-  // Search matches title and question text, case-insensitive.
-  // Unit filter rolls subfolder unit_ids up to their top unit so a
-  // question saved into "math / algebra" still shows up under math.
+  // Client-side search filter (unit filtering moved into ApprovedTable
+  // for the approved view; pending/rejected still use this).
   const filteredItems = useMemo(() => {
     let out = items;
-    if (unitSelection === "uncategorized") {
-      out = out.filter((i) => i.unit_id === null);
-    } else if (unitSelection !== "all") {
-      out = out.filter((i) => topUnitIdOf(units, i.unit_id) === unitSelection);
-    }
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       out = out.filter(
@@ -74,64 +47,57 @@ export function QuestionBankTab({
       );
     }
     return out;
-  }, [items, units, unitSelection, searchQuery]);
+  }, [items, searchQuery]);
+
   const [showGenerate, setShowGenerate] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
-  // Separate state for "edit invoked from inside ReviewModal" so we
-  // can force WorkshopModal into editOnly mode (Approve/Reject hidden)
-  // — keeps the two surfaces from fighting over status changes.
   const [editFromReviewItem, setEditFromReviewItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
-  // Flow A: full-screen review for fresh primary problems. Captured at
-  // open time so mid-review generations don't splice in.
   const [primaryReviewQueue, setPrimaryReviewQueue] = useState<BankItem[] | null>(null);
-  // Flow B: full-screen review for variations of a single primary.
-  // Carries the parent so the modal can label itself and the shell
-  // can drop the teacher back at the parent's workshop on close.
   const [variationReviewQueue, setVariationReviewQueue] = useState<BankItem[] | null>(null);
-  // When a make-similar review queue completes, we want to drop the
-  // teacher back at the parent question. We stash the full BankItem
-  // (not just an id) so restoration works regardless of which status
-  // tab the teacher is currently on — the bank list might not contain
-  // the parent if it's in a different status bucket.
   const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
 
-  // Open Flow B: focused review of the just-generated pending children
-  // of `parent`. The modal labels itself with the parent's title and
-  // collapses the action set to plain Approve / Edit / Reject (no
-  // destination picker — variations are implicitly attached to their
-  // parent via parent_question_id).
+  // Inline review queue state — replaces main content with ReviewQueue
+  const [inlineReviewQueue, setInlineReviewQueue] = useState<BankItem[] | null>(null);
+
+  // Pending counts for ReviewBanner (computed from pending items cache
+  // only when on the approved tab — avoids an extra fetch).
+  const [pendingItems, setPendingItems] = useState<BankItem[]>([]);
+  useEffect(() => {
+    if (statusFilter !== "approved") return;
+    let cancelled = false;
+    teacher.bank(courseId, { status: "pending" }).then((res) => {
+      if (!cancelled) setPendingItems(res.items);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [courseId, statusFilter, counts.pending]);
+
+  const newQuestionCount = pendingItems.filter(
+    (i) => i.source === "generated" && !i.parent_question_id,
+  ).length;
+  const variationPendingCount = pendingItems.filter(
+    (i) => i.source === "practice",
+  ).length;
+
   const openVariationReview = async (parent: BankItem) => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
       const children = res.items.filter((i) => i.parent_question_id === parent.id);
       if (children.length === 0) {
-        // Pending children were all resolved since the job tracker
-        // last cared (e.g. another tab approved them). Dismiss the
-        // stale strip and surface a clear message instead of silently
-        // no-op'ing.
         setActiveJob(null);
         setError("All variations for this question have already been reviewed.");
         return;
       }
-      setActiveJob(null); // dismiss the strip — its job is done
-      setOpenItem(null); // close the single-mode workshop
+      setActiveJob(null);
+      setOpenItem(null);
       setReviewQueueParent(parent);
       setVariationReviewQueue(children);
     } catch (e) {
-      // Close the modal so the bank tab's error message is visible —
-      // otherwise the workshop modal keeps the green CTA on screen
-      // hiding the error and the teacher thinks nothing happened.
       setOpenItem(null);
       setError(e instanceof Error ? e.message : "Failed to load variations");
     }
   };
 
-  // Open the right review flow given the current pending state.
-  // Prefers Flow A (primaries) when any exist; otherwise falls back to
-  // Flow B for the parent with the most pending variations. Avoids the
-  // silent no-op the tray would otherwise hit when only variations are
-  // pending.
   const startReview = async () => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
@@ -142,8 +108,6 @@ export function QuestionBankTab({
       }
       const variations = res.items.filter((i) => i.parent_question_id);
       if (variations.length === 0) return;
-      // Group variations by parent_question_id and pick the parent
-      // with the most pending children — most efficient batch first.
       const byParent = new Map<string, BankItem[]>();
       for (const v of variations) {
         const pid = v.parent_question_id;
@@ -157,8 +121,6 @@ export function QuestionBankTab({
       );
       if (sorted.length === 0) return;
       const [parentId, children] = sorted[0];
-      // Need the parent BankItem for the modal header. Generate-similar
-      // requires the parent to be approved, so look there.
       let parentItem = items.find((i) => i.id === parentId);
       if (!parentItem) {
         const approvedRes = await teacher.bank(courseId, { status: "approved" });
@@ -175,8 +137,18 @@ export function QuestionBankTab({
     }
   };
 
-  // Reload the bank list when the active job (lifted to the page,
-  // polled there) flips to done — pulls in the freshly generated rows.
+  // Start inline review queue from the ReviewBanner (approved tab).
+  // Fetches fresh pending items and opens the inline ReviewQueue.
+  const startInlineReview = async () => {
+    try {
+      const res = await teacher.bank(courseId, { status: "pending" });
+      if (res.items.length === 0) return;
+      setInlineReviewQueue(res.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load pending");
+    }
+  };
+
   useEffect(() => {
     if (activeJob?.status === "done") {
       reload();
@@ -184,17 +156,6 @@ export function QuestionBankTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.status, activeJob?.id]);
 
-  // Auto-clear activeJob when its variations have all been resolved.
-  // Without this, the "Review N pending variations" CTA in the parent's
-  // workshop modal (and the flashing dot on the Question Bank tab)
-  // stays stale after a teacher approves the variations via a
-  // different surface — e.g. clicking each pending variation in the
-  // Pending tab and approving via "Approve as practice". The user
-  // would then click the stale CTA and hit a confusing "All variations
-  // already reviewed" error.
-  //
-  // One small extra fetch per reload, only when activeJob is in a
-  // state that could be stale.
   useEffect(() => {
     if (!activeJob || !activeJob.parent_question_id || activeJob.status !== "done") return;
     let cancelled = false;
@@ -202,37 +163,57 @@ export function QuestionBankTab({
     teacher
       .bank(courseId, { status: "pending" })
       .then((res) => {
-        if (cancelled) return;
-        const stillPending = res.items.some(
-          (i) => i.parent_question_id === parentId,
-        );
-        if (!stillPending) {
-          setActiveJob(null);
+        if (!cancelled) {
+          const stillPending = res.items.some(
+            (i) => i.parent_question_id === parentId,
+          );
+          if (!stillPending) setActiveJob(null);
         }
       })
-      .catch(() => {
-        // Transient errors are fine — the next reload retries.
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [activeJob, items, courseId, setActiveJob]);
 
-  // Clear the bank error banner whenever the user navigates (switches
-  // tabs, changes status filter, or activeJob clears). Without this,
-  // a stale error like "All variations for this question have already
-  // been reviewed" sticks around after the underlying state has moved
-  // on, and only a hard refresh clears it.
   useEffect(() => {
     if (error) setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, unitSelection, activeJob?.id]);
+  }, [statusFilter, activeJob?.id]);
+
+  // When inline review queue is active, replace the main content
+  if (inlineReviewQueue) {
+    return (
+      <CourseSubjectContext.Provider value={courseSubject}>
+        <div>
+          <ReviewQueue
+            courseId={courseId}
+            queue={inlineReviewQueue}
+            units={units}
+            onBack={() => {
+              setInlineReviewQueue(null);
+              reload();
+            }}
+            onChanged={reload}
+            onEditItem={(item) => setEditFromReviewItem(item)}
+          />
+          {editFromReviewItem && (
+            <WorkshopModal
+              item={editFromReviewItem}
+              editOnly
+              onClose={() => setEditFromReviewItem(null)}
+              onChanged={reload}
+              onJobStarted={setActiveJob}
+              activeJob={activeJob}
+            />
+          )}
+        </div>
+      </CourseSubjectContext.Provider>
+    );
+  }
 
   return (
     <CourseSubjectContext.Provider value={courseSubject}>
     <div>
-      {/* Header row: title + status chips inline + Generate. The chips
-          are primary nav, not chrome — they belong up top. */}
+      {/* Header row: title + status chips inline + Generate */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-4">
           <h2 className="text-lg font-bold text-text-primary">Question Bank</h2>
@@ -270,10 +251,23 @@ export function QuestionBankTab({
         </button>
       </div>
 
-      <PendingTray pendingCount={counts.pending} onReview={startReview} />
+      {/* Review banner — only on approved tab when pending items exist */}
+      {statusFilter === "approved" && (newQuestionCount > 0 || variationPendingCount > 0) && (
+        <div className="mt-4">
+          <ReviewBanner
+            newQuestionCount={newQuestionCount}
+            variationCount={variationPendingCount}
+            onReview={startInlineReview}
+          />
+        </div>
+      )}
 
-      {/* Active job banner — hidden for make-similar jobs since those
-          have their own in-modal strip with the "Review them" CTA. */}
+      {/* Pending tray — shown on non-approved tabs */}
+      {statusFilter !== "approved" && (
+        <PendingTray pendingCount={counts.pending} onReview={startReview} />
+      )}
+
+      {/* Active job banner */}
       {activeJob && !activeJob.parent_question_id && (
         <div
           className={`mt-4 rounded-[--radius-lg] border p-3 text-sm ${
@@ -284,100 +278,77 @@ export function QuestionBankTab({
                 : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10"
           }`}
         >
-          {activeJob.status === "queued" && "🟡 Generation queued…"}
+          {activeJob.status === "queued" && "Generation queued..."}
           {activeJob.status === "running" &&
             (activeJob.produced_count > 0
-              ? `🔄 Generating questions… ${activeJob.produced_count}/${activeJob.requested_count}`
-              : `🔄 Generating ${activeJob.requested_count} questions…`)}
+              ? `Generating questions... ${activeJob.produced_count}/${activeJob.requested_count}`
+              : `Generating ${activeJob.requested_count} questions...`)}
           {activeJob.status === "done" && (
             <span>
-              ✅ Generated {activeJob.produced_count}/{activeJob.requested_count} questions
+              Generated {activeJob.produced_count}/{activeJob.requested_count} questions
             </span>
           )}
           {activeJob.status === "failed" &&
-            `❌ Generation failed: ${activeJob.error_message ?? "unknown error"}`}
+            `Generation failed: ${activeJob.error_message ?? "unknown error"}`}
         </div>
       )}
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
-      {/* Search bar — primary "find a question" affordance. */}
+      {/* Search bar */}
       <div className="mt-4">
         <div className="relative">
           <span
             className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-text-muted"
             aria-hidden
           >
-            🔍
+            &#128269;
           </span>
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${counts[statusFilter] ?? 0} ${statusFilter} questions…`}
+            placeholder={`Search ${counts[statusFilter] ?? 0} ${statusFilter} questions...`}
             className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Two-pane: slim unit rail on the left, content on the right.
-          The rail no longer has its own card chrome — it visually
-          retreats so the content area is the focal point. */}
-      <div className="mt-4 flex flex-col gap-6 md:flex-row md:items-start">
-        <aside className="md:w-52 md:shrink-0">
-          <UnitRail
-            units={units}
-            totalCount={items.length}
-            countFor={(uid) =>
-              items.filter((i) =>
-                uid === null
-                  ? i.unit_id === null
-                  : topUnitIdOf(units, i.unit_id) === uid,
-              ).length
-            }
-            selected={unitSelection}
-            onSelect={(s) => {
-              setUnitSelection(s);
-              setOpenItem(null);
-            }}
-          />
-        </aside>
-
-        <div className="min-w-0 flex-1">
-          {loading ? (
-            <BankSkeleton />
-          ) : filteredItems.length === 0 ? (
-            searchQuery.trim() ? (
-              <EmptyState text={`No questions match "${searchQuery.trim()}".`} />
-            ) : counts.pending + counts.approved + counts.rejected === 0 ? (
-              <FirstVisitEmptyState
-                hasUnits={units.some((u) => u.parent_id === null)}
-                onGenerate={() => setShowGenerate(true)}
-              />
-            ) : (
-              <EmptyState
-                text={emptyStateFor(statusFilter, unitSelection, counts)}
-              />
-            )
-          ) : statusFilter === "pending" || statusFilter === "rejected" ? (
-            <div className="space-y-5">
-              <SimpleUnitList
-                items={filteredItems}
-                units={units}
-                onOpenItem={setOpenItem}
-                onOpenHomework={setOpenHomeworkId}
-                onChanged={reload}
-              />
-            </div>
+      {/* Full-width content — no UnitRail sidebar */}
+      <div className="mt-4">
+        {loading ? (
+          <BankSkeleton />
+        ) : filteredItems.length === 0 ? (
+          searchQuery.trim() ? (
+            <EmptyState text={`No questions match "${searchQuery.trim()}".`} />
+          ) : counts.pending + counts.approved + counts.rejected === 0 ? (
+            <FirstVisitEmptyState
+              hasUnits={units.some((u) => u.parent_id === null)}
+              onGenerate={() => setShowGenerate(true)}
+            />
           ) : (
-            <ApprovedView
+            <EmptyState
+              text={emptyStateFor(statusFilter, counts)}
+            />
+          )
+        ) : statusFilter === "pending" || statusFilter === "rejected" ? (
+          <div className="space-y-5">
+            <SimpleUnitList
               items={filteredItems}
               units={units}
               onOpenItem={setOpenItem}
               onOpenHomework={setOpenHomeworkId}
+              onChanged={reload}
             />
-          )}
-        </div>
+          </div>
+        ) : (
+          <ApprovedTable
+            items={filteredItems}
+            units={units}
+            onOpenItem={setOpenItem}
+            onOpenHomework={setOpenHomeworkId}
+          />
+        )}
       </div>
 
       {showGenerate && (
@@ -391,18 +362,10 @@ export function QuestionBankTab({
         />
       )}
 
-      {/* ReviewModals render FIRST so that modals opened from inside
-          them (Edit → WorkshopModal) stack visually on top via DOM
-          order. Both share z-50; later siblings win. */}
       {primaryReviewQueue && (
         <ReviewModal
           courseId={courseId}
           queue={primaryReviewQueue}
-          defaultUnitIds={
-            unitSelection !== "all" && unitSelection !== "uncategorized"
-              ? [unitSelection]
-              : []
-          }
           active={editFromReviewItem === null}
           onClose={() => {
             setPrimaryReviewQueue(null);
@@ -421,9 +384,6 @@ export function QuestionBankTab({
           active={editFromReviewItem === null}
           onClose={() => {
             setVariationReviewQueue(null);
-            // Drop the teacher back on the parent's workshop so the
-            // mental thread (parent → its variations → back to parent)
-            // stays intact.
             setOpenItem(reviewQueueParent);
             reload();
           }}
@@ -433,10 +393,6 @@ export function QuestionBankTab({
       )}
 
       {openItem && (
-        // Prefer the freshest copy from items (in case reload brought
-        // updated content); fall back to the stashed openItem so the
-        // modal stays open across status-tab switches and after
-        // focused-review queue completion.
         <WorkshopModal
           item={items.find((i) => i.id === openItem.id) ?? openItem}
           onClose={() => {
@@ -476,33 +432,21 @@ export function QuestionBankTab({
 
 function emptyStateFor(
   statusFilter: "pending" | "approved" | "rejected",
-  unitSelection: UnitSelection,
   counts: { pending: number; approved: number; rejected: number },
 ): string {
   const total = counts.pending + counts.approved + counts.rejected;
   if (total === 0) {
     return "No questions yet. Hit \u201cGenerate Questions\u201d to create some.";
   }
-  const where =
-    unitSelection === "all"
-      ? ""
-      : unitSelection === "uncategorized"
-        ? " in Uncategorized"
-        : " in this unit";
   if (statusFilter === "pending") {
-    return `No pending review${where}. New generations land here.`;
+    return "No pending review. New generations land here.";
   }
   if (statusFilter === "rejected") {
-    return `No rejected questions${where}.`;
+    return "No rejected questions.";
   }
-  return `No approved questions${where} yet. Review pending ones to add them to a homework.`;
+  return "No approved questions yet. Review pending ones to add them to a homework.";
 }
 
-// Rich first-visit empty state — replaces the generic one-line empty
-// for the "zero questions in any status" case so a teacher landing on
-// the tab cold has a concrete next action. Branches on whether they
-// have units yet, because generating without units lands questions in
-// Uncategorized which they then have to migrate later.
 function FirstVisitEmptyState({
   hasUnits,
   onGenerate,
@@ -513,7 +457,7 @@ function FirstVisitEmptyState({
   return (
     <div className="flex flex-col items-center justify-center rounded-[--radius-lg] border border-dashed border-border-light bg-bg-base/30 px-6 py-16 text-center">
       <div className="text-5xl" aria-hidden>
-        📚
+        &#128218;
       </div>
       <h3 className="mt-4 text-lg font-bold text-text-primary">
         Your question bank is empty
@@ -530,7 +474,7 @@ function FirstVisitEmptyState({
             onClick={onGenerate}
             className="mt-5 rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
           >
-            ✨ Generate your first questions
+            Generate your first questions
           </button>
         </>
       ) : (
@@ -542,7 +486,7 @@ function FirstVisitEmptyState({
             generate.
           </p>
           <p className="mt-3 text-[11px] italic text-text-muted">
-            Open the Materials tab above ↑ to get started.
+            Open the Materials tab above to get started.
           </p>
         </>
       )}

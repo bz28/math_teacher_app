@@ -773,7 +773,7 @@ function toLocalDatetimeInputValue(iso: string): string {
 // ── Problem row ──
 //
 // Fat card with the math-rendered question as the focal element.
-// Mirrors approved-tree's ProblemCard but read-only (clicking does
+// Mirrors approved-table's expanded row but read-only (clicking does
 // nothing — editing happens via the Edit problems button).
 function ProblemRow({ problem }: { problem: AssignmentProblem }) {
   return (
