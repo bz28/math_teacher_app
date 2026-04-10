@@ -165,7 +165,7 @@ async def generate_integrity_questions(
         model=MODEL_REASON,
         max_tokens=1024,
     )
-    questions = result.get("questions", [])
+    questions: list[dict[str, str]] = result.get("questions", [])  # type: ignore[assignment]
     # Defensive: cap at 3 even if the model over-generates.
     return questions[:3]
 
