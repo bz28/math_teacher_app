@@ -25,6 +25,13 @@ class User(Base):
         nullable=True, index=True,
     )
 
+    # Shadow student for "Try as Student" preview mode.
+    is_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    preview_owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+
     # Subscription
     subscription_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
     subscription_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none")

@@ -23,6 +23,7 @@ from api.models.integrity_check import IntegrityCheckProblem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
+from api.models.user import User
 from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import (
     hydrate_assignment_content,
@@ -190,13 +191,15 @@ async def bulk_assignment_stats(
         return {}
 
     # 1. Total enrolled students per assignment (distinct across sections).
+    # Exclude preview (shadow) students from all counts.
     totals_rows = (await db.execute(
         select(
             AssignmentSection.assignment_id,
             func.count(SectionEnrollment.student_id.distinct()).label("c"),
         )
         .join(SectionEnrollment, SectionEnrollment.section_id == AssignmentSection.section_id)
-        .where(AssignmentSection.assignment_id.in_(assignment_ids))
+        .join(User, User.id == SectionEnrollment.student_id)
+        .where(AssignmentSection.assignment_id.in_(assignment_ids), User.is_preview.is_(False))
         .group_by(AssignmentSection.assignment_id)
     )).all()
     totals = {r.assignment_id: r.c for r in totals_rows}
@@ -204,7 +207,8 @@ async def bulk_assignment_stats(
     # 2. Submission counts per assignment.
     submitted_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
-        .where(Submission.assignment_id.in_(assignment_ids))
+        .join(User, User.id == Submission.student_id)
+        .where(Submission.assignment_id.in_(assignment_ids), User.is_preview.is_(False))
         .group_by(Submission.assignment_id)
     )).all()
     submitted = {r.assignment_id: r.c for r in submitted_rows}
@@ -213,9 +217,11 @@ async def bulk_assignment_stats(
     graded_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id.in_(assignment_ids),
             Submission.status == "teacher_reviewed",
+            User.is_preview.is_(False),
         )
         .group_by(Submission.assignment_id)
     )).all()
@@ -225,9 +231,11 @@ async def bulk_assignment_stats(
     avg_rows = (await db.execute(
         select(Submission.assignment_id, func.avg(SubmissionGrade.final_score).label("avg"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id.in_(assignment_ids),
             SubmissionGrade.final_score.isnot(None),
+            User.is_preview.is_(False),
         )
         .group_by(Submission.assignment_id)
     )).all()
@@ -617,13 +625,12 @@ async def list_submissions(
 ) -> dict[str, Any]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
-    # Get all submissions with grades
-    from api.models.user import User
+    # Get all submissions with grades (exclude preview students)
     rows = (await db.execute(
         select(Submission, SubmissionGrade, User.name, User.email)
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .join(User, User.id == Submission.student_id)
-        .where(Submission.assignment_id == a.id)
+        .where(Submission.assignment_id == a.id, User.is_preview.is_(False))
         .order_by(Submission.submitted_at.desc())
     )).all()
 
