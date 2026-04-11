@@ -4,7 +4,7 @@ import { Eyebrow } from "./eyebrow";
 export function HomeProblem() {
   return (
     <Section variant="alt">
-      <div className="grid gap-12 md:grid-cols-[1fr_1.2fr] md:gap-16">
+      <div className="grid gap-12 md:grid-cols-[1fr_1.2fr] md:items-center md:gap-16">
         <div>
           <Eyebrow>Why schools need a new kind of AI</Eyebrow>
           <h2 className="mt-6 text-display-lg text-[color:var(--color-text)]">
