@@ -1,16 +1,25 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/learn";
+import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { Button } from "@/components/ui";
-import { ImageUpload } from "@/components/shared/image-upload";
-import { MathText } from "@/components/shared/math-text";
-import { EntitlementError } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
-import { cn } from "@/lib/utils";
+import { useImageExtraction } from "@/hooks/use-image-extraction";
+import { EntitlementError } from "@/lib/api";
 import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
+import { Button } from "@/components/ui";
+import { SubjectPills } from "@/components/shared/subject-pills";
+import { MockTestConfig, type ExamType } from "@/components/shared/mock-test-config";
+import { ExtractionResultModal } from "@/components/shared/extraction-result-modal";
+import { MathText } from "@/components/shared/math-text";
+import { RectangleSelector } from "@/components/shared/rectangle-selector";
+import { cn } from "@/lib/utils";
+
+const MAX_PROBLEMS = 10;
+type Mode = "learn" | "mock_test";
 
 export default function SolvePage() {
   return (
@@ -20,15 +29,14 @@ export default function SolvePage() {
   );
 }
 
-const SUBJECTS: Subject[] = ["math", "physics", "chemistry"];
-
 function SolveContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const subject = (searchParams.get("subject") ?? "math") as Subject;
+  const urlSubject = (searchParams.get("subject") ?? "math") as Subject;
   const sectionId = searchParams.get("section");
 
   const {
+    subject,
     setSubject,
     setSectionId,
     problemQueue,
@@ -39,61 +47,149 @@ function SolveContent() {
     startSession,
     phase,
   } = useSessionStore();
-  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } =
-    useEntitlementStore();
+  const startMockTest = useMockTestStore((s) => s.startMockTest);
+
+  const {
+    isPro,
+    dailySessionsUsed,
+    dailySessionsLimit,
+    dailyScansUsed,
+    dailyScansLimit,
+    fetchEntitlements,
+  } = useEntitlementStore();
+
   const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
   const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
-  const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
+  const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, remainingSessions);
 
+  const [mode, setMode] = useState<Mode>("learn");
+  const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
-  const [starting, setStarting] = useState(false);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
-  const [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
-  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Mock Test config
+  const [examType, setExamType] = useState<ExamType>("use_as_exam");
+  const [untimed, setUntimed] = useState(true);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
+  const [multipleChoice, setMultipleChoice] = useState(true);
 
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
+  // Destructure the extraction hook so ESLint's react-hooks/refs rule
+  // doesn't false-positive on the render-time property reads.
+  const {
+    phase: extractionPhase,
+    imageBase64: extractionImage,
+    result: extractionResult,
+    selected: extractionSelected,
+    progress: extractionProgress,
+    error: extractionError,
+    editingIndex: extractionEditingIndex,
+    pickFromCamera,
+    pickFromGallery,
+    extractRectangles,
+    cancelSelect,
+    toggleSelected,
+    updateProblemText,
+    setEditingIndex,
+    getConfirmedItems,
+    closeResult,
+    cameraInputRef,
+    galleryInputRef,
+    onCameraChange,
+    onGalleryChange,
+  } = useImageExtraction({
+    subject: urlSubject,
+    maxItems: maxQueueSize,
+    scansRemaining: remainingScans,
+    onScanLimitReached: () =>
+      showUpgrade(
+        "image_scan",
+        `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`,
+      ),
+    onExtractComplete: fetchEntitlements,
+  });
+
+  // Sync URL subject → store on mount / subject change.
+  // data-subject is applied automatically by <SubjectTheme /> in (app)/layout.
   useEffect(() => {
-    setSubject(subject);
+    setSubject(urlSubject);
     setSectionId(sectionId);
-    document.documentElement.setAttribute("data-subject", subject);
     setProblemQueue([]);
     fetchEntitlements();
-    return () => document.documentElement.removeAttribute("data-subject");
-  }, [subject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
+  }, [urlSubject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
 
-  const isScanning = imagePhase === "select" || imagePhase === "extracting";
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const isLoading = phase === "loading" || starting;
-  const config = SUBJECT_CONFIG[subject];
+  const extracting = extractionPhase === "extracting";
 
-  function handleAddProblem() {
-    const trimmed = input.trim();
-    if (!trimmed) return;
+  // Queue label adapts to mode + examType
+  const queueLabel = (() => {
+    const n = problemQueue.length;
+    if (mode === "mock_test") {
+      if (examType === "generate_similar") {
+        return `${n} example${n !== 1 ? "s" : ""} → ${n} generated question${n !== 1 ? "s" : ""}`;
+      }
+      return `${n} question${n !== 1 ? "s" : ""}`;
+    }
+    return `${n} ${n === 1 ? "problem" : "problems"} queued`;
+  })();
+
+  // Solve button label
+  const solveLabel = (() => {
+    const verb = mode === "mock_test" ? "Test" : "Learn";
+    if (totalProblems <= 1) return verb;
+    return `${verb} (${totalProblems})`;
+  })();
+
+  function onSubjectChange(next: Subject) {
+    if (next === urlSubject) return;
+    router.push(`/learn?subject=${next}${sectionId ? `&section=${sectionId}` : ""}`);
+  }
+
+  function handleAddFromTyping() {
+    const text = input.trim();
+    if (!text) {
+      setTyping(false);
+      return;
+    }
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      const msg = problemQueue.length > 0
-        ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today.`
-        : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
+      const msg =
+        problemQueue.length > 0
+          ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today.`
+          : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
       showUpgrade("create_session", msg);
       return;
     }
-    addToQueue(trimmed);
+    addToQueue(text);
     setInput("");
-    inputRef.current?.focus();
+    setError(null);
+    setTyping(false);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (problemQueue.length > 0) handleAddProblem();
-      else handleSolve();
-    }
+  function handleConfirmExtraction() {
+    const remaining = maxQueueSize - problemQueue.length;
+    const items = getConfirmedItems(remaining);
+    items.forEach((it) => addToQueue(it.text, it.image));
+    closeResult();
   }
 
   async function handleSolve() {
     if (starting) return;
-    if (problemQueue.length === 0 && !input.trim()) return;
+    const queueTexts = problemQueue.map((p) => p.text);
+    const allProblems =
+      queueTexts.length > 0
+        ? [...queueTexts, ...(input.trim() ? [input.trim()] : [])]
+        : input.trim()
+          ? [input.trim()]
+          : [];
+    if (allProblems.length === 0) return;
+
+    setError(null);
+
     if (!isPro && remainingSessions <= 0) {
       showUpgrade(
         "create_session",
@@ -101,229 +197,502 @@ function SolveContent() {
       );
       return;
     }
-
-    const problemCount = problemQueue.length > 0 ? problemQueue.length + (input.trim() ? 1 : 0) : 1;
-    if (!isPro && problemCount > 1 && !quotaConfirm) {
+    if (!isPro && allProblems.length > 1 && !quotaConfirm) {
       setQuotaConfirm(true);
       return;
     }
     setQuotaConfirm(false);
     setStarting(true);
 
-    const allProblems =
-      problemQueue.length > 0
-        ? [...problemQueue.map((p) => p.text), ...(input.trim() ? [input.trim()] : [])]
-        : [input.trim()];
-    const firstImage = problemQueue.length > 0 ? problemQueue[0].image : undefined;
-
     try {
-      if (allProblems.length === 1) {
-        await startSession(allProblems[0], firstImage);
+      if (mode === "mock_test") {
+        const generateCount = examType === "generate_similar" ? allProblems.length : 0;
+        const timeLimit = untimed ? null : timeLimitMinutes;
+        await startMockTest(
+          allProblems,
+          generateCount,
+          timeLimit,
+          urlSubject,
+          problemQueue,
+          multipleChoice,
+        );
+        setProblemQueue([]);
+        setInput("");
+        router.push(`/mock-test?subject=${urlSubject}`);
       } else {
-        await startLearnQueue(allProblems);
+        const firstImage = problemQueue[0]?.image;
+        if (allProblems.length === 1) {
+          await startSession(allProblems[0], firstImage);
+        } else {
+          await startLearnQueue(allProblems);
+        }
+        router.push(`/learn/session?subject=${urlSubject}`);
       }
-      router.push(`/learn/session?subject=${subject}`);
     } catch (err) {
       if (err instanceof EntitlementError) {
         showUpgrade(err.entitlement, err.message);
+      } else {
+        setError((err as Error).message);
       }
       setStarting(false);
     }
   }
 
-  function pickSubject(s: Subject) {
-    setSubjectMenuOpen(false);
-    if (s === subject) return;
-    router.push(`/learn?subject=${s}`);
+  // ── Rectangle selection phase (manual crop fallback) ──
+  if (extractionPhase === "select" && extractionImage) {
+    return (
+      <RectangleSelector
+        imageBase64={extractionImage}
+        onConfirm={extractRectangles}
+        onCancel={cancelSelect}
+        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length, remainingScans)}
+      />
+    );
   }
 
-  const solveLabel =
-    totalProblems === 0
-      ? "Solve"
-      : totalProblems === 1
-        ? "Solve"
-        : `Solve ${totalProblems} problems`;
+  const cardsDisabled = extracting || problemQueue.length >= maxQueueSize;
+  const activeGradient = SUBJECT_CONFIG[urlSubject]?.gradient ?? "bg-gradient-primary";
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-12rem)] max-w-2xl flex-col">
-      {/* Top: subject pill */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setSubjectMenuOpen((o) => !o)}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-md",
-              config?.gradient ?? "from-primary to-primary-light",
-            )}
-            aria-haspopup="listbox"
-            aria-expanded={subjectMenuOpen}
-            aria-label={`Subject: ${config?.name ?? subject}. Click to change.`}
-          >
-            <span>{config?.icon}</span>
-            <span>{config?.name ?? subject}</span>
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          {subjectMenuOpen && (
-            <div
-              className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-[--radius-md] border border-border-light bg-surface shadow-lg"
-              role="listbox"
-            >
-              {SUBJECTS.map((s) => {
-                const sc = SUBJECT_CONFIG[s];
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => pickSubject(s)}
-                    className={cn(
-                      "flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-primary-bg",
-                      s === subject ? "bg-primary-bg text-primary" : "text-text-primary",
-                    )}
-                    role="option"
-                    aria-selected={s === subject}
-                  >
-                    <span>{sc?.icon}</span>
-                    <span>{sc?.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-2xl flex-col">
+      {/* Subject pills row */}
+      <SubjectPills active={subject} onChange={onSubjectChange} />
 
-      {/* Hero */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
-          What can I help you<br />solve today?
-        </h1>
-      </div>
-
-      {/* Big snap target — wraps ImageUpload */}
-      <div className="mb-4">
-        <ImageUpload
-          subject={subject}
-          onProblemsExtracted={(problems) => {
-            problems.forEach((p) => addToQueue(p.text, p.image));
-          }}
-          maxProblems={maxQueueSize}
-          currentQueueLength={problemQueue.length}
-          scansRemaining={remainingScans}
-          onScanLimitReached={() =>
-            showUpgrade(
-              "image_scan",
-              `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`,
-            )
-          }
-          onExtractComplete={fetchEntitlements}
-          onPhaseChange={setImagePhase}
+      {/* Mode segmented control */}
+      <div className="flex gap-2 px-5 pb-3">
+        <ModePill
+          label="Learn"
+          icon={<BookIcon />}
+          active={mode === "learn"}
+          onClick={() => setMode("learn")}
+        />
+        <ModePill
+          label="Mock Test"
+          icon={<DocIcon />}
+          active={mode === "mock_test"}
+          onClick={() => setMode("mock_test")}
         />
       </div>
 
-      {/* Inline text input */}
-      <div className="mb-3">
-        <div className="flex items-stretch gap-2 rounded-[--radius-lg] border-2 border-border bg-surface focus-within:border-primary">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isScanning ? "Finish scanning first…" : "…or type a problem here"}
-            disabled={isScanning}
-            rows={1}
-            className="flex-1 resize-none bg-transparent px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
-            aria-label="Type a math problem"
-          />
-          {input.trim() && problemQueue.length < maxQueueSize && (
-            <button
-              type="button"
-              onClick={handleAddProblem}
-              className="m-2 flex h-8 w-8 flex-shrink-0 items-center justify-center self-end rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark"
-              aria-label="Add to queue"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Scroll region */}
+      <div className="flex-1 px-5 pb-4">
+        {/* Hero greeting */}
+        <motion.h1
+          key={mode}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+          className="mb-5 text-[30px] font-extrabold leading-tight tracking-tight text-text-primary"
+        >
+          {mode === "mock_test" ? "What can I help you test?" : "What can I help you learn?"}
+        </motion.h1>
 
-      {/* Inline queue chips */}
-      {problemQueue.length > 0 && (
-        <div className="mb-4">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">
-            {problemQueue.length} queued
-          </p>
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {problemQueue.map((item, i) => (
-              <div
-                key={i}
-                className="flex flex-shrink-0 items-center gap-2 rounded-full bg-primary-bg px-3 py-1.5 text-xs font-semibold text-primary"
-              >
-                <span className="max-w-[180px] truncate">
-                  <MathText text={item.text} />
-                </span>
+        {/* Snap card (gradient) */}
+        <HeroCard
+          variant="gradient"
+          gradientClass={activeGradient}
+          disabled={cardsDisabled}
+          onClick={pickFromCamera}
+          icon={<CameraIcon className="h-8 w-8 text-white" />}
+          title="Snap a problem"
+          subtitle="Point your camera at any problem"
+          ariaLabel="Snap a photo of a problem"
+        />
+
+        {/* Gallery card (outlined) */}
+        <HeroCard
+          variant="outlined"
+          disabled={cardsDisabled}
+          onClick={pickFromGallery}
+          icon={<ImagesIcon className="h-8 w-8 text-primary" />}
+          title="Choose a photo"
+          subtitle="Pick a problem from your device"
+          ariaLabel="Choose a photo from your device"
+        />
+
+        {/* Type card (outlined, collapses to inline input) */}
+        <div
+          className={cn(
+            "mb-3 flex min-h-[180px] flex-col items-center justify-center rounded-[--radius-lg] border-2 border-primary bg-surface px-5 py-8 shadow-sm transition-opacity",
+            cardsDisabled && !typing && "opacity-50",
+          )}
+          onClick={() => {
+            if (!typing && !cardsDisabled) {
+              setTyping(true);
+              requestAnimationFrame(() => inputRef.current?.focus());
+            }
+          }}
+          role={typing ? undefined : "button"}
+          tabIndex={typing ? -1 : 0}
+          onKeyDown={(e) => {
+            if (!typing && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              setTyping(true);
+              requestAnimationFrame(() => inputRef.current?.focus());
+            }
+          }}
+          aria-label={typing ? undefined : "Type a problem"}
+        >
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary-bg">
+            <EditIcon className="h-8 w-8 text-primary" />
+          </div>
+          {typing ? (
+            <div className="flex w-full items-center gap-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  if (error) setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddFromTyping();
+                  }
+                }}
+                onBlur={() => {
+                  if (!input.trim()) setTyping(false);
+                }}
+                placeholder="Type your problem here…"
+                className="flex-1 bg-transparent text-center text-base font-semibold text-primary placeholder:text-text-muted focus:outline-none"
+                aria-label="Problem text input"
+              />
+              {input.trim() ? (
                 <button
                   type="button"
-                  onClick={() => removeFromQueue(i)}
-                  aria-label={`Remove problem ${i + 1}`}
-                  className="rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
+                  onClick={handleAddFromTyping}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white transition-transform active:scale-95"
+                  aria-label="Add to queue"
                 >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <CheckIcon className="h-5 w-5" />
                 </button>
-              </div>
-            ))}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTyping(false)}
+                  className="rounded-[--radius-pill] bg-border px-3 py-2 text-xs font-semibold text-text-secondary"
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <h3 className="mb-1 text-2xl font-bold text-primary">Type a problem</h3>
+              <p className="text-[13px] text-text-secondary">Tap to enter your problem here</p>
+            </>
+          )}
+        </div>
+
+        {/* Queue chips */}
+        {problemQueue.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-2 text-[13px] font-semibold text-primary">{queueLabel}</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {problemQueue.map((item, i) => (
+                <div
+                  key={`${i}-${item.text}`}
+                  className="flex max-w-[220px] flex-shrink-0 items-center gap-2 rounded-[--radius-pill] bg-primary-bg px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-primary">
+                    <MathText text={item.text} />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeFromQueue(i)}
+                    aria-label={`Remove problem ${i + 1}`}
+                    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-text-muted hover:text-text-secondary"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="15" y1="9" x2="9" y2="15" />
+                      <line x1="9" y1="9" x2="15" y2="15" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Quota confirm inline */}
-      {quotaConfirm && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[--radius-md] border-l-4 border-warning-dark bg-warning-bg p-3">
-          <p className="flex-1 text-sm text-text-primary">
-            This will use {totalProblems} of your {remainingSessions} remaining problems today.
-          </p>
-          <button
-            type="button"
-            onClick={() => setQuotaConfirm(false)}
-            className="text-xs font-semibold text-text-secondary hover:text-text-primary"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+        {/* Mock Test config (only in mock mode) */}
+        {mode === "mock_test" && (
+          <div className="mt-4">
+            <MockTestConfig
+              examType={examType}
+              onExamTypeChange={setExamType}
+              untimed={untimed}
+              onUntimedChange={setUntimed}
+              timeLimitMinutes={timeLimitMinutes}
+              onTimeLimitChange={setTimeLimitMinutes}
+              multipleChoice={multipleChoice}
+              onMultipleChoiceChange={setMultipleChoice}
+            />
+          </div>
+        )}
 
-      {/* Spacer pushes solve button to bottom */}
-      <div className="flex-1" />
+        {/* Extracting indicator */}
+        {extracting && (
+          <div className="mb-3 flex items-center gap-3 rounded-[--radius-lg] bg-surface p-4 shadow-sm">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="flex-1 text-sm text-text-secondary">
+              {extractionProgress.total > 1
+                ? `Reading ${Math.min(extractionProgress.done + 1, extractionProgress.total)} of ${extractionProgress.total}…`
+                : "Reading your problem…"}
+            </p>
+          </div>
+        )}
 
-      {/* Sticky-feel solve button */}
-      <div className="sticky bottom-20 mt-6 -mx-4 border-t border-border-light bg-background/95 px-4 py-3 backdrop-blur md:bottom-0 md:-mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0">
+        {/* Quota confirm inline */}
+        {quotaConfirm && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[--radius-lg] border-l-4 border-warning-dark bg-warning-bg p-3">
+            <svg className="h-5 w-5 flex-shrink-0 text-warning-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <p className="flex-1 text-[13px] text-text-primary">
+              This will use {totalProblems} of your {remainingSessions} remaining problems today.
+            </p>
+            <button
+              type="button"
+              onClick={() => setQuotaConfirm(false)}
+              className="text-xs font-semibold text-text-secondary hover:text-text-primary"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Inline error */}
+        {(error ?? extractionError) && (
+          <div className="mb-3 flex items-center gap-2 text-xs text-error">
+            <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="flex-1">{error ?? extractionError}</span>
+          </div>
+        )}
+
+        {/* Quota footer */}
+        {!isPro && remainingSessions < Infinity && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-border-light">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{
+                  width: `${Math.min(
+                    ((dailySessionsLimit - remainingSessions) / dailySessionsLimit) * 100,
+                    100,
+                  )}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-text-muted">
+              {remainingSessions} of {dailySessionsLimit} left today
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky bottom action bar */}
+      <div className="sticky bottom-16 border-t border-border-light bg-background/95 px-5 py-3 backdrop-blur md:static md:bottom-0 md:border-0 md:bg-transparent md:px-0 md:py-4">
         <Button
           gradient
           onClick={handleSolve}
           loading={isLoading}
           disabled={totalProblems === 0}
-          className="w-full py-3 text-base"
+          className="w-full"
           aria-label={solveLabel}
         >
           {solveLabel}
         </Button>
-        {!isPro && remainingSessions < Infinity && (
-          <p className="mt-2 text-center text-xs text-text-muted">
-            {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems left today
-          </p>
-        )}
       </div>
+
+      {/* Hidden file inputs — camera uses `capture` so phones open the camera */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onCameraChange}
+        className="hidden"
+      />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        onChange={onGalleryChange}
+        className="hidden"
+      />
+
+      {/* Extraction results modal */}
+      <ExtractionResultModal
+        result={extractionResult}
+        selected={extractionSelected}
+        editingIndex={extractionEditingIndex}
+        onToggle={toggleSelected}
+        onUpdateText={updateProblemText}
+        onSetEditingIndex={setEditingIndex}
+        onConfirm={handleConfirmExtraction}
+        onClose={closeResult}
+      />
 
       {UpgradeModal}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Subcomponents
+// ═══════════════════════════════════════════════════════════════════
+
+function ModePill({
+  label,
+  icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-[--radius-pill] px-3 py-1.5 text-xs font-semibold transition-colors",
+        active
+          ? "border border-primary bg-primary-bg text-primary"
+          : "bg-input-bg text-text-muted hover:text-text-secondary",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function HeroCard({
+  variant,
+  gradientClass,
+  disabled,
+  onClick,
+  icon,
+  title,
+  subtitle,
+  ariaLabel,
+}: {
+  variant: "gradient" | "outlined";
+  gradientClass?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  ariaLabel: string;
+}) {
+  const gradient = variant === "gradient";
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      whileTap={{ scale: disabled ? 1 : 0.97 }}
+      className={cn(
+        "mb-3 flex min-h-[180px] w-full flex-col items-center justify-center rounded-[--radius-lg] px-5 py-8 text-center shadow-lg transition-opacity",
+        gradient ? gradientClass : "border-2 border-primary bg-surface shadow-sm",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
+      <div
+        className={cn(
+          "mb-3 flex h-14 w-14 items-center justify-center rounded-full",
+          gradient ? "bg-white/20" : "bg-primary-bg",
+        )}
+      >
+        {icon}
+      </div>
+      <h3
+        className={cn(
+          "mb-1 text-2xl font-bold",
+          gradient ? "text-white" : "text-primary",
+        )}
+      >
+        {title}
+      </h3>
+      <p
+        className={cn(
+          "text-[13px]",
+          gradient ? "text-white/85" : "text-text-secondary",
+        )}
+      >
+        {subtitle}
+      </p>
+    </motion.button>
+  );
+}
+
+// ── Icons ──
+
+function BookIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+    </svg>
+  );
+}
+
+function DocIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+function CameraIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function ImagesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </svg>
+  );
+}
+
+function EditIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }
