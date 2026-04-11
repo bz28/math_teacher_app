@@ -57,7 +57,6 @@ export function SolveScreen({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const typeCardRef = useRef<View>(null);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,12 +90,6 @@ export function SolveScreen({
 
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
 
-  // Scroll when entering typing mode so the type card is visible.
-  // KAV behavior="padding" handles the keyboard offset natively.
-  useEffect(() => {
-    if (!typing) return;
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
-  }, [typing]);
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
   const activeSubject = getSubjectMeta(subject);
@@ -302,33 +295,35 @@ export function SolveScreen({
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Mode segmented control */}
-        <View style={styles.modeRow}>
-          {MODES.map((m) => {
-            const isActive = m.key === mode;
-            return (
-              <TouchableOpacity
-                key={m.key}
-                onPress={() => setMode(m.key)}
-                style={[
-                  styles.modePill,
-                  isActive && { backgroundColor: theme.primaryBg, borderWidth: 1, borderColor: theme.primary },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`${m.label} mode${isActive ? ", selected" : ""}`}
-                accessibilityState={{ selected: isActive }}
-              >
-                <Ionicons
-                  name={m.icon}
-                  size={14}
-                  color={isActive ? theme.primary : colors.textMuted}
-                />
-                <Text style={[styles.modePillText, isActive && { color: theme.primary }]}>
-                  {m.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* Mode segmented control — full-width with sliding background */}
+        <View style={styles.modeContainer}>
+          <View style={[styles.modeTrack, { backgroundColor: colors.inputBg }]}>
+            {MODES.map((m) => {
+              const isActive = m.key === mode;
+              return (
+                <TouchableOpacity
+                  key={m.key}
+                  onPress={() => setMode(m.key)}
+                  style={[
+                    styles.modeTab,
+                    isActive && { backgroundColor: theme.primary, borderRadius: radii.pill },
+                  ]}
+                  accessibilityRole="tab"
+                  accessibilityLabel={m.label}
+                  accessibilityState={{ selected: isActive }}
+                >
+                  <Ionicons
+                    name={m.icon}
+                    size={16}
+                    color={isActive ? colors.white : colors.textMuted}
+                  />
+                  <Text style={[styles.modeTabText, isActive && { color: colors.white }]}>
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         <ScrollView
@@ -338,10 +333,25 @@ export function SolveScreen({
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.greetingTitle}>
-            {mode === "mock_test" ? "What can I help you test?" : "What can I help you learn?"}
+            {mode === "mock_test" ? "What do you want to test?" : "What do you want to learn?"}
           </Text>
 
-          {/* SNAP — full-width gradient hero card */}
+          {/* Mock Test config — shown at the TOP when in test mode */}
+          {mode === "mock_test" && (
+            <MockTestConfig
+              examType={examType}
+              onExamTypeChange={setExamType}
+              untimed={untimed}
+              onUntimedChange={setUntimed}
+              timeLimitMinutes={timeLimitMinutes}
+              onTimeLimitChange={setTimeLimitMinutes}
+              multipleChoice={multipleChoice}
+              onMultipleChoiceChange={setMultipleChoice}
+              themeColor={theme.primary}
+            />
+          )}
+
+          {/* SNAP — gradient hero card */}
           <AnimatedPressable
             onPress={() => pickImage("camera")}
             disabled={extracting || problemQueue.length >= maxQueueSize}
@@ -353,17 +363,19 @@ export function SolveScreen({
               colors={gradients[activeSubject.gradient]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[styles.bigCard, shadows.lg, extracting && styles.cardDisabled]}
+              style={[styles.snapCard, shadows.lg, extracting && styles.cardDisabled]}
             >
-              <View style={styles.bigCardIconWrap}>
-                <Ionicons name="camera" size={32} color={colors.white} />
+              <View style={styles.snapIconWrap}>
+                <Ionicons name="camera" size={28} color={colors.white} />
               </View>
-              <Text style={styles.bigCardTitle}>Snap a problem</Text>
-              <Text style={styles.bigCardSubtitle}>Point your camera at any problem</Text>
+              <View>
+                <Text style={styles.snapTitle}>Snap a problem</Text>
+                <Text style={styles.snapSubtitle}>Point your camera at any problem</Text>
+              </View>
             </LinearGradient>
           </AnimatedPressable>
 
-          {/* GALLERY — full-width outlined card, equal size to Snap */}
+          {/* GALLERY — compact row card */}
           <AnimatedPressable
             onPress={() => pickImage("gallery")}
             disabled={extracting || problemQueue.length >= maxQueueSize}
@@ -371,111 +383,54 @@ export function SolveScreen({
             accessibilityRole="button"
             accessibilityLabel="Choose a photo from gallery"
           >
-            <View
-              style={[
-                styles.bigCard,
-                styles.bigCardOutlined,
-                shadows.sm,
-                extracting && styles.cardDisabled,
-                { borderColor: theme.primary },
-              ]}
-            >
-              <View style={[styles.bigCardIconWrap, { backgroundColor: theme.primaryBg }]}>
-                <Ionicons name="images" size={32} color={theme.primary} />
-              </View>
-              <Text style={[styles.bigCardTitle, { color: theme.primary }]}>Choose a photo</Text>
-              <Text style={[styles.bigCardSubtitle, { color: colors.textSecondary }]}>
-                Pick a problem from your gallery
-              </Text>
+            <View style={[styles.compactCard, shadows.sm, extracting && styles.cardDisabled]}>
+              <Ionicons name="images-outline" size={22} color={theme.primary} />
+              <Text style={[styles.compactCardText, { color: theme.primary }]}>Choose from gallery</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </View>
           </AnimatedPressable>
 
-          {/* TYPE — full-width card matching Snap/Gallery */}
-          <AnimatedPressable
-            onPress={() => {
-              setTyping(true);
-              requestAnimationFrame(() => inputRef.current?.focus());
-            }}
-            disabled={typing}
-            scaleDown={0.97}
-            accessibilityRole="button"
-            accessibilityLabel="Type a problem"
-          >
-            <View
-              ref={typeCardRef}
-              style={[
-                styles.bigCard,
-                styles.bigCardOutlined,
-                shadows.sm,
-                { borderColor: theme.primary },
-              ]}
-            >
-              <View style={[styles.bigCardIconWrap, { backgroundColor: theme.primaryBg }]}>
-                <Ionicons name="create" size={32} color={theme.primary} />
-              </View>
-              {typing ? (
-                <View style={styles.typeInputRow}>
-                  <TextInput
-                    ref={inputRef}
-                    style={[styles.typeInput, { color: theme.primary }]}
-                    value={input}
-                    onChangeText={(t) => {
-                      setInput(t);
-                      if (error) setError(null);
-                    }}
-                    placeholder="Type your problem here…"
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="done"
-                    blurOnSubmit
-                    onSubmitEditing={() => {
-                      handleAddToQueue();
-                      inputRef.current?.blur();
-                      setTyping(false);
-                    }}
-                    onBlur={() => {
-                      if (!input.trim()) setTyping(false);
-                    }}
-                    accessibilityLabel="Problem text input"
-                  />
-                  {input.trim() ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        handleAddToQueue();
-                        inputRef.current?.blur();
-                        setTyping(false);
-                      }}
-                      style={[styles.addChip, { backgroundColor: theme.primary }]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Add to queue"
-                    >
-                      <Ionicons name="checkmark" size={20} color={colors.white} />
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => {
-                        inputRef.current?.blur();
-                        setTyping(false);
-                      }}
-                      style={styles.doneChip}
-                      accessibilityRole="button"
-                      accessibilityLabel="Done"
-                    >
-                      <Text style={styles.doneChipText}>Done</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : (
-                <>
-                  <Text style={[styles.bigCardTitle, { color: theme.primary }]}>Type a problem</Text>
-                  <Text style={[styles.bigCardSubtitle, { color: colors.textSecondary }]}>
-                    Tap to enter your problem here
-                  </Text>
-                </>
-              )}
-            </View>
-          </AnimatedPressable>
+          {/* TYPE — always-visible inline input bar */}
+          <View style={[styles.typeBar, { borderColor: typing ? theme.primary : colors.border }]}>
+            <Ionicons name="create-outline" size={20} color={typing ? theme.primary : colors.textMuted} />
+            <TextInput
+              ref={inputRef}
+              style={styles.typeBarInput}
+              value={input}
+              onChangeText={(t) => {
+                setInput(t);
+                if (error) setError(null);
+              }}
+              onFocus={() => {
+                setTyping(true);
+                setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+              }}
+              onBlur={() => setTyping(false)}
+              placeholder="Or type a problem…"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={() => {
+                if (input.trim()) handleAddToQueue();
+              }}
+              accessibilityLabel="Type a problem"
+            />
+            {input.trim() && (
+              <TouchableOpacity
+                onPress={() => {
+                  handleAddToQueue();
+                  inputRef.current?.blur();
+                }}
+                style={[styles.typeBarSend, { backgroundColor: theme.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Add to queue"
+              >
+                <Ionicons name="add" size={18} color={colors.white} />
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Inline queue chips — tap to edit */}
           {problemQueue.length > 0 && (
@@ -516,21 +471,6 @@ export function SolveScreen({
                 ))}
               </ScrollView>
             </View>
-          )}
-
-          {/* Mock Test config (matches main InputScreen behavior) */}
-          {mode === "mock_test" && (
-            <MockTestConfig
-              examType={examType}
-              onExamTypeChange={setExamType}
-              untimed={untimed}
-              onUntimedChange={setUntimed}
-              timeLimitMinutes={timeLimitMinutes}
-              onTimeLimitChange={setTimeLimitMinutes}
-              multipleChoice={multipleChoice}
-              onMultipleChoiceChange={setMultipleChoice}
-              themeColor={theme.primary}
-            />
           )}
 
           {/* Extracting indicator */}
@@ -658,33 +598,27 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   flex: { flex: 1 },
 
   // Mode segmented control
-  modeRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
+  modeContainer: {
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
   },
-  modePill: {
+  modeTrack: {
+    flexDirection: "row",
+    borderRadius: radii.pill,
+    padding: 3,
+  },
+  modeTab: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radii.pill,
-    backgroundColor: colors.inputBg,
+    paddingVertical: spacing.md,
   },
-  modePillActive: {
-    backgroundColor: colors.primaryBg,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  modePillText: {
-    ...typography.label,
-    fontSize: 12,
+  modeTabText: {
+    ...typography.bodyBold,
+    fontSize: 14,
     color: colors.textMuted,
-  },
-  modePillTextActive: {
-    color: colors.primary,
   },
 
   scrollContent: {
@@ -693,82 +627,89 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
 
-  // Hero
+  // Hero — slightly smaller so both learn/test fit on one line
   greetingTitle: {
-    ...typography.hero,
+    ...typography.title,
+    fontSize: 22,
     color: colors.text,
-    lineHeight: 38,
-    marginBottom: spacing.xl,
+    lineHeight: 28,
+    marginBottom: spacing.lg,
   },
 
-  // Big equal-size cards (snap, gallery, type)
-  bigCard: {
+  // Snap card — horizontal row with icon + text
+  snapCard: {
     borderRadius: radii.lg,
-    paddingVertical: spacing.xxxl,
-    paddingHorizontal: spacing.xl,
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: spacing.md,
-    minHeight: 180,
-    justifyContent: "center",
-  },
-  bigCardOutlined: {
-    backgroundColor: colors.white,
-    borderWidth: 2,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
+    marginBottom: spacing.sm,
   },
   cardDisabled: { opacity: 0.5 },
-  bigCardIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  snapIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: spacing.md,
   },
-  bigCardTitle: {
-    ...typography.title,
+  snapTitle: {
+    ...typography.bodyBold,
     color: colors.white,
-    marginBottom: spacing.xs,
+    fontSize: 16,
   },
-  bigCardSubtitle: {
+  snapSubtitle: {
     ...typography.caption,
-    fontSize: 13,
-    color: "rgba(255,255,255,0.85)",
+    fontSize: 12,
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 2,
   },
 
-  // Type input row — appears inside the type card when in editing state
-  typeInputRow: {
+  // Compact row card (gallery)
+  compactCard: {
     flexDirection: "row",
     alignItems: "center",
-    width: "100%",
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.sm,
   },
-  typeInput: {
-    flex: 1,
+  compactCardText: {
     ...typography.bodyBold,
-    fontSize: 16,
+    fontSize: 14,
+    flex: 1,
+  },
+
+  // Always-visible type input bar
+  typeBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.lg,
+    borderWidth: 1.5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.md,
+    minHeight: 50,
+  },
+  typeBarInput: {
+    flex: 1,
+    ...typography.body,
+    fontSize: 15,
     color: colors.text,
     paddingVertical: spacing.sm,
-    textAlign: "center",
   },
-  addChip: {
-    width: 40,
-    height: 40,
+  typeBarSend: {
+    width: 34,
+    height: 34,
     borderRadius: radii.pill,
     justifyContent: "center",
     alignItems: "center",
-  },
-  doneChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.border,
-  },
-  doneChipText: {
-    ...typography.label,
-    color: colors.textSecondary,
-    fontSize: 13,
   },
 
   // Queue chips

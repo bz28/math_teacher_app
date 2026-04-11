@@ -160,13 +160,44 @@ function LearnPageContent() {
             Back
           </button>
           {SUBJECT_CONFIG[subject] && (
-            <span className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
-              SUBJECT_CONFIG[subject].bg,
-              SUBJECT_CONFIG[subject].color,
-            )}>
-              {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
-            </span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById("subject-dropdown");
+                  if (el) el.classList.toggle("hidden");
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors hover:opacity-80",
+                  SUBJECT_CONFIG[subject].bg,
+                  SUBJECT_CONFIG[subject].color,
+                )}
+              >
+                {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
+                <svg className="h-3 w-3 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+              <div
+                id="subject-dropdown"
+                className="hidden absolute right-0 top-full mt-1 z-50 w-44 rounded-[--radius-md] border border-border-light bg-surface shadow-lg overflow-hidden"
+              >
+                {Object.entries(SUBJECT_CONFIG).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      router.push(`/learn?subject=${key}`);
+                      document.getElementById("subject-dropdown")?.classList.add("hidden");
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-primary-bg",
+                      key === subject ? "bg-primary-bg text-primary" : "text-text-primary",
+                    )}
+                  >
+                    {cfg.icon} {cfg.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
