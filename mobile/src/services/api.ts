@@ -9,9 +9,6 @@ const API_BASE = __DEV__
     : `http://${DEV_HOST}:${DEV_PORT}/v1`
   : "https://math-teacher-api.up.railway.app/v1";
 
-// eslint-disable-next-line no-console
-console.log("[api] API_BASE =", API_BASE, "DEV_HOST =", DEV_HOST);
-
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
