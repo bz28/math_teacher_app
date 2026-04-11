@@ -40,7 +40,6 @@ export function ImageUpload({
     onPhaseChange?.(p);
   }, [onPhaseChange]);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [extractProgress, setExtractProgress] = useState({ done: 0, total: 0 });
   const [result, setResult] = useState<ImageExtractResponse | null>(null);
   const [cropImages, setCropImages] = useState<(string | undefined)[]>([]);
   const [selected, setSelected] = useState<boolean[]>([]);
@@ -56,10 +55,8 @@ export function ImageUpload({
   const autoExtract = useCallback(
     async (base64: string) => {
       setPhase("extracting");
-      setExtractProgress({ done: 0, total: 1 });
       try {
         const res = await imageApi.extract(base64, subject);
-        setExtractProgress({ done: 1, total: 1 });
         if (res.problems.length === 0) {
           setError("No problems found. Try selecting areas manually.");
           setManualMode(true);
@@ -114,7 +111,6 @@ export function ImageUpload({
     async (rectangles: Rectangle[]) => {
       if (!imageBase64) return;
       setPhase("extracting");
-      setExtractProgress({ done: 0, total: rectangles.length });
 
       const allProblems: string[] = [];
       const allCropImages: (string | undefined)[] = [];
@@ -142,7 +138,6 @@ export function ImageUpload({
               worstConfidence = "medium";
           }
         }
-        setExtractProgress({ done: Math.min(i + 3, rectangles.length), total: rectangles.length });
       }
 
       if (allProblems.length === 0) {

@@ -8,26 +8,18 @@ import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
 import type { PracticeBatch } from "@/stores/practice";
-import type { Subject } from "@/stores/learn";
-import { FREE_DAILY_SESSION_LIMIT } from "@/lib/constants";
 
 interface PracticeSummaryProps {
   practiceBatch: PracticeBatch;
-  subject: Subject;
-  sessionsRemaining: number;
   onToggleFlag: (index: number) => void;
   onStartLearnQueue: (problems: string[]) => Promise<void>;
-  onUpgradeNeeded: (entitlement: string, message: string) => void;
   onReset: () => void;
 }
 
 export function PracticeSummary({
   practiceBatch,
-  subject,
-  sessionsRemaining,
   onToggleFlag,
   onStartLearnQueue,
-  onUpgradeNeeded,
   onReset,
 }: PracticeSummaryProps) {
   const router = useRouter();

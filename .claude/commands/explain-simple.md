@@ -5,3 +5,4 @@ Explain everything you just did in the simplest English possible. Pretend you're
 - Short sentences, bullet points over paragraphs
 - Explain the "why" before the "what" — why did we need this change, then what we actually did
 - Group changes by feature, not by file
+- End with a **Try it:** section — the exact 2–3 steps to test the change locally, in plain English, so the user can verify before approving the next step.

@@ -1233,10 +1233,15 @@ export interface IntegrityProblemSummary {
   answered_count: number;
 }
 
+export type IntegrityOverallStatus =
+  | "pending"      // pipeline still running in the background
+  | "in_progress"  // rows exist, not all terminal
+  | "complete"     // all problems terminal
+  | "no_check";    // HW has integrity checks disabled
+
 export interface IntegrityStateResponse {
   submission_id: string;
-  /** "in_progress" | "complete" | "no_check" */
-  overall_status: string;
+  overall_status: IntegrityOverallStatus;
   problems: IntegrityProblemSummary[];
 }
 

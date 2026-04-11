@@ -25,11 +25,9 @@ export default function LearnSessionPage() {
   const {
     session,
     phase,
-    lastResponse,
     error,
     chatHistory,
     learnQueue,
-    submitAnswer,
     advanceStep,
     askAboutStep,
     advanceLearnQueue,
@@ -51,11 +49,6 @@ export default function LearnSessionPage() {
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
   );
-  const [selectedChoice, setSelectedChoice] = useState<{
-    index: number;
-    correct: boolean | null;
-    forStep: number;
-  } | null>(null);
 
   // Set subject color theme
   const subjectParam = searchParams.get("subject") ?? session?.subject ?? "math";
@@ -137,14 +130,6 @@ export default function LearnSessionPage() {
   const completedSteps = session.status === "completed" ? steps : steps.slice(0, stepIndex);
   const messages = chatHistory[stepIndex] ?? [];
 
-  // Choice selection scoped to current step (use stepIndex for consistency)
-  const activeChoice =
-    selectedChoice?.forStep === stepIndex ? selectedChoice : null;
-  const choiceResult =
-    activeChoice && lastResponse
-      ? { ...activeChoice, correct: lastResponse.is_correct }
-      : activeChoice;
-
   async function handleAsk() {
     if (!input.trim()) return;
     if (!isPro && remainingChats <= 0) {
@@ -155,16 +140,6 @@ export default function LearnSessionPage() {
     setInput("");
     await askAboutStep(q);
     fetchEntitlements();
-  }
-
-  async function handleChoiceSelect(choice: string, index: number) {
-    setSelectedChoice({ index, correct: null, forStep: stepIndex });
-    await submitAnswer(choice);
-    // Auto-reset wrong answer after 1.2s (matches mobile)
-    const { lastResponse: resp } = useSessionStore.getState();
-    if (resp && !resp.is_correct) {
-      setTimeout(() => setSelectedChoice(null), 1200);
-    }
   }
 
   function toggleExpandStep(stepNum: number) {

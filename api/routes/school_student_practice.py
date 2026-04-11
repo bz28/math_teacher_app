@@ -24,6 +24,7 @@ approved variation content.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -36,7 +37,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_pipeline import start_integrity_check
-from api.database import get_db
+from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import Course
@@ -52,6 +53,63 @@ from api.services.bank import problem_ids_in_content
 MAX_IMAGE_BASE64_LEN = 7_000_000
 
 logger = logging.getLogger(__name__)
+
+# ── Integrity pipeline background task registry ──
+#
+# The integrity pipeline does real Vision + Sonnet calls that take
+# 20–60s. Running it inline in submit_homework times out the HTTP
+# response, so we spawn it as a fire-and-forget asyncio task instead.
+#
+# Python's garbage collector will eat a task if nothing holds a
+# reference to it, cancelling the pipeline mid-flight. Every spawned
+# task goes into this set, with a done_callback that removes it on
+# completion. This is the documented asyncio fire-and-forget pattern.
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+
+
+async def drain_integrity_background_tasks() -> None:
+    """Test helper: wait for all outstanding integrity background tasks
+    to finish.
+
+    Lives in prod code (not conftest) because it needs direct access
+    to the private task set, and exposing that set to tests via an
+    import would tempt ad-hoc usage. A named helper makes the intent
+    explicit. This is the only external contract — tests call this,
+    nothing else should.
+    """
+    tasks = list(_BACKGROUND_TASKS)
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _run_integrity_pipeline_background(submission_id: uuid.UUID) -> None:
+    """Run the integrity pipeline for a submission in the background.
+
+    Opens its own DB session from the session factory — the request
+    session from Depends(get_db) is already closed by the time this
+    runs. Commits on success, logs + rolls back on any exception.
+    Never re-raises: there is no caller to catch exceptions from a
+    fire-and-forget task.
+    """
+    try:
+        async with get_session_factory()() as db:
+            try:
+                await start_integrity_check(submission_id, db)
+                await db.commit()
+            except Exception:
+                logger.exception(
+                    "integrity pipeline failed for submission %s; "
+                    "submission still saved",
+                    submission_id,
+                )
+                await db.rollback()
+    except Exception:
+        # Session open / teardown failures — log and swallow. Nothing
+        # upstream can react to a background task failure.
+        logger.exception(
+            "integrity background task crashed for submission %s",
+            submission_id,
+        )
 
 router = APIRouter(prefix="/school/student", tags=["school-student"])
 
@@ -479,37 +537,29 @@ async def submit_homework(
         raise HTTPException(status_code=409, detail="Already submitted") from None
     await db.refresh(submission)
 
-    # Capture the values we need for the response BEFORE calling the
-    # integrity pipeline. The pipeline either commits (which expires
-    # all session objects) or fails and we rollback (which also
-    # expires) — either way we'd hit MissingGreenlet trying to read
-    # submission.submitted_at later. Locals are immune.
+    # Capture the values we need for the response BEFORE spawning the
+    # background pipeline. Locals are immune to session expiry.
     response = SubmitHomeworkResponse(
         submission_id=str(submission.id),
         submitted_at=submission.submitted_at,
         is_late=submission.is_late,
     )
-    submission_id_for_log = submission.id
+    submission_id_for_task = submission.id
 
-    # Fire the integrity-check pipeline. Stubbed in PR 1 — runs
-    # inline in the same request because the stub is instant. PR 4
-    # will move this to a background task when extract / generate /
-    # score become real Vision + Sonnet calls.
+    # Spawn the integrity pipeline as a background task so the kid's
+    # submit returns immediately. The pipeline does real Vision +
+    # Sonnet calls that take 20–60s — running inline times out the
+    # HTTP response on Railway. The submission is already committed
+    # above; a pipeline failure can never affect it.
     #
-    # Wrapped in try/except so a pipeline failure CAN NEVER block
-    # the kid's submission. The submission is already committed; the
-    # worst case is that the integrity rows don't exist and the
-    # teacher view shows no badges for this submission (graceful
-    # degrade, not a hard error).
-    try:
-        await start_integrity_check(submission_id_for_log, db)
-        await db.commit()
-    except Exception:
-        logger.exception(
-            "integrity pipeline failed for submission %s; submission still saved",
-            submission_id_for_log,
+    # The frontend polls GET /integrity/submissions/{id} for the
+    # "pending" → "in_progress" transition while this runs.
+    if assignment.integrity_check_enabled:
+        task = asyncio.create_task(
+            _run_integrity_pipeline_background(submission_id_for_task),
         )
-        await db.rollback()
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     return response
 

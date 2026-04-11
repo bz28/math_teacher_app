@@ -1,39 +1,53 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-} from "react-native";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 import { AccountScreen } from "./src/components/AccountScreen";
 import { AuthScreen } from "./src/components/AuthScreen";
+import { BottomTabBar, type TabKey } from "./src/components/BottomTabBar";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
-import { HomeScreen } from "./src/components/HomeScreen";
-import { InputScreen } from "./src/components/InputScreen";
-import { ModeSelectScreen, type Mode } from "./src/components/ModeSelectScreen";
+import { LibraryScreen } from "./src/components/LibraryScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
+import { SolveScreen } from "./src/components/SolveScreen";
+import { useColors } from "./src/theme";
 import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
 import { useSessionStore } from "./src/stores/session";
-import { colors } from "./src/theme";
+import { loadThemePref } from "./src/stores/themePref";
 
 const ONBOARDING_KEY = "onboarding_completed";
 
-type Screen = "auth" | "onboarding" | "home" | "account" | "mode-select" | "input" | "session" | "session-review" | "history-list";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "library";
+
+const TAB_SCREENS: Screen[] = ["solve", "history-list", "library", "account"];
+const SCREEN_TO_TAB: Record<string, TabKey> = {
+  solve: "solve",
+  "history-list": "history",
+  library: "library",
+  account: "account",
+};
+const TAB_TO_SCREEN: Record<TabKey, Screen> = {
+  solve: "solve",
+  history: "history-list",
+  library: "library",
+  account: "account",
+};
 
 function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
-  const [mode, setMode] = useState<Mode>("learn");
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
+  const colors = useColors();
+  const tabHostStyle = useMemo(
+    () => ({ flex: 1, backgroundColor: colors.background }),
+    [colors.background],
+  );
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const resumeSession = useSessionStore((s) => s.resumeSession);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
@@ -44,6 +58,9 @@ function AppRoot() {
       setScreen("auth");
       setFromOnboarding(false);
     });
+
+    // Hydrate theme preference from secure storage (best-effort)
+    loadThemePref().catch(() => {});
 
     SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
       if (!done) {
@@ -58,7 +75,7 @@ function AppRoot() {
         }
         fetchEntitlements().catch(() => {});
       }
-      setScreen(restored ? "home" : "auth");
+      setScreen(restored ? "solve" : "auth");
     });
   }, [fetchEntitlements]);
 
@@ -84,8 +101,7 @@ function AppRoot() {
       <SafeAreaProvider>
         <AuthScreen
           onAuth={async () => {
-            setScreen("home");
-            // Init RevenueCat + entitlements in background after navigating
+            setScreen("solve");
             const userId = getUserId() ?? await fetchAndStoreUserId();
             if (userId) {
               initRevenueCat(userId).catch(() => {});
@@ -99,83 +115,60 @@ function AppRoot() {
     );
   }
 
-  if (screen === "home") {
-    return (
-      <SafeAreaProvider>
-        <HomeScreen
-          onSelect={(selectedSubject) => {
-            setSubject(selectedSubject);
-            setScreen("mode-select");
-          }}
-          onLogout={() => {
-            Alert.alert("Log Out", "Are you sure you want to log out?", [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Log Out",
-                style: "destructive",
-                onPress: async () => {
-                  await clearAuth();
-                  setFromOnboarding(false);
-                  setScreen("auth");
-                },
-              },
-            ]);
-          }}
-          onAccount={() => setScreen("account")}
-        />
-        <StatusBar style="auto" />
-      </SafeAreaProvider>
+  // Tab screens — wrapped in shared layout with bottom tab bar
+  if (TAB_SCREENS.includes(screen)) {
+    const tabBar = (
+      <BottomTabBar
+        active={SCREEN_TO_TAB[screen]}
+        onChange={(tab) => setScreen(TAB_TO_SCREEN[tab])}
+      />
     );
-  }
 
-  if (screen === "account") {
-    return (
-      <SafeAreaProvider>
+    let content: React.ReactNode = null;
+    if (screen === "solve") {
+      content = (
+        <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
+          <SolveScreen
+            subject={subject}
+            onSubjectChange={setSubject}
+            onSessionStart={() => setScreen("session")}
+            onSessionError={() => setScreen("solve")}
+          />
+        </ErrorBoundary>
+      );
+    } else if (screen === "history-list") {
+      content = (
+        <HistoryListScreen
+          subject={subject}
+          onSubjectChange={setSubject}
+          onBack={() => setScreen("solve")}
+          onViewSession={(sessionId) => {
+            setReviewSessionId(sessionId);
+            setScreen("session-review");
+          }}
+        />
+      );
+    } else if (screen === "library") {
+      content = <LibraryScreen />;
+    } else if (screen === "account") {
+      content = (
         <AccountScreen
-          onBack={() => setScreen("home")}
+          onBack={() => setScreen("solve")}
           onLogout={async () => {
             await clearAuth();
             setFromOnboarding(false);
             setScreen("auth");
           }}
         />
-        <StatusBar style="auto" />
-      </SafeAreaProvider>
-    );
-  }
+      );
+    }
 
-  if (screen === "mode-select") {
     return (
       <SafeAreaProvider>
-        <ModeSelectScreen
-          subject={subject}
-          onSelect={(selectedMode) => {
-            setMode(selectedMode);
-            setScreen("input");
-          }}
-          onBack={() => setScreen("home")}
-          onViewSession={(sessionId) => {
-            setReviewSessionId(sessionId);
-            setScreen("session-review");
-          }}
-          onViewAllHistory={() => setScreen("history-list")}
-        />
-        <StatusBar style="auto" />
-      </SafeAreaProvider>
-    );
-  }
-
-  if (screen === "history-list") {
-    return (
-      <SafeAreaProvider>
-        <HistoryListScreen
-          subject={subject}
-          onBack={() => setScreen("mode-select")}
-          onViewSession={(sessionId) => {
-            setReviewSessionId(sessionId);
-            setScreen("session-review");
-          }}
-        />
+        <View style={tabHostStyle}>
+          <View style={{ flex: 1 }}>{content}</View>
+          {tabBar}
+        </View>
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
@@ -184,10 +177,10 @@ function AppRoot() {
   if (screen === "session-review" && reviewSessionId) {
     return (
       <SafeAreaProvider>
-        <ErrorBoundary onReset={() => setScreen("mode-select")}>
+        <ErrorBoundary onReset={() => setScreen("solve")}>
           <SessionReviewScreen
             sessionId={reviewSessionId}
-            onBack={() => setScreen("mode-select")}
+            onBack={() => setScreen("solve")}
             onPracticeSimilar={async (problem) => {
               await startPracticeBatch(problem, 1);
               setScreen("session");
@@ -206,15 +199,15 @@ function AppRoot() {
   if (screen === "session") {
     return (
       <SafeAreaProvider>
-        <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("mode-select"); }}>
+        <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
           <SessionScreen
             onBack={() => {
               setProblemQueue([]);
-              setScreen("input");
+              setScreen("solve");
             }}
             onHome={() => {
               setProblemQueue([]);
-              setScreen("mode-select");
+              setScreen("solve");
             }}
           />
         </ErrorBoundary>
@@ -223,31 +216,8 @@ function AppRoot() {
     );
   }
 
-  // screen === "input"
-  return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("mode-select"); }}>
-            <InputScreen
-              mode={mode}
-              subject={subject}
-              onBack={() => {
-                setProblemQueue([]);
-                setScreen("mode-select");
-              }}
-              onSessionStart={() => setScreen("session")}
-              onSessionError={() => setScreen("input")}
-            />
-          </ErrorBoundary>
-        </KeyboardAvoidingView>
-        <StatusBar style="auto" />
-      </SafeAreaView>
-    </SafeAreaProvider>
-  );
+  // Fallback (shouldn't hit) — redirect to solve
+  return null;
 }
 
 export default function App() {
@@ -257,11 +227,3 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: { flex: 1 },
-});

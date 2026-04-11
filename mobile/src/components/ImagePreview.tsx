@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -9,7 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface ImagePreviewProps {
   imageUri: string;
@@ -30,6 +31,8 @@ export function ImagePreview({
   onManualSelect,
   onBack,
 }: ImagePreviewProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safe}>
@@ -37,7 +40,7 @@ export function ImagePreview({
           <AnimatedPressable onPress={onBack} style={styles.backBtn} scaleDown={0.9}>
             <Ionicons name="chevron-back" size={22} color={colors.white} />
           </AnimatedPressable>
-          <Text style={styles.title}>Extract Problems</Text>
+          <Text style={styles.title}>Confirm</Text>
           <View style={styles.backBtn} />
         </View>
 
@@ -62,7 +65,7 @@ export function ImagePreview({
               )}
               <GradientButton
                 onPress={onExtractAll}
-                label="Extract All Problems"
+                label="Looks good — read it"
                 style={styles.mainBtn}
               />
               {hasManualSelect && (
@@ -70,9 +73,11 @@ export function ImagePreview({
                   onPress={onManualSelect}
                   style={styles.secondaryBtn}
                   scaleDown={0.97}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjust crop manually"
                 >
-                  <Ionicons name="crop-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.secondaryText}>Select areas manually</Text>
+                  <Ionicons name="crop-outline" size={16} color={colors.textMuted} />
+                  <Text style={styles.secondaryText}>Adjust crop</Text>
                 </AnimatedPressable>
               )}
             </>
@@ -83,7 +88,7 @@ export function ImagePreview({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundDark,

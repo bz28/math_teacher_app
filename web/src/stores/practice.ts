@@ -6,7 +6,6 @@ import {
   practice as practiceApi,
   work as workApi,
   type PracticeProblem,
-  type PracticeCheckResponse,
   type DiagnosisResult,
 } from "@/lib/api";
 import { pollForState } from "@/lib/poll";
@@ -245,7 +244,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     });
   },
 
-  async submitPracticeAnswer(answer, subject) {
+  async submitPracticeAnswer(answer, _subject) {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
     const idx = practiceBatch.currentIndex;

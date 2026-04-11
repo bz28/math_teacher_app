@@ -238,7 +238,8 @@ async def decompose_problem(
             mode=llm_mode,
             tool_schema=DECOMPOSITION_SCHEMA,
             model=MODEL_REASON,
-            max_tokens=4096,
+            max_tokens=8192,
+            thinking_budget=2000,
             user_id=user_id,
         )
     else:
@@ -248,7 +249,8 @@ async def decompose_problem(
             mode=llm_mode,
             tool_schema=DECOMPOSITION_SCHEMA,
             model=MODEL_REASON,
-            max_tokens=4096,
+            max_tokens=8192,
+            thinking_budget=2000,
             user_id=user_id,
         )
 

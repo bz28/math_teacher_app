@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -20,7 +20,7 @@ import { LoginForm } from "./LoginForm";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface AuthScreenProps {
   onAuth: () => void;
@@ -153,6 +153,8 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
   onSwitch: () => void;
   stepNumber: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 500);
   const inputAnim = useFadeInUp(200, 500);
   const buttonAnim = useFadeInUp(400, 500);
@@ -229,6 +231,8 @@ function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNum
   onBack: () => void;
   stepNumber: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
 
   return (
@@ -294,6 +298,8 @@ function GradeCard({ grade, selected, onSelect, delay }: {
   onSelect: () => void;
   delay: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const anim = useFadeInUp(delay, 400);
 
   return (
@@ -334,6 +340,8 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
   onSwitch: () => void;
   stepNumber: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
   const formAnim = useFadeInUp(200, 400);
 
@@ -428,6 +436,8 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
 /* ── Shared Components ──────────────────────────────────── */
 
 function StepIndicator({ current, total }: { current: number; total: number }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.stepRow}>
       {Array.from({ length: total }, (_, i) => (
@@ -445,6 +455,8 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 }
 
 function ErrorRow({ message }: { message: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.errorWrap}>
       <Ionicons name="alert-circle" size={16} color={colors.error} />
@@ -455,7 +467,7 @@ function ErrorRow({ message }: { message: string }) {
 
 /* ── Styles ─────────────────────────────────────────────── */
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

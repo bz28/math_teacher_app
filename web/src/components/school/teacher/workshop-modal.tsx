@@ -209,6 +209,10 @@ export function WorkshopModal({
   const isLocked = liveItem?.locked ?? false;
 
   // Fetch units once per course so the header can show a unit picker.
+  // Intentionally depends only on course_id, not on liveItem itself —
+  // two different liveItem objects with the same course_id should not
+  // trigger a refetch (this effect fires while the user cycles through
+  // the workshop queue, and most of those items share a course).
   useEffect(() => {
     if (!liveItem) return;
     let cancelled = false;
@@ -223,6 +227,7 @@ export function WorkshopModal({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above: liveItem tracked via course_id only
   }, [liveItem?.course_id]);
 
   const saveUnit = (nextUnitId: string | null) =>
