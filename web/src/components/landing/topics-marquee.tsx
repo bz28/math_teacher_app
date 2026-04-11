@@ -139,7 +139,7 @@ function MarqueeRow({
   const animClass =
     direction === "left" ? "animate-marquee-left" : "animate-marquee-right";
   return (
-    <div className="overflow-hidden">
+    <div className="overflow-x-hidden py-2">
       <div className={`flex w-max ${animClass}`}>
         {duped.map((t, i) => (
           <TopicChip key={`${t.subject}-${t.label}-${i}`} t={t} />

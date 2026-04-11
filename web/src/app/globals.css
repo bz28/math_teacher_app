@@ -304,10 +304,10 @@ html {
   to { transform: translateX(0); }
 }
 .animate-marquee-left {
-  animation: marquee-left 60s linear infinite;
+  animation: marquee-left 110s linear infinite;
 }
 .animate-marquee-right {
-  animation: marquee-right 60s linear infinite;
+  animation: marquee-right 110s linear infinite;
 }
 .marquee-pause:hover .animate-marquee-left,
 .marquee-pause:hover .animate-marquee-right {
