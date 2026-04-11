@@ -95,43 +95,49 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     }
   }, [lastResponse]);
 
-  // Auto-scroll to bottom when new response arrives or phase changes
-  useEffect(() => {
-    if (lastResponse || phase === "awaiting_input") {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
-    }
-  }, [lastResponse, phase]);
-
-  // Scroll to bottom whenever the chat history changes for the current step
-  // (covers user msg appended optimistically, thinking placeholder, and the
-  // tutor reply on success — three scrolls per ask cycle).
+  // Auto-scroll: consolidated trigger for every state change that should
+  // re-anchor the scroll view at the bottom. Covers:
+  //   - new tutor response or phase becoming awaiting_input
+  //   - chat history growing for the current step (user msg, thinking, reply)
+  //   - askMode thinking/awaiting_input transitions where chat length
+  //     didn't change (placeholder bubble mount/unmount)
+  // Two scrolls per trigger — the first catches the new bubble mount, the
+  // second lands after layout settles in case the bubble grew taller than
+  // the initial measurement. Both timer IDs are tracked in a ref and
+  // cleared on re-run / unmount so we never leak stray timers.
   const stepChatLen = chatHistory[session?.current_step ?? -1]?.length ?? 0;
   useEffect(() => {
-    if (stepChatLen === 0) return;
-    // Two scrolls: one immediate after the new bubble mounts, one after
-    // layout settles in case the bubble grew taller than expected.
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
-  }, [stepChatLen]);
+    const shouldScroll =
+      !!lastResponse ||
+      phase === "awaiting_input" ||
+      stepChatLen > 0 ||
+      (askMode && phase === "thinking");
+    if (!shouldScroll) return;
+    const scrollToEnd = () => scrollRef.current?.scrollToEnd({ animated: true });
+    const t1 = setTimeout(scrollToEnd, 80);
+    const t2 = setTimeout(scrollToEnd, 300);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [lastResponse, phase, stepChatLen, askMode]);
 
-  // Also scroll when the thinking phase begins/ends (catches cases where the
-  // chat length didn't change but the placeholder bubble appeared/disappeared)
-  useEffect(() => {
-    if (askMode && (phase === "thinking" || phase === "awaiting_input")) {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-    }
-  }, [phase, askMode]);
-
-  // Scroll when the keyboard appears in ask mode
+  // Scroll when the keyboard appears in ask mode. Kept separate because
+  // this fires on an OS event, not a state transition, and the listener
+  // is torn down when askMode flips off.
   useEffect(() => {
     if (!askMode) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const sub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
       () => {
-        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+        timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
       },
     );
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      if (timer) clearTimeout(timer);
+    };
   }, [askMode]);
 
   // Confetti on learn completion
