@@ -19,7 +19,7 @@ export interface SubjectConfig {
 }
 
 export const SUBJECT_CONFIG: Record<string, SubjectConfig> = {
-  math: { name: "Mathematics", icon: "📐", color: "text-[#F39C12]", bg: "bg-[#F39C12]/10", gradient: "from-[#F39C12] to-[#FDCB6E]" },
+  math: { name: "Mathematics", icon: "📐", color: "text-[#00B5AD]", bg: "bg-[#00B5AD]/10", gradient: "from-[#00B5AD] to-[#72E8E0]" },
   chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00B894]", bg: "bg-[#00B894]/10", gradient: "from-[#00B894] to-[#55EFC4]" },
   physics: { name: "Physics", icon: "🚀", color: "text-[#0984E3]", bg: "bg-[#0984E3]/10", gradient: "from-[#0984E3] to-[#74B9FF]" },
 };
