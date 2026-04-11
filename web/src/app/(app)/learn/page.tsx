@@ -106,7 +106,6 @@ function LearnPageContent() {
     }
     setQuotaConfirm(false);
     setStarting(true);
-    setEditingQueueIndex(null);
 
     const problems =
       problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
