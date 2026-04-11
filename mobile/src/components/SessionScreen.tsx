@@ -585,11 +585,13 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
     width: 12,
   },
 
-  // Sticky bottom action bar
+  // Sticky bottom action bar — paddingBottom is minimal because
+  // KAV behavior="padding" already pushes this bar above the keyboard.
+  // Extra padding creates a visible white gap.
   actionBar: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,

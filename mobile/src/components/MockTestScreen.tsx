@@ -16,7 +16,6 @@ import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
-import { MathKeyboard } from "./MathKeyboard";
 import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
@@ -121,11 +120,6 @@ export function MockTestScreen({ onBack }: Props) {
         onPress: () => { reset(); onBack(); },
       },
     ]);
-  };
-
-  const handleInsert = (value: string) => {
-    setLocalAnswer((prev) => prev + value);
-    inputRef.current?.focus();
   };
 
   const handleAttachWork = async () => {
@@ -274,7 +268,8 @@ export function MockTestScreen({ onBack }: Props) {
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              inputAccessoryViewID="math-mock-test"
+              returnKeyType="done"
+              blurOnSubmit
             />
           )}
         </View>
@@ -340,9 +335,6 @@ export function MockTestScreen({ onBack }: Props) {
         </View>
       </ScrollView>
 
-      {!mockTest.multipleChoice && (
-        <MathKeyboard onInsert={handleInsert} accessoryID="math-mock-test" />
-      )}
     </KeyboardAvoidingView>
   );
 }
@@ -460,13 +452,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   answerInput: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.lg,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    minHeight: 52,
     ...typography.body,
+    lineHeight: 22,
     backgroundColor: colors.inputBg,
     color: colors.text,
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   choicesGrid: {
     gap: spacing.sm,

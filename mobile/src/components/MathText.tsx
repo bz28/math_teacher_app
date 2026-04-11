@@ -39,14 +39,19 @@ function escapeHtml(s: string): string {
 }
 
 function renderLatex(latex: string, displayMode: boolean): string {
+  // Fix lost backslashes: if `\t` was interpreted as a tab character by the
+  // JS string pipeline (happens when the API JSON's `\\times` gets double-
+  // unescaped), restore it so katex sees `\t` as the start of `\times`,
+  // `\theta`, `\tau`, `\text{...}`, etc. Real tabs in LaTeX are meaningless.
+  const fixed = latex.replace(/\t/g, "\\t");
   try {
-    return katex.renderToString(latex, {
+    return katex.renderToString(fixed, {
       displayMode,
       throwOnError: false,
       strict: false,
     });
   } catch {
-    return escapeHtml(latex);
+    return escapeHtml(fixed);
   }
 }
 

@@ -452,7 +452,19 @@ export function SolveScreen({
                     >
                       <Ionicons name="checkmark" size={20} color={colors.white} />
                     </TouchableOpacity>
-                  ) : null}
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => {
+                        inputRef.current?.blur();
+                        setTyping(false);
+                      }}
+                      style={styles.doneChip}
+                      accessibilityRole="button"
+                      accessibilityLabel="Done"
+                    >
+                      <Text style={styles.doneChipText}>Done</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ) : (
                 <>
@@ -746,6 +758,17 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     borderRadius: radii.pill,
     justifyContent: "center",
     alignItems: "center",
+  },
+  doneChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: colors.border,
+  },
+  doneChipText: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 13,
   },
 
   // Queue chips
