@@ -1,5 +1,6 @@
 import { Navbar } from "@/components/landing/navbar";
 import { Hero } from "@/components/landing/hero";
+import { HomeProblem } from "@/components/landing/home-problem";
 import { Features } from "@/components/landing/features";
 import { Subjects } from "@/components/landing/subjects";
 import { FAQ } from "@/components/landing/faq";
@@ -12,6 +13,7 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
+        <HomeProblem />
         <Features />
         <Subjects />
         <FAQ />
