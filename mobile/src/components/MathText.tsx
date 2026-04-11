@@ -130,11 +130,24 @@ function buildHtml(text: string, color: string, fontSize: number, fontWeight: st
 export function MathText({ text, style, numberOfLines }: MathTextProps) {
   const [height, setHeight] = useState(20);
 
+  // All hooks must run unconditionally on every render — React tracks them
+  // by call order. Previously, useMemo lived below the empty-text and
+  // plain-text early returns, so any MathText instance whose `text` prop
+  // transitioned between plain and math would grow its hook count and
+  // trigger "Rendered more hooks than during the previous render."
+  const hasMath = !!text && HAS_MATH_OR_BOLD.test(text);
+  const color = (style?.color as string) ?? colors.text;
+  const fontSize = (style?.fontSize as number) ?? 14;
+  const fontWeight = String(style?.fontWeight ?? "400");
+
+  const html = useMemo(
+    () => (hasMath ? buildHtml(text, color, fontSize, fontWeight) : ""),
+    [hasMath, text, color, fontSize, fontWeight],
+  );
+
   if (!text) return null;
 
-  const hasMath = HAS_MATH_OR_BOLD.test(text);
-
-  // Plain text fast path
+  // Plain text fast path — skips the WebView cost entirely.
   if (!hasMath) {
     return (
       <Text style={style ?? defaultTextStyle} numberOfLines={numberOfLines}>
@@ -142,15 +155,6 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
       </Text>
     );
   }
-
-  const color = (style?.color as string) ?? colors.text;
-  const fontSize = (style?.fontSize as number) ?? 14;
-  const fontWeight = String(style?.fontWeight ?? "400");
-
-  const html = useMemo(
-    () => buildHtml(text, color, fontSize, fontWeight),
-    [text, color, fontSize, fontWeight],
-  );
 
   return (
     <View style={[styles.webviewWrap, { height }]}>

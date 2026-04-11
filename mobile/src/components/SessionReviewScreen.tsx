@@ -39,6 +39,11 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
+  // scrollRef must be declared BEFORE any early returns below — otherwise
+  // the hook count grows on the render that transitions from loading → data,
+  // triggering a Rules-of-Hooks crash: "Rendered more hooks than during the
+  // previous render." This is exactly what broke the History → review flow.
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     (async () => {
@@ -79,8 +84,6 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
   const isCompleted = session.status === "completed";
   const isAbandoned = session.status === "abandoned";
   const isActive = session.status === "active";
-
-  const scrollRef = useRef<ScrollView>(null);
 
   return (
     <SafeAreaView style={styles.container}>
