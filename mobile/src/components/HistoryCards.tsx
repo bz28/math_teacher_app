@@ -8,7 +8,7 @@ import { useColors, spacing, radii, typography, shadows, type ColorPalette } fro
 
 /** Strip LaTeX delimiters and commands for a clean single-line preview.
  *  Full math rendering via WebView is too heavy for a list of cards. */
-function cleanMathPreview(text: string): string {
+export function cleanMathPreview(text: string): string {
   return text
     .replace(/\$\$/g, "")         // $$
     .replace(/\$/g, "")           // $

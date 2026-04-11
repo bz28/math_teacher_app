@@ -28,6 +28,7 @@ import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { LoadingHero } from "./LoadingHero";
 import { MathText } from "./MathText";
+import { cleanMathPreview } from "./HistoryCards";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
@@ -293,7 +294,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                   </View>
                 ) : (
                   <View style={chatStyles.bubbleTutor}>
-                    <Text style={chatStyles.bubbleTutorText}>{msg.text}</Text>
+                    <Text style={chatStyles.bubbleTutorText}>{cleanMathPreview(msg.text)}</Text>
                   </View>
                 )}
               </View>
@@ -585,13 +586,11 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
     width: 12,
   },
 
-  // Sticky bottom action bar — paddingBottom is minimal because
-  // KAV behavior="padding" already pushes this bar above the keyboard.
-  // Extra padding creates a visible white gap.
+  // Sticky bottom action bar
   actionBar: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.xl,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,

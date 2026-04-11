@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Appearance, ColorSchemeName } from "react-native";
+import { useEffect } from "react";
+import { useColorScheme } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 
@@ -50,12 +50,10 @@ export function useThemePref() {
   const pref = useThemePrefStore((s) => s.pref);
   const setPref = useThemePrefStore((s) => s.setPref);
   const toggle = useThemePrefStore((s) => s.toggle);
-  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(Appearance.getColorScheme());
-
-  useEffect(() => {
-    const sub = Appearance.addChangeListener(({ colorScheme }) => setSystemScheme(colorScheme));
-    return () => sub.remove();
-  }, []);
+  // useColorScheme() is a React hook that reliably tracks the OS
+  // appearance — more stable than Appearance.getColorScheme() which
+  // returns null in some Expo Go scenarios.
+  const systemScheme = useColorScheme();
 
   const resolved: "light" | "dark" =
     pref === "system" ? (systemScheme === "dark" ? "dark" : "light") : pref;
