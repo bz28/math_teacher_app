@@ -17,7 +17,7 @@ export interface SubjectMeta {
 }
 
 export const SUBJECTS: SubjectMeta[] = [
-  { key: "math",      label: "Math",      icon: "calculator", gradient: "math",      primary: "#00B5AD", primaryBg: "#E0F7F6" },
+  { key: "math",      label: "Math",      icon: "calculator", gradient: "math",      primary: "#7C3AED", primaryBg: "#EDE9FE" },
   { key: "physics",   label: "Physics",   icon: "rocket",     gradient: "physics",   primary: "#0984E3", primaryBg: "#E3F2FD" },
   { key: "chemistry", label: "Chemistry", icon: "flask",      gradient: "chemistry", primary: "#00B894", primaryBg: "#E8F8F5" },
 ];

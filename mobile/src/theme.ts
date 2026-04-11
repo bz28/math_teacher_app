@@ -216,7 +216,7 @@ export const gradients = {
   header: ["#6C5CE7", "#8B7CF7"] as const,
   success: ["#00B894", "#55EFC4"] as const,
   warning: ["#E17055", "#FDCB6E"] as const,
-  math: ["#00B5AD", "#72E8E0"] as const,
+  math: ["#7C3AED", "#A78BFA"] as const,
   chemistry: ["#00B894", "#55EFC4"] as const,
   physics: ["#0984E3", "#74B9FF"] as const,
   card: ["#F8F7FF", "#F0EDFF"] as const,
