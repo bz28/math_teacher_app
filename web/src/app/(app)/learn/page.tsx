@@ -7,7 +7,6 @@ import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
-import { EditProblemTextarea } from "@/components/shared/edit-problem-textarea";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
@@ -35,7 +34,6 @@ function LearnPageContent() {
     problemQueue,
     setProblemQueue,
     addToQueue,
-    updateInQueue,
     removeFromQueue,
     startLearnQueue,
     startSession,
@@ -48,7 +46,6 @@ function LearnPageContent() {
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
-  const [editingQueueIndex, setEditingQueueIndex] = useState<number | null>(null);
 
   // Mock test config
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
@@ -148,56 +145,26 @@ function LearnPageContent() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <button
-            onClick={() => router.push("/home")}
-            className="flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-          {SUBJECT_CONFIG[subject] && (
-            <div className="relative">
+        {/* Subject pill row — matches mobile */}
+        <div className="mb-4 flex items-center gap-2 overflow-x-auto">
+          {Object.entries(SUBJECT_CONFIG).map(([key, cfg]) => {
+            const isActive = key === subject;
+            return (
               <button
+                key={key}
                 type="button"
-                onClick={() => {
-                  const el = document.getElementById("subject-dropdown");
-                  if (el) el.classList.toggle("hidden");
-                }}
+                onClick={() => router.push(`/learn?subject=${key}`)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors hover:opacity-80",
-                  SUBJECT_CONFIG[subject].bg,
-                  SUBJECT_CONFIG[subject].color,
+                  "inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition-all",
+                  isActive
+                    ? cn("text-white shadow-md bg-gradient-to-r", cfg.gradient)
+                    : "border border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",
                 )}
               >
-                {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
-                <svg className="h-3 w-3 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="6 9 12 15 18 9" /></svg>
+                {cfg.icon} {cfg.name}
               </button>
-              <div
-                id="subject-dropdown"
-                className="hidden absolute right-0 top-full mt-1 z-50 w-44 rounded-[--radius-md] border border-border-light bg-surface shadow-lg overflow-hidden"
-              >
-                {Object.entries(SUBJECT_CONFIG).map(([key, cfg]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      router.push(`/learn?subject=${key}`);
-                      document.getElementById("subject-dropdown")?.classList.add("hidden");
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-primary-bg",
-                      key === subject ? "bg-primary-bg text-primary" : "text-text-primary",
-                    )}
-                  >
-                    {cfg.icon} {cfg.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            );
+          })}
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
           {isLearn ? "What do you want to learn?" : "What do you want to test?"}
@@ -370,148 +337,73 @@ function LearnPageContent() {
         )}
       </div>
 
-      {/* Start button when queue is empty but input has text */}
-      {problemQueue.length === 0 && input.trim() && (
+      {/* Inline queue chips — matches mobile */}
+      {problemQueue.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">
+            {problemQueue.length} queued
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {problemQueue.map((item, i) => (
+              <div
+                key={i}
+                className="flex flex-shrink-0 items-center gap-2 rounded-full bg-primary-bg px-3 py-1.5 text-xs font-semibold text-primary"
+              >
+                <span className="max-w-[180px] truncate">
+                  <MathText text={item.text} />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeFromQueue(i)}
+                  aria-label={`Remove problem ${i + 1}`}
+                  className="rounded-full p-0.5 text-primary/60 hover:text-primary"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quota confirm */}
+      {quotaConfirm && (
+        <div className="space-y-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg p-4">
+          <p className="text-sm font-semibold text-warning-dark">
+            This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
+          </p>
+          <div className="flex gap-2">
+            <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
+              Continue
+            </Button>
+            <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Start button — matches mobile labels */}
+      {!quotaConfirm && canStart && (
         <Button
           gradient
           onClick={handleStart}
           loading={isLoading || starting}
           className="w-full py-3 text-base"
         >
-          {isLearn ? "Start Learning" : "Start Exam"}
+          {isLearn
+            ? problemQueue.length > 1 ? `Learn (${problemQueue.length})` : "Learn"
+            : problemQueue.length > 1 ? `Test (${problemQueue.length})` : "Test"}
         </Button>
       )}
 
-      {/* Problem queue */}
-      {problemQueue.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text-secondary">
-              Problem Queue
-            </h3>
-            <span className="text-xs font-medium text-text-muted">
-              {problemQueue.length}/10
-            </span>
-          </div>
-          {problemQueue.map((item, i) => {
-            const isEditing = editingQueueIndex === i;
-            return (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 * i }}
-                className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
-              >
-                <div className="flex items-start gap-3 p-4">
-                  <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
-                    {i + 1}
-                  </span>
-                  {isEditing ? (
-                    <div className="flex-1 min-w-0">
-                      <EditProblemTextarea
-                        value={item.text}
-                        onChange={(text) => updateInQueue(i, text)}
-                        onDone={() => setEditingQueueIndex(null)}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium leading-relaxed text-text-primary">
-                        <MathText text={item.text} />
-                      </div>
-                      {item.image && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={`data:image/jpeg;base64,${item.image}`}
-                          alt=""
-                          className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
-                        />
-                      )}
-                    </div>
-                  )}
-                  <div className="flex flex-shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingQueueIndex(isEditing ? null : i)}
-                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-primary-bg hover:text-primary"
-                      aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
-                    >
-                      {isEditing ? (
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      ) : (
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Adjust the editing index when deleting shifts indices.
-                        // - Deleting the edited row: close the editor.
-                        // - Deleting a row BEFORE the edited row: shift index down by 1.
-                        // - Deleting a row AFTER the edited row: no change.
-                        if (editingQueueIndex !== null) {
-                          if (editingQueueIndex === i) {
-                            setEditingQueueIndex(null);
-                          } else if (editingQueueIndex > i) {
-                            setEditingQueueIndex(editingQueueIndex - 1);
-                          }
-                        }
-                        removeFromQueue(i);
-                      }}
-                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error"
-                      aria-label="Remove problem"
-                    >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-
-          {/* Start button — full width */}
-          {quotaConfirm ? (
-            <div className="space-y-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg p-4">
-              <p className="text-sm font-semibold text-warning-dark">
-                This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
-              </p>
-              <div className="flex gap-2">
-                <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
-                  Continue
-                </Button>
-                <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              gradient
-              onClick={handleStart}
-              loading={isLoading || starting}
-              disabled={!canStart}
-              className="w-full py-3 text-base"
-            >
-              {isLearn
-                ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
-                : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
-            </Button>
-          )}
-          {!isPro && remainingSessions < Infinity && !quotaConfirm && (
-            <p className="text-center text-xs text-text-muted">
-              {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems remaining today
-            </p>
-          )}
-        </div>
+      {!isPro && remainingSessions < Infinity && !quotaConfirm && (
+        <p className="text-center text-xs text-text-muted">
+          {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems remaining today
+        </p>
       )}
       {UpgradeModal}
     </div>
