@@ -25,11 +25,9 @@ export default function LearnSessionPage() {
   const {
     session,
     phase,
-    lastResponse,
     error,
     chatHistory,
     learnQueue,
-    submitAnswer,
     advanceStep,
     askAboutStep,
     advanceLearnQueue,
@@ -52,18 +50,9 @@ export default function LearnSessionPage() {
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>(
     {},
   );
-  const [selectedChoice, setSelectedChoice] = useState<{
-    index: number;
-    correct: boolean | null;
-    forStep: number;
-  } | null>(null);
 
-  // Set subject color theme
-  const subjectParam = searchParams.get("subject") ?? session?.subject ?? "math";
-  useEffect(() => {
-    document.documentElement.setAttribute("data-subject", subjectParam);
-    return () => { document.documentElement.removeAttribute("data-subject"); };
-  }, [subjectParam]);
+  // data-subject is synced at the layout level by <SubjectTheme />, which
+  // reads useSessionStore().subject. Nothing to do here.
 
   // Resume session from history
   useEffect(() => {
@@ -138,14 +127,6 @@ export default function LearnSessionPage() {
   const completedSteps = session.status === "completed" ? steps : steps.slice(0, stepIndex);
   const messages = chatHistory[stepIndex] ?? [];
 
-  // Choice selection scoped to current step (use stepIndex for consistency)
-  const activeChoice =
-    selectedChoice?.forStep === stepIndex ? selectedChoice : null;
-  const choiceResult =
-    activeChoice && lastResponse
-      ? { ...activeChoice, correct: lastResponse.is_correct }
-      : activeChoice;
-
   async function handleAsk() {
     if (!input.trim()) return;
     if (!isPro && remainingChats <= 0) {
@@ -156,16 +137,6 @@ export default function LearnSessionPage() {
     setInput("");
     await askAboutStep(q);
     fetchEntitlements();
-  }
-
-  async function handleChoiceSelect(choice: string, index: number) {
-    setSelectedChoice({ index, correct: null, forStep: stepIndex });
-    await submitAnswer(choice);
-    // Auto-reset wrong answer after 1.2s (matches mobile)
-    const { lastResponse: resp } = useSessionStore.getState();
-    if (resp && !resp.is_correct) {
-      setTimeout(() => setSelectedChoice(null), 1200);
-    }
   }
 
   function toggleExpandStep(stepNum: number) {
@@ -216,31 +187,35 @@ export default function LearnSessionPage() {
 
       {/* ── Completed steps timeline ── */}
       {completedSteps.length > 0 && (!isCompleted || session.status === "completed") && (
-        <div className="mb-6 space-y-0">
+        <div className="mb-6">
           {completedSteps.map((step, i) => {
             const stepNum = i + 1;
             const expanded = expandedSteps[stepNum] ?? false;
+            const isLast = i === completedSteps.length - 1;
             return (
               <div key={i} className="flex gap-3">
                 {/* Timeline line + dot */}
                 <div className="flex flex-col items-center">
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-success">
-                    <CheckIcon className="h-3 w-3 text-white" strokeWidth={3} />
+                  <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success">
+                    <CheckIcon className="h-2.5 w-2.5 text-white" strokeWidth={3} />
                   </div>
-                  <div className="w-px flex-1 bg-border" />
+                  {!isLast && <div className="mt-1 w-0.5 flex-1 bg-success-border" />}
                 </div>
                 {/* Content */}
                 <button
+                  type="button"
                   onClick={() => toggleExpandStep(stepNum)}
                   className="mb-3 flex flex-1 items-start justify-between pb-1 text-left"
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? "Collapse" : "Expand"} step ${stepNum}`}
                 >
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-success">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-success">
                       Step {stepNum}{step.title ? ` — ${step.title}` : ""}
                     </p>
                     <div
                       className={cn(
-                        "text-sm text-text-secondary",
+                        "mt-0.5 text-[13px] leading-[18px] text-text-secondary",
                         !expanded && "line-clamp-1",
                       )}
                     >
@@ -249,7 +224,7 @@ export default function LearnSessionPage() {
                   </div>
                   <svg
                     className={cn(
-                      "ml-2 h-4 w-4 flex-shrink-0 text-text-muted transition-transform",
+                      "ml-2 h-3.5 w-3.5 flex-shrink-0 text-text-muted transition-transform",
                       expanded && "rotate-180",
                     )}
                     viewBox="0 0 24 24"
@@ -293,31 +268,13 @@ export default function LearnSessionPage() {
       {/* ── "Continue asking" state (completed but user wants to ask more) ── */}
       {(phase === "awaiting_input" || phase === "thinking") && session?.status === "completed" && (
         <div className="space-y-4">
-          {messages.map((msg, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-              {msg.role === "user" ? (
-                <div className="flex justify-end">
-                  <div className="max-w-[80%] rounded-[--radius-md] bg-primary-bg px-4 py-3 text-sm text-primary">{msg.text}</div>
-                </div>
-              ) : (
-                <Card variant="flat" className="border-primary/15">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" /><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" /></svg>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-primary">Tutor</p>
-                      <div className="mt-1 text-sm leading-relaxed text-text-primary"><MathText text={msg.text} /></div>
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </motion.div>
-          ))}
+          <div className="flex flex-col gap-1.5">
+            {messages.map((msg, i) => (
+              <ChatBubble key={i} role={msg.role} text={msg.text} />
+            ))}
+          </div>
 
-          {isThinking && (
-            <TypingIndicator />
-          )}
+          {isThinking && <TypingIndicator />}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -352,38 +309,21 @@ export default function LearnSessionPage() {
 
       {/* ── Active step (only when session is truly active, not in continue-asking) ── */}
       {!isCompleted && session.status !== "completed" && (
-        <div className="space-y-4">
-          {/* Current step card — re-animates when step changes */}
+        <div className="space-y-3">
+          {/* Current step card — primaryBg with primary border, re-animates on step change */}
           <motion.div
             key={stepIndex}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="rounded-[--radius-lg] border-[1.5px] border-primary-light bg-primary-bg p-4 shadow-sm"
           >
-            <Card variant="elevated">
-              <div className="flex items-start gap-4">
-                <motion.span
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 20 }}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[--radius-sm] bg-gradient-to-br from-primary to-primary-light text-sm font-bold text-white"
-                >
-                  {currentStep}
-                </motion.span>
-                <motion.div
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 }}
-                >
-                  <p className="text-xs font-semibold text-text-muted">
-                    Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
-                  </p>
-                  <div className="mt-1 text-base leading-relaxed text-text-primary">
-                    {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
-                  </div>
-                </motion.div>
-              </div>
-            </Card>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-primary">
+              Step {currentStep}{currentStepData?.title ? ` — ${currentStepData.title}` : ""}
+            </p>
+            <div className="mt-1 text-base font-semibold leading-relaxed text-primary-dark">
+              {currentStepData ? <MathText text={currentStepData.description} /> : "Loading..."}
+            </div>
           </motion.div>
 
           {/* Final Answer — its own card after the last step */}
@@ -403,57 +343,17 @@ export default function LearnSessionPage() {
             </motion.div>
           )}
 
-
-          {/* ── Inline chat: question bubbles + tutor responses ── */}
-          {messages.map((msg, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              {msg.role === "user" ? (
-                /* User question bubble */
-                <div className="flex justify-end">
-                  <div className="max-w-[80%] rounded-[--radius-md] bg-primary-bg px-4 py-3 text-sm text-primary">
-                    {msg.text}
-                  </div>
-                </div>
-              ) : (
-                /* Tutor response card */
-                <Card variant="flat" className="border-primary/15">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <svg
-                        className="h-4 w-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
-                        <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-primary">
-                        Tutor
-                      </p>
-                      <div className="mt-1 text-sm leading-relaxed text-text-primary">
-                        <MathText text={msg.text} />
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </motion.div>
-          ))}
-
-
-          {/* Thinking indicator */}
-          {isThinking && (
-            <TypingIndicator />
+          {/* ── iMessage-style chat thread for this step ── */}
+          {messages.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {messages.map((msg, i) => (
+                <ChatBubble key={i} role={msg.role} text={msg.text} />
+              ))}
+            </div>
           )}
 
+          {/* Thinking indicator */}
+          {isThinking && <TypingIndicator />}
         </div>
       )}
 
@@ -462,10 +362,10 @@ export default function LearnSessionPage() {
         <div className="fixed bottom-16 left-0 right-0 z-30 border-t border-border-light bg-surface/95 backdrop-blur md:bottom-0">
           <div className="mx-auto max-w-3xl px-4 py-3">
             {askMode ? (
-              <div className="flex items-center gap-2 rounded-full border-2 border-primary bg-input-bg px-4 py-1">
+              <div className="flex h-12 items-center gap-2 rounded-[--radius-pill] border border-border bg-input-bg px-3">
                 <input
                   autoFocus
-                  placeholder="Ask a question about this step…"
+                  placeholder="Ask about this step…"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -481,25 +381,39 @@ export default function LearnSessionPage() {
                     }
                   }}
                   disabled={isThinking}
-                  className="flex-1 bg-transparent py-2 text-sm placeholder:text-text-muted focus:outline-none disabled:opacity-50"
-                  aria-label="Ask a question"
+                  className="h-10 flex-1 bg-transparent px-1 text-sm text-text-primary placeholder:text-text-muted focus:outline-none disabled:opacity-50"
+                  aria-label="Ask a question about this step"
                 />
+                {/* Inline "I understand →" pill — advance the step without asking */}
                 <button
                   type="button"
-                  onClick={() => { setAskMode(false); setInput(""); }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-border-light"
-                  aria-label="Cancel question"
+                  onClick={() => {
+                    setAskMode(false);
+                    setInput("");
+                    advanceStep();
+                  }}
+                  disabled={isThinking}
+                  className="flex items-center gap-1 rounded-[--radius-pill] bg-primary-bg px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
+                  aria-label="I understand, advance step"
                 >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  I understand
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
                 </button>
+                {/* Circular send button */}
                 <button
                   type="button"
                   onClick={() => { if (input.trim()) { handleAsk(); setAskMode(false); } }}
                   disabled={!input.trim() || isThinking}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark disabled:opacity-40"
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark disabled:opacity-40"
                   aria-label="Send question"
                 >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
                 </button>
               </div>
             ) : (
@@ -534,5 +448,35 @@ export default function LearnSessionPage() {
 
       {UpgradeModal}
     </div>
+  );
+}
+
+/**
+ * iMessage-style chat bubble.
+ *
+ * - User: right-aligned, bg-primary / white text, sharp bottom-right corner.
+ * - Tutor: left-aligned, bg-surface / border, sharp bottom-left corner.
+ *
+ * Matches mobile SessionScreen chat bubbles.
+ */
+function ChatBubble({ role, text }: { role: "user" | "assistant"; text: string }) {
+  const isUser = role === "user";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn("flex", isUser ? "justify-end pl-12" : "justify-start pr-12")}
+    >
+      <div
+        className={cn(
+          "max-w-full rounded-[18px] px-4 py-2 text-sm leading-snug",
+          isUser
+            ? "rounded-br-[4px] bg-primary text-text-on-primary"
+            : "rounded-bl-[4px] border border-border-light bg-surface text-text-primary",
+        )}
+      >
+        <MathText text={text} />
+      </div>
+    </motion.div>
   );
 }
