@@ -15,8 +15,8 @@ const subjects: SubjectCard[] = [
     slug: "math",
     name: "Math",
     tagline: "Pre-algebra through calculus, word problems, and proofs.",
-    accent: "#6C5CE7",
-    accentBg: "rgba(108, 92, 231, 0.08)",
+    accent: "#7C3AED",
+    accentBg: "rgba(124, 58, 237, 0.08)",
   },
   {
     slug: "physics",

@@ -11,8 +11,8 @@ export default function OpenGraphImage() {
     subtitle: "Step-by-step solutions for algebra, calculus, geometry, word problems, and more.",
     url: `${SITE_URL.replace(/^https?:\/\//, "")}/subjects/math`,
     tags: ["Algebra", "Calculus", "Geometry", "Word Problems"],
-    color: "#6C5CE7",
-    colorLight: "#A29BFE",
-    bgGradient: ["#1A1630", "#0D0C14", "#1C1040"],
+    color: "#7C3AED",
+    colorLight: "#A78BFA",
+    bgGradient: ["#1F1440", "#0D0C14", "#2A1055"],
   });
 }
