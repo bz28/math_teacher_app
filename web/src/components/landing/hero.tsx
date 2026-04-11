@@ -7,12 +7,12 @@ import { HeroStepsAnimation } from "./hero-steps-animation";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden bg-[color:var(--color-surface)]">
+    <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
       {/* Subtle radial glow */}
       <div className="pointer-events-none absolute right-0 top-1/4 hidden h-[720px] w-[720px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/10 to-transparent blur-3xl md:block" />
       <div className="pointer-events-none absolute -left-40 -top-40 h-[480px] w-[480px] rounded-full bg-gradient-to-br from-[color:var(--color-primary-light)]/10 to-transparent blur-3xl" />
 
-      <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-6 pb-24 pt-16 md:grid-cols-[1.1fr_1fr] md:gap-12 md:px-8 md:pb-32 md:pt-24">
+      <div className="relative mx-auto grid w-full max-w-6xl items-center gap-14 px-6 py-12 md:grid-cols-[1.1fr_1fr] md:gap-12 md:px-8 md:py-16">
         {/* Left — text */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

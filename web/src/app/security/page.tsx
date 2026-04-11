@@ -55,10 +55,10 @@ export default function SecurityPage() {
       <Navbar />
       <main>
         {/* Hero */}
-        <section className="relative overflow-hidden bg-[color:var(--color-surface)]">
+        <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
           <div className="pointer-events-none absolute right-0 top-0 hidden h-[520px] w-[520px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/10 to-transparent blur-3xl md:block" />
 
-          <div className="relative mx-auto max-w-3xl px-6 pb-20 pt-16 md:px-8 md:pb-28 md:pt-24">
+          <div className="relative mx-auto w-full max-w-3xl px-6 py-12 md:px-8 md:py-16">
             <Eyebrow>Security &amp; privacy</Eyebrow>
             <h1 className="mt-6 text-display-lg text-[color:var(--color-text)]">
               Built to be safe in schools.

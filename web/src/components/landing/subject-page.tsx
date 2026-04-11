@@ -85,11 +85,11 @@ export function SubjectPage({
       />
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-[color:var(--color-surface)]">
+      <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
         <div className="pointer-events-none absolute right-0 top-0 hidden h-[700px] w-[700px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/12 to-transparent blur-3xl md:block" />
         <div className="pointer-events-none absolute -left-40 bottom-0 h-[460px] w-[460px] rounded-full bg-gradient-to-br from-[color:var(--color-primary-light)]/14 to-transparent blur-3xl" />
 
-        <div className="relative mx-auto max-w-4xl px-6 pb-24 pt-16 text-center md:px-8 md:pb-32 md:pt-24">
+        <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
