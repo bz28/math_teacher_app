@@ -4,7 +4,6 @@ import { Eyebrow } from "./eyebrow";
 type Pillar = {
   title: string;
   body: string;
-  visual: string; // placeholder description
   icon: React.ReactNode;
 };
 
@@ -12,7 +11,6 @@ const pillars: Pillar[] = [
   {
     title: "Teaches, doesn't tell.",
     body: "Students don't get a dropped answer. They get guided questions, hints, and step-by-step reasoning that take them to the right answer on their own, so the thinking sticks.",
-    visual: "Step decomposition screenshot with a chat bubble on one of the steps",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2v4" />
@@ -28,7 +26,6 @@ const pillars: Pillar[] = [
   {
     title: "Catches work that isn't theirs.",
     body: "Our integrity checker asks students follow-up questions about their own submissions. If they didn't actually do the work, we can tell. And so can you.",
-    visual: "Integrity flag UI with follow-up questions",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -39,7 +36,6 @@ const pillars: Pillar[] = [
   {
     title: "Teacher-controlled content.",
     body: "Teachers upload materials, approve AI-generated questions, and build homework from a locked bank. No open photo uploads. No jailbreaks. No surprises.",
-    visual: "Question bank approval view — teacher reviewing AI-generated problems",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -83,10 +79,6 @@ export function HomePillars() {
             <p className="mt-4 text-base leading-relaxed text-[color:var(--color-text-secondary)]">
               {p.body}
             </p>
-            {/* TODO: replace with real screenshot — {p.visual} */}
-            <div className="mt-6 flex aspect-[4/3] items-center justify-center rounded-xl border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface-alt)] text-xs text-[color:var(--color-text-muted)]">
-              Screenshot placeholder
-            </div>
           </div>
         ))}
       </div>

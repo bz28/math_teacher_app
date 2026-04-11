@@ -7,61 +7,62 @@ so it's grep-able.
 
 ## 1. Screenshots from the app UI
 
-Each of these is currently a `TODO:` comment in code or a dashed-border
-"Screenshot placeholder" block. Ideal asset: a clean PNG/WebP on a
-transparent background OR a composed screenshot on a white card.
+Ideal asset: a clean PNG/WebP on a transparent background OR a composed
+screenshot on a white card.
 
-| # | Where it goes | What it should show |
-|---|---|---|
-| 1 | Homepage hero — right side | Composite: student "guided steps" view next to a teacher's dashboard. A chat bubble should be visible on one of the steps. File: `web/src/components/landing/hero.tsx` |
-| 2 | Homepage logo strip | 5–8 greyscale school/district logos (if any pilots are in place). Otherwise delete the logo strip. |
-| 3 | Homepage pillar #1 ("Teaches, doesn't tell") | A real step decomposition screenshot with a follow-up question in a chat bubble on one of the steps. File: `web/src/components/landing/home-pillars.tsx` |
-| 4 | Homepage pillar #2 ("Catches work that isn't theirs") | Integrity checker UI showing an AI follow-up question flagged, ideally with an integrity score. |
-| 5 | Homepage pillar #3 ("Teacher-controlled content") | Question bank approval view — teacher reviewing AI-generated problems with approve / reject buttons. |
-| 6 | `/teachers` page hero visual | (Not currently placed — optional. If added, should be a teacher dashboard overview.) |
-| 7 | `/subjects/math` demo area | Real in-app screenshot of Veradic walking through one math problem. |
-| 8 | `/subjects/physics` demo area | Same, for physics. |
-| 9 | `/subjects/chemistry` demo area | Same, for chemistry. Ideally includes a SMILES molecular structure rendered inline to highlight that feature. |
-| 10 | `/students` page hero | Phone mockup of the student mobile app. Can replace the current text-only hero. |
+| # | Where it goes | What it should show | Status |
+|---|---|---|---|
+| 1 | Homepage hero — right side | Replaced by live step-animation component (`hero-steps-animation.tsx`) using the real AI output for the quadratic `x² − 11x + 24 = 0`. | ✅ Done (math). Physics + chemistry solve flows pending for rotating animation. |
+| 2 | Homepage logo strip | 5–8 greyscale school/district logos. Otherwise delete the logo strip. | ⏳ |
+| 3 | Homepage pillar #1 ("Teaches, doesn't tell") | A real step decomposition screenshot with a follow-up question in a chat bubble on one of the steps. File: `web/src/components/landing/home-pillars.tsx` | ⏳ (have `if you ask a question in solve math.png` — needs wiring in) |
+| 4 | `/subjects/math` demo area | Real in-app screenshot of Veradic walking through one math problem. | ⏳ |
+| 5 | `/subjects/physics` demo area | Same, for physics. | ⏳ |
+| 6 | `/subjects/chemistry` demo area | Same, for chemistry. Ideally includes a SMILES molecular structure rendered inline to highlight that feature. | ⏳ |
+| 7 | `/students` page hero | Phone mockup of the student mobile app. Can replace the current text-only hero. | ⏳ |
+
+### Removed from the needs list (feature not built out enough yet)
+
+These have been stripped from the site layouts — no screenshot slot left.
+When the respective features are mature, we can reopen:
+
+- ~~Homepage pillar #2 screenshot (Integrity checker UI)~~ — pillar card now text-only
+- ~~Homepage pillar #3 screenshot (Question bank approval view)~~ — pillar card now text-only
+- ~~Teacher dashboard overview for `/teachers` hero or homepage~~ — no screenshot slot
+
+The concepts themselves (integrity, teacher-controlled content, dashboard
+functionality) still live in the site's prose copy. Only the image slots
+are removed.
 
 ## 2. LLM output captures (real Veradic responses)
 
-The homepage demo and each subject page demo currently use **hand-written
-placeholder steps** that approximate what Veradic would say. For the
-real launch we should capture actual LLM output and paste it in.
+The hero animation on `/` and the demo sections on each `/subjects/*` page
+use step-by-step AI output. Math is live with the real captured output.
+Physics and chemistry still use hand-written placeholder steps.
 
-Each capture should include:
-- The original problem text
-- Each step's short label and the exact question/hint Veradic produced
-- ~4–6 steps per problem
-
-| # | Where it goes | Requested problem type |
-|---|---|---|
-| 11 | `web/src/components/landing/home-demo.tsx` (homepage demo) | Any subject. Pick the most impressive decomposition across the three subjects after capturing 12–14. |
-| 12 | `web/src/app/subjects/math/page.tsx` (`demo` constant) | A multi-step word problem OR a calculus optimization problem. Current placeholder uses a rectangle perimeter — swap in something harder. |
-| 13 | `web/src/app/subjects/physics/page.tsx` (`demo` constant) | An energy-conservation problem or a multi-step kinematics problem. Current placeholder uses a frictionless incline — capture the real walkthrough. |
-| 14 | `web/src/app/subjects/chemistry/page.tsx` (`demo` constant) | A stoichiometry problem, ideally one that would benefit from rendering a SMILES structure inline. Current placeholder uses methane combustion. |
-| 15 | `web/src/components/landing/home-pillars.tsx` (pillar #2 / integrity card) | A real integrity-check dialogue showing Veradic asking 2–3 follow-up questions that catch a student who didn't do their own work. |
+| # | Where it goes | Requested problem type | Status |
+|---|---|---|---|
+| 8 | Homepage hero animation (`hero-steps-animation.tsx`) | Math quadratic factoring | ✅ Live with real output |
+| 9 | `web/src/app/subjects/math/page.tsx` (`demo` constant) | A multi-step word problem OR calculus optimization. Current placeholder uses a rectangle perimeter. | ⏳ |
+| 10 | `web/src/app/subjects/physics/page.tsx` (`demo` constant) | Energy conservation or multi-step kinematics. Current placeholder uses a frictionless incline. | ⏳ |
+| 11 | `web/src/app/subjects/chemistry/page.tsx` (`demo` constant) | Stoichiometry, ideally with a SMILES structure. Current placeholder uses methane combustion. | ⏳ |
 
 ## 3. Placeholder content that needs real data or user approval
 
 | # | Where | Current state | What's needed |
 |---|---|---|---|
-| 16 | `web/src/components/landing/testimonial-marquee.tsx` | 12 placeholder teacher testimonials with plausible names, roles, schools | Replace with real quotes from real teachers. Each needs name, role, and school. |
-| 17 | `web/src/components/landing/home-teachers.tsx` | 4 placeholder stats (hours saved, 1-on-1 coverage, homework assembly time, unsupervised chat count) | Real pilot data — or cut the stat grid until we have it. |
-| 18 | Homepage logo strip | Placeholder shapes | Real school/district logos (greyscale) — or cut the section. |
-| 19 | `/teachers` page demo form | Existing, works today | No changes needed — this form is live and hitting the real `contact.submitLead()` API. |
-| 20 | Hero composite product mockup (`hero.tsx`) | Currently reuses existing `LearnSessionMockup` | Swap for a real composed screenshot per item #1. |
+| 12 | `web/src/components/landing/topics-marquee.tsx` | Replaces the old testimonial marquee. Scrolls real topic names. | No real testimonial data required. |
+| 13 | `web/src/components/landing/home-teachers.tsx` | 4 placeholder stats (hours saved, 1-on-1 coverage, homework assembly time, unsupervised chat count) | Real pilot data — or cut the stat grid until we have it. |
+| 14 | Homepage logo strip | Placeholder shapes | Real school/district logos (greyscale) — or cut the section. |
+| 15 | `/teachers` page demo form | Existing, works today | No changes needed — this form is live and hitting the real `contact.submitLead()` API. |
 
 ## 4. Copy / business decisions
 
 | # | Decision | Context |
 |---|---|---|
-| 21 | **App store badges on `/students`** | Currently a text note "App store badges coming soon". Replace with real iOS and Google Play badges once the mobile app is live on the stores. |
-| 22 | **Email addresses** | Code currently uses `hello@veradicai.com` (subject "more subjects" + CTA secondary), `security@veradicai.com` (security page), and `/teachers#contact` (primary CTAs everywhere). Confirm these are the right addresses or swap. |
-| 23 | **FERPA / COPPA language** | `/security` page explicitly states no formal certifications are held. If a formal attestation is obtained, update the section. |
-| 24 | **Subprocessor list** | `/security` lists Anthropic, Vercel, managed Postgres, Cloudflare, RevenueCat as a best-guess. Verify this matches the actual production stack. |
-| 25 | **Testimonial disclosure** | Current placeholders are plausibly fake. Before launch, either (a) replace with real quotes, or (b) add a small "Illustrative quotes from early access teachers" disclaimer, or (c) remove the marquee. Do not ship invented quotes without disclosure. |
+| 16 | **App store badges on `/students`** | Currently a text note "App store badges coming soon". Replace with real iOS and Google Play badges once the mobile app is live on the stores. |
+| 17 | **Email addresses** | Code currently uses `hello@veradicai.com` (subject "more subjects" + CTA secondary), `security@veradicai.com` (security page), and `/teachers#contact` (primary CTAs everywhere). Confirm these are the right addresses or swap. |
+| 18 | **FERPA / COPPA language** | `/security` page explicitly states no formal certifications are held. If a formal attestation is obtained, update the section. |
+| 19 | **Subprocessor list** | `/security` lists Anthropic, Vercel, managed Postgres, Cloudflare, RevenueCat as a best-guess. Verify this matches the actual production stack. |
 
 ## 5. Things intentionally left out of this pass
 
@@ -75,13 +76,14 @@ These are documented in `plans/marketing-site-redesign.md` as future work:
 - LMS integrations positioning
 - Curriculum standard alignment tagging
 - `/schools` rename (kept as `/teachers`)
+- Any screenshot of the teacher dashboard, question bank approval, or
+  integrity checker UI (features not mature enough for marketing)
 
 ## 6. How to swap a placeholder
 
 Every placeholder is tagged in one of these ways:
 - `// TODO: replace with real …` comments in `.tsx` files
 - `Screenshot placeholder` visible text in the rendered page (inside a dashed border)
-- `TODO: replace with real testimonials …` on the testimonials array
 
 `grep -r "TODO:" web/src/components/landing/ web/src/app/` will show
 every remaining placeholder location.
