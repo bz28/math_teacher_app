@@ -133,8 +133,6 @@ function AppRoot() {
             onSubjectChange={setSubject}
             onSessionStart={() => setScreen("session")}
             onSessionError={() => setScreen("solve")}
-            onAccount={() => setScreen("account")}
-            onHistory={() => setScreen("history-list")}
           />
         </ErrorBoundary>
       );

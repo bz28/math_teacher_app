@@ -43,8 +43,6 @@ interface Props {
   onSubjectChange: (s: string) => void;
   onSessionStart: () => void;
   onSessionError: () => void;
-  onAccount: () => void;
-  onHistory: () => void;
 }
 
 export function SolveScreen({
@@ -737,7 +735,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   queueChipsLabel: {
     ...typography.label,
-    color: colors.primary,
     marginBottom: spacing.sm,
   },
   queueChipsRow: {
@@ -756,11 +753,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   queueChipTextWrap: {
     flexShrink: 1,
-  },
-  queueChipText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 13,
   },
 
   // Extracting
