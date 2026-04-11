@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -80,14 +80,20 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
   const isAbandoned = session.status === "abandoned";
   const isActive = session.status === "active";
 
+  const scrollRef = useRef<ScrollView>(null);
+
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <AnimatedPressable style={styles.backButton} onPress={onBack}>
         <Ionicons name="chevron-back" size={20} color={colors.primary} />
         <Text style={styles.backText}>Back</Text>
       </AnimatedPressable>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Problem header */}
         <View style={[styles.problemCard, shadows.md]}>
           <View style={styles.problemHeader}>
@@ -145,7 +151,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
 
         {/* Chat — ask questions about this session */}
         {isCompleted && (
-          <SessionChat sessionId={sessionId} />
+          <SessionChat sessionId={sessionId} scrollRef={scrollRef} />
         )}
 
         {/* Action buttons */}
@@ -183,11 +189,12 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
           </AnimatedPressable>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function SessionChat({ sessionId }: { sessionId: string }) {
+function SessionChat({ sessionId, scrollRef }: { sessionId: string; scrollRef: React.RefObject<ScrollView | null> }) {
   const colors = useColors();
   const chatStyles = useMemo(() => makeChatStyles(colors), [colors]);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
@@ -211,7 +218,6 @@ function SessionChat({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={chatStyles.container}>
         <Text style={chatStyles.title}>Have questions?</Text>
 
@@ -245,6 +251,9 @@ function SessionChat({ sessionId }: { sessionId: string }) {
             onSubmitEditing={handleSend}
             editable={!thinking}
             returnKeyType="send"
+            onFocus={() => {
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+            }}
           />
           <GradientButton
             onPress={handleSend}
@@ -255,7 +264,6 @@ function SessionChat({ sessionId }: { sessionId: string }) {
           />
         </View>
       </View>
-    </KeyboardAvoidingView>
   );
 }
 
