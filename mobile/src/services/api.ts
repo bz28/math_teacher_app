@@ -338,6 +338,9 @@ export const register = (email: string, password: string, name: string, gradeLev
     grade_level: gradeLevel,
   });
 
+export const forgotPassword = (email: string) =>
+  apiPost<{ status: string; message: string }>("/auth/forgot-password", { email });
+
 export const deleteAccount = (password: string) =>
   apiDelete("/auth/account", { password });
 

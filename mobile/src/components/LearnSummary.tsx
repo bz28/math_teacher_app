@@ -6,9 +6,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { cleanMathPreview } from "./HistoryCards";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
-import { colors, spacing } from "../theme";
+import { useColors, spacing } from "../theme";
 
 interface LearnSummaryProps {
   onBack: () => void;
@@ -16,6 +17,7 @@ interface LearnSummaryProps {
 }
 
 export function LearnSummary({ onBack, onHome }: LearnSummaryProps) {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const {
     learnQueue,
@@ -54,7 +56,7 @@ export function LearnSummary({ onBack, onHome }: LearnSummaryProps) {
           <View key={i} style={[styles.resultRow, styles.resultCorrect]}>
             <Ionicons name="checkmark-circle" size={20} color={colors.success} style={{ marginRight: 10, marginTop: 1 }} />
             <View style={styles.resultContent}>
-              <Text style={styles.resultProblem}>{problem}</Text>
+              <Text style={styles.resultProblem}>{cleanMathPreview(problem)}</Text>
             </View>
             <AnimatedPressable
               style={[styles.flagToggle, learnQueue.flags[i] && styles.flagToggleActive]}

@@ -1,8 +1,9 @@
 import { StyleSheet } from "react-native";
-import { colors, spacing, radii, typography } from "../theme";
+import { spacing, radii, typography, type ColorPalette } from "../theme";
 
-/** Shared styles for SessionScreen, PracticeBatchView, and CompletedCard */
-export const sessionScreenStyles = StyleSheet.create({
+/** Shared styles for SessionScreen, PracticeBatchView, and CompletedCard.
+ * Wrapped as a factory so callers pass the active color palette. */
+export const makeSessionScreenStyles = (colors: ColorPalette) => StyleSheet.create({
   loadingContainer: {
     flex: 1,
     backgroundColor: colors.background,

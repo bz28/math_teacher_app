@@ -14,7 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { GradientButton } from "./GradientButton";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 export interface Rectangle {
   id: number;
@@ -35,8 +35,7 @@ interface RectangleSelectorProps {
 const MIN_SIZE = 30;
 const HANDLE_RADIUS = 20;
 const HANDLE_SIZE = 14;
-const RECT_COLOR = colors.primaryOverlay;
-const RECT_BORDER = colors.primaryOverlayStrong;
+// RECT_COLOR and RECT_BORDER moved inside makeStyles (derived from dynamic colors)
 const TOAST_DURATION = 1800;
 
 type InteractionMode =
@@ -53,6 +52,8 @@ export function RectangleSelector({
   onCancel,
   maxRectangles = 10,
 }: RectangleSelectorProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
   const [interaction, setInteraction] = useState<InteractionMode | null>(null);
@@ -60,21 +61,38 @@ export function RectangleSelector({
   const [toast, setToast] = useState<string | null>(null);
   const nextId = useRef(1);
   const toastTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  /**
+   * Container's absolute position on screen, captured via measure() onLayout.
+   * We use pageX/pageY (absolute screen coords) minus this offset to get
+   * container-relative coordinates. nativeEvent.locationX/Y can't be used
+   * here because they're relative to the touched child element, not the
+   * container — touching an existing rectangle returns coords relative to
+   * that rectangle, breaking hit-testing and resize as soon as any rect
+   * exists.
+   */
+  const containerOffset = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<View>(null);
+  const measureContainer = useCallback(() => {
+    containerRef.current?.measure((_x, _y, _w, _h, pageX, pageY) => {
+      containerOffset.current = { x: pageX, y: pageY };
+    });
+  }, []);
 
   // Animations
   const onboardingOpacity = useRef(new Animated.Value(1)).current;
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
-  // Auto-dismiss onboarding on first draw
+  // Auto-dismiss onboarding the moment the user starts drawing or has rectangles
   useEffect(() => {
-    if (rectangles.length > 0 && showOnboarding) {
+    const drawing = interaction?.type === "draw";
+    if ((drawing || rectangles.length > 0) && showOnboarding) {
       Animated.timing(onboardingOpacity, {
         toValue: 0,
-        duration: 300,
+        duration: 200,
         useNativeDriver: true,
       }).start(() => setShowOnboarding(false));
     }
-  }, [rectangles.length]);
+  }, [interaction?.type, rectangles.length, showOnboarding, onboardingOpacity]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -177,9 +195,14 @@ export function RectangleSelector({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        // Don't capture — let children (the X delete button) claim
+        // their own touches. The parent only takes the responder if no
+        // child wants it.
         onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (e) => {
-          const { locationX, locationY } = e.nativeEvent;
+          const locationX = e.nativeEvent.pageX - containerOffset.current.x;
+          const locationY = e.nativeEvent.pageY - containerOffset.current.y;
 
           const cornerHit = hitTestCorner(locationX, locationY);
           if (cornerHit) {
@@ -230,7 +253,8 @@ export function RectangleSelector({
         },
 
         onPanResponderMove: (e) => {
-          const { locationX, locationY } = e.nativeEvent;
+          const locationX = e.nativeEvent.pageX - containerOffset.current.x;
+          const locationY = e.nativeEvent.pageY - containerOffset.current.y;
           const cur = interactionRef.current;
           if (!cur) return;
 
@@ -346,6 +370,8 @@ export function RectangleSelector({
       {/* Image area */}
       <View style={styles.imageArea}>
         <View
+          ref={containerRef}
+          onLayout={measureContainer}
           style={[styles.imageContainer, { width: screenWidth, height: screenHeight }]}
           {...panResponder.panHandlers}
         >
@@ -492,7 +518,7 @@ export function RectangleSelector({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundDark,
@@ -544,9 +570,9 @@ const styles = StyleSheet.create({
   // Rectangles
   rect: {
     position: "absolute",
-    backgroundColor: RECT_COLOR,
+    backgroundColor: colors.primaryOverlay,
     borderWidth: 2,
-    borderColor: RECT_BORDER,
+    borderColor: colors.primaryOverlayStrong,
     borderRadius: 6,
   },
   rectDrawing: {
@@ -576,15 +602,19 @@ const styles = StyleSheet.create({
   },
   rectDelete: {
     position: "absolute",
-    top: -11,
-    right: -11,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    // Sit inside the top-right corner of the rect, inset enough to
+    // clear the resize handle at -7/-7. The X is on top of the
+    // rect's interior and inside its frame so taps register reliably.
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: colors.error,
     alignItems: "center",
     justifyContent: "center",
     ...shadows.sm,
+    zIndex: 10,
   },
 
   // Corner handles

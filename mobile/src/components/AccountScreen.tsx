@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,9 +18,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { PaywallScreen } from "./PaywallScreen";
+import { ThemeToggle } from "./ThemeToggle";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface AccountScreenProps {
   onBack: () => void;
@@ -31,6 +32,8 @@ interface AccountScreenProps {
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
 function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: IoniconsName }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const pct = limit > 0 ? used / limit : 0;
   const barColor = pct >= 1 ? colors.error : pct >= 0.8 ? colors.warningDark : colors.primary;
   return (
@@ -50,6 +53,8 @@ function UsageBar({ label, used, limit, icon }: { label: string; used: number; l
 }
 
 export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScreenProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const name = getUserName();
   const isPro = useEntitlementStore((s) => s.isPro);
   const status = useEntitlementStore((s) => s.status);
@@ -207,6 +212,12 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           </AnimatedPressable>
         )}
 
+        {/* Theme toggle — single icon button matching the web ThemeToggle */}
+        <View style={styles.themeRow}>
+          <Text style={styles.themeRowLabel}>Theme</Text>
+          <ThemeToggle />
+        </View>
+
         {/* Delete Account */}
         <AnimatedPressable style={styles.deleteButton} onPress={handleDeleteAccount} scaleDown={0.97}>
           <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
@@ -287,7 +298,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -446,6 +457,21 @@ const styles = StyleSheet.create({
   upgradeButtonText: {
     ...typography.button,
     color: colors.white,
+  },
+  themeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    marginTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  themeRowLabel: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
   },
   deleteButton: {
     flexDirection: "row",

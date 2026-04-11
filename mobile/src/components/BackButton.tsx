@@ -1,7 +1,7 @@
 import { Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, typography } from "../theme";
+import { useColors, spacing, typography } from "../theme";
 
 interface BackButtonProps {
   onPress: () => void;
@@ -9,6 +9,7 @@ interface BackButtonProps {
 }
 
 export function BackButton({ onPress, label = "Back" }: BackButtonProps) {
+  const colors = useColors();
   return (
     <AnimatedPressable
       style={{

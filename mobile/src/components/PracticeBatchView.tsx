@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,10 +15,11 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
+import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
-import { colors, spacing, shadows } from "../theme";
-import { sessionScreenStyles as styles } from "./sessionScreenStyles";
+import { useColors, spacing, shadows } from "../theme";
+import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface PracticeBatchViewProps {
   onBack: () => void;
@@ -26,6 +27,8 @@ interface PracticeBatchViewProps {
 
 export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState("");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
@@ -128,7 +131,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
         </View>
         <View style={[styles.problemCard, shadows.sm]}>
           <Text style={styles.cardLabel}>Problem</Text>
-          <Text style={styles.problemText}>{currentProblem.question}</Text>
+          <MathText text={currentProblem.question} style={styles.problemText} />
         </View>
         <View style={styles.progressRow}>
           <View style={styles.progressContainer}>

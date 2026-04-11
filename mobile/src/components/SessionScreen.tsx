@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
-  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  type TextStyle,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,7 +16,6 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { BackButton } from "./BackButton";
 import { CompletedCard } from "./CompletedCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { GradientButton } from "./GradientButton";
@@ -28,37 +26,35 @@ import { PracticeBatchView } from "./PracticeBatchView";
 import { PracticeSummary } from "./PracticeSummary";
 import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
+import { LoadingHero } from "./LoadingHero";
+import { MathText } from "./MathText";
+import { cleanMathPreview } from "./HistoryCards";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
-import { sessionScreenStyles as styles } from "./sessionScreenStyles";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface SessionScreenProps {
   onBack: () => void;
   onHome: () => void;
 }
 
-/** Render text with **bold** markdown into React Native Text elements. */
-function renderBold(text: string, style: TextStyle) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) =>
-    part.startsWith("**") && part.endsWith("**")
-      ? <Text key={i} style={[style, { fontWeight: "700" }]}>{part.slice(2, -2)}</Text>
-      : part,
-  );
-}
-
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
+  const readerStyles = useMemo(() => makeReaderStyles(colors), [colors]);
+  const chatStyles = useMemo(() => makeChatStyles(colors), [colors]);
+  const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const confettiRef = useRef<ConfettiOverlayRef>(null);
   const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
+  const [askMode, setAskMode] = useState(false);
 
   const {
     session,
@@ -74,6 +70,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     switchToLearnMode,
     finishAsking,
     problemImages,
+    chatHistory,
     reset,
   } = useSessionStore();
 
@@ -98,32 +95,74 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     }
   }, [lastResponse]);
 
-  // Auto-scroll to bottom when new response arrives or phase changes
+  // Auto-scroll: consolidated trigger for every state change that should
+  // re-anchor the scroll view at the bottom. Covers:
+  //   - new tutor response or phase becoming awaiting_input
+  //   - chat history growing for the current step (user msg, thinking, reply)
+  //   - askMode thinking/awaiting_input transitions where chat length
+  //     didn't change (placeholder bubble mount/unmount)
+  // Two scrolls per trigger — the first catches the new bubble mount, the
+  // second lands after layout settles in case the bubble grew taller than
+  // the initial measurement. Both timer IDs are tracked in a ref and
+  // cleared on re-run / unmount so we never leak stray timers.
+  const stepChatLen = chatHistory[session?.current_step ?? -1]?.length ?? 0;
   useEffect(() => {
-    if (lastResponse || phase === "awaiting_input") {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
-    }
-  }, [lastResponse, phase]);
+    const shouldScroll =
+      !!lastResponse ||
+      phase === "awaiting_input" ||
+      stepChatLen > 0 ||
+      (askMode && phase === "thinking");
+    if (!shouldScroll) return;
+    const scrollToEnd = () => scrollRef.current?.scrollToEnd({ animated: true });
+    const t1 = setTimeout(scrollToEnd, 80);
+    const t2 = setTimeout(scrollToEnd, 300);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [lastResponse, phase, stepChatLen, askMode]);
+
+  // Scroll when the keyboard appears in ask mode. Kept separate because
+  // this fires on an OS event, not a state transition, and the listener
+  // is torn down when askMode flips off.
+  useEffect(() => {
+    if (!askMode) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+      },
+    );
+    return () => {
+      sub.remove();
+      if (timer) clearTimeout(timer);
+    };
+  }, [askMode]);
 
   // Confetti on learn completion
   useEffect(() => {
     if (phase === "completed") confettiRef.current?.fire();
   }, [phase]);
 
-  // Loading state
+  // Loading state — full-screen subject-themed hero with pulsing icon
   if (phase === "loading") {
-    const isGrading = isBatchMode && practiceBatch.pendingChecks > 0
+    const isPracticeGrading = isBatchMode && practiceBatch.pendingChecks > 0
       && practiceBatch.results.length >= practiceBatch.problems.length;
-    return (
-      <SafeAreaView style={styles.loadingContainer}>
-        {isGrading ? (
-          <>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.gradingText}>Grading your answers...</Text>
-          </>
-        ) : isBatchMode ? <PracticeSkeleton /> : <SessionSkeleton />}
-      </SafeAreaView>
-    );
+    // Mock test grading: mockTest exists and has answered questions (answers
+    // object is non-empty). During initial test generation answers is empty;
+    // during grading the user has already filled in answers and hit Submit.
+    const isMockGrading = !!mockTest && Object.keys(mockTest.answers).length > 0;
+    if (isPracticeGrading || isMockGrading) {
+      return (
+        <SafeAreaView style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.gradingText}>Grading your answers...</Text>
+        </SafeAreaView>
+      );
+    }
+    const subjectFromStore = useSessionStore.getState().subject;
+    return <LoadingHero subject={subjectFromStore} mode={mockTest ? "test" : "learn"} />;
   }
 
   // Mock test mode
@@ -164,7 +203,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       return;
     }
     const text = input.trim();
-    setLastQuestion(text);
     setInput("");
     await askAboutStep(text);
     fetchEntitlements();
@@ -185,41 +223,38 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <BackButton onPress={handleBack} />
-          <View style={styles.headerBadge} accessibilityRole="text">
-            <Text style={styles.headerBadgeText}>
-              {isLearnQueue && learnQueue
-                ? `${learnQueue.currentIndex + 1}/${learnQueue.problems.length}`
-                : isPractice ? "Practice" : "Learn"}
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.problemCard, shadows.sm]}>
-          <Text style={styles.cardLabel}>Problem</Text>
-          <Text style={styles.problemText}>{session.problem}</Text>
+      <View style={[readerStyles.slimHeader, { paddingTop: insets.top + spacing.sm }]}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={readerStyles.backIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <View style={readerStyles.problemPill}>
+          <MathText
+            text={session.problem}
+            style={readerStyles.problemPillText}
+            numberOfLines={1}
+          />
           {problemImages[session.problem] && (
-            <Image
-              source={{ uri: `data:image/jpeg;base64,${problemImages[session.problem]}` }}
-              style={{ height: 120, marginTop: 8, borderRadius: 8 }}
-              resizeMode="contain"
-            />
+            <Ionicons name="image" size={14} color={colors.textMuted} />
           )}
         </View>
         {isLearn && (
-          <View style={styles.progressRow}>
-            <View style={styles.progressContainer}>
+          <View style={readerStyles.dotsRow}>
+            {Array.from({ length: session.total_steps }).map((_, i) => (
               <View
+                key={i}
                 style={[
-                  styles.progressBar,
-                  { width: `${(session.current_step / session.total_steps) * 100}%` },
+                  readerStyles.dot,
+                  i < session.current_step && readerStyles.dotDone,
+                  i === session.current_step && readerStyles.dotCurrent,
                 ]}
               />
-            </View>
-            <Text style={styles.progressLabel}>
-              Step {session.current_step + 1}/{session.total_steps}
-            </Text>
+            ))}
           </View>
         )}
       </View>
@@ -244,7 +279,39 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             <Text style={styles.stepDescLabel}>
               Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
             </Text>
-            <Text style={styles.stepDescText}>{renderBold(currentStep.description, styles.stepDescText)}</Text>
+            <MathText text={currentStep.description} style={styles.stepDescText} />
+          </View>
+        )}
+
+        {/* iMessage-style chat thread above the current step (Learn mode) */}
+        {isLearn && !isCompleted && (chatHistory[session.current_step]?.length ?? 0) > 0 && (
+          <View style={chatStyles.thread}>
+            {(chatHistory[session.current_step] ?? []).map((msg, i) => (
+              <View
+                key={`chat-${session.current_step}-${i}`}
+                style={[
+                  chatStyles.bubbleRow,
+                  msg.role === "user" ? chatStyles.bubbleRowUser : chatStyles.bubbleRowTutor,
+                ]}
+              >
+                {msg.role === "user" ? (
+                  <View style={chatStyles.bubbleUser}>
+                    <Text style={chatStyles.bubbleUserText}>{msg.text}</Text>
+                  </View>
+                ) : (
+                  <View style={chatStyles.bubbleTutor}>
+                    <Text style={chatStyles.bubbleTutorText}>{cleanMathPreview(msg.text)}</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+            {phase === "thinking" && (
+              <View style={[chatStyles.bubbleRow, chatStyles.bubbleRowTutor]}>
+                <View style={chatStyles.bubbleTutor}>
+                  <Text style={chatStyles.bubbleTutorText}>Thinking…</Text>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -253,16 +320,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <Text style={styles.promptText}>Enter your final answer</Text>
         )}
 
-        {/* User's question bubble (for chat conversations) */}
-        {lastQuestion && lastResponse?.action === "conversation" && (
-          <View style={compactStyles.questionBubble}>
-            <Ionicons name="chatbubble" size={14} color={colors.primary} />
-            <Text style={compactStyles.questionText}>{lastQuestion}</Text>
-          </View>
-        )}
-
-        {/* Thinking indicator */}
-        {phase === "thinking" && (
+        {/* Thinking indicator — only shown for practice mode (learn mode
+            shows thinking as a chat bubble in the thread above) */}
+        {isPractice && phase === "thinking" && (
           <View style={[compactStyles.thinkingCard, shadows.sm]}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={compactStyles.thinkingText}>Thinking...</Text>
@@ -270,7 +330,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         )}
 
         {/* Feedback */}
-        {lastResponse && phase !== "thinking" && (
+        {/* FeedbackCard for practice-mode answer feedback only.
+            Learn-mode chat replies render as tutor bubbles in the chat
+            thread above the step — showing the FeedbackCard for them too
+            would duplicate the most recent reply. */}
+        {isPractice && lastResponse && phase !== "thinking" && (
           <FeedbackCard response={lastResponse} />
         )}
 
@@ -299,133 +363,134 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {/* Completed */}
         {isCompleted && <CompletedCard onBack={onBack} onHome={onHome} />}
 
-        {/* Continue asking after completion */}
-        {!isCompleted && session.status === "completed" && isLearn && (
+        {/* Practice mode: answer input stays in scroll body */}
+        {!isCompleted && session.status !== "completed" && isPractice && (
           <>
             <View>
-              <View style={styles.inputLabelRow}>
-                <Text style={styles.inputLabel}>Ask a question about the problem</Text>
-                {!isPro && chatsRemaining() < Infinity && (
-                  <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
-                )}
-              </View>
+              <Text style={styles.inputLabel}>Your answer</Text>
               <TextInput
                 ref={inputRef}
                 style={styles.input}
                 value={input}
                 onChangeText={setInput}
-                placeholder="Ask a question..."
+                placeholder="Enter your answer..."
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="go"
-                onSubmitEditing={handleAsk}
+                onSubmitEditing={handleSubmit}
                 inputAccessoryViewID="math-session"
               />
             </View>
-
             <View style={styles.buttons}>
-              {input.trim() ? (
-                <GradientButton
-                  onPress={handleAsk}
-                  label="Ask"
-                  loading={phase === "thinking"}
-                  style={styles.submitButton}
-                />
-              ) : (
-                <GradientButton
-                  onPress={finishAsking}
-                  label="I Understand Now"
-                  style={styles.submitButton}
-                />
-              )}
+              <GradientButton
+                onPress={handleSubmit}
+                label="Answer"
+                loading={phase === "thinking"}
+                disabled={!input.trim()}
+                style={styles.submitButton}
+              />
             </View>
           </>
         )}
-
-        {/* Input area */}
-        {!isCompleted && session.status !== "completed" && (
-          <>
-            {/* Learn mode: chat input for questions */}
-            {isLearn && (
-              <>
-                <View>
-                  <View style={styles.inputLabelRow}>
-                    <Text style={styles.inputLabel}>Have a question about this step?</Text>
-                    {!isPro && chatsRemaining() < Infinity && (
-                      <Text style={styles.chatCountText}>{chatsRemaining()} chats remaining</Text>
-                    )}
-                  </View>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    value={input}
-                    onChangeText={setInput}
-                    placeholder="Ask a question..."
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="go"
-                    onSubmitEditing={handleAsk}
-                    inputAccessoryViewID="math-session"
-                  />
-                </View>
-
-                <View style={styles.buttons}>
-                  {input.trim() ? (
-                    <GradientButton
-                      onPress={handleAsk}
-                      label="Ask"
-                      loading={phase === "thinking"}
-                      style={styles.submitButton}
-                    />
-                  ) : (
-                    <GradientButton
-                      onPress={advanceStep}
-                      label="I Understand"
-                      loading={phase === "thinking"}
-                      style={styles.submitButton}
-                    />
-                  )}
-                </View>
-              </>
-            )}
-
-            {/* Practice mode: answer input */}
-            {isPractice && (
-              <>
-                <View>
-                  <Text style={styles.inputLabel}>Your answer</Text>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    value={input}
-                    onChangeText={setInput}
-                    placeholder="Enter your answer..."
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="go"
-                    onSubmitEditing={handleSubmit}
-                    inputAccessoryViewID="math-session"
-                  />
-                </View>
-
-                <View style={styles.buttons}>
-                  <GradientButton
-                    onPress={handleSubmit}
-                    label="Answer"
-                    loading={phase === "thinking"}
-                    disabled={!input.trim()}
-                    style={styles.submitButton}
-                  />
-                </View>
-              </>
-            )}
-          </>
-        )}
       </ScrollView>
-      <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />
+
+      {/* Sticky bottom action area for Learn mode */}
+      {isLearn && !isCompleted && (
+        <View style={readerStyles.actionBar}>
+          {askMode ? (
+            <View style={readerStyles.askInputRow}>
+              <TextInput
+                ref={inputRef}
+                style={readerStyles.askInput}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask about this step…"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+                returnKeyType="send"
+                blurOnSubmit={false}
+                onSubmitEditing={async () => {
+                  if (!input.trim()) {
+                    Keyboard.dismiss();
+                    setAskMode(false);
+                    return;
+                  }
+                  Keyboard.dismiss();
+                  await handleAsk();
+                }}
+                accessibilityLabel="Ask a question"
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setAskMode(false);
+                  setInput("");
+                  // If the user has chat history, advance to next step
+                  if ((chatHistory[session.current_step]?.length ?? 0) > 0) {
+                    advanceStep();
+                  }
+                }}
+                style={readerStyles.askUnderstandBtn}
+                accessibilityRole="button"
+                accessibilityLabel="I understand, next step"
+              >
+                <Text style={readerStyles.askUnderstandText}>I understand</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!input.trim()) return;
+                  Keyboard.dismiss();
+                  await handleAsk();
+                }}
+                style={readerStyles.askSend}
+                disabled={!input.trim() || phase === "thinking"}
+                accessibilityRole="button"
+                accessibilityLabel="Send question"
+              >
+                <Ionicons name="arrow-up" size={20} color={colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={readerStyles.actionRow}>
+              <TouchableOpacity
+                onPress={session.status === "completed" ? finishAsking : advanceStep}
+                style={readerStyles.primaryAction}
+                disabled={phase === "thinking"}
+                accessibilityRole="button"
+                accessibilityLabel={session.status === "completed" ? "I understand now" : "I get it, next step"}
+              >
+                <LinearGradient
+                  colors={gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={readerStyles.primaryActionInner}
+                >
+                  <Text style={readerStyles.primaryActionText}>
+                    {phase === "thinking" ? "…" : session.status === "completed" ? "I understand" : "I get it"}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={18} color={colors.white} />
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setAskMode(true)}
+                style={readerStyles.secondaryAction}
+                accessibilityRole="button"
+                accessibilityLabel="Ask about this step"
+              >
+                <Ionicons name="help-circle-outline" size={20} color={colors.primary} />
+                <Text style={readerStyles.secondaryActionText}>Ask</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {!isPro && chatsRemaining() < Infinity && askMode && (
+            <Text style={readerStyles.askChatHint}>{chatsRemaining()} chats left today</Text>
+          )}
+        </View>
+      )}
+
+      {!isLearn && <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />}
       {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
       <UpgradePrompt {...promptProps} />
       <PaywallScreen
@@ -440,6 +505,8 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 
 function CompletedStepRow({ index, title, description, isLast }: { index: number; title?: string; description: string; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const colors = useColors();
+  const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={compactStyles.historyItem}
@@ -456,9 +523,11 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
         <Text style={compactStyles.historyLabel}>
           Step {index + 1}{title ? ` — ${title}` : ""}
         </Text>
-        <Text style={compactStyles.historyText} numberOfLines={expanded ? undefined : 1}>
-          {renderBold(description, compactStyles.historyText)}
-        </Text>
+        <MathText
+          text={description}
+          style={compactStyles.historyText}
+          numberOfLines={expanded ? undefined : 1}
+        />
       </View>
       <Ionicons
         name={expanded ? "chevron-up" : "chevron-down"}
@@ -469,7 +538,207 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
   );
 }
 
-const compactStyles = StyleSheet.create({
+const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
+  // Slim header
+  slimHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    backgroundColor: colors.background,
+  },
+  backIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  problemPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  problemPillText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 12,
+    flex: 1,
+  },
+  dotsRow: {
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "center",
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderLight,
+  },
+  dotDone: {
+    backgroundColor: colors.success,
+  },
+  dotCurrent: {
+    backgroundColor: colors.primary,
+    width: 12,
+  },
+
+  // Sticky bottom action bar
+  actionBar: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    backgroundColor: colors.white,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  primaryAction: {
+    flex: 2,
+    borderRadius: radii.md,
+    overflow: "hidden",
+  },
+  primaryActionInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+  },
+  primaryActionText: {
+    ...typography.button,
+    color: colors.white,
+  },
+  secondaryAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.md,
+    paddingVertical: spacing.lg,
+  },
+  secondaryActionText: {
+    ...typography.button,
+    color: colors.primary,
+    fontSize: 14,
+  },
+
+  // Compose row stuck inline in the action bar (replaces the 2-button row when askMode)
+  askInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing.sm,
+    height: 48,
+  },
+  askInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "400",
+    color: colors.text,
+    paddingVertical: 0,
+    paddingHorizontal: spacing.xs,
+    height: 40,
+    lineHeight: 20,
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+  askUnderstandBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  askUnderstandText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 12,
+  },
+  askSend: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  askChatHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.xs,
+  },
+});
+
+// In-body iMessage-style chat thread that renders ABOVE the current step card
+const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
+  thread: {
+    marginBottom: spacing.md,
+    gap: 6,
+  },
+  bubbleRow: {
+    flexDirection: "row",
+  },
+  bubbleRowUser: {
+    justifyContent: "flex-end",
+    paddingLeft: 60,
+  },
+  bubbleRowTutor: {
+    justifyContent: "flex-start",
+    paddingRight: 60,
+  },
+  bubbleUser: {
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  bubbleUserText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.white,
+  },
+  bubbleTutor: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  bubbleTutorText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.text,
+  },
+});
+
+const makeCompactStyles = (colors: ColorPalette) => StyleSheet.create({
   historyContainer: {
     marginBottom: spacing.md,
   },

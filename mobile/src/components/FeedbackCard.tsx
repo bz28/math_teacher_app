@@ -1,14 +1,18 @@
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { cleanMathPreview } from "./HistoryCards";
 import type { StepResponse } from "../services/api";
-import { colors, shadows } from "../theme";
-import { sessionScreenStyles as styles } from "./sessionScreenStyles";
+import { useColors, shadows } from "../theme";
+import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface FeedbackCardProps {
   response: StepResponse;
 }
 
 export function FeedbackCard({ response }: FeedbackCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
   const isConversation = response.action === "conversation";
 
   return (
@@ -51,7 +55,7 @@ export function FeedbackCard({ response }: FeedbackCardProps) {
           </Text>
         </View>
       )}
-      <Text style={styles.feedbackText}>{response.feedback}</Text>
+      <Text style={styles.feedbackText}>{cleanMathPreview(response.feedback)}</Text>
     </View>
   );
 }
