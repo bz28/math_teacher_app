@@ -75,15 +75,24 @@ export function StepsAnimation({
   const [currentStep, setCurrentStep] = useState(0);
 
   /**
-   * Whether the mouse cursor animation should be playing on the current
-   * step. For steps without a question (or when `hideQuestions` is true)
-   * the cursor becomes ready after a short delay so the body has time to
+   * Which step index the cursor animation is currently ready for, or
+   * `null` if not ready. Stored as an index (rather than a boolean)
+   * so the parent doesn't need a synchronous reset on step change —
+   * `cursorReady` is derived via `cursorReadyForStep === currentStep`,
+   * and stale values from the previous step naturally compare false.
+   *
+   * For steps without a question (or when `hideQuestions` is true) the
+   * cursor becomes ready after a short delay so the body has time to
    * fade in. For steps WITH a question, the cursor stays hidden until
    * `QuestionInteraction` signals that the tutor reply has popped in by
-   * calling `onComplete`. This keeps the cursor animation decoupled from
-   * the step's total dwell time and the question's internal timing.
+   * calling `onComplete`. This keeps the cursor animation decoupled
+   * from the step's total dwell time and the question's internal
+   * timing.
    */
-  const [cursorReady, setCursorReady] = useState(false);
+  const [cursorReadyForStep, setCursorReadyForStep] = useState<number | null>(
+    null,
+  );
+  const cursorReady = cursorReadyForStep === currentStep;
 
   useEffect(() => {
     let cancelled = false;
@@ -113,10 +122,10 @@ export function StepsAnimation({
     };
   }, [steps, hideQuestions]);
 
-  // Reset the cursor on every step change, and schedule it for steps
-  // that don't have a question interaction to wait for.
+  // Schedule the cursor for steps that don't have a question interaction
+  // to wait for. No synchronous reset is needed — stale `cursorReadyForStep`
+  // values from the previous step compare false against the new `currentStep`.
   useEffect(() => {
-    setCursorReady(false);
     if (phase !== "solving") return;
     const step = steps[currentStep];
     if (!step) return;
@@ -125,13 +134,16 @@ export function StepsAnimation({
       // QuestionInteraction will call handleQuestionComplete when ready.
       return;
     }
-    const t = setTimeout(() => setCursorReady(true), CURSOR_START_DELAY_MS);
+    const t = setTimeout(
+      () => setCursorReadyForStep(currentStep),
+      CURSOR_START_DELAY_MS,
+    );
     return () => clearTimeout(t);
   }, [currentStep, phase, steps, hideQuestions]);
 
   const handleQuestionComplete = useCallback(() => {
-    setCursorReady(true);
-  }, []);
+    setCursorReadyForStep(currentStep);
+  }, [currentStep]);
 
   const totalSteps = steps.length;
   const displayedStepIndex =
@@ -145,8 +157,17 @@ export function StepsAnimation({
     /* data-subject="math" forces the brand purple scope inside the
        animation, so physics/chemistry pages don't bleed their subject
        color into the step cards, tutor bubbles, etc. — matching how
-       the real app keeps the solve UI purple regardless of subject. */
-    <div className="relative" data-subject="math">
+       the real app keeps the solve UI purple regardless of subject.
+
+       aria-hidden: the whole thing is a decorative auto-cycling demo
+       with fake buttons, mock cursor clicks, and text that's already
+       covered by the surrounding headline + body copy. Screen readers
+       skip it instead of announcing every rotated step + fake CTA. */
+    <div
+      className="relative"
+      data-subject="math"
+      aria-hidden="true"
+    >
       {/* Gradient halo */}
       <div className="pointer-events-none absolute -inset-10 -z-10 bg-gradient-to-br from-[color:var(--color-primary)]/20 via-[color:var(--color-primary-light)]/10 to-transparent blur-3xl" />
 
