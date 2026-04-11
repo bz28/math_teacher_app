@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Eyebrow } from "./eyebrow";
-import { HeroStepsAnimation } from "./hero-steps-animation";
+import { StepsAnimation } from "./steps-animation";
+import { mathDemo } from "./demos/math-demo";
 
 export function Hero() {
   return (
@@ -82,7 +83,7 @@ export function Hero() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="relative"
         >
-          <HeroStepsAnimation />
+          <StepsAnimation data={mathDemo} hideQuestions />
         </motion.div>
       </div>
     </section>

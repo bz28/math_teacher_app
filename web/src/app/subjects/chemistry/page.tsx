@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
+import { chemistryDemo } from "@/components/landing/demos/chemistry-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -94,33 +95,6 @@ const whyReasons = [
   "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
 ];
 
-const demo = {
-  problem:
-    "How many grams of CO₂ are produced when 16 grams of methane (CH₄) are burned completely in oxygen?",
-  steps: [
-    {
-      label: "Write the balanced equation",
-      body: "Complete combustion of methane produces CO₂ and H₂O. Try to write and balance it before we move on.",
-    },
-    {
-      label: "Convert grams to moles",
-      body: "You have 16 g of CH₄. What's the molar mass of CH₄, and how many moles does that work out to?",
-    },
-    {
-      label: "Use the mole ratio",
-      body: "Look at your balanced equation. What's the ratio of CH₄ to CO₂? Apply that ratio to the moles you just found.",
-    },
-    {
-      label: "Convert moles back to grams",
-      body: "You now have moles of CO₂. Multiply by the molar mass of CO₂ to get your final answer in grams.",
-    },
-    {
-      label: "Sanity check",
-      body: "Does your answer make sense? You started with 16 g of carbon-containing fuel. The carbon can't disappear, so the answer should reflect where it went.",
-    },
-  ],
-};
-
 // Legacy props retained for schema generation
 const examples = [
   { topic: "Balancing Equations", problem: "Balance: Fe₂O₃ + CO → Fe + CO₂" },
@@ -152,7 +126,7 @@ export default function ChemistryPage() {
       topics={topics}
       differentiators={differentiators}
       whyReasons={whyReasons}
-      demo={demo}
+      demoData={chemistryDemo}
     />
   );
 }

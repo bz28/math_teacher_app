@@ -62,8 +62,19 @@
 }
 
 /* ── Subject color overrides ── */
-/* Math intentionally has no override — it uses the brand primary
-   (#6C5CE7 / #A29BFE), matching the mobile app's gradients.primary. */
+/* Math maps back to the brand primary (#6C5CE7 / #A29BFE), matching the
+   mobile app's gradients.primary. Having an explicit rule lets us nest
+   data-subject="math" inside a physics/chemistry page to reset the
+   animation's colors back to the brand purple. */
+[data-subject="math"] {
+  --color-primary: #6C5CE7;
+  --color-primary-light: #A29BFE;
+  --color-primary-bg: #F0EDFF;
+  --color-primary-dark: #5A4BD1;
+  --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  --gradient-header: linear-gradient(135deg, #6C5CE7, #8B7CF7);
+  --color-overlay: rgba(108, 92, 231, 0.08);
+}
 
 [data-subject="physics"] {
   --color-primary: #0984E3;
@@ -129,6 +140,16 @@
   --color-overlay: rgba(0, 0, 0, 0.3);
 
   --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
+}
+
+[data-theme="dark"][data-subject="math"] {
+  --color-primary: #7C6CF7;
+  --color-primary-light: #B0A4FF;
+  --color-primary-bg: #1E1A3A;
+  --color-primary-dark: #9B8FFF;
+  --gradient-primary: linear-gradient(135deg, #7C6CF7, #B0A4FF);
+  --gradient-header: linear-gradient(135deg, #7C6CF7, #8B7CF7);
+  --color-overlay: rgba(124, 108, 247, 0.1);
 }
 
 [data-theme="dark"][data-subject="physics"] {

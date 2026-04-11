@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
+import { mathDemo } from "@/components/landing/demos/math-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -89,33 +90,6 @@ const whyReasons = [
   "Catches the common mistakes you see every week (sign errors, missed steps, distribution errors) and walks students past them.",
 ];
 
-const demo = {
-  problem:
-    "A rectangle has a perimeter of 36 meters. If its length is 4 meters more than twice its width, find its dimensions.",
-  steps: [
-    {
-      label: "Start with what you know",
-      body: "The perimeter is 36 and the length has a specific relationship to the width. Can you write down both facts before we pick an equation?",
-    },
-    {
-      label: "Set up your variables",
-      body: "Let w be the width. How would you express the length in terms of w based on the problem?",
-    },
-    {
-      label: "Build the perimeter equation",
-      body: "The perimeter of a rectangle is 2(length + width). Plug in what you just wrote for length and set it equal to 36.",
-    },
-    {
-      label: "Solve for the width",
-      body: "You now have one equation with one unknown. Distribute, combine like terms, and isolate w.",
-    },
-    {
-      label: "Check your answer",
-      body: "Plug w back in, find the length, and verify that the perimeter really does equal 36. I'll wait for your work.",
-    },
-  ],
-};
-
 // Kept for backward compat with existing SEO schema generation
 const examples = [
   { topic: "Algebra", problem: "Solve for x: 3x² + 7x - 20 = 0" },
@@ -147,7 +121,7 @@ export default function MathPage() {
       topics={topics}
       differentiators={differentiators}
       whyReasons={whyReasons}
-      demo={demo}
+      demoData={mathDemo}
     />
   );
 }

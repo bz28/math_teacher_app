@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
+import { physicsDemo } from "@/components/landing/demos/physics-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -92,33 +93,6 @@ const whyReasons = [
   "Catches the unit errors, sign errors, and vector-component mistakes that trip up every physics student at least once a week.",
 ];
 
-const demo = {
-  problem:
-    "A 5 kg block is released from rest and slides down a 30° frictionless incline. What is its speed after sliding 4 meters along the incline?",
-  steps: [
-    {
-      label: "What physics applies here?",
-      body: "You could use kinematics, or you could use energy conservation. Which one uses fewer variables given what you know?",
-    },
-    {
-      label: "Find the height",
-      body: "If it slides 4 meters along a 30° incline, how much vertical distance did it actually fall? Draw the right triangle if it helps.",
-    },
-    {
-      label: "Set up energy conservation",
-      body: "Potential energy at the top equals kinetic energy at the bottom. Write that out with symbols before plugging in numbers.",
-    },
-    {
-      label: "Solve for v",
-      body: "The mass cancels out. That's your first clue the problem is independent of m. Isolate v and then plug in g and your height.",
-    },
-    {
-      label: "Check the units",
-      body: "Make sure what you end up with is in meters per second, not square meters per second. If it isn't, there's a missing square root somewhere.",
-    },
-  ],
-};
-
 // Legacy props retained for schema generation
 const examples = [
   { topic: "Mechanics", problem: "A 5 kg block slides down a 30° incline with friction μ = 0.2. Find the acceleration." },
@@ -150,7 +124,7 @@ export default function PhysicsPage() {
       topics={topics}
       differentiators={differentiators}
       whyReasons={whyReasons}
-      demo={demo}
+      demoData={physicsDemo}
     />
   );
 }

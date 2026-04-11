@@ -7,6 +7,7 @@ import { Section } from "./section";
 import { Eyebrow } from "./eyebrow";
 import { CtaBand } from "./cta-band";
 import { FAQ as SharedFAQ } from "./faq";
+import { StepsAnimation, type StepsAnimationData } from "./steps-animation";
 
 interface ExampleProblem {
   topic: string;
@@ -46,11 +47,8 @@ interface SubjectPageProps {
   whyReasons: string[];
   /** Subject-specific FAQ questions */
   subjectFaqs?: SubjectFaq[];
-  /** Demo walkthrough sample — problem + hinted steps (placeholder until real LLM capture) */
-  demo?: {
-    problem: string;
-    steps: { label: string; body: string }[];
-  };
+  /** Animated demo walkthrough — same component as the homepage hero */
+  demoData?: StepsAnimationData;
 }
 
 export function SubjectPage({
@@ -65,7 +63,7 @@ export function SubjectPage({
   topics,
   differentiators,
   whyReasons,
-  demo,
+  demoData,
 }: SubjectPageProps) {
   return (
     <div data-subject={slug === "math" ? undefined : slug}>
@@ -192,47 +190,22 @@ export function SubjectPage({
         </div>
       </Section>
 
-      {/* ── Live demo ── */}
-      {demo && (
+      {/* ── Live demo — same animated component as the homepage hero ── */}
+      {demoData && (
         <Section variant="invert" id="demo">
           <div className="mx-auto max-w-3xl text-center">
             <Eyebrow variant="invert">See it solve a problem</Eyebrow>
             <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
               Watch Veradic teach {name.toLowerCase()}.
             </h2>
+            <p className="mt-4 text-lg leading-relaxed text-[color:var(--color-invert-text-muted)] md:text-xl">
+              Not a glossy mockup. This is the real step-by-step output
+              your students see when they work a problem.
+            </p>
           </div>
 
-          {/* TODO: replace with real LLM capture for {name} */}
-          <div className="mt-14 overflow-hidden rounded-3xl border border-white/10 bg-[color:var(--color-invert-alt)]">
-            <div className="border-b border-white/10 px-6 py-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-white/40">
-                Problem
-              </p>
-              <p className="mt-2 text-base text-white/90">{demo.problem}</p>
-            </div>
-            <div className="grid gap-4 p-8 md:p-10">
-              {demo.steps.map((step, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-white/10 bg-white/[0.03] p-5"
-                >
-                  <div className="flex items-start gap-4">
-                    <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/20 text-xs font-bold text-[color:var(--color-primary-light)]">
-                      {i + 1}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-white">
-                        {step.label}
-                      </p>
-                      <p
-                        className="mt-1 text-sm leading-relaxed text-white/70"
-                        dangerouslySetInnerHTML={{ __html: step.body }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="mx-auto mt-14 max-w-2xl">
+            <StepsAnimation data={demoData} />
           </div>
         </Section>
       )}
