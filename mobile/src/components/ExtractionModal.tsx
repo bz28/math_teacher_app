@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -11,7 +12,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { MathText } from "./MathText";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface Props {
   problems: string[] | null;
@@ -50,6 +52,8 @@ export function ExtractionModal({
   onRetry,
   onManualSelect,
 }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal
       visible={problems !== null}
@@ -125,12 +129,14 @@ export function ExtractionModal({
                     onPress={() => onStartEdit(i)}
                     activeOpacity={0.6}
                   >
-                    <Text
-                      style={[styles.problemText, !selected[i] && styles.deselected]}
+                    <MathText
+                      text={problem}
+                      style={{
+                        ...styles.problemText,
+                        ...(!selected[i] ? styles.deselected : {}),
+                      }}
                       numberOfLines={2}
-                    >
-                      {problem}
-                    </Text>
+                    />
                     <Ionicons name="pencil-outline" size={14} color={colors.textMuted} />
                   </TouchableOpacity>
                 )}
@@ -177,7 +183,7 @@ export function ExtractionModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

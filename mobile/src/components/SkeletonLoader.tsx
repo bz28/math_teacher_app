@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Animated, StyleSheet, View, ViewStyle } from "react-native";
-import { colors, spacing, radii } from "../theme";
+import { useColors, spacing, radii, type ColorPalette } from "../theme";
 
 /** Shared pulse animation — all bones shimmer in sync. */
 function usePulse() {
@@ -31,6 +31,8 @@ function Bone({
   style?: ViewStyle;
   opacity: Animated.Value;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Animated.View style={[styles.bone, { width, height, opacity }, style]} />
   );
@@ -48,6 +50,8 @@ function CommonSkeleton({
   problemWidth: `${number}%`;
   children: React.ReactNode;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -72,6 +76,8 @@ function CommonSkeleton({
 
 /** Skeleton that mimics the learn mode session layout. */
 export function SessionSkeleton() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const opacity = usePulse();
 
   return (
@@ -91,6 +97,8 @@ export function SessionSkeleton() {
 
 /** Skeleton that mimics the practice batch layout. */
 export function PracticeSkeleton() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const opacity = usePulse();
 
   return (
@@ -106,7 +114,7 @@ export function PracticeSkeleton() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     padding: spacing.xl,

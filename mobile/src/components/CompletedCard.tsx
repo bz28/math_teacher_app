@@ -1,10 +1,11 @@
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { useSessionStore } from "../stores/session";
-import { colors, spacing, shadows, gradients } from "../theme";
-import { sessionScreenStyles as styles } from "./sessionScreenStyles";
+import { useColors, spacing, shadows, gradients } from "../theme";
+import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface CompletedCardProps {
   onBack: () => void;
@@ -12,6 +13,8 @@ interface CompletedCardProps {
 }
 
 export function CompletedCard({ onBack, onHome }: CompletedCardProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
   const {
     session,
     learnQueue,

@@ -9,10 +9,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
+import { cleanMathPreview } from "./HistoryCards";
 import { completePracticeBatchSession } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
-import { colors, spacing } from "../theme";
+import { useColors, spacing } from "../theme";
 
 interface PracticeSummaryProps {
   onBack: () => void;
@@ -20,6 +21,7 @@ interface PracticeSummaryProps {
 }
 
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const confettiRef = useRef<ConfettiOverlayRef>(null);
   const {
@@ -111,9 +113,9 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
                 style={{ marginRight: 10, marginTop: 1 }}
               />
               <View style={styles.resultContent}>
-                <Text style={styles.resultProblem}>{r.problem}</Text>
+                <Text style={styles.resultProblem}>{cleanMathPreview(r.problem)}</Text>
                 <Text style={styles.resultAnswer}>
-                  {r.userAnswer === "(skipped)" ? "Skipped" : `Your answer: ${r.userAnswer}`}
+                  {r.userAnswer === "(skipped)" ? "Skipped" : `Your answer: ${cleanMathPreview(r.userAnswer)}`}
                 </Text>
                 <DiagnosisTeaser diagnosis={workSubmissions[i]} />
               </View>

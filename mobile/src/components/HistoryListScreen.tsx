@@ -1,21 +1,25 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
+import { SubjectPills } from "./SubjectPills";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
-import { colors, spacing, typography } from "../theme";
+import { useColors, spacing, typography, type ColorPalette } from "../theme";
 
 interface HistoryListScreenProps {
   subject: string;
+  onSubjectChange: (s: string) => void;
   onBack: () => void;
   onViewSession: (sessionId: string) => void;
 }
 
 const PAGE_SIZE = 20;
 
-export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryListScreenProps) {
+export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSession }: HistoryListScreenProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -61,11 +65,8 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
   const completed = items.filter((s) => s.status !== "active");
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AnimatedPressable style={styles.backButton} onPress={onBack}>
-        <Ionicons name="chevron-back" size={20} color={colors.primary} />
-        <Text style={styles.backText}>Back</Text>
-      </AnimatedPressable>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+      <SubjectPills active={subject} onChange={onSubjectChange} />
 
       <Text style={styles.title}>{subjectLabel} History</Text>
 
@@ -133,13 +134,13 @@ export function HistoryListScreen({ subject, onBack, onViewSession }: HistoryLis
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingHorizontal: spacing.xxl + 4,
   },
   scrollContent: {
+    paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxxl,
   },
   backButton: {
@@ -148,6 +149,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
     marginBottom: spacing.sm,
   },
   backText: { color: colors.primary, ...typography.bodyBold },
@@ -155,6 +157,7 @@ const styles = StyleSheet.create({
     ...typography.hero,
     color: colors.text,
     marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.xl,
   },
   centered: {
     flex: 1,

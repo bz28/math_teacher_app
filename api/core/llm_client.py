@@ -65,6 +65,40 @@ _DEFAULT_PRICING = _PRICING[MODEL_SONNET]
 
 MAX_RETRIES = 3
 
+# Extended thinking: minimum budget enforced by the Anthropic API.
+MIN_THINKING_BUDGET = 1024
+
+
+def _build_thinking_kwargs(
+    thinking_budget: int | None,
+    max_tokens: int,
+    tool_choice: Any,
+) -> tuple[dict[str, Any], Any]:
+    """Build the `thinking` kwarg and effective tool_choice for a Claude call.
+
+    Extended thinking requires tool_choice to be "auto" (forced tool_use is
+    rejected) and max_tokens to exceed the thinking budget so there is room
+    for the actual output after the hidden reasoning block.
+
+    Returns a (kwargs_to_merge, effective_tool_choice) pair. When
+    `thinking_budget` is None, the kwargs dict is empty and tool_choice is
+    passed through unchanged.
+    """
+    if thinking_budget is None:
+        return {}, tool_choice
+    if thinking_budget < MIN_THINKING_BUDGET:
+        raise ValueError(
+            f"thinking_budget must be >= {MIN_THINKING_BUDGET}, got {thinking_budget}"
+        )
+    if max_tokens <= thinking_budget:
+        raise ValueError(
+            f"max_tokens ({max_tokens}) must exceed thinking_budget ({thinking_budget})"
+        )
+    return (
+        {"thinking": {"type": "enabled", "budget_tokens": thinking_budget}},
+        {"type": "auto"},
+    )
+
 
 def get_client() -> anthropic.AsyncAnthropic:
     global _client
@@ -213,6 +247,7 @@ async def call_claude_json(
     model: str | None = None,
     max_tokens: int = 512,
     max_retries: int = MAX_RETRIES,
+    thinking_budget: int | None = None,
 ) -> dict[str, object]:
     """Call Claude and return a structured JSON dict via tool use.
 
@@ -234,6 +269,10 @@ async def call_claude_json(
         model: Claude model to use. Defaults to MODEL_CLASSIFY (Haiku).
         max_tokens: Max tokens in response. Defaults to 512.
         max_retries: Number of retry attempts. Defaults to 3.
+        thinking_budget: If set, enables extended thinking with this many
+            scratchpad tokens. Forces tool_choice to "auto" (required by
+            the API). Must be >= 1024 and < max_tokens. Thinking tokens
+            are billed as output tokens.
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
@@ -242,7 +281,10 @@ async def call_claude_json(
     use_model = model or MODEL_CLASSIFY
     client = get_client()
     last_error: Exception | None = None
-    tools, tool_choice = _to_tool_params(tool_schema)
+    tools, tool_choice_default = _to_tool_params(tool_schema)
+    thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
+        thinking_budget, max_tokens, tool_choice_default
+    )
 
     for attempt in range(max_retries):
         start = time.monotonic()
@@ -253,8 +295,9 @@ async def call_claude_json(
                 system=_system_with_cache(system_prompt),
                 messages=[{"role": "user", "content": user_message}],
                 tools=tools,
-                tool_choice=tool_choice,
+                tool_choice=effective_tool_choice,
                 timeout=90.0,
+                **thinking_kwargs,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
 
@@ -385,11 +428,17 @@ async def call_claude_vision(
     user_id: str | None = None,
     model: str | None = None,
     max_tokens: int = 1024,
+    thinking_budget: int | None = None,
 ) -> dict[str, object]:
     """Call Claude with image content (Vision) and return structured JSON via tool use.
 
     Single-attempt (no retry) — the user can retry from the UI.
     Still gets circuit breaker, cost limiting, timeout, and logging.
+
+    If `thinking_budget` is set, extended thinking is enabled for the
+    call. This forces tool_choice to "auto" (required by the API). The
+    budget must be >= 1024 and < max_tokens; thinking tokens are billed
+    as output tokens.
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
@@ -397,7 +446,10 @@ async def call_claude_vision(
 
     use_model = model or MODEL_REASON
     client = get_client()
-    tools, tool_choice = _to_tool_params(tool_schema)
+    tools, tool_choice_default = _to_tool_params(tool_schema)
+    thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
+        thinking_budget, max_tokens, tool_choice_default
+    )
 
     start = time.monotonic()
     try:
@@ -406,8 +458,9 @@ async def call_claude_vision(
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": user_content}],
             tools=tools,
-            tool_choice=tool_choice,
+            tool_choice=effective_tool_choice,
             timeout=90.0,
+            **thinking_kwargs,
         )
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 

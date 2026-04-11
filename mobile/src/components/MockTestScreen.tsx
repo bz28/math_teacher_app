@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,17 +16,19 @@ import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
-import { MathKeyboard } from "./MathKeyboard";
+import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
 import { useMockTimer, formatTime } from "../hooks/useMockTimer";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface Props {
   onBack: () => void;
 }
 
 export function MockTestScreen({ onBack }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const {
@@ -122,11 +124,6 @@ export function MockTestScreen({ onBack }: Props) {
     ]);
   };
 
-  const handleInsert = (value: string) => {
-    setLocalAnswer((prev) => prev + value);
-    inputRef.current?.focus();
-  };
-
   const handleAttachWork = async () => {
     const base64 = await captureWorkImage();
     if (base64) attachWorkImage(currentIndex, base64);
@@ -207,7 +204,7 @@ export function MockTestScreen({ onBack }: Props) {
 
         {/* Question card */}
         <View style={[styles.questionCard, shadows.sm]}>
-          <Text style={styles.questionText}>{currentQuestion.question}</Text>
+          <MathText text={currentQuestion.question} style={styles.questionText} />
         </View>
 
         {/* Answer input — MC choices or free response */}
@@ -245,9 +242,13 @@ export function MockTestScreen({ onBack }: Props) {
                             {letters[i]}
                           </Text>
                         </View>
-                        <Text style={[styles.choiceText, isSelected && styles.choiceTextSelected]}>
-                          {choice}
-                        </Text>
+                        <MathText
+                          text={choice}
+                          style={{
+                            ...styles.choiceText,
+                            ...(isSelected ? styles.choiceTextSelected : {}),
+                          }}
+                        />
                       </AnimatedPressable>
                     );
                   });
@@ -269,7 +270,8 @@ export function MockTestScreen({ onBack }: Props) {
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              inputAccessoryViewID="math-mock-test"
+              returnKeyType="done"
+              blurOnSubmit
             />
           )}
         </View>
@@ -310,7 +312,7 @@ export function MockTestScreen({ onBack }: Props) {
           </Text>
         </AnimatedPressable>
 
-        {/* Prev / Next buttons */}
+        {/* Prev / Next-or-Submit buttons */}
         <View style={styles.navRow}>
           <GradientButton
             onPress={handlePrev}
@@ -318,23 +320,28 @@ export function MockTestScreen({ onBack }: Props) {
             disabled={currentIndex === 0}
             style={styles.navButton}
           />
-          <GradientButton
-            onPress={handleNext}
-            label="Next →"
-            disabled={currentIndex === questions.length - 1}
-            style={styles.navButton}
-          />
+          {currentIndex === questions.length - 1 ? (
+            <GradientButton
+              onPress={handleSubmit}
+              label="✓ Submit Exam"
+              gradient="success"
+              style={styles.navButton}
+            />
+          ) : (
+            <GradientButton
+              onPress={handleNext}
+              label="Next →"
+              style={styles.navButton}
+            />
+          )}
         </View>
       </ScrollView>
 
-      {!mockTest.multipleChoice && (
-        <MathKeyboard onInsert={handleInsert} accessoryID="math-mock-test" />
-      )}
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -447,13 +454,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   answerInput: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.lg,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    minHeight: 52,
     ...typography.body,
+    lineHeight: 22,
     backgroundColor: colors.inputBg,
     color: colors.text,
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   choicesGrid: {
     gap: spacing.sm,

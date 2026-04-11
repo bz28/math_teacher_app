@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
+import { cleanMathPreview } from "./HistoryCards";
+import { MathText } from "./MathText";
 import { getSession, respondToStep, type SessionData } from "../services/api";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface SessionReviewScreenProps {
   sessionId: string;
@@ -15,6 +17,8 @@ interface SessionReviewScreenProps {
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
+  const colors = useColors();
+  const progressStyles = useMemo(() => makeProgressStyles(colors), [colors]);
   const progress = total > 0 ? current / total : 0;
   return (
     <View style={progressStyles.container}>
@@ -29,10 +33,17 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 }
 
 export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onResume }: SessionReviewScreenProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
+  // scrollRef must be declared BEFORE any early returns below — otherwise
+  // the hook count grows on the render that transitions from loading → data,
+  // triggering a Rules-of-Hooks crash: "Rendered more hooks than during the
+  // previous render." This is exactly what broke the History → review flow.
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     (async () => {
@@ -76,12 +87,16 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <AnimatedPressable style={styles.backButton} onPress={onBack}>
         <Ionicons name="chevron-back" size={20} color={colors.primary} />
         <Text style={styles.backText}>Back</Text>
       </AnimatedPressable>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Problem header */}
         <View style={[styles.problemCard, shadows.md]}>
           <View style={styles.problemHeader}>
@@ -94,7 +109,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
               {isAbandoned ? "Ended Early" : isCompleted ? "Completed" : "In Progress"}
             </Text>
           </View>
-          <Text style={styles.problemText}>{session.problem}</Text>
+          <MathText text={session.problem} style={styles.problemText} />
           <ProgressBar current={session.current_step} total={session.total_steps} />
         </View>
 
@@ -120,11 +135,11 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
                 <View style={styles.stepContent}>
                   {isReached ? (
                     <>
-                      <Text style={styles.stepDescription}>{step.description}</Text>
+                      <MathText text={step.description} style={styles.stepDescription} />
                       {step.final_answer ? (
                         <View style={styles.answerRow}>
                           <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-                          <Text style={styles.answerText}>{step.final_answer}</Text>
+                          <MathText text={step.final_answer} style={styles.answerText} />
                         </View>
                       ) : null}
                     </>
@@ -139,7 +154,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
 
         {/* Chat — ask questions about this session */}
         {isCompleted && (
-          <SessionChat sessionId={sessionId} />
+          <SessionChat sessionId={sessionId} scrollRef={scrollRef} />
         )}
 
         {/* Action buttons */}
@@ -177,11 +192,14 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
           </AnimatedPressable>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function SessionChat({ sessionId }: { sessionId: string }) {
+function SessionChat({ sessionId, scrollRef }: { sessionId: string; scrollRef: React.RefObject<ScrollView | null> }) {
+  const colors = useColors();
+  const chatStyles = useMemo(() => makeChatStyles(colors), [colors]);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -203,53 +221,56 @@ function SessionChat({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <View style={chatStyles.container}>
-      <Text style={chatStyles.title}>Have questions?</Text>
+      <View style={chatStyles.container}>
+        <Text style={chatStyles.title}>Have questions?</Text>
 
-      {messages.map((msg, i) => (
-        <View
-          key={i}
-          style={[
-            chatStyles.bubble,
-            msg.role === "user" ? chatStyles.userBubble : chatStyles.assistantBubble,
-          ]}
-        >
-          <Text style={[chatStyles.bubbleText, msg.role === "user" && chatStyles.userBubbleText]}>
-            {msg.text}
-          </Text>
+        {messages.map((msg, i) => (
+          <View
+            key={i}
+            style={[
+              chatStyles.bubble,
+              msg.role === "user" ? chatStyles.userBubble : chatStyles.assistantBubble,
+            ]}
+          >
+            <Text style={[chatStyles.bubbleText, msg.role === "user" && chatStyles.userBubbleText]}>
+              {msg.role === "assistant" ? cleanMathPreview(msg.text) : msg.text}
+            </Text>
+          </View>
+        ))}
+
+        {thinking && (
+          <View style={[chatStyles.bubble, chatStyles.assistantBubble]}>
+            <Text style={[chatStyles.bubbleText, { color: colors.textMuted }]}>Thinking...</Text>
+          </View>
+        )}
+
+        <View style={chatStyles.inputRow}>
+          <TextInput
+            style={chatStyles.input}
+            placeholder="Ask about this problem..."
+            placeholderTextColor={colors.textMuted}
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={handleSend}
+            editable={!thinking}
+            returnKeyType="send"
+            onFocus={() => {
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+            }}
+          />
+          <GradientButton
+            onPress={handleSend}
+            label="Ask"
+            loading={thinking}
+            disabled={!input.trim()}
+            style={chatStyles.sendButton}
+          />
         </View>
-      ))}
-
-      {thinking && (
-        <View style={[chatStyles.bubble, chatStyles.assistantBubble]}>
-          <Text style={[chatStyles.bubbleText, { color: colors.textMuted }]}>Thinking...</Text>
-        </View>
-      )}
-
-      <View style={chatStyles.inputRow}>
-        <TextInput
-          style={chatStyles.input}
-          placeholder="Ask about this problem..."
-          placeholderTextColor={colors.textMuted}
-          value={input}
-          onChangeText={setInput}
-          onSubmitEditing={handleSend}
-          editable={!thinking}
-          returnKeyType="send"
-        />
-        <GradientButton
-          onPress={handleSend}
-          label="Ask"
-          loading={thinking}
-          disabled={!input.trim()}
-          style={chatStyles.sendButton}
-        />
       </View>
-    </View>
   );
 }
 
-const chatStyles = StyleSheet.create({
+const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     backgroundColor: colors.background,
     borderRadius: radii.lg,
@@ -307,7 +328,7 @@ const chatStyles = StyleSheet.create({
   },
 });
 
-const progressStyles = StyleSheet.create({
+const makeProgressStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
@@ -335,7 +356,7 @@ const progressStyles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

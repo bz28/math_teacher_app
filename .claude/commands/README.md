@@ -10,3 +10,5 @@
 | `/debug` | Something is broken — investigate root cause and propose a fix |
 | `/ui` | Design or fix frontend/UX |
 | `/explain-simple` | Explain what just happened in plain english |
+
+**Canonical per-feature loop:** `/plan` → `/explain-simple` → (you approve) → `/implement` or `/autopilot` → `/review` → `/explain-simple` → (you test) → next feature. Skills are built to hand off in this order.

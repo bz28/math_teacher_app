@@ -80,12 +80,19 @@ export interface MockTest {
   multipleChoice: boolean;
 }
 
+export interface ChatMessage {
+  role: "user" | "tutor";
+  text: string;
+}
+
 export interface SessionState {
   // Learn mode state
   session: SessionData | null;
   phase: SessionPhase;
   lastResponse: StepResponse | null;
   error: string | null;
+  /** Persistent follow-up Q&A history per step index */
+  chatHistory: Record<number, ChatMessage[]>;
 
   // Subject (math, chemistry, etc.)
   subject: string;
@@ -142,6 +149,7 @@ export const initialState = {
   phase: "idle" as SessionPhase,
   lastResponse: null as StepResponse | null,
   error: null as string | null,
+  chatHistory: {} as Record<number, ChatMessage[]>,
   subject: "math",
   practiceBatch: null as PracticeBatch | null,
   learnQueue: null as LearnQueue | null,
