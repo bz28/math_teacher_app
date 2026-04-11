@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,13 +20,15 @@ import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
 import { useMockTimer, formatTime } from "../hooks/useMockTimer";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface Props {
   onBack: () => void;
 }
 
 export function MockTestScreen({ onBack }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const {
@@ -339,7 +341,7 @@ export function MockTestScreen({ onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

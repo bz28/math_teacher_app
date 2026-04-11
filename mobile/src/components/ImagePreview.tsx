@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -9,7 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface ImagePreviewProps {
   imageUri: string;
@@ -30,6 +31,8 @@ export function ImagePreview({
   onManualSelect,
   onBack,
 }: ImagePreviewProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safe}>
@@ -85,7 +88,7 @@ export function ImagePreview({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundDark,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,7 +6,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
 import { SubjectPills } from "./SubjectPills";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
-import { colors, spacing, typography } from "../theme";
+import { useColors, spacing, typography, type ColorPalette } from "../theme";
 
 interface HistoryListScreenProps {
   subject: string;
@@ -18,6 +18,8 @@ interface HistoryListScreenProps {
 const PAGE_SIZE = 20;
 
 export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSession }: HistoryListScreenProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -132,7 +134,7 @@ export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSess
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

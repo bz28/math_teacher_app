@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
 import { getSession, respondToStep, type SessionData } from "../services/api";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface SessionReviewScreenProps {
   sessionId: string;
@@ -15,6 +15,8 @@ interface SessionReviewScreenProps {
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
+  const colors = useColors();
+  const progressStyles = useMemo(() => makeProgressStyles(colors), [colors]);
   const progress = total > 0 ? current / total : 0;
   return (
     <View style={progressStyles.container}>
@@ -29,6 +31,8 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 }
 
 export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onResume }: SessionReviewScreenProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +186,8 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
 }
 
 function SessionChat({ sessionId }: { sessionId: string }) {
+  const colors = useColors();
+  const chatStyles = useMemo(() => makeChatStyles(colors), [colors]);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -249,7 +255,7 @@ function SessionChat({ sessionId }: { sessionId: string }) {
   );
 }
 
-const chatStyles = StyleSheet.create({
+const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     backgroundColor: colors.background,
     borderRadius: radii.lg,
@@ -307,7 +313,7 @@ const chatStyles = StyleSheet.create({
   },
 });
 
-const progressStyles = StyleSheet.create({
+const makeProgressStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
@@ -335,7 +341,7 @@ const progressStyles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

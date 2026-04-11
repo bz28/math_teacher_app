@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,7 +7,7 @@ import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
 import { useSessionStore } from "../stores/session";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface Props {
   onBack: () => void;
@@ -15,6 +15,8 @@ interface Props {
 }
 
 export function MockTestSummary({ onBack, onHome }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { mockTest, startLearnQueue, toggleMockTestFlag, reset } = useSessionStore();
   const confettiRef = useRef<ConfettiOverlayRef>(null);
 
@@ -210,7 +212,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

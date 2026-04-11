@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface MockTestConfigProps {
   examType: "use_as_exam" | "generate_similar";
@@ -27,6 +28,8 @@ function PillToggle<T extends string>({
   onChange: (id: T) => void;
   themeColor: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.pillGroup}>
       {options.map((opt) => {
@@ -57,8 +60,11 @@ export function MockTestConfig({
   onTimeLimitChange,
   multipleChoice,
   onMultipleChoiceChange,
-  themeColor = colors.primary,
+  themeColor,
 }: MockTestConfigProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const resolvedThemeColor = themeColor ?? colors.primary;
   return (
     <View style={[styles.card, shadows.sm]}>
       {/* Questions */}
@@ -71,7 +77,7 @@ export function MockTestConfig({
           ]}
           value={examType}
           onChange={onExamTypeChange}
-          themeColor={themeColor}
+          themeColor={resolvedThemeColor}
         />
       </View>
 
@@ -88,7 +94,7 @@ export function MockTestConfig({
             ]}
             value={untimed ? "untimed" : "timed"}
             onChange={(id) => onUntimedChange(id === "untimed")}
-            themeColor={themeColor}
+            themeColor={resolvedThemeColor}
           />
           {!untimed && (
             <View style={styles.stepper}>
@@ -98,16 +104,16 @@ export function MockTestConfig({
                 scaleDown={0.9}
                 disabled={timeLimitMinutes <= 1}
               >
-                <Ionicons name="remove" size={14} color={timeLimitMinutes <= 1 ? colors.textMuted : themeColor} />
+                <Ionicons name="remove" size={14} color={timeLimitMinutes <= 1 ? colors.textMuted : resolvedThemeColor} />
               </AnimatedPressable>
-              <Text style={[styles.stepperValue, { color: themeColor }]}>{timeLimitMinutes}m</Text>
+              <Text style={[styles.stepperValue, { color: resolvedThemeColor }]}>{timeLimitMinutes}m</Text>
               <AnimatedPressable
                 style={[styles.stepperBtn, timeLimitMinutes >= 180 && styles.stepperBtnDisabled]}
                 onPress={() => onTimeLimitChange(Math.min(180, timeLimitMinutes + 5))}
                 scaleDown={0.9}
                 disabled={timeLimitMinutes >= 180}
               >
-                <Ionicons name="add" size={14} color={timeLimitMinutes >= 180 ? colors.textMuted : themeColor} />
+                <Ionicons name="add" size={14} color={timeLimitMinutes >= 180 ? colors.textMuted : resolvedThemeColor} />
               </AnimatedPressable>
             </View>
           )}
@@ -126,14 +132,14 @@ export function MockTestConfig({
           ]}
           value={multipleChoice ? "mc" : "free"}
           onChange={(id) => onMultipleChoiceChange(id === "mc")}
-          themeColor={themeColor}
+          themeColor={resolvedThemeColor}
         />
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,

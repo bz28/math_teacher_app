@@ -14,7 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { GradientButton } from "./GradientButton";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 export interface Rectangle {
   id: number;
@@ -35,8 +35,7 @@ interface RectangleSelectorProps {
 const MIN_SIZE = 30;
 const HANDLE_RADIUS = 20;
 const HANDLE_SIZE = 14;
-const RECT_COLOR = colors.primaryOverlay;
-const RECT_BORDER = colors.primaryOverlayStrong;
+// RECT_COLOR and RECT_BORDER moved inside makeStyles (derived from dynamic colors)
 const TOAST_DURATION = 1800;
 
 type InteractionMode =
@@ -53,6 +52,8 @@ export function RectangleSelector({
   onCancel,
   maxRectangles = 10,
 }: RectangleSelectorProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
   const [interaction, setInteraction] = useState<InteractionMode | null>(null);
@@ -517,7 +518,7 @@ export function RectangleSelector({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundDark,
@@ -569,9 +570,9 @@ const styles = StyleSheet.create({
   // Rectangles
   rect: {
     position: "absolute",
-    backgroundColor: RECT_COLOR,
+    backgroundColor: colors.primaryOverlay,
     borderWidth: 2,
-    borderColor: RECT_BORDER,
+    borderColor: colors.primaryOverlayStrong,
     borderRadius: 6,
   },
   rectDrawing: {

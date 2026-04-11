@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { getSubjectMeta } from "./SubjectPills";
-import { colors, spacing, radii, typography, gradients } from "../theme";
+import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface Props {
   subject: string;
@@ -29,6 +29,8 @@ const PHRASES_TEST = [
  * of a static spinner while session generation is in flight.
  */
 export function LoadingHero({ subject, mode }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const meta = getSubjectMeta(subject);
   const phrases = mode === "test" ? PHRASES_TEST : PHRASES_LEARN;
   const icon = mode === "test" ? "document-text" : "book";
@@ -82,7 +84,7 @@ export function LoadingHero({ subject, mode }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",

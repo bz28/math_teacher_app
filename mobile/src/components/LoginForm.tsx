@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +19,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { forgotPassword, login, saveTokens } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
-import { colors, spacing, radii, typography, gradients } from "../theme";
+import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface LoginFormProps {
   onAuth: () => void;
@@ -27,6 +27,8 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -182,7 +184,7 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

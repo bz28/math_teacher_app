@@ -12,7 +12,7 @@ import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { completePracticeBatchSession } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
-import { colors, spacing } from "../theme";
+import { useColors, spacing } from "../theme";
 
 interface PracticeSummaryProps {
   onBack: () => void;
@@ -20,6 +20,7 @@ interface PracticeSummaryProps {
 }
 
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const confettiRef = useRef<ConfettiOverlayRef>(null);
   const {

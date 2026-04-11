@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -12,7 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { MathText } from "./MathText";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface Props {
   problems: string[] | null;
@@ -51,6 +52,8 @@ export function ExtractionModal({
   onRetry,
   onManualSelect,
 }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal
       visible={problems !== null}
@@ -180,7 +183,7 @@ export function ExtractionModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

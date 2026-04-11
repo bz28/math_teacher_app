@@ -8,7 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
-import { colors, spacing } from "../theme";
+import { useColors, spacing } from "../theme";
 
 interface LearnSummaryProps {
   onBack: () => void;
@@ -16,6 +16,7 @@ interface LearnSummaryProps {
 }
 
 export function LearnSummary({ onBack, onHome }: LearnSummaryProps) {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const {
     learnQueue,
