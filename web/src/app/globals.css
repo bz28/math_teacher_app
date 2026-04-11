@@ -62,15 +62,8 @@
 }
 
 /* ── Subject color overrides ── */
-[data-subject="math"] {
-  --color-primary: #7C3AED;
-  --color-primary-light: #A78BFA;
-  --color-primary-bg: #F3EEFF;
-  --color-primary-dark: #6D28D9;
-  --gradient-primary: linear-gradient(135deg, #7C3AED, #A78BFA);
-  --gradient-header: linear-gradient(135deg, #7C3AED, #8B5CF6);
-  --color-overlay: rgba(124, 58, 237, 0.08);
-}
+/* Math intentionally has no override — it uses the brand primary
+   (#6C5CE7 / #A29BFE), matching the mobile app's gradients.primary. */
 
 [data-subject="physics"] {
   --color-primary: #0984E3;
@@ -136,16 +129,6 @@
   --color-overlay: rgba(0, 0, 0, 0.3);
 
   --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
-}
-
-[data-theme="dark"][data-subject="math"] {
-  --color-primary: #A78BFA;
-  --color-primary-light: #C4B5FD;
-  --color-primary-bg: #2A1B4A;
-  --color-primary-dark: #C4B5FD;
-  --gradient-primary: linear-gradient(135deg, #A78BFA, #C4B5FD);
-  --gradient-header: linear-gradient(135deg, #A78BFA, #C4B5FD);
-  --color-overlay: rgba(167, 139, 250, 0.1);
 }
 
 [data-theme="dark"][data-subject="physics"] {

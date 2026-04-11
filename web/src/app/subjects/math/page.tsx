@@ -140,7 +140,7 @@ export default function MathPage() {
       description="From pre-algebra through AP Calculus BC, Veradic walks every student through the thinking — so they get the answer, and they actually understand how they got there."
       detailedDescription="Whether your students are struggling with quadratic equations, fighting their way through calculus, or trying to write their first geometry proof, Veradic meets them where they are and guides them forward — one step at a time."
       educationalProgramDescription="AI-powered math tutoring for classrooms, covering pre-algebra, algebra, geometry, trigonometry, pre-calculus, AP Calculus, and statistics with step-by-step guidance and teacher-controlled content."
-      badgeColor="#7C3AED"
+      badgeColor="#6C5CE7"
       icon={mathIcon}
       examples={examples}
       features={features}

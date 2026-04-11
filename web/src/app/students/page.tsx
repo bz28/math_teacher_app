@@ -181,7 +181,7 @@ export default function StudentsPage() {
 
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {[
-              { slug: "math", name: "Math", blurb: "Pre-algebra through calculus.", color: "#7C3AED" },
+              { slug: "math", name: "Math", blurb: "Pre-algebra through calculus.", color: "#6C5CE7" },
               { slug: "physics", name: "Physics", blurb: "Mechanics through modern physics.", color: "#0984E3" },
               { slug: "chemistry", name: "Chemistry", blurb: "Stoichiometry through organic.", color: "#00B894" },
             ].map((s) => (

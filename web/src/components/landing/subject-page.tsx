@@ -68,7 +68,7 @@ export function SubjectPage({
   demo,
 }: SubjectPageProps) {
   return (
-    <div data-subject={slug}>
+    <div data-subject={slug === "math" ? undefined : slug}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
