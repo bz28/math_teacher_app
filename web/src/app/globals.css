@@ -216,7 +216,7 @@
   --color-invert-border: var(--color-invert-border);
 
   /* Display typography scale — big, bold, tight */
-  --text-display-xl: clamp(2.75rem, 7vw, 6rem);        /* hero headlines, 44→96px */
+  --text-display-xl: clamp(3.5rem, 7vw, 6rem);         /* hero headlines, 56→96px */
   --text-display-lg: clamp(2.25rem, 5.5vw, 4.5rem);   /* section headlines, 36→72px */
   --text-display-md: clamp(1.875rem, 4vw, 3rem);      /* sub headlines, 30→48px */
   --text-display-sm: clamp(1.5rem, 3vw, 2.25rem);     /* small display, 24→36px */
