@@ -263,7 +263,7 @@ export function SolveScreen({
         imageDimensions={imageDimensions}
         onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
         onCancel={cancelSelection}
-        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length, scansLeft)}
+        maxRectangles={Math.max(0, Math.min(10, maxQueueSize - problemQueue.length, scansLeft))}
       />
     );
   }

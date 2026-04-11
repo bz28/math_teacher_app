@@ -29,7 +29,10 @@ interface MathTextProps {
   numberOfLines?: number;
 }
 
-const HAS_MATH_OR_BOLD = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*)/;
+// Single source of truth for the math/bold tokenizer. Use .test() directly
+// (lastIndex is always 0 for a non-global regex) and create a fresh global
+// clone in buildHtml() so matchAll() has its own iterator state.
+const MATH_OR_BOLD_RE = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*)/;
 
 function escapeHtml(s: string): string {
   return s
@@ -57,7 +60,7 @@ function renderLatex(latex: string, displayMode: boolean): string {
 
 function buildHtml(text: string, color: string, fontSize: number, fontWeight: string): string {
   const parts: string[] = [];
-  const pattern = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*)/g;
+  const pattern = new RegExp(MATH_OR_BOLD_RE.source, "g");
   let last = 0;
   for (const m of text.matchAll(pattern)) {
     const idx = m.index!;
@@ -106,22 +109,30 @@ function buildHtml(text: string, color: string, fontSize: number, fontWeight: st
 <body>
 <div id="content">${body}</div>
 <script>
+  var lastH = 0;
   function postHeight() {
-    var h = document.getElementById('content').getBoundingClientRect().height;
-    if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(String(Math.ceil(h)));
+    var el = document.getElementById('content');
+    if (!el) return;
+    var h = Math.ceil(el.getBoundingClientRect().height);
+    if (h > 0 && h !== lastH && window.ReactNativeWebView) {
+      lastH = h;
+      window.ReactNativeWebView.postMessage(String(h));
     }
   }
-  // Report height once the stylesheet has applied
   function init() {
     postHeight();
-    setTimeout(postHeight, 100);
-    setTimeout(postHeight, 400);
+    // ResizeObserver fires once after layout and then only when the
+    // content box actually changes — far fewer round-trips than the
+    // previous fixed-delay polling. Webkit on iOS has had it since 13.4.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(postHeight).observe(document.getElementById('content'));
+    }
+    // Fallback: fonts.ready catches late-loading KaTeX webfonts on
+    // platforms where ResizeObserver doesn't cover font metric changes.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(postHeight);
   }
   if (document.readyState === 'complete') init();
   else window.addEventListener('load', init);
-  // Also report on font / image / stylesheet load
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(postHeight);
 </script>
 </body>
 </html>`;
@@ -136,7 +147,7 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
   // plain-text early returns, so any MathText instance whose `text` prop
   // transitioned between plain and math would grow its hook count and
   // trigger "Rendered more hooks than during the previous render."
-  const hasMath = !!text && HAS_MATH_OR_BOLD.test(text);
+  const hasMath = !!text && MATH_OR_BOLD_RE.test(text);
   const color = (style?.color as string) ?? colors.text;
   const fontSize = (style?.fontSize as number) ?? 14;
   const fontWeight = String(style?.fontWeight ?? "400");
