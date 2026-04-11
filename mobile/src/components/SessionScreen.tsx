@@ -140,9 +140,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 
   // Loading state — full-screen subject-themed hero with pulsing icon
   if (phase === "loading") {
-    const isGrading = isBatchMode && practiceBatch.pendingChecks > 0
+    const isPracticeGrading = isBatchMode && practiceBatch.pendingChecks > 0
       && practiceBatch.results.length >= practiceBatch.problems.length;
-    if (isGrading) {
+    // Mock test grading: mockTest exists and has answered questions (answers
+    // object is non-empty). During initial test generation answers is empty;
+    // during grading the user has already filled in answers and hit Submit.
+    const isMockGrading = !!mockTest && Object.keys(mockTest.answers).length > 0;
+    if (isPracticeGrading || isMockGrading) {
       return (
         <SafeAreaView style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
