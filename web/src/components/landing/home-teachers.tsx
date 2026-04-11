@@ -21,7 +21,7 @@ export function HomeTeachers() {
           <h2 className="mt-6 text-display-lg text-[color:var(--color-text)]">
             Reclaim your evenings.
           </h2>
-          <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
+          <p className="mt-6 text-xl leading-relaxed text-[color:var(--color-text-secondary)] md:text-[1.375rem]">
             You became a teacher to teach — not to photocopy worksheets at
             9pm or grade the same multiple-choice quiz 140 times. Veradic
             takes the repetitive work off your plate so you can focus on the

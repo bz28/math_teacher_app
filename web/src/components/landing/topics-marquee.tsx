@@ -166,7 +166,7 @@ export function TopicsMarquee({ variant = "default" }: TopicsMarqueeProps) {
         <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           Every topic your classroom touches.
         </h2>
-        <p className="mt-4 text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
+        <p className="mt-4 text-xl font-medium leading-snug text-[color:var(--color-text-secondary)] md:text-2xl">
           From pre-algebra to organic chemistry — Veradic walks students
           through all of it.
         </p>

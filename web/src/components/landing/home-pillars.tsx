@@ -59,7 +59,7 @@ export function HomePillars() {
         <h2 className="mt-6 text-display-lg text-[color:var(--color-text)]">
           Three things no other AI tutor gets right.
         </h2>
-        <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
+        <p className="mt-6 text-xl font-medium leading-snug text-[color:var(--color-text-secondary)] md:text-2xl">
           Everything else is a feature. These three are the reason Veradic
           belongs in a classroom.
         </p>

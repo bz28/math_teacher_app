@@ -12,7 +12,7 @@ export function HomeStudents() {
           <br />
           Veradic walks you through it — not past it.
         </h2>
-        <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
+        <p className="mt-6 text-xl font-medium leading-snug text-[color:var(--color-text-secondary)] md:text-2xl">
           Snap a picture of any problem. Veradic breaks it into steps and
           asks you the right questions until you figure it out yourself. You
           get to the answer — and you actually know how you got there.
