@@ -15,6 +15,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { MathKeyboard } from "./MathKeyboard";
+import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
 import { useColors, spacing, shadows } from "../theme";
@@ -130,7 +131,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
         </View>
         <View style={[styles.problemCard, shadows.sm]}>
           <Text style={styles.cardLabel}>Problem</Text>
-          <Text style={styles.problemText}>{currentProblem.question}</Text>
+          <MathText text={currentProblem.question} style={styles.problemText} />
         </View>
         <View style={styles.progressRow}>
           <View style={styles.progressContainer}>

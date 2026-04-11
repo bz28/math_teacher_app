@@ -6,6 +6,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
+import { cleanMathPreview } from "./HistoryCards";
 import { useSessionStore } from "../stores/session";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
@@ -142,13 +143,13 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                 </AnimatedPressable>
               </View>
               <Text style={styles.resultQuestion} numberOfLines={2}>
-                {result.question}
+                {cleanMathPreview(result.question)}
               </Text>
               <View style={styles.resultAnswers}>
                 {result.isCorrect === true && (
                   <>
                     <Text style={styles.resultAnswer}>
-                      Your answer: {result.userAnswer}
+                      Your answer: {cleanMathPreview(result.userAnswer ?? "")}
                     </Text>
                     <Text style={styles.resultCorrectAnswer}>
                       Correct!
@@ -158,7 +159,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                 {result.isCorrect === false && (
                   <>
                     <Text style={[styles.resultAnswer, styles.resultAnswerWrong]}>
-                      Your answer: {result.userAnswer}
+                      Your answer: {cleanMathPreview(result.userAnswer ?? "")}
                     </Text>
                     <Text style={styles.resultHint}>
                       Flag this question and learn it to see the answer

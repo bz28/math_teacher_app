@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
+import { cleanMathPreview } from "./HistoryCards";
+import { MathText } from "./MathText";
 import { getSession, respondToStep, type SessionData } from "../services/api";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
@@ -98,7 +100,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
               {isAbandoned ? "Ended Early" : isCompleted ? "Completed" : "In Progress"}
             </Text>
           </View>
-          <Text style={styles.problemText}>{session.problem}</Text>
+          <MathText text={session.problem} style={styles.problemText} />
           <ProgressBar current={session.current_step} total={session.total_steps} />
         </View>
 
@@ -124,11 +126,11 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
                 <View style={styles.stepContent}>
                   {isReached ? (
                     <>
-                      <Text style={styles.stepDescription}>{step.description}</Text>
+                      <MathText text={step.description} style={styles.stepDescription} />
                       {step.final_answer ? (
                         <View style={styles.answerRow}>
                           <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-                          <Text style={styles.answerText}>{step.final_answer}</Text>
+                          <MathText text={step.final_answer} style={styles.answerText} />
                         </View>
                       ) : null}
                     </>
@@ -209,49 +211,51 @@ function SessionChat({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <View style={chatStyles.container}>
-      <Text style={chatStyles.title}>Have questions?</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={chatStyles.container}>
+        <Text style={chatStyles.title}>Have questions?</Text>
 
-      {messages.map((msg, i) => (
-        <View
-          key={i}
-          style={[
-            chatStyles.bubble,
-            msg.role === "user" ? chatStyles.userBubble : chatStyles.assistantBubble,
-          ]}
-        >
-          <Text style={[chatStyles.bubbleText, msg.role === "user" && chatStyles.userBubbleText]}>
-            {msg.text}
-          </Text>
+        {messages.map((msg, i) => (
+          <View
+            key={i}
+            style={[
+              chatStyles.bubble,
+              msg.role === "user" ? chatStyles.userBubble : chatStyles.assistantBubble,
+            ]}
+          >
+            <Text style={[chatStyles.bubbleText, msg.role === "user" && chatStyles.userBubbleText]}>
+              {msg.role === "assistant" ? cleanMathPreview(msg.text) : msg.text}
+            </Text>
+          </View>
+        ))}
+
+        {thinking && (
+          <View style={[chatStyles.bubble, chatStyles.assistantBubble]}>
+            <Text style={[chatStyles.bubbleText, { color: colors.textMuted }]}>Thinking...</Text>
+          </View>
+        )}
+
+        <View style={chatStyles.inputRow}>
+          <TextInput
+            style={chatStyles.input}
+            placeholder="Ask about this problem..."
+            placeholderTextColor={colors.textMuted}
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={handleSend}
+            editable={!thinking}
+            returnKeyType="send"
+          />
+          <GradientButton
+            onPress={handleSend}
+            label="Ask"
+            loading={thinking}
+            disabled={!input.trim()}
+            style={chatStyles.sendButton}
+          />
         </View>
-      ))}
-
-      {thinking && (
-        <View style={[chatStyles.bubble, chatStyles.assistantBubble]}>
-          <Text style={[chatStyles.bubbleText, { color: colors.textMuted }]}>Thinking...</Text>
-        </View>
-      )}
-
-      <View style={chatStyles.inputRow}>
-        <TextInput
-          style={chatStyles.input}
-          placeholder="Ask about this problem..."
-          placeholderTextColor={colors.textMuted}
-          value={input}
-          onChangeText={setInput}
-          onSubmitEditing={handleSend}
-          editable={!thinking}
-          returnKeyType="send"
-        />
-        <GradientButton
-          onPress={handleSend}
-          label="Ask"
-          loading={thinking}
-          disabled={!input.trim()}
-          style={chatStyles.sendButton}
-        />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
