@@ -10,16 +10,20 @@ type Step = {
 
 const PROBLEM_TEXT = (
   <>
-    Solve for <em className="font-serif italic">x</em>:{" "}
-    <span className="font-serif italic">
+    Solve for x:{" "}
+    <span className="font-medium text-[color:var(--color-text)]">
       x<sup>2</sup> − 11x + 24 = 0
     </span>
   </>
 );
 
-// Inline math helper — italic serif to mimic KaTeX rendering in the real app
+// Inline math helper — upright, matching the real app (no italics)
 function M({ children }: { children: ReactNode }) {
-  return <span className="font-serif italic">{children}</span>;
+  return (
+    <span className="font-medium text-[color:var(--color-text)]">
+      {children}
+    </span>
+  );
 }
 // Bolded concept callout (styled like the real app's bold inline terms)
 function C({ children }: { children: ReactNode }) {
@@ -56,23 +60,32 @@ const steps: Step[] = [
     title: "Find factor pairs",
     body: (
       <>
-        We need two numbers that multiply to 24 and add to −11. Let&rsquo;s
-        list the factor pairs of 24:
-        <ul className="mt-2 space-y-1 pl-4">
+        Look at the signs first. The constant (<M>+24</M>) is positive and
+        the middle coefficient (<M>−11</M>) is negative. Since our two
+        factors need to multiply to a positive and add to a negative, they
+        must <C>both be negative</C>.
+        <p className="mt-2">
+          Let&rsquo;s list the negative factor pairs of 24:
+        </p>
+        <ul className="mt-1 space-y-1 pl-4">
           <li>
-            <M>1 × 24 = 24</M>, and <M>1 + 24 = 25</M> (too big)
+            <M>(−1) × (−24) = 24</M>, and <M>(−1) + (−24) = −25</M> (too
+            negative)
           </li>
           <li>
-            <M>2 × 12 = 24</M>, and <M>2 + 12 = 14</M> (still too big)
+            <M>(−2) × (−12) = 24</M>, and <M>(−2) + (−12) = −14</M> (still
+            too big)
           </li>
           <li>
-            <M>3 × 8 = 24</M>, and <M>3 + 8 = 11</M> (close, but we need −11)
+            <M>(−3) × (−8) = 24</M>, and <M>(−3) + (−8) = −11 ✓</M>
+          </li>
+          <li>
+            <M>(−4) × (−6) = 24</M>, and <M>(−4) + (−6) = −10</M> (too
+            small)
           </li>
         </ul>
         <p className="mt-2">
-          Since we need the sum to be −11, we need both factors to be
-          negative:{" "}
-          <M>(−3) × (−8) = 24</M> and <M>(−3) + (−8) = −11 ✓</M>. Perfect.
+          Perfect. The two numbers are <M>−3</M> and <M>−8</M>.
         </p>
       </>
     ),
@@ -345,36 +358,106 @@ export function HeroStepsAnimation() {
                 </AnimatePresence>
               </>
             ) : (
-              /* Solved screen */
+              /* Solved screen — matches the real app's final page */
               <motion.div
                 key="solved"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-xl border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/5 p-6 text-center"
+                className="space-y-3"
               >
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--color-success)]/15">
-                  <svg
-                    className="h-6 w-6 text-[color:var(--color-success)]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+                {/* All 5 steps collapsed */}
+                <div className="space-y-2">
+                  {steps.map((step, i) => (
+                    <div
+                      key={`final-${i}`}
+                      className="flex items-center gap-3 rounded-lg border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-3 py-2"
+                    >
+                      <CheckBadge />
+                      <span className="flex-1 truncate text-xs font-semibold text-[color:var(--color-text-secondary)]">
+                        <span className="text-[color:var(--color-success)]">
+                          Step {i + 1}
+                        </span>
+                        <span className="mx-1.5 text-[color:var(--color-text-muted)]">
+                          —
+                        </span>
+                        {step.title}
+                      </span>
+                      <svg
+                        className="h-3.5 w-3.5 text-[color:var(--color-text-muted)]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <polyline points="18 15 12 9 6 15" />
+                      </svg>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]">
-                  Answer
-                </p>
-                <p className="mt-1 font-serif text-xl italic text-[color:var(--color-text)]">
-                  x = 3 or x = 8
-                </p>
-                <p className="mt-3 text-sm font-bold text-[color:var(--color-text)]">
-                  Problem Solved
-                </p>
+
+                {/* Answer row */}
+                <div className="rounded-xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                    Answer
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-[color:var(--color-text)]">
+                    x = 3 or x = 8
+                  </p>
+                </div>
+
+                {/* Problem solved banner */}
+                <div className="rounded-xl border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/5 p-5 text-center">
+                  <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--color-success)]/15">
+                    <svg
+                      className="h-5 w-5 text-[color:var(--color-success)]"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <p className="text-base font-bold text-[color:var(--color-text)]">
+                    Problem Solved!
+                  </p>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="rounded-full bg-[color:var(--color-primary)] py-2.5 text-xs font-bold text-white"
+                    >
+                      Try a practice problem
+                    </button>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] py-2 text-xs font-semibold text-[color:var(--color-text-secondary)]"
+                    >
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                      I still have questions
+                    </button>
+                    <div className="flex items-center justify-center gap-4 pt-1">
+                      <span className="text-[11px] font-semibold text-[color:var(--color-primary)]">
+                        Learn New Problem
+                      </span>
+                      <span className="text-[11px] font-semibold text-[color:var(--color-primary)]">
+                        Return Home
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             )}
           </div>
