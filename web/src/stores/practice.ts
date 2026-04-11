@@ -17,6 +17,7 @@ import type { Subject } from "@/stores/learn";
 export type PracticePhase =
   | "idle"
   | "loading"
+  | "practice_preview"
   | "awaiting_input"
   | "thinking"
   | "practice_summary"
@@ -75,6 +76,7 @@ interface PracticeState {
   error: string | null;
 
   startPracticeBatch: (problem: string, count: number, subject: Subject) => Promise<void>;
+  beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
   practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject) => Promise<void>;
   submitPracticeAnswer: (answer: string, subject: Subject) => Promise<void>;
@@ -132,19 +134,32 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     set({ ...initialState, phase: "loading" as PracticePhase });
     try {
       // Phase 1: batch generate similar question texts for all flagged problems
-      const { problems: generated } = await practiceApi.generate({ problems: flaggedProblems, subject });
-      const similarQuestions = generated.map((p) => p.question);
-
-      // Phase 2: solve each generated question in parallel (get answer + distractors)
-      const [solvedResults, { id: sessionId }] = await Promise.all([
-        Promise.all(similarQuestions.map((q) => practiceApi.generate({ problem: q, count: 0, subject }))),
+      const [{ problems: generated }, { id: sessionId }] = await Promise.all([
+        practiceApi.generate({ problems: flaggedProblems, subject }),
         sessionApi.createPracticeBatch(flaggedProblems[0]),
       ]);
-      const allProblems = solvedResults.flatMap((r) => r.problems);
+      const similarQuestions = generated.map((p) => p.question);
+
+      // Show intermission screen with placeholders
+      const placeholders: PracticeProblem[] = similarQuestions.map((q) => ({ question: q, answer: "" }));
       set({
-        practiceBatch: createPracticeBatch(allProblems, sessionId),
-        phase: "awaiting_input" as PracticePhase,
+        practiceBatch: createPracticeBatch(placeholders, sessionId, { totalCount: flaggedProblems.length }),
+        phase: "practice_preview" as PracticePhase,
       });
+
+      // Phase 2: solve each in parallel — user clicks Begin when ready
+      Promise.allSettled(
+        similarQuestions.map((q, i) =>
+          practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
+            if (!res.problems[0]) return;
+            const { practiceBatch: current } = get();
+            if (!current) return;
+            const updated = [...current.problems];
+            updated[i] = res.problems[0];
+            set({ practiceBatch: { ...current, problems: updated } });
+          }),
+        ),
+      );
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
@@ -157,18 +172,31 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       const { problems: generated } = await practiceApi.generate({ problems: [problem], subject });
       const similarQuestion = generated[0]?.question ?? problem;
 
-      // Phase 2: solve the generated question (get answer + distractors) + create session in parallel
-      const [{ problems: solved }, { id: sessionId }] = await Promise.all([
-        practiceApi.generate({ problem: similarQuestion, count: 0, subject }),
-        sessionApi.createPracticeBatch(problem),
-      ]);
+      // Show intermission screen immediately with placeholder
+      const placeholder: PracticeProblem = { question: similarQuestion, answer: "" };
+      const { id: sessionId } = await sessionApi.createPracticeBatch(problem);
       set({
-        practiceBatch: createPracticeBatch(solved, sessionId),
-        phase: "awaiting_input",
+        practiceBatch: createPracticeBatch([placeholder], sessionId, { totalCount: 1 }),
+        phase: "practice_preview",
+      });
+
+      // Phase 2: solve in background — user clicks Begin when ready
+      practiceApi.generate({ problem: similarQuestion, count: 0, subject }).then((res) => {
+        const { practiceBatch: current } = get();
+        if (!current) return;
+        const updated = [...current.problems];
+        if (res.problems[0]) updated[0] = res.problems[0];
+        set({ practiceBatch: { ...current, problems: updated } });
+      }).catch((err) => {
+        set({ phase: "error", error: (err as Error).message });
       });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  beginPractice() {
+    set({ phase: "awaiting_input" });
   },
 
   async startPracticeQueue(problems, subject) {

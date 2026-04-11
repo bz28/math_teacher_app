@@ -14,6 +14,7 @@ import { useConfetti } from "@/components/ui/confetti";
 import { MCQCard } from "@/components/shared/mcq-card";
 import { ProgressBar } from "@/components/shared/progress-bar";
 import { PracticeSummary } from "./_components/practice-summary";
+import { MathText } from "@/components/shared/math-text";
 
 export default function PracticePage() {
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function PracticePage() {
     practiceBatch,
     phase,
     error,
+    beginPractice,
     submitPracticeAnswer,
     skipPracticeProblem,
     submitPracticeWork,
@@ -81,6 +83,52 @@ export default function PracticePage() {
       <div className="mx-auto max-w-2xl space-y-4">
         <SkeletonStep />
         <SkeletonStep />
+      </div>
+    );
+  }
+
+  if (phase === "practice_preview") {
+    const allSolved = practiceBatch.problems.every((q) => q.answer !== "");
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-extrabold text-text-primary">Your practice problem</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            {practiceBatch.problems.length} question{practiceBatch.problems.length !== 1 ? "s" : ""} · Review before you begin
+          </p>
+        </div>
+        <div className="space-y-3">
+          {practiceBatch.problems.map((q, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-[--radius-lg] border border-border bg-surface px-4 py-3">
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary-bg text-xs font-bold text-primary">
+                {i + 1}
+              </span>
+              <div className="flex-1 text-sm font-medium text-text-primary">
+                <MathText text={q.question} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          <Button
+            gradient
+            onClick={beginPractice}
+            className="w-full py-3 text-base"
+          >
+            {allSolved ? "Begin Practice" : (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Preparing answer choices…
+              </span>
+            )}
+          </Button>
+          <Button variant="ghost" onClick={() => { reset(); router.back(); }} className="w-full">
+            Cancel
+          </Button>
+        </div>
       </div>
     );
   }

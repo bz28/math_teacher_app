@@ -305,6 +305,7 @@ function PracticeSimilarButton({ problem, subject }: { problem: string; subject:
           setLoading(true);
           try {
             useSessionStore.getState().setSubject(subject as "math" | "chemistry");
+            // startPracticeBatch returns after Phase 1 (practice_preview is set); Phase 2 runs in background
             await usePracticeStore.getState().startPracticeBatch(problem, 1, subject as "math" | "chemistry");
             router.push("/practice");
           } finally {

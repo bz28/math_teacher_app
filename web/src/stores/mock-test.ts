@@ -15,6 +15,7 @@ import type { Subject } from "@/stores/learn";
 export type MockTestPhase =
   | "idle"
   | "loading"
+  | "mock_test_preview"
   | "mock_test_active"
   | "mock_test_summary"
   | "error";
@@ -56,7 +57,7 @@ function createMockTest(
     flags: new Array(len).fill(false),
     currentIndex: 0,
     timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-    startedAt: Date.now(),
+    startedAt: 0,
     submittedAt: null,
     results: null,
     sessionId,
@@ -81,6 +82,7 @@ interface MockTestState {
     problemQueue: { text: string; image?: string }[],
     multipleChoice?: boolean,
   ) => Promise<void>;
+  beginMockTest: () => void;
   saveMockTestAnswer: (index: number, answer: string) => void;
   attachMockTestWork: (index: number, imageBase64: string) => void;
   toggleMockTestFlag: (index: number) => void;
@@ -132,6 +134,9 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
         set({ mockTest: mt });
 
+        // Show preview screen immediately (questions visible, no answers yet)
+        set({ phase: "mock_test_preview" });
+
         // Fire solve calls for all generated questions in parallel
         const solvePromises = questionTexts.map((q, i) =>
           practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
@@ -145,12 +150,8 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }),
         );
 
-        // Wait for Q1 to be solved before showing exam (so timed exams start with at least 1 answer ready)
-        try { await solvePromises[0]; } catch { /* continue even if Q1 fails */ }
-        set({ phase: "mock_test_active" });
-
-        // Q2+ continue solving in the background
-        Promise.allSettled(solvePromises.slice(1));
+        // Solve in background for both timed and untimed — user clicks Begin when ready
+        Promise.allSettled(solvePromises);
       } else {
         const placeholders: PracticeProblem[] = problems.map((p) => ({
           question: p,
@@ -160,7 +161,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
 
         // Set mockTest with placeholders first so .then() handlers can find it
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
-        set({ mockTest: mt });
+        set({ mockTest: mt, phase: "mock_test_preview" });
 
         // Fire all API calls in parallel, update each question as it resolves
         const promises = problems.map((p, i) => {
@@ -179,16 +180,20 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           });
         });
 
-        // Wait for the first question before showing the exam
-        try { await promises[0]; } catch { /* first question failed, continue */ }
-        set({ phase: "mock_test_active" });
-
-        // Remaining questions continue resolving in background
-        Promise.allSettled(promises.slice(1));
+        // Solve in background for both timed and untimed — user clicks Begin when ready
+        Promise.allSettled(promises);
       }
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  beginMockTest() {
+    const { mockTest } = get();
+    set({
+      phase: "mock_test_active",
+      mockTest: mockTest ? { ...mockTest, startedAt: Date.now() } : null,
+    });
   },
 
   saveMockTestAnswer(index, answer) {

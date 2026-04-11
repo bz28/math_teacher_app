@@ -89,6 +89,7 @@ export function LearnCompleted({
                 loading={loading}
                 onClick={async () => {
                   setLoading(true);
+                  // onStartPractice returns after Phase 1 (practice_preview set); Phase 2 runs in background
                   await onStartPractice(session.problem, 1, subject);
                   router.push("/practice");
                 }}
