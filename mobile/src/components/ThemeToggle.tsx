@@ -17,7 +17,12 @@ export function ThemeToggle() {
   const iconName: keyof typeof Ionicons.glyphMap =
     pref === "system" ? "phone-portrait-outline" : resolved === "dark" ? "sunny-outline" : "moon-outline";
 
-  const label = pref === "system" ? "System" : pref === "dark" ? "Dark" : "Light";
+  // Show the resolved theme so the user always knows what they're experiencing.
+  // If in auto mode, prefix with "Auto" so they know it's system-driven.
+  const label =
+    pref === "system"
+      ? `Auto (${resolved === "dark" ? "Dark" : "Light"})`
+      : pref === "dark" ? "Dark" : "Light";
 
   return (
     <TouchableOpacity

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -61,7 +60,6 @@ export function SolveScreen({
   const typeCardRef = useRef<View>(null);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
   const [mode, setMode] = useState<Mode>("learn");
@@ -93,26 +91,12 @@ export function SolveScreen({
 
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
 
-  // Track keyboard height so we can pad the scroll content precisely
+  // Scroll when entering typing mode so the type card is visible.
+  // KAV behavior="padding" handles the keyboard offset natively.
   useEffect(() => {
-    const showSub = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hideSub = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => setKeyboardHeight(0),
-    );
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
-
-  // When the keyboard appears in typing mode, scroll the type card so its
-  // bottom edge sits just above the keyboard. The extra paddingBottom (set
-  // by the ScrollView prop above) gives us room to scroll into.
-  useEffect(() => {
-    if (!typing || keyboardHeight === 0) return;
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
-  }, [typing, keyboardHeight]);
+    if (!typing) return;
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+  }, [typing]);
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
   const activeSubject = getSubjectMeta(subject);
@@ -295,7 +279,7 @@ export function SolveScreen({
     const noun = n === 1 ? "problem" : "problems";
     if (mode === "mock_test") {
       if (examType === "generate_similar") {
-        return `${n} seed${n !== 1 ? "s" : ""} → ${n} generated question${n !== 1 ? "s" : ""}`;
+        return `${n} example${n !== 1 ? "s" : ""} → ${n} generated question${n !== 1 ? "s" : ""}`;
       }
       return `${n} question${n !== 1 ? "s" : ""}`;
     }
@@ -316,7 +300,7 @@ export function SolveScreen({
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Mode segmented control */}
         <View style={styles.modeRow}>
@@ -349,13 +333,7 @@ export function SolveScreen({
 
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={[
-            styles.scrollContent,
-            // When the keyboard is up, pad the bottom by exactly the
-            // keyboard height + 16 so the type card has somewhere to scroll
-            // to that lands its bottom edge just above the keyboard.
-            typing && keyboardHeight > 0 && { paddingBottom: keyboardHeight + 16 },
-          ]}
+          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
