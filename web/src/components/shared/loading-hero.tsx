@@ -41,7 +41,14 @@ const TITLES: Record<Mode, string> = {
  * Used in place of a generic spinner anywhere session generation / mock-test
  * setup / mock-test grading is in flight.
  */
-export function LoadingHero({
+export function LoadingHero(props: { subject?: Subject; mode: Mode }) {
+  // Keying by mode forces a full remount when the mode changes (e.g. a page
+  // transitions from "test" setup to "grading"), so phrase rotation restarts
+  // cleanly from phrase 0 without setState-in-effect.
+  return <LoadingHeroInner key={props.mode} {...props} />;
+}
+
+function LoadingHeroInner({
   subject = "math",
   mode,
 }: {

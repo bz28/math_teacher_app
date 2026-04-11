@@ -90,6 +90,7 @@ function SolveContent() {
     editingIndex: extractionEditingIndex,
     pickFromCamera,
     pickFromGallery,
+    pickForManualCrop,
     extractRectangles,
     cancelSelect,
     toggleSelected,
@@ -125,6 +126,7 @@ function SolveContent() {
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
   const isLoading = phase === "loading" || starting;
   const extracting = extractionPhase === "extracting";
+  const scanLimitReached = !isPro && remainingScans <= 0;
 
   // Queue label adapts to mode + examType
   const queueLabel = (() => {
@@ -216,6 +218,14 @@ function SolveContent() {
           problemQueue,
           multipleChoice,
         );
+        // Store catches errors internally and sets phase="error" — don't
+        // navigate in that case, let the user see the inline error instead.
+        const mockPhase = useMockTestStore.getState().phase;
+        if (mockPhase === "error") {
+          setError(useMockTestStore.getState().error ?? "Mock test failed");
+          setStarting(false);
+          return;
+        }
         setProblemQueue([]);
         setInput("");
         router.push(`/mock-test?subject=${urlSubject}`);
@@ -225,6 +235,14 @@ function SolveContent() {
           await startSession(allProblems[0], firstImage);
         } else {
           await startLearnQueue(allProblems);
+        }
+        // Same defense: the learn store catches and sets phase="error"
+        // without throwing. Bail out before navigating if that happened.
+        const learnPhase = useSessionStore.getState().phase;
+        if (learnPhase === "error") {
+          setError(useSessionStore.getState().error ?? "Couldn't start session");
+          setStarting(false);
+          return;
         }
         router.push(`/learn/session?subject=${urlSubject}`);
       }
@@ -250,7 +268,9 @@ function SolveContent() {
     );
   }
 
-  const cardsDisabled = extracting || problemQueue.length >= maxQueueSize;
+  // Type card only needs queue room. Snap/Gallery also need a scan quota.
+  const typeCardDisabled = extracting || problemQueue.length >= maxQueueSize;
+  const imageCardsDisabled = typeCardDisabled || scanLimitReached;
   const activeGradient = SUBJECT_CONFIG[urlSubject]?.gradient ?? "bg-gradient-primary";
 
   return (
@@ -291,7 +311,7 @@ function SolveContent() {
         <HeroCard
           variant="gradient"
           gradientClass={activeGradient}
-          disabled={cardsDisabled}
+          disabled={imageCardsDisabled}
           onClick={pickFromCamera}
           icon={<CameraIcon className="h-8 w-8 text-white" />}
           title="Snap a problem"
@@ -302,7 +322,7 @@ function SolveContent() {
         {/* Gallery card (outlined) */}
         <HeroCard
           variant="outlined"
-          disabled={cardsDisabled}
+          disabled={imageCardsDisabled}
           onClick={pickFromGallery}
           icon={<ImagesIcon className="h-8 w-8 text-primary" />}
           title="Choose a photo"
@@ -310,14 +330,32 @@ function SolveContent() {
           ariaLabel="Choose a photo from your device"
         />
 
+        {/* Manual-crop fallback link — lets power users draw rectangles
+         * directly without first trying auto-extract. */}
+        {!imageCardsDisabled && (
+          <button
+            type="button"
+            onClick={pickForManualCrop}
+            className="mb-3 block w-full text-center text-xs font-semibold text-text-muted underline-offset-2 hover:text-primary hover:underline"
+            aria-label="Upload an image and adjust the crop manually"
+          >
+            Or upload and adjust crop manually
+          </button>
+        )}
+
         {/* Type card (outlined, collapses to inline input) */}
         <div
           className={cn(
             "mb-3 flex min-h-[180px] flex-col items-center justify-center rounded-[--radius-lg] border-2 border-primary bg-surface px-5 py-8 shadow-sm transition-opacity",
-            cardsDisabled && !typing && "opacity-50",
+            typeCardDisabled && !typing && "opacity-50",
           )}
           onClick={() => {
-            if (!typing && !cardsDisabled) {
+            if (typing) {
+              // Re-focus input if user clicks dead space inside the card.
+              inputRef.current?.focus();
+              return;
+            }
+            if (!typeCardDisabled) {
               setTyping(true);
               requestAnimationFrame(() => inputRef.current?.focus());
             }
