@@ -3,32 +3,32 @@ import { SubjectPage } from "@/components/landing/subject-page";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Veradic AI Physics Tutor — Step-by-Step Physics Help",
+  title: "AI Physics Tutor for Schools — Mechanics to Modern Physics | Veradic AI",
   description:
-    "Veradic is an AI physics tutor that breaks any mechanics, thermodynamics, or waves problem into guided steps you actually understand, then generates unlimited practice.",
+    "Veradic is the AI physics tutor built for classrooms. Guides students through kinematics, forces, energy, electricity, and waves step by step — without ever giving the answer away.",
   keywords: [
-    "veradic",
-    "veradic physics tutor",
-    "AI physics tutor",
+    "ai physics tutor for schools",
+    "ai physics tutor",
     "physics homework help",
-    "physics solver",
-    "step-by-step physics",
+    "step by step physics",
     "mechanics tutor",
-    "thermodynamics help",
+    "ap physics tutor",
+    "ai tutor for teachers",
+    "classroom physics ai",
+    "chatgpt alternative physics",
     "physics practice problems",
-    "online physics tutor",
-    "AI physics help",
+    "veradic physics tutor",
   ],
   openGraph: {
-    title: "Veradic — Your AI Physics Tutor",
+    title: "AI Physics Tutor for Schools | Veradic AI",
     description:
-      "Break any physics problem into steps you actually understand. Mechanics, energy, waves, and more.",
+      "Guides students through kinematics, forces, energy, electricity, and waves step by step — without ever giving the answer away.",
     url: `${SITE_URL}/subjects/physics`,
   },
   twitter: {
-    title: "Veradic — Your AI Physics Tutor",
+    title: "AI Physics Tutor for Schools | Veradic AI",
     description:
-      "Break any physics problem into steps you actually understand. Mechanics, energy, waves, and more.",
+      "Guides students through kinematics, forces, energy, electricity, and waves step by step — without ever giving the answer away.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/physics`,
@@ -36,60 +36,121 @@ export const metadata: Metadata = {
 };
 
 const physicsIcon = (
-  <svg className="h-10 w-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-    <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+  <svg
+    className="h-8 w-8"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="2" />
+    <ellipse cx="12" cy="12" rx="10" ry="4" />
+    <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)" />
+    <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)" />
   </svg>
 );
 
+const topics = [
+  "Kinematics",
+  "Forces & Newton's Laws",
+  "Energy & Work",
+  "Momentum",
+  "Circular Motion",
+  "Gravity",
+  "Waves",
+  "Sound",
+  "Optics",
+  "Electricity",
+  "Magnetism",
+  "Thermodynamics",
+  "Modern Physics",
+];
+
+const differentiators = [
+  {
+    title: "Units that never drift",
+    description:
+      "Veradic tracks units through every step — meters, seconds, newtons, joules — and catches mismatches before they become wrong answers.",
+  },
+  {
+    title: "Multi-step problems, actually broken down",
+    description:
+      "Most physics problems are two, three, or four sub-problems glued together. Veradic teaches students to see and separate them.",
+  },
+  {
+    title: "Concept before calculation",
+    description:
+      "Students are asked what physics applies before they're asked to do arithmetic. You build intuition, not just plug-and-chug.",
+  },
+];
+
+const whyReasons = [
+  "Covers the full physics curriculum from conceptual physics through AP Physics C — mechanics, electricity, magnetism, and modern physics.",
+  "Walks students through free-body diagrams, unit conversions, and energy conservation — the moves that matter, not just the final numbers.",
+  "Catches the unit errors, sign errors, and vector-component mistakes that trip up every physics student at least once a week.",
+];
+
+const demo = {
+  problem:
+    "A 5 kg block is released from rest and slides down a 30° frictionless incline. What is its speed after sliding 4 meters along the incline?",
+  steps: [
+    {
+      label: "What physics applies here?",
+      body: "You could use kinematics, or you could use energy conservation. Which one uses fewer variables given what you know?",
+    },
+    {
+      label: "Find the height",
+      body: "If it slides 4 meters along a 30° incline, how much vertical distance did it actually fall? Draw the right triangle if it helps.",
+    },
+    {
+      label: "Set up energy conservation",
+      body: "Potential energy at the top equals kinetic energy at the bottom. Write that out with symbols before plugging in numbers.",
+    },
+    {
+      label: "Solve for v",
+      body: "The mass cancels out — that's your first clue the problem is independent of m. Isolate v and then plug in g and your height.",
+    },
+    {
+      label: "Check the units",
+      body: "Make sure what you end up with is in meters per second, not square meters per second. If it isn't, there's a missing square root somewhere.",
+    },
+  ],
+};
+
+// Legacy props retained for schema generation
 const examples = [
   { topic: "Mechanics", problem: "A 5 kg block slides down a 30° incline with friction μ = 0.2. Find the acceleration." },
   { topic: "Energy", problem: "A roller coaster starts at 40m height. What is its speed at the bottom?" },
   { topic: "Waves", problem: "A guitar string vibrates at 440 Hz with length 0.65m. Find the wave speed." },
   { topic: "Electricity", problem: "Three resistors (2Ω, 4Ω, 6Ω) are in parallel. Find the total resistance." },
-  { topic: "Thermodynamics", problem: "How much heat is needed to raise 2 kg of water from 20°C to 100°C?" },
-  { topic: "Optics", problem: "A convex lens has focal length 10 cm. Where is the image of an object at 25 cm?" },
-  { topic: "Magnetism", problem: "A 2m wire carrying 5A is in a 0.3T magnetic field. Find the force on the wire." },
-  { topic: "Kinematics", problem: "A ball is thrown upward at 20 m/s. How high does it go and when does it return?" },
 ];
 
 const features = [
-  {
-    title: "Step-by-Step Solutions",
-    description: "Every physics problem is broken into clear steps — identify forces, draw free-body diagrams, set up equations, solve, and verify. No hand-waving.",
-  },
-  {
-    title: "Ask Questions at Any Step",
-    description: "Not sure why F = ma applies here? Ask your Veradic tutor and get an explanation that connects the concept to the problem.",
-  },
-  {
-    title: "Unlimited Practice Variations",
-    description: "Same physics concept, different masses, angles, and velocities. Veradic generates fresh scenarios so you build real problem-solving intuition.",
-  },
-  {
-    title: "Photo Scan Your Homework",
-    description: "Snap a photo of your physics worksheet — diagrams and all. Veradic extracts the problems and guides you through each one.",
-  },
+  { title: "Step-by-Step Solutions", description: "Every physics problem is broken into clear steps." },
+  { title: "Ask Questions at Any Step", description: "Ask your tutor why a concept applies." },
+  { title: "Unlimited Practice", description: "Fresh variations on any problem." },
+  { title: "Photo Scan Homework", description: "Snap a worksheet, Veradic extracts every problem." },
 ];
 
 export default function PhysicsPage() {
   return (
-    <>
-      <SubjectPage
-        name="Physics"
-        slug="physics"
-        tagline="Your AI Physics Tutor"
-        description="From mechanics to thermodynamics, Veradic breaks any physics problem into guided steps you actually understand — then generates unlimited practice until you master it."
-        detailedDescription="Whether you're analyzing projectile motion, calculating electric fields, or solving thermodynamics problems, Veradic walks you through the physics step by step. Understand the why, not just the how."
-        educationalProgramDescription="AI-powered physics tutoring with step-by-step solutions for mechanics, thermodynamics, waves, and more."
-        gradient="from-[#0984E3] to-[#74B9FF]"
-        badgeColor="#0984E3"
-        icon={physicsIcon}
-        examples={examples}
-        features={features}
-      />
-    </>
+    <SubjectPage
+      name="Physics"
+      slug="physics"
+      tagline="AI physics tutoring, built for classrooms."
+      description="From kinematics through modern physics, Veradic walks every student through the reasoning — so they get the answer, and they actually understand the physics behind it."
+      detailedDescription="Whether your students are drawing their first free-body diagram, working through projectile motion, or prepping for the AP Physics exam, Veradic meets them where they are and guides them forward — one step at a time."
+      educationalProgramDescription="AI-powered physics tutoring for classrooms, covering kinematics, forces, energy, waves, electricity, magnetism, and modern physics with step-by-step guidance and teacher-controlled content."
+      badgeColor="#0984E3"
+      icon={physicsIcon}
+      examples={examples}
+      features={features}
+      topics={topics}
+      differentiators={differentiators}
+      whyReasons={whyReasons}
+      demo={demo}
+    />
   );
 }
