@@ -46,7 +46,7 @@ export function HomeSubjects() {
             your students need.
           </h2>
         </div>
-        <p className="max-w-md text-base leading-relaxed text-[color:var(--color-text-secondary)]">
+        <p className="max-w-lg text-xl font-medium leading-snug text-[color:var(--color-text-secondary)] md:text-2xl">
           Each subject page walks through how Veradic handles the specific
           kinds of problems your students see in class.
         </p>
