@@ -104,10 +104,10 @@ export default function HomePage() {
                   className="relative overflow-hidden"
                   onClick={() => router.push(`/learn?subject=${course.subject}&section=${course.section_id}`)}
                 >
-                  <div className={`absolute left-0 top-0 h-1 w-full ${gradient}`} />
+                  <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${gradient}`} />
                   <div className="flex items-start gap-4 pt-2">
                     <div
-                      className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] ${gradient} text-white shadow-sm`}
+                      className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${gradient} text-white shadow-sm`}
                     >
                       {course.subject === "physics" ? <PhysicsIcon /> : course.subject === "chemistry" ? <ChemIcon /> : <MathIcon />}
                     </div>
@@ -150,10 +150,10 @@ export default function HomePage() {
                 className="relative overflow-hidden"
                 onClick={() => router.push(`/learn?subject=${subject.id}`)}
               >
-                <div className={`absolute left-0 top-0 h-1 w-full ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient}`} />
+                <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient}`} />
                 <div className="flex items-start gap-4 pt-2">
                   <div
-                    className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient} text-white shadow-sm`}
+                    className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient} text-white shadow-sm`}
                   >
                     {subject.id === "math" ? <MathIcon /> : subject.id === "physics" ? <PhysicsIcon /> : <ChemIcon />}
                   </div>

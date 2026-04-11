@@ -1,683 +1,483 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
-import { useImageExtraction } from "@/hooks/use-image-extraction";
-import { EntitlementError } from "@/lib/api";
-import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
-import { Button, Spinner } from "@/components/ui";
-import {
-  AlertCircleIcon,
-  BookIcon,
-  CameraIcon,
-  CheckIcon,
-  DocIcon,
-  EditIcon,
-  ImagesIcon,
-  XCircleIcon,
-} from "@/components/ui/icons";
-import { SubjectPills } from "@/components/shared/subject-pills";
-import { MockTestConfig, type ExamType } from "@/components/shared/mock-test-config";
-import { ExtractionResultModal } from "@/components/shared/extraction-result-modal";
+import { Button, Card } from "@/components/ui";
+import { Textarea } from "@/components/ui/input";
+import { EditProblemTextarea } from "@/components/shared/edit-problem-textarea";
+import { ImageUpload } from "@/components/shared/image-upload";
 import { MathText } from "@/components/shared/math-text";
-import { RectangleSelector } from "@/components/shared/rectangle-selector";
+import { EntitlementError } from "@/lib/api";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
+import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
 
-const MAX_PROBLEMS = 10;
-type Mode = "learn" | "mock_test";
-
-export default function SolvePage() {
+export default function LearnPage() {
   return (
     <Suspense>
-      <SolveContent />
+      <LearnPageContent />
     </Suspense>
   );
 }
 
-function SolveContent() {
+function LearnPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const urlSubject = (searchParams.get("subject") ?? "math") as Subject;
+  const subject = (searchParams.get("subject") ?? "math") as Subject;
   const sectionId = searchParams.get("section");
 
   const {
-    subject,
     setSubject,
     setSectionId,
     problemQueue,
     setProblemQueue,
     addToQueue,
+    updateInQueue,
     removeFromQueue,
     startLearnQueue,
     startSession,
     phase,
   } = useSessionStore();
-  const startMockTest = useMockTestStore((s) => s.startMockTest);
-
-  const {
-    isPro,
-    dailySessionsUsed,
-    dailySessionsLimit,
-    dailyScansUsed,
-    dailyScansLimit,
-    fetchEntitlements,
-  } = useEntitlementStore();
-
+  const { startMockTest } = useMockTestStore();
+  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } = useEntitlementStore();
   const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
   const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
-  const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, remainingSessions);
 
-  const [mode, setMode] = useState<Mode>("learn");
-  const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
-  const [quotaConfirm, setQuotaConfirm] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<"learn" | "mock-test">("learn");
+  const [editingQueueIndex, setEditingQueueIndex] = useState<number | null>(null);
 
-  // Mock Test config
-  const [examType, setExamType] = useState<ExamType>("use_as_exam");
+  // Mock test config
+  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
-  const [multipleChoice, setMultipleChoice] = useState(true);
 
-  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
-
-  // Destructure the extraction hook so ESLint's react-hooks/refs rule
-  // doesn't false-positive on the render-time property reads.
-  const {
-    phase: extractionPhase,
-    imageBase64: extractionImage,
-    result: extractionResult,
-    selected: extractionSelected,
-    progress: extractionProgress,
-    error: extractionError,
-    editingIndex: extractionEditingIndex,
-    pickFromCamera,
-    pickFromGallery,
-    pickForManualCrop,
-    extractRectangles,
-    cancelSelect,
-    toggleSelected,
-    updateProblemText,
-    setEditingIndex,
-    getConfirmedItems,
-    closeResult,
-    cameraInputRef,
-    galleryInputRef,
-    onCameraChange,
-    onGalleryChange,
-  } = useImageExtraction({
-    subject: urlSubject,
-    maxItems: maxQueueSize,
-    scansRemaining: remainingScans,
-    onScanLimitReached: () =>
-      showUpgrade(
-        "image_scan",
-        `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`,
-      ),
-    onExtractComplete: fetchEntitlements,
-  });
-
-  // Sync URL subject → store on mount / subject change.
-  // data-subject is applied automatically by <SubjectTheme /> in (app)/layout.
   useEffect(() => {
-    setSubject(urlSubject);
+    setSubject(subject);
     setSectionId(sectionId);
+    document.documentElement.setAttribute("data-subject", subject);
     setProblemQueue([]);
+    // Refresh quota counts so remaining is accurate
     fetchEntitlements();
-  }, [urlSubject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
+    return () => { document.documentElement.removeAttribute("data-subject"); };
+  }, [subject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
 
-  const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
-  const isLoading = phase === "loading" || starting;
-  const extracting = extractionPhase === "extracting";
-  const scanLimitReached = !isPro && remainingScans <= 0;
+  const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
 
-  // Queue label adapts to mode + examType
-  const queueLabel = (() => {
-    const n = problemQueue.length;
-    if (mode === "mock_test") {
-      if (examType === "generate_similar") {
-        return `${n} example${n !== 1 ? "s" : ""} → ${n} generated question${n !== 1 ? "s" : ""}`;
-      }
-      return `${n} question${n !== 1 ? "s" : ""}`;
-    }
-    return `${n} ${n === 1 ? "problem" : "problems"} queued`;
-  })();
-
-  // Solve button label
-  const solveLabel = (() => {
-    const verb = mode === "mock_test" ? "Test" : "Learn";
-    if (totalProblems <= 1) return verb;
-    return `${verb} (${totalProblems})`;
-  })();
-
-  function onSubjectChange(next: Subject) {
-    if (next === urlSubject) return;
-    router.push(`/learn?subject=${next}${sectionId ? `&section=${sectionId}` : ""}`);
-  }
-
-  function handleAddFromTyping() {
-    const text = input.trim();
-    if (!text) {
-      setTyping(false);
-      return;
-    }
+  function handleAddProblem() {
+    const trimmed = input.trim();
+    if (!trimmed) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      const msg =
-        problemQueue.length > 0
-          ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today.`
-          : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
+      const msg = problemQueue.length > 0
+        ? `Your queue is full — you have ${remainingSessions} problem${remainingSessions !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
+        : `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`;
       showUpgrade("create_session", msg);
       return;
     }
-    addToQueue(text);
+    addToQueue(trimmed);
     setInput("");
-    setError(null);
-    setTyping(false);
   }
 
-  function handleConfirmExtraction() {
-    const remaining = maxQueueSize - problemQueue.length;
-    const items = getConfirmedItems(remaining);
-    items.forEach((it) => addToQueue(it.text, it.image));
-    closeResult();
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAddProblem();
+    }
   }
 
-  async function handleSolve() {
+  const [starting, setStarting] = useState(false);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+  const [quotaConfirm, setQuotaConfirm] = useState(false);
+  const [imagePhase, setImagePhase] = useState<"upload" | "select" | "extracting">("upload");
+  const isScanning = imagePhase === "select" || imagePhase === "extracting";
+
+  async function handleStart() {
     if (starting) return;
-    const queueTexts = problemQueue.map((p) => p.text);
-    const allProblems =
-      queueTexts.length > 0
-        ? [...queueTexts, ...(input.trim() ? [input.trim()] : [])]
-        : input.trim()
-          ? [input.trim()]
-          : [];
-    if (allProblems.length === 0) return;
-
-    setError(null);
-
+    if (problemQueue.length === 0 && !input.trim()) return;
     if (!isPro && remainingSessions <= 0) {
-      showUpgrade(
-        "create_session",
-        `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`,
-      );
+      showUpgrade("create_session", `You've used all ${FREE_DAILY_SESSION_LIMIT} problems for today. Upgrade to Pro for unlimited access.`);
       return;
     }
-    if (!isPro && allProblems.length > 1 && !quotaConfirm) {
+
+    const problemCount = problemQueue.length > 0 ? problemQueue.length : 1;
+    if (!isPro && problemCount > 1 && !quotaConfirm) {
       setQuotaConfirm(true);
       return;
     }
     setQuotaConfirm(false);
     setStarting(true);
+    setEditingQueueIndex(null);
+
+    const problems =
+      problemQueue.length > 0 ? problemQueue.map((p) => p.text) : [input.trim()];
+    const firstImage = problemQueue.length > 0 ? problemQueue[0].image : undefined;
 
     try {
-      if (mode === "mock_test") {
-        const generateCount = examType === "generate_similar" ? allProblems.length : 0;
-        const timeLimit = untimed ? null : timeLimitMinutes;
-        await startMockTest(
-          allProblems,
-          generateCount,
-          timeLimit,
-          urlSubject,
-          problemQueue,
-          multipleChoice,
-        );
-        // Store catches errors internally and sets phase="error" — don't
-        // navigate in that case, let the user see the inline error instead.
-        const mockPhase = useMockTestStore.getState().phase;
-        if (mockPhase === "error") {
-          setError(useMockTestStore.getState().error ?? "Mock test failed");
-          setStarting(false);
-          return;
-        }
-        setProblemQueue([]);
-        setInput("");
-        router.push(`/mock-test?subject=${urlSubject}`);
-      } else {
-        const firstImage = problemQueue[0]?.image;
-        if (allProblems.length === 1) {
-          await startSession(allProblems[0], firstImage);
+      if (mode === "learn") {
+        if (problems.length === 1) {
+          await startSession(problems[0], firstImage);
         } else {
-          await startLearnQueue(allProblems);
+          await startLearnQueue(problems);
         }
-        // Same defense: the learn store catches and sets phase="error"
-        // without throwing. Bail out before navigating if that happened.
-        const learnPhase = useSessionStore.getState().phase;
-        if (learnPhase === "error") {
-          setError(useSessionStore.getState().error ?? "Couldn't start session");
-          setStarting(false);
-          return;
-        }
-        router.push(`/learn/session?subject=${urlSubject}`);
+        router.push(`/learn/session?subject=${subject}`);
+      } else {
+        const generateCount = examType === "generate_similar" ? problems.length : 0;
+        const timeLimit = untimed ? null : timeLimitMinutes;
+        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, true);
+        router.push(`/mock-test?subject=${subject}`);
       }
     } catch (err) {
       if (err instanceof EntitlementError) {
         showUpgrade(err.entitlement, err.message);
-      } else {
-        setError((err as Error).message);
       }
       setStarting(false);
     }
   }
 
-  // ── Rectangle selection phase (manual crop fallback) ──
-  if (extractionPhase === "select" && extractionImage) {
-    return (
-      <RectangleSelector
-        imageBase64={extractionImage}
-        onConfirm={extractRectangles}
-        onCancel={cancelSelect}
-        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length, remainingScans)}
-      />
-    );
-  }
-
-  // Type card only needs queue room. Snap/Gallery also need a scan quota.
-  const typeCardDisabled = extracting || problemQueue.length >= maxQueueSize;
-  const imageCardsDisabled = typeCardDisabled || scanLimitReached;
-  const activeGradient = SUBJECT_CONFIG[urlSubject]?.gradient ?? "bg-gradient-primary";
+  const isLoading = phase === "loading";
+  const isLearn = mode === "learn";
+  const canStart = problemQueue.length > 0 || input.trim().length > 0;
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-2xl flex-col">
-      {/* Subject pills row */}
-      <SubjectPills active={subject} onChange={onSubjectChange} />
-
-      {/* Mode segmented control */}
-      <div className="flex gap-2 px-5 pb-3">
-        <ModePill
-          label="Learn"
-          icon={<BookIcon className="h-3.5 w-3.5" />}
-          active={mode === "learn"}
-          onClick={() => setMode("learn")}
-        />
-        <ModePill
-          label="Mock Test"
-          icon={<DocIcon className="h-3.5 w-3.5" />}
-          active={mode === "mock_test"}
-          onClick={() => setMode("mock_test")}
-        />
-      </div>
-
-      {/* Scroll region */}
-      <div className="flex-1 px-5 pb-4">
-        {/* Hero greeting */}
-        <motion.h1
-          key={mode}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="mb-5 text-[30px] font-extrabold leading-tight tracking-tight text-text-primary"
-        >
-          {mode === "mock_test" ? "What can I help you test?" : "What can I help you learn?"}
-        </motion.h1>
-
-        {/* Snap card (gradient) */}
-        <HeroCard
-          variant="gradient"
-          gradientClass={activeGradient}
-          disabled={imageCardsDisabled}
-          onClick={pickFromCamera}
-          icon={<CameraIcon className="h-8 w-8 text-white" />}
-          title="Snap a problem"
-          subtitle="Point your camera at any problem"
-          ariaLabel="Snap a photo of a problem"
-        />
-
-        {/* Gallery card (outlined) */}
-        <HeroCard
-          variant="outlined"
-          disabled={imageCardsDisabled}
-          onClick={pickFromGallery}
-          icon={<ImagesIcon className="h-8 w-8 text-primary" />}
-          title="Choose a photo"
-          subtitle="Pick a problem from your device"
-          ariaLabel="Choose a photo from your device"
-        />
-
-        {/* Manual-crop fallback link — lets power users draw rectangles
-         * directly without first trying auto-extract. */}
-        {!imageCardsDisabled && (
+    <div className="mx-auto max-w-3xl space-y-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <div className="mb-4 flex items-center justify-between">
           <button
-            type="button"
-            onClick={pickForManualCrop}
-            className="mb-3 block w-full text-center text-xs font-semibold text-text-muted underline-offset-2 hover:text-primary hover:underline"
-            aria-label="Upload an image and adjust the crop manually"
+            onClick={() => router.push("/home")}
+            className="flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
           >
-            Or upload and adjust crop manually
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Back
           </button>
-        )}
-
-        {/* Type card (outlined, collapses to inline input) */}
-        <div
-          className={cn(
-            "mb-3 flex min-h-[180px] flex-col items-center justify-center rounded-[--radius-lg] border-2 border-primary bg-surface px-5 py-8 shadow-sm transition-opacity",
-            typeCardDisabled && !typing && "opacity-50",
-          )}
-          onClick={() => {
-            if (typing) {
-              // Re-focus input if user clicks dead space inside the card.
-              inputRef.current?.focus();
-              return;
-            }
-            if (!typeCardDisabled) {
-              setTyping(true);
-              requestAnimationFrame(() => inputRef.current?.focus());
-            }
-          }}
-          role={typing ? undefined : "button"}
-          tabIndex={typing ? -1 : 0}
-          onKeyDown={(e) => {
-            if (!typing && (e.key === "Enter" || e.key === " ")) {
-              e.preventDefault();
-              setTyping(true);
-              requestAnimationFrame(() => inputRef.current?.focus());
-            }
-          }}
-          aria-label={typing ? undefined : "Type a problem"}
-        >
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary-bg">
-            <EditIcon className="h-8 w-8 text-primary" />
-          </div>
-          {typing ? (
-            <div className="flex w-full items-center gap-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  if (error) setError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddFromTyping();
-                  }
-                }}
-                onBlur={() => {
-                  if (!input.trim()) setTyping(false);
-                }}
-                placeholder="Type your problem here…"
-                className="flex-1 bg-transparent text-center text-base font-semibold text-primary placeholder:text-text-muted focus:outline-none"
-                aria-label="Problem text input"
-              />
-              {input.trim() ? (
-                <button
-                  type="button"
-                  onClick={handleAddFromTyping}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white transition-transform active:scale-95"
-                  aria-label="Add to queue"
-                >
-                  <CheckIcon className="h-5 w-5" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setTyping(false)}
-                  className="rounded-[--radius-pill] bg-border px-3 py-2 text-xs font-semibold text-text-secondary"
-                >
-                  Done
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <h3 className="mb-1 text-2xl font-bold text-primary">Type a problem</h3>
-              <p className="text-[13px] text-text-secondary">Tap to enter your problem here</p>
-            </>
+          {SUBJECT_CONFIG[subject] && (
+            <span className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+              SUBJECT_CONFIG[subject].bg,
+              SUBJECT_CONFIG[subject].color,
+            )}>
+              {SUBJECT_CONFIG[subject].icon} {SUBJECT_CONFIG[subject].name}
+            </span>
           )}
         </div>
+        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+          {isLearn ? "What do you need help with?" : "Build your exam"}
+        </h1>
+      </motion.div>
 
-        {/* Queue chips */}
-        {problemQueue.length > 0 && (
-          <div className="mb-3">
-            <p className="mb-2 text-[13px] font-semibold text-primary">{queueLabel}</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {problemQueue.map((item, i) => (
-                <div
-                  key={`${i}-${item.text}`}
-                  className="flex max-w-[220px] flex-shrink-0 items-center gap-2 rounded-[--radius-pill] bg-primary-bg px-3 py-2"
+      {/* Mode selector — pill toggle */}
+      <div className="relative flex rounded-full border border-border bg-surface p-1">
+        {/* Sliding background indicator */}
+        <motion.div
+          className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-primary"
+          initial={false}
+          animate={{ left: mode === "learn" ? "4px" : "calc(50% + 0px)" }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        />
+        {([
+          { id: "learn" as const, label: "Learn" },
+          { id: "mock-test" as const, label: "Mock Test" },
+        ]).map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setMode(m.id)}
+            className={cn(
+              "relative z-10 flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
+              mode === m.id ? "text-white" : "text-text-secondary hover:text-text-primary",
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Mock test config */}
+      <AnimatePresence initial={false}>
+      {!isLearn && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden"
+        >
+        <Card variant="flat">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Questions type — inline pill toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted">Questions:</span>
+              <div className="flex rounded-full border border-border bg-surface p-0.5">
+                {([
+                  { id: "use_as_exam" as const, label: "Use mine" },
+                  { id: "generate_similar" as const, label: "Generate similar" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setExamType(opt.id)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                      examType === opt.id
+                        ? "bg-primary text-white"
+                        : "text-text-secondary hover:text-text-primary",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time limit — inline toggle + stepper */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted">Time:</span>
+              <div className="flex items-center rounded-full border border-border bg-surface p-0.5">
+                <button
+                  onClick={() => setUntimed(true)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                    untimed ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
+                  )}
                 >
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-primary">
-                    <MathText text={item.text} />
+                  Untimed
+                </button>
+                <button
+                  onClick={() => setUntimed(false)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                    !untimed ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary",
+                  )}
+                >
+                  Timed
+                </button>
+              </div>
+              {!untimed && (
+                <div className="flex items-center rounded-full border border-border-light bg-surface">
+                  <button
+                    onClick={() => setTimeLimitMinutes(Math.max(1, timeLimitMinutes - 5))}
+                    disabled={timeLimitMinutes <= 1}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-primary disabled:opacity-30"
+                  >
+                    -
+                  </button>
+                  <span className="min-w-[40px] text-center text-xs font-semibold text-primary">
+                    {timeLimitMinutes}m
                   </span>
                   <button
-                    type="button"
-                    onClick={() => removeFromQueue(i)}
-                    aria-label={`Remove problem ${i + 1}`}
-                    // -m-1 p-1 expands the 16x16 icon hit area to ~24px
-                    // without changing visual layout
-                    className="-m-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full p-1 text-text-muted hover:text-text-secondary"
+                    onClick={() => setTimeLimitMinutes(Math.min(180, timeLimitMinutes + 5))}
+                    disabled={timeLimitMinutes >= 180}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-primary disabled:opacity-30"
                   >
-                    <XCircleIcon className="h-4 w-4" strokeWidth={2.5} />
+                    +
                   </button>
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        )}
 
-        {/* Mock Test config (only in mock mode) */}
-        {mode === "mock_test" && (
-          <div className="mt-4">
-            <MockTestConfig
-              examType={examType}
-              onExamTypeChange={setExamType}
-              untimed={untimed}
-              onUntimedChange={setUntimed}
-              timeLimitMinutes={timeLimitMinutes}
-              onTimeLimitChange={setTimeLimitMinutes}
-              multipleChoice={multipleChoice}
-              onMultipleChoiceChange={setMultipleChoice}
-            />
           </div>
-        )}
+        </Card>
+        </motion.div>
+      )}
+      </AnimatePresence>
 
-        {/* Extracting indicator */}
-        {extracting && (
-          <div className="mb-3 flex items-center gap-3 rounded-[--radius-lg] bg-surface p-4 shadow-sm">
-            <Spinner size="md" />
-            <p className="flex-1 text-sm text-text-secondary">
-              {extractionProgress.total > 1
-                ? `Reading ${Math.min(extractionProgress.done + 1, extractionProgress.total)} of ${extractionProgress.total}…`
-                : "Reading your problem…"}
-            </p>
-          </div>
-        )}
+      {/* Add problems — image upload + text input */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* Image upload */}
+        <Card variant="flat" className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Upload a photo
+          </p>
+          <ImageUpload
+            subject={subject}
+            onProblemsExtracted={(problems) => {
+              problems.forEach((p) => addToQueue(p.text, p.image));
+            }}
+            maxProblems={maxQueueSize}
+            currentQueueLength={problemQueue.length}
+            scansRemaining={remainingScans}
+            onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
+            onExtractComplete={fetchEntitlements}
+            onPhaseChange={setImagePhase}
+          />
+        </Card>
 
-        {/* Quota confirm inline */}
-        {quotaConfirm && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[--radius-lg] border-l-4 border-warning-dark bg-warning-bg p-3">
-            <AlertCircleIcon className="h-5 w-5 flex-shrink-0 text-warning-dark" />
-            <p className="flex-1 text-[13px] text-text-primary">
-              This will use {totalProblems} of your {remainingSessions} remaining problems today.
-            </p>
-            <button
-              type="button"
-              onClick={() => setQuotaConfirm(false)}
-              className="text-xs font-semibold text-text-secondary hover:text-text-primary"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-
-        {/* Inline error */}
-        {(error ?? extractionError) && (
-          <div className="mb-3 flex items-center gap-2 text-xs text-error">
-            <AlertCircleIcon className="h-4 w-4 flex-shrink-0" />
-            <span className="flex-1">{error ?? extractionError}</span>
-          </div>
-        )}
-
-        {/* Quota footer */}
-        {!isPro && remainingSessions < Infinity && (
-          <div className="mt-2 flex items-center gap-2">
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-border-light">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{
-                  width: `${Math.min(
-                    ((dailySessionsLimit - remainingSessions) / dailySessionsLimit) * 100,
-                    100,
-                  )}%`,
-                }}
-              />
-            </div>
-            <p className="text-xs text-text-muted">
-              {remainingSessions} of {dailySessionsLimit} left today
-            </p>
-          </div>
-        )}
+        {/* Text input */}
+        <Card variant="flat" className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Or type a problem
+          </p>
+          <Textarea
+            placeholder={isScanning ? "Finish scanning first..." : "Enter your problem here... (Shift+Enter for new line)"}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isScanning}
+            className="min-h-[80px]"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleAddProblem}
+            disabled={isScanning || !input.trim() || problemQueue.length >= maxQueueSize}
+            className="w-full"
+          >
+            Add to Queue
+          </Button>
+        </Card>
       </div>
 
-      {/* Sticky bottom action bar */}
-      <div className="sticky bottom-16 border-t border-border-light bg-background/95 px-5 py-3 backdrop-blur md:static md:bottom-0 md:border-0 md:bg-transparent md:px-0 md:py-4">
+      {/* Start button when queue is empty but input has text */}
+      {problemQueue.length === 0 && input.trim() && (
         <Button
           gradient
-          onClick={handleSolve}
-          loading={isLoading}
-          disabled={totalProblems === 0}
-          className="w-full"
-          aria-label={solveLabel}
+          onClick={handleStart}
+          loading={isLoading || starting}
+          className="w-full py-3 text-base"
         >
-          {solveLabel}
+          {isLearn ? "Start Learning" : "Start Exam"}
         </Button>
-      </div>
+      )}
 
-      {/* Hidden file inputs — camera uses `capture` so phones open the camera */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={onCameraChange}
-        className="hidden"
-      />
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        onChange={onGalleryChange}
-        className="hidden"
-      />
+      {/* Problem queue */}
+      {problemQueue.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-secondary">
+              Problem Queue
+            </h3>
+            <span className="text-xs font-medium text-text-muted">
+              {problemQueue.length}/10
+            </span>
+          </div>
+          {problemQueue.map((item, i) => {
+            const isEditing = editingQueueIndex === i;
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * i }}
+                className="group relative rounded-[--radius-lg] bg-surface-raised shadow-sm ring-1 ring-border-light/50 overflow-hidden"
+              >
+                <div className="flex items-start gap-3 p-4">
+                  <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white shadow-sm">
+                    {i + 1}
+                  </span>
+                  {isEditing ? (
+                    <div className="flex-1 min-w-0">
+                      <EditProblemTextarea
+                        value={item.text}
+                        onChange={(text) => updateInQueue(i, text)}
+                        onDone={() => setEditingQueueIndex(null)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium leading-relaxed text-text-primary">
+                        <MathText text={item.text} />
+                      </div>
+                      {item.image && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`data:image/jpeg;base64,${item.image}`}
+                          alt=""
+                          className="mt-2 h-20 rounded-[--radius-sm] border border-border-light object-contain"
+                        />
+                      )}
+                    </div>
+                  )}
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingQueueIndex(isEditing ? null : i)}
+                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-primary-bg hover:text-primary"
+                      aria-label={isEditing ? "Finish editing problem" : "Edit problem"}
+                    >
+                      {isEditing ? (
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Adjust the editing index when deleting shifts indices.
+                        // - Deleting the edited row: close the editor.
+                        // - Deleting a row BEFORE the edited row: shift index down by 1.
+                        // - Deleting a row AFTER the edited row: no change.
+                        if (editingQueueIndex !== null) {
+                          if (editingQueueIndex === i) {
+                            setEditingQueueIndex(null);
+                          } else if (editingQueueIndex > i) {
+                            setEditingQueueIndex(editingQueueIndex - 1);
+                          }
+                        }
+                        removeFromQueue(i);
+                      }}
+                      className="rounded-full p-1.5 text-text-muted transition-all hover:bg-error-light hover:text-error"
+                      aria-label="Remove problem"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
 
-      {/* Extraction results modal */}
-      <ExtractionResultModal
-        result={extractionResult}
-        selected={extractionSelected}
-        editingIndex={extractionEditingIndex}
-        onToggle={toggleSelected}
-        onUpdateText={updateProblemText}
-        onSetEditingIndex={setEditingIndex}
-        onConfirm={handleConfirmExtraction}
-        onClose={closeResult}
-      />
-
+          {/* Start button — full width */}
+          {quotaConfirm ? (
+            <div className="space-y-2 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg p-4">
+              <p className="text-sm font-semibold text-warning-dark">
+                This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
+              </p>
+              <div className="flex gap-2">
+                <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
+                  Continue
+                </Button>
+                <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              gradient
+              onClick={handleStart}
+              loading={isLoading || starting}
+              disabled={!canStart}
+              className="w-full py-3 text-base"
+            >
+              {isLearn
+                ? `Start Learning (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`
+                : `Start Exam (${problemQueue.length} problem${problemQueue.length !== 1 ? "s" : ""})`}
+            </Button>
+          )}
+          {!isPro && remainingSessions < Infinity && !quotaConfirm && (
+            <p className="text-center text-xs text-text-muted">
+              {remainingSessions} of {FREE_DAILY_SESSION_LIMIT} problems remaining today
+            </p>
+          )}
+        </div>
+      )}
       {UpgradeModal}
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// Subcomponents
-// ═══════════════════════════════════════════════════════════════════
-
-function ModePill({
-  label,
-  icon,
-  active,
-  onClick,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        // min-h-10 (40px) is close enough to 44px for small segmented pills
-        // because they're not the primary action — and matches mobile sizing
-        "inline-flex min-h-10 items-center gap-1.5 rounded-[--radius-pill] px-4 py-2 text-[13px] font-semibold transition-colors",
-        active
-          ? "border border-primary bg-primary-bg text-primary"
-          : "bg-input-bg text-text-muted hover:text-text-secondary",
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function HeroCard({
-  variant,
-  gradientClass,
-  disabled,
-  onClick,
-  icon,
-  title,
-  subtitle,
-  ariaLabel,
-}: {
-  variant: "gradient" | "outlined";
-  gradientClass?: string;
-  disabled?: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  ariaLabel: string;
-}) {
-  const gradient = variant === "gradient";
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={ariaLabel}
-      whileTap={{ scale: disabled ? 1 : 0.97 }}
-      className={cn(
-        "mb-3 flex min-h-[180px] w-full flex-col items-center justify-center rounded-[--radius-lg] px-5 py-8 text-center shadow-lg transition-opacity",
-        gradient ? gradientClass : "border-2 border-primary bg-surface shadow-sm",
-        disabled && "cursor-not-allowed opacity-50",
-      )}
-    >
-      <div
-        className={cn(
-          "mb-3 flex h-14 w-14 items-center justify-center rounded-full",
-          gradient ? "bg-white/20" : "bg-primary-bg",
-        )}
-      >
-        {icon}
-      </div>
-      <h3
-        className={cn(
-          "mb-1 text-2xl font-bold",
-          gradient ? "text-white" : "text-primary",
-        )}
-      >
-        {title}
-      </h3>
-      <p
-        className={cn(
-          "text-[13px]",
-          gradient ? "text-white/85" : "text-text-secondary",
-        )}
-      >
-        {subtitle}
-      </p>
-    </motion.button>
-  );
-}
-

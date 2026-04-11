@@ -13,4 +13,3 @@ export { ToastProvider, useToast } from "./toast";
 export { AnimatedCounter } from "./animated-counter";
 export { TypingIndicator } from "./typing-indicator";
 export { EmptyState } from "./empty-state";
-export { Spinner } from "./spinner";

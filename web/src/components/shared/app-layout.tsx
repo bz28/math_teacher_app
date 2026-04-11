@@ -10,10 +10,9 @@ import { LogoMark } from "@/components/shared/logo-mark";
 // ── Student nav items ──
 
 const studentNavItems = [
-  { label: "Solve", href: "/learn?subject=math", icon: SolveIcon, match: "/learn" },
-  { label: "History", href: "/history", icon: HistoryIcon, match: "/history" },
-  { label: "Library", href: "/library", icon: LibraryIcon, match: "/library" },
-  { label: "Account", href: "/account", icon: AccountIcon, match: "/account" },
+  { label: "Home", href: "/home", icon: HomeIcon },
+  { label: "History", href: "/history", icon: HistoryIcon },
+  { label: "Account", href: "/account", icon: AccountIcon },
 ];
 
 // ── Teacher nav items ──
@@ -64,7 +63,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
 
             <nav className="hidden items-center gap-1 md:flex">
               {studentNavItems.map((item) => {
-                const active = pathname.startsWith(item.match);
+                const active = pathname.startsWith(item.href);
                 return (
                   <Link
                     key={item.href}
@@ -107,7 +106,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-surface/95 backdrop-blur-md md:hidden">
         <div className="flex h-16 items-stretch">
           {studentNavItems.map((item) => {
-            const active = pathname.startsWith(item.match);
+            const active = pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -122,6 +121,16 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <Link
+            href="/learn"
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
+              pathname.startsWith("/learn") ? "text-primary" : "text-text-muted",
+            )}
+          >
+            <LearnIcon active={pathname.startsWith("/learn")} />
+            <span className="text-[10px] font-semibold">Learn</span>
+          </Link>
         </div>
       </nav>
     </div>
@@ -269,19 +278,11 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 
 // ── Icons ──
 
-function SolveIcon({ active }: { active: boolean }) {
+function HomeIcon({ active }: { active: boolean }) {
   return (
     <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  );
-}
-
-function LibraryIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
     </svg>
   );
 }
@@ -301,6 +302,15 @@ function AccountIcon({ active }: { active: boolean }) {
     <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
       <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function LearnIcon({ active }: { active: boolean }) {
+  return (
+    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
     </svg>
   );
 }

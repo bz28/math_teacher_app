@@ -7,7 +7,7 @@ import { session as sessionApi, type SessionHistoryItem } from "@/lib/api";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
-import { CameraIcon, CheckIcon } from "@/components/ui/icons";
+import { CheckIcon } from "@/components/ui/icons";
 import { formatRelativeDate, cn } from "@/lib/utils";
 
 export default function HistoryPage() {
@@ -138,7 +138,10 @@ export default function HistoryPage() {
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-medium text-text-primary">
                     {item.problem.includes("[") && (
-                      <CameraIcon className="mr-1 inline h-3.5 w-3.5 text-text-muted" />
+                      <svg className="mr-1 inline h-3.5 w-3.5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
                     )}
                     {item.problem}
                   </p>

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { work as workApi, type DiagnosisResult } from "@/lib/api";
-import { Card, Badge, Spinner } from "@/components/ui";
+import { Card, Badge } from "@/components/ui";
 import { statusToBadgeVariant } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +111,7 @@ export function WorkDiagnosis({
       >
         {submitting ? (
           <>
-            <Spinner size="sm" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             Analyzing your work...
           </>
         ) : (

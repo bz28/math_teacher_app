@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { auth, clearTokens, type InviteData } from "@/lib/api";
-import { Button, Spinner, useToast } from "@/components/ui";
+import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
 const GRADE_OPTIONS = [
@@ -105,7 +105,7 @@ function RegisterPageContent() {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <Spinner size="lg" className="mx-auto mb-4" />
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-sm text-text-secondary">Verifying your invite...</p>
         </div>
       </div>

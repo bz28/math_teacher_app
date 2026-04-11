@@ -9,13 +9,13 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
+import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
 import { cn } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
-import { LoadingHero } from "@/components/shared/loading-hero";
 
 export default function MockTestPage() {
   const router = useRouter();
@@ -93,10 +93,11 @@ export default function MockTestPage() {
   }, [phase, mockTest, setMockTestIndex, submitMockTest, subject]);
 
   if (phase === "loading" || !mockTest) {
-    // !mockTest → creating the test from Solve (setup phase).
-    // mockTest exists + loading → user hit Submit, we're grading.
-    const loadingMode = !mockTest ? "test" : "grading";
-    return <LoadingHero subject={subject} mode={loadingMode} />;
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <SkeletonStep />
+      </div>
+    );
   }
 
   if (phase === "error") {
@@ -135,31 +136,26 @@ export default function MockTestPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      {/* Header with timer — mobile parity: timer pill, error color when <5min */}
+      {/* Header with timer */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-text-primary">Mock Test</h1>
         <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-[--radius-lg] border bg-surface px-3 py-1.5 text-xs font-semibold",
-              timeLeft !== null && timeLeft < 5 * 60
-                ? "border-error text-error"
-                : "border-border text-text-secondary",
-            )}
-            aria-label={timeLeft !== null ? `Time remaining: ${formatTime(timeLeft)}` : "Untimed"}
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            {timeLeft !== null ? formatTime(timeLeft) : "Untimed"}
-          </div>
+          {timeLeft !== null && (
+            <span
+              className={cn(
+                "text-sm font-mono font-bold",
+                timeLeft <= 60 ? "text-error" : "text-text-secondary",
+              )}
+            >
+              {formatTime(timeLeft)}
+            </span>
+          )}
           <Button
             variant="danger"
             size="sm"
             onClick={() => submitMockTest(subject)}
           >
-            Submit
+            Submit Test
           </Button>
         </div>
       </div>
@@ -216,7 +212,7 @@ export default function MockTestPage() {
 
         {mockTest.multipleChoice ? (
           current.distractors && current.distractors.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {(() => {
                 // Shuffle choices deterministically per question index
                 const choices = [current.answer, ...current.distractors];
@@ -226,38 +222,20 @@ export default function MockTestPage() {
                   const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
                   return ha - hb;
                 });
-                return shuffled.map((choice, i) => {
-                  const selected = currentAnswer === choice;
-                  const letter = String.fromCharCode(65 + i);
-                  return (
-                    <button
-                      key={choice}
-                      type="button"
-                      onClick={() => saveMockTestAnswer(mockTest.currentIndex, choice)}
-                      className={cn(
-                        "flex items-center gap-3 rounded-[--radius-lg] border-[1.5px] px-4 py-4 text-left text-sm font-medium transition-colors",
-                        selected
-                          ? "border-primary bg-primary-bg text-primary"
-                          : "border-border bg-surface text-text-primary hover:border-primary/40",
-                      )}
-                      aria-pressed={selected}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold",
-                          selected
-                            ? "bg-primary text-white"
-                            : "bg-input-bg text-text-secondary",
-                        )}
-                      >
-                        {letter}
-                      </span>
-                      <span className="flex-1">
-                        <MathText text={choice} />
-                      </span>
-                    </button>
-                  );
-                });
+                return shuffled.map((choice) => (
+                  <button
+                    key={choice}
+                    onClick={() => saveMockTestAnswer(mockTest.currentIndex, choice)}
+                    className={cn(
+                      "rounded-[--radius-md] border px-4 py-3 text-left text-sm font-medium transition-colors",
+                      currentAnswer === choice
+                        ? "border-primary bg-primary-bg text-primary"
+                        : "border-border-light bg-surface text-text-primary hover:border-primary/30",
+                    )}
+                  >
+                    <MathText text={choice} />
+                  </button>
+                ));
               })()}
             </div>
           ) : (
