@@ -31,9 +31,45 @@ type Segment =
   | { type: "bold"; content: string }
   | { type: "diagram"; data: DiagramData };
 
+/**
+ * Restore LaTeX commands whose leading backslash was consumed by a JSON
+ * string-escape collision. Commands like \rightarrow, \times, \frac, \vec,
+ * \bullet arrive from the API with a literal control character in place
+ * of the backslash (\r → U+000D, \t → U+0009, \f → U+000C, \v → U+000B,
+ * \b → U+0008) because the server serialized them as raw Python string
+ * literals instead of double-escaping before JSON encoding.
+ *
+ * Any of these control characters followed immediately by one or more
+ * letters is almost certainly a broken LaTeX command — legitimate
+ * occurrences of these control characters in rendered math/educational
+ * text are essentially never followed by an alphabetic run. Using a
+ * permissive pattern correctly recovers commands not in any hand-picked
+ * list (\rho, \tan, \beta, \flat, …).
+ *
+ * This is a belt-and-braces fix. The real fix lives on the backend
+ * (use raw strings or explicit double-escape before json.dumps), but
+ * existing responses in the wild need to render correctly too.
+ */
+function restoreBrokenLatexCommands(input: string): string {
+  return (
+    input
+      // \r ate a backslash: \rightarrow, \right, \rho, \rangle, \rceil, \rfloor, \rvert, \rbrace, \rbrack, \rm, \rule, …
+      .replace(/\r([a-zA-Z]+)/g, "\\r$1")
+      // \t ate a backslash: \times, \theta, \text, \tau, \to, \top, \triangle, \tilde, \tan, \tanh, …
+      .replace(/\t([a-zA-Z]+)/g, "\\t$1")
+      // \f ate a backslash: \frac, \forall, \fbox, \flat, \frown, …
+      .replace(/\f([a-zA-Z]+)/g, "\\f$1")
+      // \v ate a backslash: \vec, \varepsilon, \varphi, \vartheta, \vdots, \vee, \vspace, \vert, \vphantom, …
+      .replace(/\v([a-zA-Z]+)/g, "\\v$1")
+      // \x08 (backspace) ate a backslash: \backslash, \beta, \because, \binom, \bigcap, \bullet, \bar, \bot, …
+      .replace(/\x08([a-zA-Z]+)/g, "\\b$1")
+  );
+}
+
 function parse(input: string): Segment[] {
   // Clean up before parsing
-  let text = input.replace(/<br\s*\/?>/gi, "\n");
+  let text = restoreBrokenLatexCommands(input);
+  text = text.replace(/<br\s*\/?>/gi, "\n");
   // Strip arrow characters that Claude sometimes inserts inside SVG
   text = text.replace(/→\s*/g, "").replace(/←\s*/g, "");
   const segments: Segment[] = [];
