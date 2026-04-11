@@ -93,21 +93,6 @@ const whyReasons = [
   "Catches the unit errors, sign errors, and vector-component mistakes that trip up every physics student at least once a week.",
 ];
 
-// Legacy props retained for schema generation
-const examples = [
-  { topic: "Mechanics", problem: "A 5 kg block slides down a 30° incline with friction μ = 0.2. Find the acceleration." },
-  { topic: "Energy", problem: "A roller coaster starts at 40m height. What is its speed at the bottom?" },
-  { topic: "Waves", problem: "A guitar string vibrates at 440 Hz with length 0.65m. Find the wave speed." },
-  { topic: "Electricity", problem: "Three resistors (2Ω, 4Ω, 6Ω) are in parallel. Find the total resistance." },
-];
-
-const features = [
-  { title: "Step-by-Step Solutions", description: "Every physics problem is broken into clear steps." },
-  { title: "Ask Questions at Any Step", description: "Ask your tutor why a concept applies." },
-  { title: "Unlimited Practice", description: "Fresh variations on any problem." },
-  { title: "Photo Scan Homework", description: "Snap a worksheet, Veradic extracts every problem." },
-];
-
 export default function PhysicsPage() {
   return (
     <SubjectPage
@@ -119,8 +104,6 @@ export default function PhysicsPage() {
       educationalProgramDescription="AI-powered physics tutoring for classrooms, covering kinematics, forces, energy, waves, electricity, magnetism, and modern physics with step-by-step guidance and teacher-controlled content."
       badgeColor="#0984E3"
       icon={physicsIcon}
-      examples={examples}
-      features={features}
       topics={topics}
       differentiators={differentiators}
       whyReasons={whyReasons}

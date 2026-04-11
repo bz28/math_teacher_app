@@ -9,19 +9,9 @@ import { CtaBand } from "./cta-band";
 import { FAQ as SharedFAQ } from "./faq";
 import { StepsAnimation, type StepsAnimationData } from "./steps-animation";
 
-interface ExampleProblem {
-  topic: string;
-  problem: string;
-}
-
-interface Feature {
+interface Differentiator {
   title: string;
   description: string;
-}
-
-interface SubjectFaq {
-  question: string;
-  answer: string;
 }
 
 interface SubjectPageProps {
@@ -32,21 +22,15 @@ interface SubjectPageProps {
   description: string;
   detailedDescription?: string;
   educationalProgramDescription: string;
-  /** Unused with new design but kept for backward compat */
-  gradient?: string;
-  /** Hex used for inline subject pills — defaults to var(--color-primary) */
+  /** Hex used for inline subject pills */
   badgeColor: string;
   icon: React.ReactNode;
-  examples: ExampleProblem[];
-  features: Feature[];
   /** Topics grid — what we cover for this subject */
   topics: string[];
-  /** Subject-specific differentiators (distinct from generic examples/features) */
-  differentiators: Feature[];
+  /** Subject-specific differentiators */
+  differentiators: Differentiator[];
   /** 3 short reasons a teacher of this subject would want Veradic */
   whyReasons: string[];
-  /** Subject-specific FAQ questions */
-  subjectFaqs?: SubjectFaq[];
   /** Animated demo walkthrough — same component as the homepage hero */
   demoData?: StepsAnimationData;
 }

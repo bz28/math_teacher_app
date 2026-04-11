@@ -95,21 +95,6 @@ const whyReasons = [
   "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
 ];
 
-// Legacy props retained for schema generation
-const examples = [
-  { topic: "Balancing Equations", problem: "Balance: Fe₂O₃ + CO → Fe + CO₂" },
-  { topic: "Stoichiometry", problem: "How many grams of CO₂ are produced from burning 10g of CH₄?" },
-  { topic: "Acids & Bases", problem: "Find the pH of a 0.05 M HCl solution" },
-  { topic: "Organic Chemistry", problem: "Draw the product of an SN2 reaction between CH₃Br and NaOH" },
-];
-
-const features = [
-  { title: "Step-by-Step Solutions", description: "Every chemistry problem broken into clear steps." },
-  { title: "Ask Questions at Any Step", description: "Ask your tutor why a concept applies." },
-  { title: "Unlimited Practice", description: "Fresh variations on any reaction or problem." },
-  { title: "Photo Scan Homework", description: "Snap a worksheet, Veradic extracts every problem." },
-];
-
 export default function ChemistryPage() {
   return (
     <SubjectPage
@@ -121,8 +106,6 @@ export default function ChemistryPage() {
       educationalProgramDescription="AI-powered chemistry tutoring for classrooms, covering atoms, bonding, stoichiometry, thermochemistry, equilibrium, acids and bases, electrochemistry, kinetics, and organic chemistry with step-by-step guidance and teacher-controlled content."
       badgeColor="#00B894"
       icon={chemIcon}
-      examples={examples}
-      features={features}
       topics={topics}
       differentiators={differentiators}
       whyReasons={whyReasons}

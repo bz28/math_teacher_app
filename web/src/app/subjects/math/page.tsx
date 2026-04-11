@@ -90,21 +90,6 @@ const whyReasons = [
   "Catches the common mistakes you see every week (sign errors, missed steps, distribution errors) and walks students past them.",
 ];
 
-// Kept for backward compat with existing SEO schema generation
-const examples = [
-  { topic: "Algebra", problem: "Solve for x: 3x² + 7x - 20 = 0" },
-  { topic: "Calculus", problem: "Find the derivative of f(x) = x³ ln(x)" },
-  { topic: "Word Problems", problem: "A train leaves at 60 mph, another at 80 mph. When do they meet?" },
-  { topic: "Geometry", problem: "Find the area of a triangle with vertices at (1,2), (4,6), and (7,1)" },
-];
-
-const features = [
-  { title: "Step-by-Step Solutions", description: "Every math problem is decomposed into clear, logical steps." },
-  { title: "Ask Questions at Any Step", description: "Students can ask why, and get an explanation tailored to their level." },
-  { title: "Unlimited Practice", description: "Fresh variations on any problem so students build real fluency." },
-  { title: "Photo Scan Homework", description: "Snap a worksheet, Veradic extracts every problem and walks through each one." },
-];
-
 export default function MathPage() {
   return (
     <SubjectPage
@@ -116,8 +101,6 @@ export default function MathPage() {
       educationalProgramDescription="AI-powered math tutoring for classrooms, covering pre-algebra, algebra, geometry, trigonometry, pre-calculus, AP Calculus, and statistics with step-by-step guidance and teacher-controlled content."
       badgeColor="#6C5CE7"
       icon={mathIcon}
-      examples={examples}
-      features={features}
       topics={topics}
       differentiators={differentiators}
       whyReasons={whyReasons}

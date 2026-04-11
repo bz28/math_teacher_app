@@ -9,8 +9,6 @@ type SectionProps = {
   containerClassName?: string;
   id?: string;
   as?: "section" | "div" | "article";
-  /** Use full-bleed background but still constrain inner content. */
-  fullBleed?: boolean;
 };
 
 /**
