@@ -22,7 +22,7 @@ export function HomeTeachers() {
             Reclaim your evenings.
           </h2>
           <p className="mt-6 text-xl leading-relaxed text-[color:var(--color-text-secondary)] md:text-[1.375rem]">
-            You became a teacher to teach — not to photocopy worksheets at
+            You became a teacher to teach, not to photocopy worksheets at
             9pm or grade the same multiple-choice quiz 140 times. Veradic
             takes the repetitive work off your plate so you can focus on the
             parts of your job only a human can do.
@@ -32,7 +32,7 @@ export function HomeTeachers() {
               "Upload your unit materials. Veradic builds a question bank from what you already teach.",
               "Approve the questions you like. Ignore the ones you don't. You're always in control.",
               "Assign homework in one click. Every student gets a patient tutor, at their own pace.",
-              "See exactly who struggled — and on what — before class Monday morning.",
+              "See exactly who struggled (and on what) before class Monday morning.",
             ].map((line) => (
               <li key={line} className="flex items-start gap-3">
                 <svg

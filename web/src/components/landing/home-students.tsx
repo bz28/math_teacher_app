@@ -10,12 +10,12 @@ export function HomeStudents() {
         <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           Stuck on homework?
           <br />
-          Veradic walks you through it — not past it.
+          Veradic walks you through it, not past it.
         </h2>
         <p className="mt-6 text-xl font-medium leading-snug text-[color:var(--color-text-secondary)] md:text-2xl">
           Snap a picture of any problem. Veradic breaks it into steps and
           asks you the right questions until you figure it out yourself. You
-          get to the answer — and you actually know how you got there.
+          get to the answer, and you actually know how you got there.
         </p>
         <Link
           href="/students"

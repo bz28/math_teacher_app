@@ -3,9 +3,9 @@ import { SubjectPage } from "@/components/landing/subject-page";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "AI Chemistry Tutor for Schools — Stoichiometry to Organic | Veradic AI",
+  title: "AI Chemistry Tutor for Schools: Stoichiometry to Organic | Veradic AI",
   description:
-    "Veradic is the AI chemistry tutor built for classrooms. Guides students through stoichiometry, bonding, equilibrium, thermodynamics, and organic step by step — without ever giving the answer away.",
+    "Veradic is the AI chemistry tutor built for classrooms. Guides students through stoichiometry, bonding, equilibrium, thermodynamics, and organic step by step, without ever giving the answer away.",
   keywords: [
     "ai chemistry tutor for schools",
     "ai chemistry tutor",
@@ -23,13 +23,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Chemistry Tutor for Schools | Veradic AI",
     description:
-      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step — without ever giving the answer away.",
+      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step, without ever giving the answer away.",
     url: `${SITE_URL}/subjects/chemistry`,
   },
   twitter: {
     title: "AI Chemistry Tutor for Schools | Veradic AI",
     description:
-      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step — without ever giving the answer away.",
+      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step, without ever giving the answer away.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/chemistry`,
@@ -74,12 +74,12 @@ const differentiators = [
   {
     title: "Molecules rendered, not described",
     description:
-      "Veradic renders real molecular structures from SMILES notation — students see the actual bonds, not just a string of letters.",
+      "Veradic renders real molecular structures from SMILES notation. Students see the actual bonds, not just a string of letters.",
   },
   {
     title: "Stoichiometry that teaches the why",
     description:
-      "Mole ratios, limiting reagents, percent yield — every step is explained in the context of the reaction, not as memorized formulas.",
+      "Mole ratios, limiting reagents, percent yield: every step is explained in the context of the reaction, not as memorized formulas.",
   },
   {
     title: "Balances equations with the student",
@@ -89,8 +89,8 @@ const differentiators = [
 ];
 
 const whyReasons = [
-  "Covers the full chemistry curriculum from intro chem through AP Chemistry and organic — one tool for every section in your course.",
-  "Handles the unit gymnastics chemistry demands — grams to moles to molecules — without students giving up halfway through.",
+  "Covers the full chemistry curriculum from intro chem through AP Chemistry and organic. One tool for every section in your course.",
+  "Handles the unit gymnastics chemistry demands (grams to moles to molecules) without students giving up halfway through.",
   "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
 ];
 
@@ -116,7 +116,7 @@ const demo = {
     },
     {
       label: "Sanity check",
-      body: "Does your answer make sense? You started with 16 g of carbon-containing fuel — the carbon can't disappear, so the answer should reflect where it went.",
+      body: "Does your answer make sense? You started with 16 g of carbon-containing fuel. The carbon can't disappear, so the answer should reflect where it went.",
     },
   ],
 };
@@ -142,8 +142,8 @@ export default function ChemistryPage() {
       name="Chemistry"
       slug="chemistry"
       tagline="AI chemistry tutoring, built for classrooms."
-      description="From balancing equations through organic synthesis, Veradic walks every student through the chemistry — so they get the answer, and they actually understand the reaction behind it."
-      detailedDescription="Whether your students are just learning the periodic table or prepping for AP Chemistry, Veradic meets them where they are and guides them forward through stoichiometry, bonding, equilibrium, and beyond — one step at a time."
+      description="From balancing equations through organic synthesis, Veradic walks every student through the chemistry, so they get the answer, and they actually understand the reaction behind it."
+      detailedDescription="Whether your students are just learning the periodic table or prepping for AP Chemistry, Veradic meets them where they are and guides them forward through stoichiometry, bonding, equilibrium, and beyond, one step at a time."
       educationalProgramDescription="AI-powered chemistry tutoring for classrooms, covering atoms, bonding, stoichiometry, thermochemistry, equilibrium, acids and bases, electrochemistry, kinetics, and organic chemistry with step-by-step guidance and teacher-controlled content."
       badgeColor="#00B894"
       icon={chemIcon}

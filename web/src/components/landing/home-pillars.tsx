@@ -11,7 +11,7 @@ type Pillar = {
 const pillars: Pillar[] = [
   {
     title: "Teaches, doesn't tell.",
-    body: "Students don't get a dropped answer. They get guided questions, hints, and step-by-step reasoning that take them to the right answer on their own — so the thinking sticks.",
+    body: "Students don't get a dropped answer. They get guided questions, hints, and step-by-step reasoning that take them to the right answer on their own, so the thinking sticks.",
     visual: "Step decomposition screenshot with a chat bubble on one of the steps",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -27,7 +27,7 @@ const pillars: Pillar[] = [
   },
   {
     title: "Catches work that isn't theirs.",
-    body: "Our integrity checker asks students follow-up questions about their own submissions. If they didn't actually do the work, we can tell — and so can you.",
+    body: "Our integrity checker asks students follow-up questions about their own submissions. If they didn't actually do the work, we can tell. And so can you.",
     visual: "Integrity flag UI with follow-up questions",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

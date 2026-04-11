@@ -19,7 +19,7 @@ export function HomeProblem() {
         <div className="space-y-6 text-xl leading-relaxed text-[color:var(--color-text-secondary)] md:text-[1.375rem]">
           <p>
             Every student with a phone has a homework-solving AI in their
-            pocket. Most of them will take the fastest path through it — and
+            pocket. Most of them will take the fastest path through it, and
             that path doesn&rsquo;t end with learning anything.
           </p>
           <p>

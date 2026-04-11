@@ -33,8 +33,8 @@ export function Hero() {
           </h1>
 
           <p className="mt-7 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-            Veradic walks every student through the thinking — question by
-            question, step by step — until they get there themselves. Built for
+            Veradic walks every student through the thinking, question by
+            question, step by step, until they get there themselves. Built for
             schools, loved by teachers.
           </p>
 

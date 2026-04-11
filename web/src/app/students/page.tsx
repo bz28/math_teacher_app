@@ -10,7 +10,7 @@ import { SITE_URL } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "Homework Help That Guides You, Not Gives Answers | Veradic AI",
   description:
-    "Stuck on homework? Veradic walks you through every math, physics, and chemistry problem step by step. You reach the answer — and actually understand how you got there.",
+    "Stuck on homework? Veradic walks you through every math, physics, and chemistry problem step by step. You reach the answer, and actually understand how you got there.",
   keywords: [
     "homework help",
     "math homework app",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     "veradic student",
   ],
   openGraph: {
-    title: "Veradic for Students — Homework Help That Actually Helps",
+    title: "Veradic for Students: Homework Help That Actually Helps",
     description:
       "Snap a problem. Get guided steps. Practice until you get it. The AI tutor that teaches, instead of telling.",
     url: `${SITE_URL}/students`,
@@ -44,7 +44,7 @@ const features = [
   },
   {
     title: "Get guided steps",
-    body: "Veradic breaks it down into steps and asks you the right questions. No dropped answers. You get there yourself — faster than you would have alone.",
+    body: "Veradic breaks it down into steps and asks you the right questions. No dropped answers. You get there yourself, faster than you would have alone.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4" />
@@ -55,7 +55,7 @@ const features = [
   },
   {
     title: "Practice until you get it",
-    body: "Finished a problem? Veradic makes five more just like it with different numbers so the concept actually sticks. Not one-and-done — real mastery.",
+    body: "Finished a problem? Veradic makes five more just like it with different numbers so the concept actually sticks. Not one-and-done. Real mastery.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="23 4 23 10 17 10" />
@@ -68,11 +68,11 @@ const features = [
 const faqs = [
   {
     q: "Will Veradic just give me the answer?",
-    a: "No. That's the whole point. Veradic will guide you through the thinking — but you'll be the one who gets to the answer. You'll learn way more this way, and you won't get caught in class not knowing how you got it.",
+    a: "No. That's the whole point. Veradic will guide you through the thinking, but you'll be the one who gets to the answer. You'll learn way more this way, and you won't get caught in class not knowing how you got it.",
   },
   {
     q: "Is it expensive?",
-    a: "There's a free tier you can try without paying. If you like it, individual plans are cheap — way less than a real tutor.",
+    a: "There's a free tier you can try without paying. If you like it, individual plans are cheap, way less than a real tutor.",
   },
   {
     q: "Does it work for my subject?",
@@ -84,7 +84,7 @@ const faqs = [
   },
   {
     q: "Is my teacher already using Veradic?",
-    a: "Some are. If your school uses Veradic, your teacher will share a join code with you — use it on the sign-in page to connect your account to the class.",
+    a: "Some are. If your school uses Veradic, your teacher will share a join code with you. Use it on the sign-in page to connect your account to the class.",
   },
 ];
 
@@ -109,7 +109,7 @@ export default function StudentsPage() {
               </span>
             </h1>
             <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-              Snap a problem. Veradic walks you through it — not past it. You
+              Snap a problem. Veradic walks you through it, not past it. You
               reach the answer, and for once you actually know how you got
               there.
             </p>

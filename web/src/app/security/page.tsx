@@ -29,7 +29,7 @@ const pillars = [
   },
   {
     title: "No training on student work",
-    body: "Your students' submissions, chats, and sessions are never used to train AI models — ours or anyone else's.",
+    body: "Your students' submissions, chats, and sessions are never used to train AI models: ours or anyone else's.",
   },
   {
     title: "Academic integrity by design",
@@ -66,7 +66,7 @@ export default function SecurityPage() {
             <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
               Veradic was built from the beginning to live in classrooms.
               That&rsquo;s a different bar than a consumer chatbot has to
-              clear — and we hold ourselves to it.
+              clear, and we hold ourselves to it.
             </p>
             <p className="mt-4 text-sm text-[color:var(--color-text-muted)]">
               Questions?{" "}
@@ -176,7 +176,7 @@ export default function SecurityPage() {
                   <p>
                     When a student submits homework, Veradic asks them
                     follow-up questions about the specific steps in their own
-                    submission — questions that are easy to answer if they
+                    submission: questions that are easy to answer if they
                     did the work, and hard to answer if they didn&rsquo;t.
                   </p>
                   <p>
@@ -201,7 +201,7 @@ export default function SecurityPage() {
                   </p>
                   <p>
                     In school mode, students cannot upload arbitrary photos
-                    or chat freely with the AI — they can only work on
+                    or chat freely with the AI. They can only work on
                     problems from their teacher&rsquo;s approved bank. This
                     closes the common jailbreak vectors you see with open
                     chatbots.
@@ -220,8 +220,8 @@ export default function SecurityPage() {
                         {s.name}
                       </strong>
                       <span className="text-[color:var(--color-text-secondary)]">
-                        {" "}
-                        — {s.purpose}
+                        {": "}
+                        {s.purpose}
                       </span>
                     </li>
                   ))}
@@ -264,7 +264,7 @@ export default function SecurityPage() {
         <CtaBand
           eyebrow="Still have questions?"
           headline="We'll talk to your legal team."
-          subhead="Data-processing agreements, subprocessor questionnaires, security reviews — we've answered them all before."
+          subhead="Data-processing agreements, subprocessor questionnaires, security reviews. We've answered them all before."
           primaryLabel="Email security"
           primaryHref="mailto:security@veradicai.com"
           secondaryLabel="Book a demo"

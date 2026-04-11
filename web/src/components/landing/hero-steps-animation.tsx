@@ -14,7 +14,7 @@ const PROBLEM_WORDS = "Solve for x.";
 const steps: Step[] = [
   {
     label: "Start with what you know",
-    hint: "You have an equation with one variable. What's the goal — get x by itself on one side.",
+    hint: "You have an equation with one variable. What's the goal? Get x by itself on one side.",
   },
   {
     label: "Subtract 5 from both sides",

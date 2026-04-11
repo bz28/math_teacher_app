@@ -11,7 +11,7 @@ export function HomeDemo() {
         </h2>
         <p className="mt-6 text-xl font-medium leading-snug text-[color:var(--color-invert-text-muted)] md:text-2xl">
           No glossy demo video. This is Veradic working through an actual
-          problem the same way it works with your students — one guided step
+          problem the same way it works with your students, one guided step
           at a time.
         </p>
       </div>

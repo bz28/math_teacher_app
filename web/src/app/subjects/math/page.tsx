@@ -3,9 +3,9 @@ import { SubjectPage } from "@/components/landing/subject-page";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "AI Math Tutor for Schools — Algebra to Calculus | Veradic AI",
+  title: "AI Math Tutor for Schools: Algebra to Calculus | Veradic AI",
   description:
-    "Veradic is the AI math tutor built for classrooms. Guides students through algebra, geometry, calculus, and word problems step by step — without ever giving the answer away.",
+    "Veradic is the AI math tutor built for classrooms. Guides students through algebra, geometry, calculus, and word problems step by step, without ever giving the answer away.",
   keywords: [
     "ai math tutor for schools",
     "ai math tutor",
@@ -22,13 +22,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Math Tutor for Schools | Veradic AI",
     description:
-      "Guides students through algebra, geometry, calculus, and word problems step by step — without ever giving the answer away.",
+      "Guides students through algebra, geometry, calculus, and word problems step by step, without ever giving the answer away.",
     url: `${SITE_URL}/subjects/math`,
   },
   twitter: {
     title: "AI Math Tutor for Schools | Veradic AI",
     description:
-      "Guides students through algebra, geometry, calculus, and word problems step by step — without ever giving the answer away.",
+      "Guides students through algebra, geometry, calculus, and word problems step by step, without ever giving the answer away.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/math`,
@@ -74,7 +74,7 @@ const differentiators = [
   {
     title: "Word problems the right way",
     description:
-      "Veradic doesn't just solve word problems — it teaches students how to translate English into math, which is the part they actually struggle with.",
+      "Veradic doesn't just solve word problems. It teaches students how to translate English into math, which is the part they actually struggle with.",
   },
   {
     title: "Proofs, step by step",
@@ -84,7 +84,7 @@ const differentiators = [
 ];
 
 const whyReasons = [
-  "Covers the full math curriculum from middle school through AP Calculus BC — one tool, every class you teach.",
+  "Covers the full math curriculum from middle school through AP Calculus BC. One tool, every class you teach.",
   "Shows work the way you show work: factor, simplify, solve, verify. Not a black box that spits out a final number.",
   "Catches the common mistakes you see every week (sign errors, missed steps, distribution errors) and walks students past them.",
 ];
@@ -120,13 +120,13 @@ const demo = {
 const examples = [
   { topic: "Algebra", problem: "Solve for x: 3x² + 7x - 20 = 0" },
   { topic: "Calculus", problem: "Find the derivative of f(x) = x³ ln(x)" },
-  { topic: "Word Problems", problem: "A train leaves at 60 mph, another at 80 mph — when do they meet?" },
+  { topic: "Word Problems", problem: "A train leaves at 60 mph, another at 80 mph. When do they meet?" },
   { topic: "Geometry", problem: "Find the area of a triangle with vertices at (1,2), (4,6), and (7,1)" },
 ];
 
 const features = [
   { title: "Step-by-Step Solutions", description: "Every math problem is decomposed into clear, logical steps." },
-  { title: "Ask Questions at Any Step", description: "Students can ask why — and get an explanation tailored to their level." },
+  { title: "Ask Questions at Any Step", description: "Students can ask why, and get an explanation tailored to their level." },
   { title: "Unlimited Practice", description: "Fresh variations on any problem so students build real fluency." },
   { title: "Photo Scan Homework", description: "Snap a worksheet, Veradic extracts every problem and walks through each one." },
 ];
@@ -137,8 +137,8 @@ export default function MathPage() {
       name="Math"
       slug="math"
       tagline="AI math tutoring, built for classrooms."
-      description="From pre-algebra through AP Calculus BC, Veradic walks every student through the thinking — so they get the answer, and they actually understand how they got there."
-      detailedDescription="Whether your students are struggling with quadratic equations, fighting their way through calculus, or trying to write their first geometry proof, Veradic meets them where they are and guides them forward — one step at a time."
+      description="From pre-algebra through AP Calculus BC, Veradic walks every student through the thinking, so they get the answer, and they actually understand how they got there."
+      detailedDescription="Whether your students are struggling with quadratic equations, fighting their way through calculus, or trying to write their first geometry proof, Veradic meets them where they are and guides them forward, one step at a time."
       educationalProgramDescription="AI-powered math tutoring for classrooms, covering pre-algebra, algebra, geometry, trigonometry, pre-calculus, AP Calculus, and statistics with step-by-step guidance and teacher-controlled content."
       badgeColor="#6C5CE7"
       icon={mathIcon}

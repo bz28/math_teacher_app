@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { SITE_URL } from "@/lib/seo";
 
 export const alt =
-  "Veradic AI for Teachers — A personal AI tutor for every student in your classroom.";
+  "Veradic AI for Teachers: a personal AI tutor for every student in your classroom.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -129,7 +129,7 @@ export default function TeachersOpenGraphImage() {
               maxWidth: 750,
             }}
           >
-            {"A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most."}
+            {"A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights, so you can spend your time where it matters most."}
           </div>
         </div>
 

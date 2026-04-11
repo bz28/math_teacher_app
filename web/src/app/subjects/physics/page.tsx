@@ -3,9 +3,9 @@ import { SubjectPage } from "@/components/landing/subject-page";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "AI Physics Tutor for Schools — Mechanics to Modern Physics | Veradic AI",
+  title: "AI Physics Tutor for Schools: Mechanics to Modern Physics | Veradic AI",
   description:
-    "Veradic is the AI physics tutor built for classrooms. Guides students through kinematics, forces, energy, electricity, and waves step by step — without ever giving the answer away.",
+    "Veradic is the AI physics tutor built for classrooms. Guides students through kinematics, forces, energy, electricity, and waves step by step, without ever giving the answer away.",
   keywords: [
     "ai physics tutor for schools",
     "ai physics tutor",
@@ -22,13 +22,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Physics Tutor for Schools | Veradic AI",
     description:
-      "Guides students through kinematics, forces, energy, electricity, and waves step by step — without ever giving the answer away.",
+      "Guides students through kinematics, forces, energy, electricity, and waves step by step, without ever giving the answer away.",
     url: `${SITE_URL}/subjects/physics`,
   },
   twitter: {
     title: "AI Physics Tutor for Schools | Veradic AI",
     description:
-      "Guides students through kinematics, forces, energy, electricity, and waves step by step — without ever giving the answer away.",
+      "Guides students through kinematics, forces, energy, electricity, and waves step by step, without ever giving the answer away.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/physics`,
@@ -72,7 +72,7 @@ const differentiators = [
   {
     title: "Units that never drift",
     description:
-      "Veradic tracks units through every step — meters, seconds, newtons, joules — and catches mismatches before they become wrong answers.",
+      "Veradic tracks units through every step (meters, seconds, newtons, joules) and catches mismatches before they become wrong answers.",
   },
   {
     title: "Multi-step problems, actually broken down",
@@ -87,8 +87,8 @@ const differentiators = [
 ];
 
 const whyReasons = [
-  "Covers the full physics curriculum from conceptual physics through AP Physics C — mechanics, electricity, magnetism, and modern physics.",
-  "Walks students through free-body diagrams, unit conversions, and energy conservation — the moves that matter, not just the final numbers.",
+  "Covers the full physics curriculum from conceptual physics through AP Physics C: mechanics, electricity, magnetism, and modern physics.",
+  "Walks students through free-body diagrams, unit conversions, and energy conservation: the moves that matter, not just the final numbers.",
   "Catches the unit errors, sign errors, and vector-component mistakes that trip up every physics student at least once a week.",
 ];
 
@@ -110,7 +110,7 @@ const demo = {
     },
     {
       label: "Solve for v",
-      body: "The mass cancels out — that's your first clue the problem is independent of m. Isolate v and then plug in g and your height.",
+      body: "The mass cancels out. That's your first clue the problem is independent of m. Isolate v and then plug in g and your height.",
     },
     {
       label: "Check the units",
@@ -140,8 +140,8 @@ export default function PhysicsPage() {
       name="Physics"
       slug="physics"
       tagline="AI physics tutoring, built for classrooms."
-      description="From kinematics through modern physics, Veradic walks every student through the reasoning — so they get the answer, and they actually understand the physics behind it."
-      detailedDescription="Whether your students are drawing their first free-body diagram, working through projectile motion, or prepping for the AP Physics exam, Veradic meets them where they are and guides them forward — one step at a time."
+      description="From kinematics through modern physics, Veradic walks every student through the reasoning, so they get the answer, and they actually understand the physics behind it."
+      detailedDescription="Whether your students are drawing their first free-body diagram, working through projectile motion, or prepping for the AP Physics exam, Veradic meets them where they are and guides them forward, one step at a time."
       educationalProgramDescription="AI-powered physics tutoring for classrooms, covering kinematics, forces, energy, waves, electricity, magnetism, and modern physics with step-by-step guidance and teacher-controlled content."
       badgeColor="#0984E3"
       icon={physicsIcon}

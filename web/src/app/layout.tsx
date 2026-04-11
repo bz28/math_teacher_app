@@ -16,11 +16,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Veradic AI — AI Tutor for Schools, Teachers, and Students",
+    default: "Veradic AI: AI Tutor for Schools, Teachers, and Students",
     template: "%s | Veradic AI",
   },
   description:
-    "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step — without ever giving the answer away. Teacher-controlled content, integrity checks, and safe classroom deployment.",
+    "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step, without ever giving the answer away. Teacher-controlled content, integrity checks, and safe classroom deployment.",
   metadataBase: new URL("https://veradicai.com"),
   keywords: [
     "ai tutor for schools",
@@ -43,9 +43,9 @@ export const metadata: Metadata = {
   applicationName: "Veradic AI",
   category: "Education",
   openGraph: {
-    title: "Veradic AI — The AI tutor that teaches, instead of telling",
+    title: "Veradic AI: The AI tutor that teaches, instead of telling",
     description:
-      "Built for schools. Guides students through math, physics, and chemistry step by step — without ever giving the answer away.",
+      "Built for schools. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
     url: "https://veradicai.com",
     siteName: "Veradic AI",
     locale: "en_US",
@@ -53,9 +53,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Veradic AI — The AI tutor that teaches, instead of telling",
+    title: "Veradic AI: The AI tutor that teaches, instead of telling",
     description:
-      "Built for schools. Guides students through math, physics, and chemistry step by step — without ever giving the answer away.",
+      "Built for schools. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
     creator: "@veradicai",
     site: "@veradicai",
   },
@@ -95,7 +95,7 @@ export default function RootLayout({
               operatingSystem: "Web, iOS, Android",
               url: "https://veradicai.com",
               description:
-                "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step — without ever giving the answer away.",
+                "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
               audience: {
                 "@type": "EducationalAudience",
                 educationalRole: ["teacher", "student", "school administrator"],

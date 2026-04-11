@@ -11,7 +11,7 @@ import { contact } from "@/lib/api";
 
 const PAIN_POINTS = [
   "Wishing you could give every student 1-on-1 time, but there's only one of you",
-  "Wondering if your class actually got last week's lesson — or just nodded along",
+  "Wondering if your class actually got last week's lesson, or just nodded along",
   "Spending Sunday nights building problem sets instead of recharging",
   "Staring at a pile of papers that won't grade themselves",
 ];
@@ -24,7 +24,7 @@ const FEATURES = [
   },
   {
     icon: InsightIcon,
-    title: "See who's struggling — and on what",
+    title: "See who's struggling, and on what",
     description: "Student sessions are tracked to your class. You'll know exactly where to focus your time when you walk in Monday morning.",
   },
   {
@@ -273,7 +273,7 @@ export default function TeachersPage() {
                     <h3 className="text-sm font-bold uppercase tracking-widest text-[color:var(--color-text-muted)]">Then we get you set up</h3>
                     <div className="mt-5 space-y-5">
                       <StepItem num="3" title="We create your school" desc="We handle the account setup and invite your teachers." />
-                      <StepItem num="4" title="Organize your classes" desc="Create courses and sections — Algebra I Period 3, Chemistry Block A." />
+                      <StepItem num="4" title="Organize your classes" desc="Create courses and sections: Algebra I Period 3, Chemistry Block A." />
                       <StepItem num="5" title="Students join with a code" desc="Share a 6-character code. No emails, no paperwork." />
                       <StepItem num="6" title="You're live" desc="Students get step-by-step help. You focus on teaching." />
                     </div>

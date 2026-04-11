@@ -4,17 +4,17 @@ import { SITE_URL } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "For Schools & Teachers",
   description:
-    "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most.",
+    "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights, so you can spend your time where it matters most.",
   openGraph: {
-    title: "Veradic AI — AI-Powered Tutoring for Your Classroom",
+    title: "Veradic AI: AI-Powered Tutoring for Your Classroom",
     description:
-      "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most.",
+      "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights, so you can spend your time where it matters most.",
     url: `${SITE_URL}/teachers`,
   },
   twitter: {
-    title: "Veradic AI — AI-Powered Tutoring for Your Classroom",
+    title: "Veradic AI: AI-Powered Tutoring for Your Classroom",
     description:
-      "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights — so you can spend your time where it matters most.",
+      "A personal AI tutor for every student in your classroom: step-by-step guidance at every student's pace, automated grading, endless practice problems, and actionable insights, so you can spend your time where it matters most.",
   },
   alternates: {
     canonical: `${SITE_URL}/teachers`,
