@@ -3,7 +3,7 @@ import { StyleSheet, Text, TextStyle, View } from "react-native";
 import { WebView } from "react-native-webview";
 import katex from "katex";
 import { KATEX_CSS } from "../katexCss";
-import { colors, typography } from "../theme";
+import { typography, useColors } from "../theme";
 
 /**
  * Mobile MathText — renders text with embedded LaTeX the same way the
@@ -128,6 +128,7 @@ function buildHtml(text: string, color: string, fontSize: number, fontWeight: st
 }
 
 export function MathText({ text, style, numberOfLines }: MathTextProps) {
+  const colors = useColors();
   const [height, setHeight] = useState(20);
 
   // All hooks must run unconditionally on every render — React tracks them
@@ -143,6 +144,11 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
   const html = useMemo(
     () => (hasMath ? buildHtml(text, color, fontSize, fontWeight) : ""),
     [hasMath, text, color, fontSize, fontWeight],
+  );
+
+  const defaultTextStyle = useMemo<TextStyle>(
+    () => ({ ...typography.body, color: colors.text }),
+    [colors.text],
   );
 
   if (!text) return null;
@@ -178,11 +184,6 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
     </View>
   );
 }
-
-const defaultTextStyle: TextStyle = {
-  ...typography.body,
-  color: colors.text,
-};
 
 const styles = StyleSheet.create({
   webviewWrap: {

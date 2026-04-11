@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
@@ -13,7 +13,7 @@ import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { SolveScreen } from "./src/components/SolveScreen";
-import { colors } from "./src/theme";
+import { useColors } from "./src/theme";
 import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
@@ -43,6 +43,11 @@ function AppRoot() {
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
+  const colors = useColors();
+  const tabHostStyle = useMemo(
+    () => ({ flex: 1, backgroundColor: colors.background }),
+    [colors.background],
+  );
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const resumeSession = useSessionStore((s) => s.resumeSession);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
@@ -162,8 +167,8 @@ function AppRoot() {
 
     return (
       <SafeAreaProvider>
-        <View style={styles.tabHost}>
-          <View style={styles.tabContent}>{content}</View>
+        <View style={tabHostStyle}>
+          <View style={{ flex: 1 }}>{content}</View>
           {tabBar}
         </View>
         <StatusBar style="auto" />
@@ -216,11 +221,6 @@ function AppRoot() {
   // Fallback (shouldn't hit) — redirect to solve
   return null;
 }
-
-const styles = StyleSheet.create({
-  tabHost: { flex: 1, backgroundColor: colors.background },
-  tabContent: { flex: 1 },
-});
 
 export default function App() {
   return (
