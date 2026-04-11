@@ -145,7 +145,7 @@ export default function LearnSessionPage() {
         <button
           type="button"
           onClick={() => router.push("/learn")}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-text-secondary hover:bg-primary-bg hover:text-primary"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-primary-bg hover:text-primary"
           aria-label="Back to Solve"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

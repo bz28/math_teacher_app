@@ -59,7 +59,10 @@ export function ChemDiagram({ smiles, label, width = 400, height = 300 }: ChemDi
 
   return (
     <div className="my-3 flex flex-col items-center">
-      <div className="rounded-lg bg-white p-4">
+      {/* bg-white is intentional: SMILES draws dark strokes that would be
+       * invisible on a dark surface. The outer border/shadow softens the
+       * contrast in dark mode. */}
+      <div className="rounded-[--radius-md] border border-border-light bg-white p-4 shadow-sm">
         <canvas ref={canvasRef} id={canvasId} width={width} height={height} />
       </div>
       {label && <p className="mt-2 text-xs text-text-muted">{label}</p>}

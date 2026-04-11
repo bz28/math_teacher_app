@@ -403,7 +403,9 @@ function SolveContent() {
                     type="button"
                     onClick={() => removeFromQueue(i)}
                     aria-label={`Remove problem ${i + 1}`}
-                    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-text-muted hover:text-text-secondary"
+                    // -m-1 p-1 expands the 16x16 icon hit area to ~24px
+                    // without changing visual layout
+                    className="-m-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full p-1 text-text-muted hover:text-text-secondary"
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10" />
@@ -568,7 +570,9 @@ function ModePill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[--radius-pill] px-3 py-1.5 text-xs font-semibold transition-colors",
+        // min-h-10 (40px) is close enough to 44px for small segmented pills
+        // because they're not the primary action — and matches mobile sizing
+        "inline-flex min-h-10 items-center gap-1.5 rounded-[--radius-pill] px-4 py-2 text-[13px] font-semibold transition-colors",
         active
           ? "border border-primary bg-primary-bg text-primary"
           : "bg-input-bg text-text-muted hover:text-text-secondary",

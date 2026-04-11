@@ -34,7 +34,8 @@ export function SubjectPills({ active, onChange }: SubjectPillsProps) {
             aria-selected={isActive}
             onClick={() => onChange(s)}
             className={cn(
-              "inline-flex flex-shrink-0 items-center gap-1.5 rounded-[--radius-pill] px-4 py-2 text-sm font-bold transition-all",
+              // min-h-11 (44px) meets tap-target guidance
+              "inline-flex min-h-11 flex-shrink-0 items-center gap-1.5 rounded-[--radius-pill] px-4 py-2.5 text-sm font-bold transition-all",
               isActive
                 ? cn("text-white shadow-md", cfg.gradient)
                 : "border border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",

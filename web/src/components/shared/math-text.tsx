@@ -136,7 +136,10 @@ export function MathText({ text, className }: MathTextProps) {
             return (
               <div
                 key={i}
-                className="my-3 flex justify-center rounded-lg bg-white p-4"
+                // bg-white is intentional: SVG diagrams often use dark
+                // strokes that would vanish on a dark surface. Border and
+                // shadow soften the contrast in dark mode.
+                className="my-3 flex justify-center rounded-[--radius-md] border border-border-light bg-white p-4 shadow-sm"
                 dangerouslySetInnerHTML={{ __html: sanitizeSvg(seg.content) }}
               />
             );

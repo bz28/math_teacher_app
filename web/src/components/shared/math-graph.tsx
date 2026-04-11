@@ -248,7 +248,10 @@ export function MathGraph({
 
   return (
     <div className="my-3 flex justify-center">
-      <div className="rounded-lg bg-white p-2">
+      {/* bg-white is intentional: the chart is drawn with dark canvas
+       * colors that would vanish on a dark surface. Border + shadow soften
+       * the contrast in dark mode. */}
+      <div className="rounded-[--radius-md] border border-border-light bg-white p-2 shadow-sm">
         <canvas ref={canvasRef} width={500} height={350} className="max-w-full" />
       </div>
     </div>
