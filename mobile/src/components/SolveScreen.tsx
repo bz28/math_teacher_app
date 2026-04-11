@@ -636,12 +636,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     marginBottom: spacing.lg,
   },
 
-  // Snap card — horizontal row with icon + text
+  // Snap card — horizontal row with icon + text, larger to fill more page
   snapCard: {
     borderRadius: radii.lg,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.xxl + 4,
     paddingHorizontal: spacing.xl,
     gap: spacing.lg,
     marginBottom: spacing.sm,
@@ -699,10 +699,14 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   typeBarInput: {
     flex: 1,
-    ...typography.body,
     fontSize: 15,
+    fontWeight: "400",
     color: colors.text,
-    paddingVertical: spacing.sm,
+    paddingVertical: 0,
+    height: 40,
+    lineHeight: 20,
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   typeBarSend: {
     width: 34,

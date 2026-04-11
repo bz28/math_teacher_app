@@ -7,7 +7,6 @@ import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card } from "@/components/ui";
-import { Textarea } from "@/components/ui/input";
 import { EditProblemTextarea } from "@/components/shared/edit-problem-textarea";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { MathText } from "@/components/shared/math-text";
@@ -201,7 +200,7 @@ function LearnPageContent() {
           )}
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-          {isLearn ? "What do you need help with?" : "Build your exam"}
+          {isLearn ? "What do you want to learn?" : "What do you want to test?"}
         </h1>
       </motion.div>
 
@@ -319,50 +318,56 @@ function LearnPageContent() {
       )}
       </AnimatePresence>
 
-      {/* Add problems — image upload + text input */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Image upload */}
-        <Card variant="flat" className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-            Upload a photo
-          </p>
-          <ImageUpload
-            subject={subject}
-            onProblemsExtracted={(problems) => {
-              problems.forEach((p) => addToQueue(p.text, p.image));
-            }}
-            maxProblems={maxQueueSize}
-            currentQueueLength={problemQueue.length}
-            scansRemaining={remainingScans}
-            onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
-            onExtractComplete={fetchEntitlements}
-            onPhaseChange={setImagePhase}
-          />
-        </Card>
+      {/* Snap a photo — larger hero card */}
+      <Card variant="flat" className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+          Snap a problem
+        </p>
+        <ImageUpload
+          subject={subject}
+          onProblemsExtracted={(problems) => {
+            problems.forEach((p) => addToQueue(p.text, p.image));
+          }}
+          maxProblems={maxQueueSize}
+          currentQueueLength={problemQueue.length}
+          scansRemaining={remainingScans}
+          onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
+          onExtractComplete={fetchEntitlements}
+          onPhaseChange={setImagePhase}
+        />
+      </Card>
 
-        {/* Text input */}
-        <Card variant="flat" className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-            Or type a problem
-          </p>
-          <Textarea
-            placeholder={isScanning ? "Finish scanning first..." : "Enter your problem here... (Shift+Enter for new line)"}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isScanning}
-            className="min-h-[80px]"
-          />
+      {/* Type a problem — inline input bar */}
+      <div className="flex items-center gap-2 rounded-[--radius-lg] border-2 border-border bg-surface px-4 py-2 transition-colors focus-within:border-primary">
+        <svg className="h-5 w-5 flex-shrink-0 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+        <input
+          type="text"
+          placeholder={isScanning ? "Finish scanning first…" : "Or type a problem…"}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (problemQueue.length > 0) handleAddProblem();
+              else handleStart();
+            }
+          }}
+          disabled={isScanning}
+          className="flex-1 bg-transparent py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none disabled:opacity-50"
+        />
+        {input.trim() && problemQueue.length < maxQueueSize && (
           <Button
             variant="secondary"
             size="sm"
             onClick={handleAddProblem}
-            disabled={isScanning || !input.trim() || problemQueue.length >= maxQueueSize}
-            className="w-full"
+            disabled={isScanning}
           >
-            Add to Queue
+            Add
           </Button>
-        </Card>
+        )}
       </div>
 
       {/* Start button when queue is empty but input has text */}
