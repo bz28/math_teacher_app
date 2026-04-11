@@ -60,12 +60,12 @@ export function CtaBand({
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </Link>
-          <a
+          <Link
             href={secondaryHref}
             className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-8 text-base font-semibold text-white transition-colors hover:bg-white/10"
           >
             {secondaryLabel}
-          </a>
+          </Link>
         </div>
       </div>
     </section>
