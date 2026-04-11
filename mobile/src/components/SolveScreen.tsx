@@ -503,6 +503,14 @@ export function SolveScreen({
                 <TouchableOpacity onPress={() => setQuotaConfirm(false)} style={styles.quotaCancel}>
                   <Text style={styles.quotaCancelText}>Cancel</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSolve}
+                  style={[styles.quotaConfirmBtn, { backgroundColor: theme.primary }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue and use remaining problems"
+                >
+                  <Text style={styles.quotaConfirmBtnText}>Continue</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -794,6 +802,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   quotaButtons: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   quotaCancel: {
     paddingHorizontal: spacing.md,
@@ -802,6 +812,15 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   quotaCancelText: {
     ...typography.label,
     color: colors.textSecondary,
+  },
+  quotaConfirmBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+  },
+  quotaConfirmBtnText: {
+    ...typography.label,
+    color: colors.white,
   },
 
   // Error
