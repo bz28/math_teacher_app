@@ -39,20 +39,20 @@ type Segment =
  * \b → U+0008) because the server serialized them as raw Python string
  * literals instead of double-escaping before JSON encoding.
  *
- * Any of these control characters followed immediately by one or more
- * letters is almost certainly a broken LaTeX command — legitimate
- * occurrences of these control characters in rendered math/educational
- * text are essentially never followed by an alphabetic run. Using a
- * permissive pattern correctly recovers commands not in any hand-picked
- * list (\rho, \tan, \beta, \flat, …).
+ * This function is only ever called on content that's already been
+ * bracketed by `$...$` or `$$...$$` delimiters — i.e. math mode — so
+ * a control character followed by an alphabetic run is guaranteed to
+ * be a broken LaTeX command and not legitimate whitespace. Applying it
+ * only inside math segments avoids corrupting tab-indented prose,
+ * code snippets, or carriage-return line endings in plain text.
  *
- * This is a belt-and-braces fix. The real fix lives on the backend
+ * This is a client-side safety net. The real fix lives on the backend
  * (use raw strings or explicit double-escape before json.dumps), but
  * existing responses in the wild need to render correctly too.
  */
-function restoreBrokenLatexCommands(input: string): string {
+function restoreBrokenLatexCommands(mathSegment: string): string {
   return (
-    input
+    mathSegment
       // \r ate a backslash: \rightarrow, \right, \rho, \rangle, \rceil, \rfloor, \rvert, \rbrace, \rbrack, \rm, \rule, …
       .replace(/\r([a-zA-Z]+)/g, "\\r$1")
       // \t ate a backslash: \times, \theta, \text, \tau, \to, \top, \triangle, \tilde, \tan, \tanh, …
@@ -68,8 +68,7 @@ function restoreBrokenLatexCommands(input: string): string {
 
 function parse(input: string): Segment[] {
   // Clean up before parsing
-  let text = restoreBrokenLatexCommands(input);
-  text = text.replace(/<br\s*\/?>/gi, "\n");
+  let text = input.replace(/<br\s*\/?>/gi, "\n");
   // Strip arrow characters that Claude sometimes inserts inside SVG
   text = text.replace(/→\s*/g, "").replace(/←\s*/g, "");
   const segments: Segment[] = [];
@@ -92,9 +91,15 @@ function parse(input: string): Segment[] {
         segments.push({ type: "text", content: m });
       }
     } else if (m.startsWith("$$") && m.endsWith("$$")) {
-      segments.push({ type: "math-display", content: m.slice(2, -2).trim() });
+      segments.push({
+        type: "math-display",
+        content: restoreBrokenLatexCommands(m.slice(2, -2).trim()),
+      });
     } else if (m.startsWith("$") && m.endsWith("$")) {
-      segments.push({ type: "math-inline", content: m.slice(1, -1).trim() });
+      segments.push({
+        type: "math-inline",
+        content: restoreBrokenLatexCommands(m.slice(1, -1).trim()),
+      });
     } else if (m.startsWith("<svg")) {
       segments.push({ type: "svg", content: m });
     } else if (m.startsWith("**") && m.endsWith("**")) {
