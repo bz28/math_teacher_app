@@ -75,10 +75,10 @@ interface PracticeState {
   phase: PracticePhase;
   error: string | null;
 
-  startPracticeBatch: (problem: string, count: number, subject: Subject) => Promise<void>;
+  startPracticeBatch: (problem: string, count: number, subject: Subject, difficulty?: string) => Promise<void>;
   beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
-  practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject) => Promise<void>;
+  practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: string) => Promise<void>;
   submitPracticeAnswer: (answer: string, subject: Subject) => Promise<void>;
   skipPracticeProblem: () => void;
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string, subject: Subject) => void;
@@ -128,14 +128,14 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     }
   },
 
-  async practiceFlaggedProblems(flaggedProblems, subject) {
+  async practiceFlaggedProblems(flaggedProblems, subject, difficulty = "same") {
     if (flaggedProblems.length === 0) return;
 
     set({ ...initialState, phase: "loading" as PracticePhase });
     try {
       // Phase 1: batch generate similar question texts for all flagged problems
       const [{ problems: generated }, { id: sessionId }] = await Promise.all([
-        practiceApi.generate({ problems: flaggedProblems, subject }),
+        practiceApi.generate({ problems: flaggedProblems, subject, difficulty }),
         sessionApi.createPracticeBatch(flaggedProblems[0]),
       ]);
       const similarQuestions = generated.map((p) => p.question);
@@ -165,11 +165,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     }
   },
 
-  async startPracticeBatch(problem, count, subject) {
+  async startPracticeBatch(problem, count, subject, difficulty = "same") {
     set({ phase: "loading", error: null });
     try {
       // Phase 1: generate a similar question text (not the original)
-      const { problems: generated } = await practiceApi.generate({ problems: [problem], subject });
+      const { problems: generated } = await practiceApi.generate({ problems: [problem], subject, difficulty });
       const similarQuestion = generated[0]?.question ?? problem;
 
       // Show intermission screen immediately with placeholder

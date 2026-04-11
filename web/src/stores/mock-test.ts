@@ -81,6 +81,7 @@ interface MockTestState {
     subject: Subject,
     problemQueue: { text: string; image?: string }[],
     multipleChoice?: boolean,
+    difficulty?: string,
   ) => Promise<void>;
   beginMockTest: () => void;
   saveMockTestAnswer: (index: number, answer: string) => void;
@@ -100,7 +101,7 @@ const initialState = {
 export const useMockTestStore = create<MockTestState>((set, get, store) => ({
   ...initialState,
 
-  async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true) {
+  async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true, difficulty = "same") {
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
     try {
@@ -114,14 +115,14 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
             problems.map((p) => {
               const image = imageMap.get(p);
               return practiceApi.generate({
-                problem: p, count: 1, subject,
+                problem: p, count: 1, subject, difficulty,
                 ...(image && { image_base64: image }),
               });
             }),
           );
           questionTexts = results.flatMap((r) => r.problems.map((p) => p.question));
         } else {
-          const res = await practiceApi.generate({ problems, subject });
+          const res = await practiceApi.generate({ problems, subject, difficulty });
           questionTexts = res.problems.map((p) => p.question);
         }
 

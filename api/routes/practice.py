@@ -46,6 +46,7 @@ async def generate(
                 body.problems,
                 user_id=str(user.id),
                 subject=body.subject,
+                difficulty=body.difficulty,
             )
             return PracticeGenerateResponse(
                 problems=[PracticeProblem(question=q, answer="", distractors=[]) for q in question_texts]

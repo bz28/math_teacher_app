@@ -129,11 +129,24 @@ def _build_generate_prompt(subject: str) -> str:
     )
 
 
+_DIFFICULTY_INSTRUCTIONS: dict[str, str] = {
+    "easier": (
+        "Make the generated problems EASIER than the originals — "
+        "use simpler numbers, fewer steps, and more straightforward setups."
+    ),
+    "harder": (
+        "Make the generated problems HARDER than the originals — "
+        "use more complex numbers, more steps, edge cases, or require deeper insight."
+    ),
+}
+
+
 async def generate_similar_questions(
     problems: list[str],
     *,
     user_id: str | None = None,
     subject: str = Subject.MATH,
+    difficulty: str = "same",
 ) -> list[str]:
     """Generate one similar question text per source problem (batch, Haiku).
 
@@ -149,7 +162,9 @@ async def generate_similar_questions(
         results: list[str] = []
         for i in range(0, len(problems), batch_size):
             chunk = problems[i:i + batch_size]
-            results.extend(await generate_similar_questions(chunk, user_id=user_id, subject=subject))
+            results.extend(
+                await generate_similar_questions(chunk, user_id=user_id, subject=subject, difficulty=difficulty)
+            )
         return results
 
     has_diagram = any("[" in p for p in problems)
@@ -163,6 +178,9 @@ async def generate_similar_questions(
             f"Generate exactly 1 similar problem for each of the {len(problems)} problems above. "
             f"Return them in the same order as a list of {len(problems)} items."
         )
+
+    if difficulty in _DIFFICULTY_INSTRUCTIONS:
+        user_msg += f"\n\nDifficulty instruction: {_DIFFICULTY_INSTRUCTIONS[difficulty]}"
 
     if has_diagram:
         user_msg += (

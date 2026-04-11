@@ -15,6 +15,7 @@ import { EntitlementError } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
 import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
+import { DifficultyPicker, type Difficulty } from "@/components/shared/difficulty-picker";
 
 export default function LearnPage() {
   return (
@@ -55,6 +56,7 @@ function LearnPageContent() {
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
+  const [difficulty, setDifficulty] = useState<Difficulty>("same");
 
   useEffect(() => {
     setSubject(subject);
@@ -127,7 +129,7 @@ function LearnPageContent() {
       } else {
         const generateCount = examType === "generate_similar" ? problems.length : 0;
         const timeLimit = untimed ? null : timeLimitMinutes;
-        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, true);
+        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, true, examType === "generate_similar" ? difficulty : "same");
         router.push(`/mock-test?subject=${subject}`);
       }
     } catch (err) {
@@ -235,6 +237,11 @@ function LearnPageContent() {
                 ))}
               </div>
             </div>
+
+            {/* Difficulty — only for generate similar */}
+            {examType === "generate_similar" && (
+              <DifficultyPicker value={difficulty} onChange={setDifficulty} />
+            )}
 
             {/* Time limit — inline toggle + stepper */}
             <div className="flex items-center gap-2">

@@ -9,6 +9,7 @@ class PracticeGenerateRequest(BaseModel):
     count: int = Field(0, ge=0, le=20)
     subject: str = Field("math")
     image_base64: str | None = Field(None, max_length=7_000_000)
+    difficulty: str = Field("same")
 
     @field_validator("subject")
     @classmethod

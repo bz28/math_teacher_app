@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DifficultyPicker, type Difficulty } from "@/components/shared/difficulty-picker";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
@@ -12,13 +13,14 @@ import type { LearnQueue } from "@/stores/learn";
 interface LearnSummaryProps {
   learnQueue: LearnQueue;
   onToggleFlag: (index: number) => void;
-  onPracticeFlagged: (flagged: string[]) => Promise<void>;
+  onPracticeFlagged: (flagged: string[], difficulty: string) => Promise<void>;
   onReset: () => void;
 }
 
 export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onReset }: LearnSummaryProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [difficulty, setDifficulty] = useState<Difficulty>("same");
   const flaggedCount = learnQueue.flags.filter(Boolean).length;
 
   return (
@@ -54,19 +56,22 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
 
       <div className="flex flex-col gap-2">
         {flaggedCount > 0 && (
-          <Button
-            gradient
-            loading={loading}
-            onClick={async () => {
-              setLoading(true);
-              const flagged = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
-              await onPracticeFlagged(flagged);
-              router.push("/practice");
-            }}
-            className="w-full"
-          >
-            Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
-          </Button>
+          <>
+            <DifficultyPicker value={difficulty} onChange={setDifficulty} />
+            <Button
+              gradient
+              loading={loading}
+              onClick={async () => {
+                setLoading(true);
+                const flagged = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
+                await onPracticeFlagged(flagged, difficulty);
+                router.push("/practice");
+              }}
+              className="w-full"
+            >
+              Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
+            </Button>
+          </>
         )}
         <Button variant="secondary" onClick={() => { onReset(); router.push("/learn"); }} className="w-full">
           New Problem
