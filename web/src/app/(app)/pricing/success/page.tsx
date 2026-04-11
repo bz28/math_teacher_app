@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { CheckIcon } from "@/components/ui/icons";
+import { Spinner } from "@/components/ui";
 
 export default function CheckoutSuccessPage() {
   const loadUser = useAuthStore((s) => s.loadUser);
@@ -53,9 +54,7 @@ export default function CheckoutSuccessPage() {
         </Link>
       )}
 
-      {!ready && (
-        <div className="mt-8 h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      )}
+      {!ready && <Spinner className="mt-8" size="md" />}
     </div>
   );
 }

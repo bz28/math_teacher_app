@@ -10,7 +10,14 @@ import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { useConfetti } from "@/components/ui/confetti";
-import { CheckIcon } from "@/components/ui/icons";
+import {
+  ArrowRightIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ImagesIcon,
+} from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 import { LoadingHero } from "@/components/shared/loading-hero";
@@ -148,17 +155,13 @@ export default function LearnSessionPage() {
           className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-primary-bg hover:text-primary"
           aria-label="Back to Solve"
         >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+          <ChevronLeftIcon className="h-5 w-5" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-primary-bg px-4 py-2 text-xs font-semibold text-primary">
           <span className="min-w-0 flex-1 truncate">
             <MathText text={session.problem} />
           </span>
-          {sessionImage && (
-            <svg className="h-3.5 w-3.5 flex-shrink-0 text-primary/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-          )}
+          {sessionImage && <ImagesIcon className="h-3.5 w-3.5 flex-shrink-0 text-primary/60" />}
         </div>
         <div className="flex items-center gap-1">
           {Array.from({ length: totalSteps }).map((_, i) => (
@@ -217,18 +220,12 @@ export default function LearnSessionPage() {
                       <MathText text={step.description} />
                     </div>
                   </div>
-                  <svg
+                  <ChevronDownIcon
                     className={cn(
                       "ml-2 h-3.5 w-3.5 flex-shrink-0 text-text-muted transition-transform",
                       expanded && "rotate-180",
                     )}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
+                  />
                 </button>
               </div>
             );
@@ -392,10 +389,7 @@ export default function LearnSessionPage() {
                   aria-label="I understand, advance step"
                 >
                   I understand
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
+                  <ArrowRightIcon className="h-3.5 w-3.5" />
                 </button>
                 {/* Circular send button */}
                 <button
@@ -405,10 +399,7 @@ export default function LearnSessionPage() {
                   className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark disabled:opacity-40"
                   aria-label="Send question"
                 >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="19" x2="12" y2="5" />
-                    <polyline points="5 12 12 5 19 12" />
-                  </svg>
+                  <ArrowUpIcon className="h-4 w-4" />
                 </button>
               </div>
             ) : (

@@ -10,7 +10,17 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useImageExtraction } from "@/hooks/use-image-extraction";
 import { EntitlementError } from "@/lib/api";
 import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
-import { Button } from "@/components/ui";
+import { Button, Spinner } from "@/components/ui";
+import {
+  AlertCircleIcon,
+  BookIcon,
+  CameraIcon,
+  CheckIcon,
+  DocIcon,
+  EditIcon,
+  ImagesIcon,
+  XCircleIcon,
+} from "@/components/ui/icons";
 import { SubjectPills } from "@/components/shared/subject-pills";
 import { MockTestConfig, type ExamType } from "@/components/shared/mock-test-config";
 import { ExtractionResultModal } from "@/components/shared/extraction-result-modal";
@@ -282,13 +292,13 @@ function SolveContent() {
       <div className="flex gap-2 px-5 pb-3">
         <ModePill
           label="Learn"
-          icon={<BookIcon />}
+          icon={<BookIcon className="h-3.5 w-3.5" />}
           active={mode === "learn"}
           onClick={() => setMode("learn")}
         />
         <ModePill
           label="Mock Test"
-          icon={<DocIcon />}
+          icon={<DocIcon className="h-3.5 w-3.5" />}
           active={mode === "mock_test"}
           onClick={() => setMode("mock_test")}
         />
@@ -445,11 +455,7 @@ function SolveContent() {
                     // without changing visual layout
                     className="-m-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full p-1 text-text-muted hover:text-text-secondary"
                   >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
+                    <XCircleIcon className="h-4 w-4" strokeWidth={2.5} />
                   </button>
                 </div>
               ))}
@@ -476,7 +482,7 @@ function SolveContent() {
         {/* Extracting indicator */}
         {extracting && (
           <div className="mb-3 flex items-center gap-3 rounded-[--radius-lg] bg-surface p-4 shadow-sm">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <Spinner size="md" />
             <p className="flex-1 text-sm text-text-secondary">
               {extractionProgress.total > 1
                 ? `Reading ${Math.min(extractionProgress.done + 1, extractionProgress.total)} of ${extractionProgress.total}…`
@@ -488,11 +494,7 @@ function SolveContent() {
         {/* Quota confirm inline */}
         {quotaConfirm && (
           <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[--radius-lg] border-l-4 border-warning-dark bg-warning-bg p-3">
-            <svg className="h-5 w-5 flex-shrink-0 text-warning-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+            <AlertCircleIcon className="h-5 w-5 flex-shrink-0 text-warning-dark" />
             <p className="flex-1 text-[13px] text-text-primary">
               This will use {totalProblems} of your {remainingSessions} remaining problems today.
             </p>
@@ -509,11 +511,7 @@ function SolveContent() {
         {/* Inline error */}
         {(error ?? extractionError) && (
           <div className="mb-3 flex items-center gap-2 text-xs text-error">
-            <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+            <AlertCircleIcon className="h-4 w-4 flex-shrink-0" />
             <span className="flex-1">{error ?? extractionError}</span>
           </div>
         )}
@@ -683,58 +681,3 @@ function HeroCard({
   );
 }
 
-// ── Icons ──
-
-function BookIcon() {
-  return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-    </svg>
-  );
-}
-
-function DocIcon() {
-  return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-    </svg>
-  );
-}
-
-function CameraIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-      <circle cx="12" cy="13" r="4" />
-    </svg>
-  );
-}
-
-function ImagesIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <polyline points="21 15 16 10 5 21" />
-    </svg>
-  );
-}
-
-function EditIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-    </svg>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
