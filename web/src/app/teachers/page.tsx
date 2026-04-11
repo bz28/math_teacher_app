@@ -6,7 +6,7 @@ import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { Section } from "@/components/landing/section";
 import { Eyebrow } from "@/components/landing/eyebrow";
-import { TestimonialMarquee } from "@/components/landing/testimonial-marquee";
+import { TopicsMarquee } from "@/components/landing/topics-marquee";
 import { contact } from "@/lib/api";
 
 const PAIN_POINTS = [
@@ -218,8 +218,8 @@ export default function TeachersPage() {
           </div>
         </Section>
 
-        {/* ── Testimonial marquee (additive — new in redesign, content frozen elsewhere) ── */}
-        <TestimonialMarquee variant="alt" />
+        {/* ── Topics marquee (additive — new in redesign, content frozen elsewhere) ── */}
+        <TopicsMarquee variant="alt" />
 
         {/* ── Contact Form ── */}
         <Section variant="default" id="contact">

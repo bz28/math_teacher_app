@@ -3,11 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Eyebrow } from "./eyebrow";
-import {
-  BrowserFrame,
-  LearnSessionMockup,
-  FloatingMockup,
-} from "./product-mockup";
+import { HeroStepsAnimation } from "./hero-steps-animation";
 
 export function Hero() {
   return (
@@ -79,31 +75,14 @@ export function Hero() {
           </p>
         </motion.div>
 
-        {/* Right — product mockup placeholder */}
+        {/* Right — animated step-by-step walkthrough */}
         <motion.div
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="relative hidden md:block"
+          className="relative"
         >
-          {/* TODO: replace with real composed screenshot — student guided steps + teacher dashboard side by side */}
-          <FloatingMockup>
-            <BrowserFrame>
-              <LearnSessionMockup />
-            </BrowserFrame>
-          </FloatingMockup>
-        </motion.div>
-
-        {/* Mobile — simplified mockup */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="md:hidden"
-        >
-          <div className="rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-4 shadow-md">
-            <LearnSessionMockup />
-          </div>
+          <HeroStepsAnimation />
         </motion.div>
       </div>
     </section>

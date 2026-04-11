@@ -7,7 +7,7 @@ import { HomeSubjects } from "@/components/landing/home-subjects";
 import { HomeTeachers } from "@/components/landing/home-teachers";
 import { HomeStudents } from "@/components/landing/home-students";
 import { HomeIntegrity } from "@/components/landing/home-integrity";
-import { TestimonialMarquee } from "@/components/landing/testimonial-marquee";
+import { TopicsMarquee } from "@/components/landing/topics-marquee";
 import { FAQ } from "@/components/landing/faq";
 import { CtaBand } from "@/components/landing/cta-band";
 import { Footer } from "@/components/landing/footer";
@@ -25,7 +25,7 @@ export default function Home() {
         <HomeTeachers />
         <HomeStudents />
         <HomeIntegrity />
-        <TestimonialMarquee />
+        <TopicsMarquee />
         <FAQ />
         <CtaBand
           eyebrow="Ready when you are"
