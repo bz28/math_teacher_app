@@ -9,11 +9,11 @@ import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
-import { SkeletonStep } from "@/components/ui/skeleton";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
+import { LoadingHero } from "@/components/shared/loading-hero";
 import { FREE_DAILY_CHAT_LIMIT } from "@/lib/constants";
 import { LearnSummary } from "./_components/learn-summary";
 import { LearnCompleted } from "./_components/learn-completed";
@@ -95,12 +95,7 @@ export default function LearnSessionPage() {
   }
 
   if (phase === "loading" || !session) {
-    return (
-      <div className="mx-auto max-w-3xl space-y-6">
-        <SkeletonStep />
-        <SkeletonStep />
-      </div>
-    );
+    return <LoadingHero subject={subject} mode="learn" />;
   }
 
   if (phase === "error") {
