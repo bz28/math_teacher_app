@@ -81,17 +81,24 @@ export function SolveScreen({
 
   const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
+  // Subscribe to the raw used/limit primitives (NOT the sessionsRemaining /
+  // scansRemaining function selectors — those return stable refs that never
+  // fire re-renders, leaving the "X of Y left today" copy stale after
+  // fetchEntitlements() refreshes the counters).
   const isPro = useEntitlementStore((s) => s.isPro);
-  const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
-  const scansRemaining = useEntitlementStore((s) => s.scansRemaining);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
   const dailyScansLimit = useEntitlementStore((s) => s.dailyScansLimit);
+  const dailySessionsUsed = useEntitlementStore((s) => s.dailySessionsUsed);
+  const dailyScansUsed = useEntitlementStore((s) => s.dailyScansUsed);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
+
+  const sessionsLeft = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
+  const scansLeft = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
 
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
 
 
-  const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsRemaining());
+  const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsLeft);
   const activeSubject = getSubjectMeta(subject);
 
   const {
@@ -126,7 +133,7 @@ export function SolveScreen({
     maxQueueSize,
     setError,
     subject,
-    isPro ? undefined : scansRemaining,
+    isPro ? undefined : () => scansLeft,
     isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
   );
 
@@ -152,7 +159,7 @@ export function SolveScreen({
     const text = input.trim();
     if (!text) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      const remaining = sessionsRemaining();
+      const remaining = sessionsLeft;
       const msg = problemQueue.length > 0
         ? `Your queue is full — you have ${remaining} problem${remaining !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
         : `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`;
@@ -192,7 +199,7 @@ export function SolveScreen({
     if (allProblems.length === 0) return;
     setError(null);
 
-    if (!isPro && sessionsRemaining() <= 0) {
+    if (!isPro && sessionsLeft <= 0) {
       showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
       return;
     }
@@ -256,7 +263,7 @@ export function SolveScreen({
         imageDimensions={imageDimensions}
         onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
         onCancel={cancelSelection}
-        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length, scansRemaining())}
+        maxRectangles={Math.min(10, maxQueueSize - problemQueue.length, scansLeft)}
       />
     );
   }
@@ -490,7 +497,7 @@ export function SolveScreen({
             <View style={styles.quotaCard}>
               <Ionicons name="alert-circle" size={18} color={colors.warningDark} />
               <Text style={styles.quotaText}>
-                This will use {collectProblems().length} of your {sessionsRemaining()} remaining problems today.
+                This will use {collectProblems().length} of your {sessionsLeft} remaining problems today.
               </Text>
               <View style={styles.quotaButtons}>
                 <TouchableOpacity onPress={() => setQuotaConfirm(false)} style={styles.quotaCancel}>
@@ -514,8 +521,8 @@ export function SolveScreen({
           )}
 
           {/* Quota footer */}
-          {!isPro && sessionsRemaining() < Infinity && <QuotaFooter
-            remaining={sessionsRemaining()}
+          {!isPro && sessionsLeft < Infinity && <QuotaFooter
+            remaining={sessionsLeft}
             limit={dailySessionsLimit as number}
             themeColor={theme.primary}
           />}
