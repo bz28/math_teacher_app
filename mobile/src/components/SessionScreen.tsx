@@ -309,8 +309,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           <Text style={styles.promptText}>Enter your final answer</Text>
         )}
 
-        {/* Thinking indicator */}
-        {phase === "thinking" && (
+        {/* Thinking indicator — only shown for practice mode (learn mode
+            shows thinking as a chat bubble in the thread above) */}
+        {isPractice && phase === "thinking" && (
           <View style={[compactStyles.thinkingCard, shadows.sm]}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={compactStyles.thinkingText}>Thinking...</Text>
@@ -410,13 +411,21 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                 accessibilityLabel="Ask a question"
               />
               <TouchableOpacity
-                onPress={() => { Keyboard.dismiss(); setAskMode(false); setInput(""); }}
-                style={readerStyles.askCancelBtn}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setAskMode(false);
+                  setInput("");
+                  // If the user has chat history, advance to next step
+                  if ((chatHistory[session.current_step]?.length ?? 0) > 0) {
+                    advanceStep();
+                  }
+                }}
+                style={readerStyles.askUnderstandBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Cancel"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="I understand, next step"
               >
-                <Ionicons name="close" size={18} color={colors.textMuted} />
+                <Text style={readerStyles.askUnderstandText}>I understand</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={async () => {
@@ -643,8 +652,19 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
     textAlignVertical: "center",
     includeFontPadding: false,
   },
-  askCancelBtn: {
-    padding: spacing.xs,
+  askUnderstandBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  askUnderstandText: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 12,
   },
   askSend: {
     width: 36,
