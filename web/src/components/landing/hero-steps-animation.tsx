@@ -159,10 +159,10 @@ const steps: Step[] = [
   },
 ];
 
-const STEP_DWELL_MS = 3600;
-const SOLVED_DWELL_MS = 2800;
-const RESET_DELAY_MS = 500;
-const FIRST_STEP_DELAY_MS = 600;
+const STEP_DWELL_MS = 6500;
+const SOLVED_DWELL_MS = 4500;
+const RESET_DELAY_MS = 700;
+const FIRST_STEP_DELAY_MS = 800;
 
 export function HeroStepsAnimation() {
   const [phase, setPhase] = useState<"solving" | "solved">("solving");
