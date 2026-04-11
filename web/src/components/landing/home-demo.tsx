@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Section } from "./section";
 import { Eyebrow } from "./eyebrow";
 
@@ -45,7 +46,7 @@ export function HomeDemo() {
             </p>
             <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/5 p-5 text-sm leading-relaxed text-white/70">
               <span className="font-mono text-red-300">
-                t = v&#8320;/g = 20/9.8 ≈ 2.04 s
+                t = v<sub>0</sub>/g = 20/9.8 ≈ 2.04 s
               </span>
               <br />
               <span className="text-white/40">
@@ -78,7 +79,13 @@ export function HomeDemo() {
               <StepCard
                 index={4}
                 label="Solve it yourself"
-                body="You've got v, v&#8320;, and a. Plug them in and solve for t. I'll check your work when you're ready."
+                body={
+                  <>
+                    You&rsquo;ve got v, v<sub>0</sub>, and a. Plug them in and
+                    solve for t. I&rsquo;ll check your work when you&rsquo;re
+                    ready.
+                  </>
+                }
               />
             </div>
           </div>
@@ -95,7 +102,7 @@ function StepCard({
 }: {
   index: number;
   label: string;
-  body: string;
+  body: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -105,10 +112,7 @@ function StepCard({
         </span>
         <div>
           <p className="text-sm font-semibold text-white">{label}</p>
-          <p
-            className="mt-1 text-sm leading-relaxed text-white/70"
-            dangerouslySetInnerHTML={{ __html: body }}
-          />
+          <p className="mt-1 text-sm leading-relaxed text-white/70">{body}</p>
         </div>
       </div>
     </div>
