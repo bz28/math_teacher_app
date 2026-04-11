@@ -1,48 +1,12 @@
 "use client";
 
-import { motion, useInView } from "framer-motion";
-import { useRef } from "react";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
-
-const ALL_SUBJECTS = [
-  {
-    name: "Math",
-    href: "/subjects/math",
-    gradient: "from-primary to-primary-light",
-    description: "Algebra, calculus, geometry, and more",
-    icon: (
-      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="12" y1="2" x2="12" y2="22" />
-        <line x1="2" y1="12" x2="22" y2="12" />
-      </svg>
-    ),
-  },
-  {
-    name: "Physics",
-    href: "/subjects/physics",
-    gradient: "from-[#0984E3] to-[#74B9FF]",
-    description: "Mechanics, energy, waves, and more",
-    icon: (
-      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-        <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-      </svg>
-    ),
-  },
-  {
-    name: "Chemistry",
-    href: "/subjects/chemistry",
-    gradient: "from-success to-[#55EFC4]",
-    description: "Reactions, stoichiometry, and more",
-    icon: (
-      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 3h6v7l4 9H5l4-9V3z" />
-        <line x1="9" y1="3" x2="15" y2="3" />
-      </svg>
-    ),
-  },
-];
+import { Section } from "./section";
+import { Eyebrow } from "./eyebrow";
+import { CtaBand } from "./cta-band";
+import { FAQ as SharedFAQ } from "./faq";
 
 interface ExampleProblem {
   topic: string;
@@ -54,18 +18,39 @@ interface Feature {
   description: string;
 }
 
+interface SubjectFaq {
+  question: string;
+  answer: string;
+}
+
 interface SubjectPageProps {
   name: string;
-  slug: string;
+  slug: "math" | "physics" | "chemistry";
+  /** Short positioning phrase used in the headline accent */
   tagline: string;
   description: string;
   detailedDescription?: string;
   educationalProgramDescription: string;
-  gradient: string;
+  /** Unused with new design but kept for backward compat */
+  gradient?: string;
+  /** Hex used for inline subject pills — defaults to var(--color-primary) */
   badgeColor: string;
   icon: React.ReactNode;
   examples: ExampleProblem[];
   features: Feature[];
+  /** Topics grid — what we cover for this subject */
+  topics: string[];
+  /** Subject-specific differentiators (distinct from generic examples/features) */
+  differentiators: Feature[];
+  /** 3 short reasons a teacher of this subject would want Veradic */
+  whyReasons: string[];
+  /** Subject-specific FAQ questions */
+  subjectFaqs?: SubjectFaq[];
+  /** Demo walkthrough sample — problem + hinted steps (placeholder until real LLM capture) */
+  demo?: {
+    problem: string;
+    steps: { label: string; body: string }[];
+  };
 }
 
 export function SubjectPage({
@@ -75,21 +60,15 @@ export function SubjectPage({
   description,
   detailedDescription,
   educationalProgramDescription,
-  gradient,
   badgeColor,
   icon,
-  examples,
-  features,
+  topics,
+  differentiators,
+  whyReasons,
+  demo,
 }: SubjectPageProps) {
-  const heroRef = useRef<HTMLElement>(null);
-  const heroInView = useInView(heroRef, { once: true });
-  const examplesRef = useRef<HTMLElement>(null);
-  const examplesInView = useInView(examplesRef, { once: true, margin: "-80px" });
-  const featuresRef = useRef<HTMLElement>(null);
-  const featuresInView = useInView(featuresRef, { once: true, margin: "-80px" });
-
   return (
-    <>
+    <div data-subject={slug === "math" ? undefined : slug}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -99,220 +78,236 @@ export function SubjectPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(subjectEducationalProgramJsonLd(name, slug, educationalProgramDescription)),
+          __html: JSON.stringify(
+            subjectEducationalProgramJsonLd(name, slug, educationalProgramDescription),
+          ),
         }}
       />
 
-      {/* Hero */}
-      <section ref={heroRef} className="relative overflow-hidden px-6 pt-32 pb-20 md:pt-40 md:pb-28">
-        <div
-          className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-[0.04]`}
-        />
-        <div className="relative mx-auto max-w-4xl text-center">
+      {/* ── Hero ── */}
+      <section className="relative overflow-hidden bg-[color:var(--color-surface)]">
+        <div className="pointer-events-none absolute right-0 top-0 hidden h-[700px] w-[700px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/12 to-transparent blur-3xl md:block" />
+        <div className="pointer-events-none absolute -left-40 bottom-0 h-[460px] w-[460px] rounded-full bg-gradient-to-br from-[color:var(--color-primary-light)]/14 to-transparent blur-3xl" />
+
+        <div className="relative mx-auto max-w-4xl px-6 pb-24 pt-16 text-center md:px-8 md:pb-32 md:pt-24">
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={heroInView ? { opacity: 1, scale: 1 } : {}}
-            transition={{ duration: 0.5 }}
-            className={`mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-[--radius-xl] bg-gradient-to-br ${gradient} text-white shadow-lg`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <span
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+              style={{
+                backgroundColor: `${badgeColor}1a`,
+                color: badgeColor,
+              }}
+            >
+              {name}
+            </span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.05 }}
+            className="mx-auto mt-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]"
             aria-hidden="true"
           >
             {icon}
           </motion.div>
-          {/* Subject tabs */}
-          <motion.nav
-            initial={{ opacity: 0, y: 12 }}
-            animate={heroInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.05, duration: 0.4 }}
-            className="mb-8 flex items-center justify-center gap-2"
-            aria-label="Subjects"
-          >
-            {ALL_SUBJECTS.map((s) => {
-              const isActive = s.name === name;
-              return (
-                <Link
-                  key={s.name}
-                  href={s.href}
-                  className={`rounded-[--radius-pill] px-5 py-2 text-sm font-semibold transition-all ${
-                    isActive
-                      ? "bg-gradient-to-r text-white shadow-sm " + s.gradient
-                      : "border border-border-light bg-surface text-text-secondary hover:border-primary-light hover:text-primary"
-                  }`}
-                >
-                  {s.name}
-                </Link>
-              );
-            })}
-          </motion.nav>
+
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
-            animate={heroInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            className="text-4xl font-extrabold tracking-tight text-text-primary md:text-6xl"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mt-8 text-display-xl text-[color:var(--color-text)]"
           >
             {tagline}
           </motion.h1>
+
           <motion.p
             initial={{ opacity: 0, y: 20 }}
-            animate={heroInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary md:text-xl"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl"
           >
             {description}
           </motion.p>
+
           {detailedDescription && (
             <motion.p
               initial={{ opacity: 0, y: 16 }}
-              animate={heroInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: 0.25, duration: 0.5 }}
-              className="mx-auto mt-4 max-w-2xl text-base text-text-muted"
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-[color:var(--color-text-muted)]"
             >
               {detailedDescription}
             </motion.p>
           )}
+
           <motion.div
             initial={{ opacity: 0, y: 16 }}
-            animate={heroInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.35, duration: 0.4 }}
-            className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center"
           >
-            <Link
-              href="/register"
-              className={`inline-flex items-center rounded-[--radius-pill] bg-gradient-to-r ${gradient} px-8 py-3.5 text-base font-semibold text-white shadow-md transition-transform hover:scale-[1.03]`}
+            <a
+              href="#demo"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)]"
             >
-              Start Learning {name} Free
-            </Link>
+              Try a problem
+            </a>
             <Link
-              href="/#features"
-              className="inline-flex items-center rounded-[--radius-pill] border border-border-light bg-surface px-8 py-3.5 text-base font-semibold text-text-primary transition-all hover:border-primary-light hover:shadow-sm"
+              href="/teachers#contact"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-8 text-base font-semibold text-[color:var(--color-text)] transition-colors hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
             >
-              See How It Works
+              Book a demo
             </Link>
           </motion.div>
         </div>
       </section>
 
-      {/* Example Problems */}
-      <section ref={examplesRef} className="bg-bg-secondary px-6 py-20 md:py-28">
-        <div className="mx-auto max-w-4xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={examplesInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5 }}
-            className="mb-14 text-center"
-          >
-            <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-              Problems You Can Solve
+      {/* ── Topics grid ── */}
+      <Section variant="alt">
+        <div className="mx-auto max-w-3xl text-center">
+          <Eyebrow>Topics we cover</Eyebrow>
+          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
+            Everything your students see in class.
+          </h2>
+          <p className="mt-4 text-lg text-[color:var(--color-text-secondary)]">
+            From the basics to the hardest problems on the AP exam. If it&rsquo;s
+            in the {name.toLowerCase()} curriculum, Veradic can walk a student
+            through it.
+          </p>
+        </div>
+
+        <div className="mt-12 flex flex-wrap justify-center gap-3">
+          {topics.map((topic) => (
+            <span
+              key={topic}
+              className="rounded-full border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-5 py-2.5 text-sm font-medium text-[color:var(--color-text-secondary)]"
+            >
+              {topic}
+            </span>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── Live demo ── */}
+      {demo && (
+        <Section variant="invert" id="demo">
+          <div className="mx-auto max-w-3xl text-center">
+            <Eyebrow variant="invert">See it solve a problem</Eyebrow>
+            <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
+              Watch Veradic teach {name.toLowerCase()}.
             </h2>
-            <p className="mt-4 text-lg text-text-secondary">
-              Snap a photo or type any of these — Veradic walks you through every step
-            </p>
-          </motion.div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {examples.map((ex, i) => (
-              <motion.div
-                key={ex.topic}
-                initial={{ opacity: 0, y: 16 }}
-                animate={examplesInView ? { opacity: 1, y: 0 } : {}}
-                transition={{ delay: 0.08 * i, duration: 0.4 }}
-                className="rounded-[--radius-lg] border border-border-light bg-surface p-6 transition-all hover:border-primary-light hover:shadow-sm"
-              >
-                <span
-                  className="mb-2 inline-block rounded-[--radius-pill] px-3 py-1 text-xs font-semibold"
-                  style={{ color: badgeColor, backgroundColor: `${badgeColor}14` }}
+          </div>
+
+          {/* TODO: replace with real LLM capture for {name} */}
+          <div className="mt-14 overflow-hidden rounded-3xl border border-white/10 bg-[color:var(--color-invert-alt)]">
+            <div className="border-b border-white/10 px-6 py-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/40">
+                Problem
+              </p>
+              <p className="mt-2 text-base text-white/90">{demo.problem}</p>
+            </div>
+            <div className="grid gap-4 p-8 md:p-10">
+              {demo.steps.map((step, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-white/10 bg-white/[0.03] p-5"
                 >
-                  {ex.topic}
-                </span>
-                <p className="mt-2 text-text-primary font-medium">{ex.problem}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section ref={featuresRef} className="px-6 py-20 md:py-28">
-        <div className="mx-auto max-w-4xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={featuresInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5 }}
-            className="mb-14 text-center"
-          >
-            <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-              Built for {name} Students
-            </h2>
-          </motion.div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {features.map((feat, i) => (
-              <motion.div
-                key={feat.title}
-                initial={{ opacity: 0, y: 16 }}
-                animate={featuresInView ? { opacity: 1, y: 0 } : {}}
-                transition={{ delay: 0.1 * i, duration: 0.4 }}
-                className="rounded-[--radius-lg] border border-border-light bg-surface p-6"
-              >
-                <h3 className="text-lg font-bold text-text-primary">{feat.title}</h3>
-                <p className="mt-2 text-text-secondary leading-relaxed">{feat.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Explore Other Subjects */}
-      <section className="bg-bg-secondary px-6 py-20 md:py-28">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-10 text-center">
-            <h2 className="text-2xl font-extrabold tracking-tight text-text-primary md:text-3xl">
-              Explore Other Subjects
-            </h2>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {ALL_SUBJECTS.filter((s) => s.name !== name).map((s) => (
-              <Link
-                key={s.name}
-                href={s.href}
-                className="group rounded-[--radius-xl] border border-border-light bg-surface p-6 transition-all hover:border-primary-light hover:shadow-lg"
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[--radius-lg] bg-gradient-to-br ${s.gradient} text-white shadow-md`}
-                    aria-hidden="true"
-                  >
-                    {s.icon}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-text-primary group-hover:text-primary transition-colors">
-                      {s.name} Tutor
-                    </h3>
-                    <p className="text-sm text-text-secondary">
-                      {s.description}
-                    </p>
+                  <div className="flex items-start gap-4">
+                    <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/20 text-xs font-bold text-[color:var(--color-primary-light)]">
+                      {i + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {step.label}
+                      </p>
+                      <p
+                        className="mt-1 text-sm leading-relaxed text-white/70"
+                        dangerouslySetInnerHTML={{ __html: step.body }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </Link>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </Section>
+      )}
 
-      {/* CTA */}
-      <section className="px-6 py-20">
-        <div className="mx-auto max-w-4xl rounded-[--radius-xl] border border-border-light bg-surface p-12 text-center md:p-16">
-          <h2 className="text-3xl font-extrabold text-text-primary md:text-4xl">
-            Ready to master {name.toLowerCase()}?
+      {/* ── Differentiators ── */}
+      <Section variant="default">
+        <div className="mx-auto max-w-3xl text-center">
+          <Eyebrow>Built for {name.toLowerCase()}</Eyebrow>
+          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
+            Why Veradic fits the subject.
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-lg text-text-secondary">
-            Join thousands of students who are learning {name.toLowerCase()} step by step with Veradic.
-          </p>
-          <Link
-            href="/register"
-            className={`mt-8 inline-flex items-center rounded-[--radius-pill] bg-gradient-to-r ${gradient} px-8 py-3.5 text-base font-semibold text-white shadow-md transition-transform hover:scale-[1.03]`}
-          >
-            Get Started Free
-          </Link>
         </div>
-      </section>
-    </>
+
+        <div className="mt-14 grid gap-6 md:grid-cols-3">
+          {differentiators.map((d, i) => (
+            <div
+              key={d.title}
+              className="marketing-card rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8"
+            >
+              <span className="text-xs font-semibold tracking-widest text-[color:var(--color-text-muted)]">
+                0{i + 1}
+              </span>
+              <h3 className="mt-3 text-xl font-bold text-[color:var(--color-text)]">
+                {d.title}
+              </h3>
+              <p className="mt-3 text-base leading-relaxed text-[color:var(--color-text-secondary)]">
+                {d.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── Why for {name} teachers ── */}
+      <Section variant="alt">
+        <div className="mx-auto max-w-3xl">
+          <Eyebrow>For {name.toLowerCase()} teachers</Eyebrow>
+          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
+            Everything you wish your AI tool did.
+          </h2>
+          <ul className="mt-10 space-y-5">
+            {whyReasons.map((reason) => (
+              <li
+                key={reason}
+                className="flex items-start gap-4 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-6"
+              >
+                <svg
+                  className="mt-1 h-6 w-6 flex-shrink-0 text-[color:var(--color-primary)]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                <p className="text-base leading-relaxed text-[color:var(--color-text-secondary)]">
+                  {reason}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
+      {/* ── Shared homepage FAQ (always on) ── */}
+      <SharedFAQ />
+
+      {/* ── CTA band ── */}
+      <CtaBand
+        eyebrow="Ready when you are"
+        headline={`Bring Veradic ${name} to your classroom.`}
+        subhead="Book a 20-minute walkthrough. We'll show you exactly how it fits your curriculum."
+      />
+    </div>
   );
 }
