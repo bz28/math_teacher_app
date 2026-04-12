@@ -15,6 +15,7 @@ interface EntitlementState {
   loaded: boolean;
 
   fetchEntitlements: () => Promise<void>;
+  incrementScansUsed: () => void;
 }
 
 export const useEntitlementStore = create<EntitlementState>((set) => ({
@@ -27,6 +28,10 @@ export const useEntitlementStore = create<EntitlementState>((set) => ({
   dailyChatsLimit: 20,
   gatedFeatures: [],
   loaded: false,
+
+  incrementScansUsed() {
+    set((s) => ({ dailyScansUsed: s.dailyScansUsed + 1 }));
+  },
 
   async fetchEntitlements() {
     try {
