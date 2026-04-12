@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSessionStore, type Subject } from "@/stores/learn";
@@ -46,6 +46,11 @@ function LearnPageContent() {
   const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements, incrementScansUsed } = useEntitlementStore();
   const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
   const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
+
+  const handleExtractComplete = useCallback(() => {
+    incrementScansUsed();
+    fetchEntitlements();
+  }, [incrementScansUsed, fetchEntitlements]);
 
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"learn" | "mock-test">("learn");
@@ -299,7 +304,7 @@ function LearnPageContent() {
           scansRemaining={remainingScans}
           onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
           onUpgrade={() => showUpgrade("create_session", `You've used ${dailySessionsUsed} of your ${FREE_DAILY_SESSION_LIMIT} problems today. Upgrade to Pro for unlimited access.`)}
-          onExtractComplete={() => { incrementScansUsed(); fetchEntitlements(); }}
+          onExtractComplete={handleExtractComplete}
           onPhaseChange={setImagePhase}
         />
       </Card>
@@ -389,6 +394,7 @@ function LearnPageContent() {
                   onClick={() => {
                     removeFromQueue(i);
                     if (editingIndex === i) setEditingIndex(null);
+                    else if (editingIndex !== null && editingIndex > i) setEditingIndex(editingIndex - 1);
                   }}
                   aria-label={`Remove problem ${i + 1}`}
                   className="mt-0.5 flex-shrink-0 rounded-full p-1 text-text-muted hover:bg-red-500/10 hover:text-red-400 transition-colors"
