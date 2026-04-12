@@ -53,21 +53,13 @@ export function Modal({
     [onClose, dismissible],
   );
 
-  // Keep the keydown handler fresh without re-running the open effect
-  const handleKeyDownRef = useRef(handleKeyDown);
-  handleKeyDownRef.current = handleKeyDown;
-
+  // Focus management — only on open/close, not on handler changes
   useEffect(() => {
     if (!open) return;
 
-    // Save previous focus to restore on close
     previousFocusRef.current = document.activeElement as HTMLElement;
-
-    const listener = (e: KeyboardEvent) => handleKeyDownRef.current(e);
-    document.addEventListener("keydown", listener);
     document.body.style.overflow = "hidden";
 
-    // Focus first focusable element in modal (only on initial open)
     requestAnimationFrame(() => {
       if (panelRef.current) {
         const first = panelRef.current.querySelector(FOCUSABLE_SELECTOR) as HTMLElement;
@@ -76,12 +68,18 @@ export function Modal({
     });
 
     return () => {
-      document.removeEventListener("keydown", listener);
       document.body.style.overflow = "";
-      // Restore focus
       previousFocusRef.current?.focus();
     };
   }, [open]);
+
+  // Keyboard handler — updates when dismissible changes without re-focusing
+  useEffect(() => {
+    if (!open) return;
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, handleKeyDown]);
 
   return (
     <AnimatePresence>
