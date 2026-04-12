@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogoMark } from "@/components/shared/logo-mark";
 
 const primaryLinks = [
+  { label: "For Teachers", href: "/for-teachers" },
   { label: "For Students", href: "/students" },
 ];
 
@@ -34,20 +35,22 @@ export function Navbar() {
 
   return (
     <nav className="sticky top-0 z-40 border-b border-[color:var(--color-border-light)]/60 bg-[color:var(--color-surface)]/80 backdrop-blur-lg">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6 md:h-20">
-        {/* Logo */}
-        <Link
-          href="/"
-          className="flex items-center gap-2.5"
-          onClick={() => setMobileOpen(false)}
-        >
-          <LogoMark size={32} />
-          <span className="text-lg font-bold tracking-tight text-[color:var(--color-text)]">
-            Veradic AI
-          </span>
-        </Link>
+      <div className="mx-auto flex h-16 max-w-6xl items-center px-6 md:h-20">
+        {/* Logo — flex-1 so links can center */}
+        <div className="flex flex-1 items-center">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5"
+            onClick={() => setMobileOpen(false)}
+          >
+            <LogoMark size={32} />
+            <span className="text-lg font-bold tracking-tight text-[color:var(--color-text)]">
+              Veradic AI
+            </span>
+          </Link>
+        </div>
 
-        {/* Desktop links */}
+        {/* Desktop links — centered */}
         <div className="hidden items-center gap-8 md:flex">
           {primaryLinks.map((link) => (
             <Link
@@ -64,8 +67,8 @@ export function Navbar() {
           ))}
         </div>
 
-        {/* Desktop CTAs */}
-        <div className="hidden items-center gap-3 md:flex">
+        {/* Desktop CTAs — flex-1 right-aligned */}
+        <div className="hidden flex-1 items-center justify-end gap-3 md:flex">
           <ThemeToggle />
           <Link
             href="/login"

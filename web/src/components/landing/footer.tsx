@@ -11,6 +11,7 @@ const productLinks: LinkItem[] = [
 ];
 
 const companyLinks: LinkItem[] = [
+  { label: "For Teachers", href: "/for-teachers" },
   { label: "Safety", href: "/safety" },
   { label: "Book a demo", href: "/demo" },
 ];
