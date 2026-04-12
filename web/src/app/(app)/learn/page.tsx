@@ -305,6 +305,7 @@ function LearnPageContent() {
           currentQueueLength={problemQueue.length}
           scansRemaining={remainingScans}
           onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
+          onUpgrade={() => showUpgrade("create_session", `You've used ${dailySessionsUsed} of your ${FREE_DAILY_SESSION_LIMIT} problems today. Upgrade to Pro for unlimited access.`)}
           onExtractComplete={() => { incrementScansUsed(); fetchEntitlements(); }}
           onPhaseChange={setImagePhase}
         />

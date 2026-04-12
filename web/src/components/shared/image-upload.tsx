@@ -18,6 +18,8 @@ interface ImageUploadProps {
   scansRemaining?: number;
   /** Called when scan limit is reached and user tries to upload */
   onScanLimitReached?: () => void;
+  /** Called when user wants to upgrade to add more problems */
+  onUpgrade?: () => void;
   /** Called after extraction completes (use to refresh quota counts) */
   onExtractComplete?: () => void;
   /** Called when the phase changes — parent can use this to adjust layout */
@@ -31,6 +33,7 @@ export function ImageUpload({
   currentQueueLength = 0,
   scansRemaining = Infinity,
   onScanLimitReached,
+  onUpgrade,
   onExtractComplete,
   onPhaseChange,
 }: ImageUploadProps) {
@@ -183,8 +186,7 @@ export function ImageUpload({
     if (!result) return;
     const items = result.problems
       .map((text, i) => ({ text, image: cropImages[i] }))
-      .filter((_, i) => selected[i])
-      .slice(0, remaining);
+      .filter((_, i) => selected[i]);
     onProblemsExtracted(items);
     setCropImages([]);
     setSelected([]);
@@ -370,6 +372,23 @@ export function ImageUpload({
               })}
             </div>
 
+            {selected.filter(Boolean).length > remaining && (
+              <div className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-3 py-2">
+                <p className="text-sm font-semibold text-warning-dark">
+                  You can only add {remaining} more problem{remaining !== 1 ? "s" : ""} today — deselect {selected.filter(Boolean).length - remaining} to continue.
+                </p>
+                {onUpgrade && (
+                  <button
+                    type="button"
+                    onClick={() => { closeResultModal(); onUpgrade(); }}
+                    className="flex-shrink-0 text-sm font-bold text-primary hover:underline"
+                  >
+                    Upgrade&nbsp;to&nbsp;Pro
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-end gap-3">
               <Button variant="ghost" onClick={closeResultModal}>
                 Cancel
@@ -377,7 +396,7 @@ export function ImageUpload({
               <Button
                 gradient
                 onClick={handleConfirm}
-                disabled={!selected.some(Boolean)}
+                disabled={!selected.some(Boolean) || selected.filter(Boolean).length > remaining}
               >
                 Add {selected.filter(Boolean).length} Problem
                 {selected.filter(Boolean).length !== 1 && "s"}
