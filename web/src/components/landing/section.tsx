@@ -39,7 +39,7 @@ export function Section({
       data-section-variant={variant}
     >
       <div
-        className={`mx-auto w-full max-w-6xl px-6 py-20 md:px-8 md:py-28 ${containerClassName}`}
+        className={`mx-auto w-full max-w-6xl px-6 py-14 md:px-8 md:py-20 ${containerClassName}`}
       >
         {children}
       </div>

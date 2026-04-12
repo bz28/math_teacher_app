@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ── Inline typography helpers (exported for demo data files) ──
@@ -48,18 +55,46 @@ export type StepsAnimationData = {
 
 // ── Timings ──
 const DEFAULT_STEP_DWELL_MS = 6500;
-const QUESTION_STEP_DWELL_MS = 12000; // longer when the step has a student question
+const QUESTION_STEP_DWELL_MS = 7500; // tightened: question interaction runs inside this window
 const SOLVED_DWELL_MS = 4500;
 const RESET_DELAY_MS = 700;
 const FIRST_STEP_DELAY_MS = 800;
-/** How long after the step body fades in before the cursor starts (no-question case). */
-const CURSOR_START_DELAY_MS = 500;
-/** Fixed duration of the cursor animation, regardless of step dwell. */
-const CURSOR_ANIMATION_MS = 3500;
+/**
+ * Fixed duration of the cursor animation, regardless of step dwell.
+ * 5000ms gives ~4s of visible cursor (fade in, glide, hover over button,
+ * click, fade out) which is long enough to catch the eye without feeling
+ * drawn out.
+ */
+const CURSOR_ANIMATION_MS = 5000;
+/**
+ * The cursor's click happens at 80% of its animation (4000ms in).
+ * Keep in sync with the timeline keyframes below in <MouseCursor>.
+ */
+const CURSOR_CLICK_POINT_MS = 4000;
+const CLICK_TO_ADVANCE_BUFFER_MS = 400;
+/** Minimum delay before cursor fires on any step (gives the body fade-in time). */
+const MIN_CURSOR_DELAY_MS = 500;
 
 function dwellFor(step: AnimatedStep, hideQuestions: boolean): number {
   if (hideQuestions) return DEFAULT_STEP_DWELL_MS;
   return step.question ? QUESTION_STEP_DWELL_MS : DEFAULT_STEP_DWELL_MS;
+}
+
+/**
+ * How long to wait after a step becomes current before the cursor fires.
+ * Computed so the cursor's click point lands CLICK_TO_ADVANCE_BUFFER_MS
+ * before the step advances — regardless of dwell length. Question steps
+ * use the same formula; the question interaction plays independently in
+ * the first ~2500ms of the dwell, and the cursor starts later so its
+ * click still lines up with step advance.
+ *
+ * For a 6500ms step: start at 2100ms, click at ~6100ms, advance at 6500ms.
+ * For a 7500ms question step: start at 3100ms (600ms after the tutor
+ * reply pops, which is a natural reading beat), click at ~7100ms.
+ */
+function cursorStartDelay(dwellMs: number): number {
+  const target = dwellMs - CURSOR_CLICK_POINT_MS - CLICK_TO_ADVANCE_BUFFER_MS;
+  return Math.max(MIN_CURSOR_DELAY_MS, target);
 }
 
 export function StepsAnimation({
@@ -72,7 +107,12 @@ export function StepsAnimation({
 }) {
   const { problem, answer, steps } = data;
   const [phase, setPhase] = useState<"solving" | "solved">("solving");
-  const [currentStep, setCurrentStep] = useState(0);
+  // Start at -1 ("not yet started") so the loop's first setCurrentStep(0)
+  // is a real state change that reliably triggers the cursor scheduling
+  // effect. Without this, the first cycle's setCurrentStep(0) is a no-op
+  // (same value as initial state) and the cursor effect only fires on
+  // mount — which is fragile under React strict-mode double-invocation.
+  const [currentStep, setCurrentStep] = useState(-1);
 
   /**
    * Which step index the cursor animation is currently ready for, or
@@ -81,18 +121,25 @@ export function StepsAnimation({
    * `cursorReady` is derived via `cursorReadyForStep === currentStep`,
    * and stale values from the previous step naturally compare false.
    *
-   * For steps without a question (or when `hideQuestions` is true) the
-   * cursor becomes ready after a short delay so the body has time to
-   * fade in. For steps WITH a question, the cursor stays hidden until
-   * `QuestionInteraction` signals that the tutor reply has popped in by
-   * calling `onComplete`. This keeps the cursor animation decoupled
-   * from the step's total dwell time and the question's internal
-   * timing.
+   * All steps (with or without a question interaction) use the same
+   * dwell-based delay. On question steps, the question typing + tutor
+   * reply play during the first ~2500ms of the dwell; the cursor
+   * starts later so its click still lines up with step advance.
    */
   const [cursorReadyForStep, setCursorReadyForStep] = useState<number | null>(
     null,
   );
   const cursorReady = cursorReadyForStep === currentStep;
+
+  /**
+   * Refs to the current step card and its "I Understand" button. Used
+   * by MouseCursor to compute real pixel coordinates for the animation
+   * target at mount time — replacing the fragile hard-coded `left: 85%`
+   * / `top: 92%` positioning that missed the button when step content
+   * or viewport size varied.
+   */
+  const cardRef = useRef<HTMLDivElement>(null);
+  const understandBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,32 +169,24 @@ export function StepsAnimation({
     };
   }, [steps, hideQuestions]);
 
-  // Schedule the cursor for steps that don't have a question interaction
-  // to wait for. No synchronous reset is needed — stale `cursorReadyForStep`
-  // values from the previous step compare false against the new `currentStep`.
+  // Schedule the cursor for every solving step, question or not. Delay is
+  // computed from the step's dwell so the cursor's click lands ~400ms
+  // before the step advances — regardless of dwell length. No synchronous
+  // reset is needed — stale `cursorReadyForStep` values from the previous
+  // step compare false against the new `currentStep`.
   useEffect(() => {
     if (phase !== "solving") return;
+    if (currentStep < 0) return; // not started yet (sentinel -1)
     const step = steps[currentStep];
     if (!step) return;
-    const hasQuestion = step.question && !hideQuestions;
-    if (hasQuestion) {
-      // QuestionInteraction will call handleQuestionComplete when ready.
-      return;
-    }
-    const t = setTimeout(
-      () => setCursorReadyForStep(currentStep),
-      CURSOR_START_DELAY_MS,
-    );
+    const delay = cursorStartDelay(dwellFor(step, hideQuestions));
+    const t = setTimeout(() => setCursorReadyForStep(currentStep), delay);
     return () => clearTimeout(t);
   }, [currentStep, phase, steps, hideQuestions]);
 
-  const handleQuestionComplete = useCallback(() => {
-    setCursorReadyForStep(currentStep);
-  }, [currentStep]);
-
   const totalSteps = steps.length;
   const displayedStepIndex =
-    phase === "solved" ? totalSteps - 1 : currentStep;
+    phase === "solved" ? totalSteps - 1 : Math.max(0, currentStep);
   const progressPct =
     phase === "solved"
       ? 100
@@ -232,6 +271,7 @@ export function StepsAnimation({
                   return (
                     <motion.div
                       key={`step-${i}`}
+                      ref={isCurrent ? cardRef : undefined}
                       layout
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -291,10 +331,7 @@ export function StepsAnimation({
 
                               {/* Ask-a-question interaction (skipped when hideQuestions) */}
                               {step.question && !hideQuestions && (
-                                <QuestionInteraction
-                                  question={step.question}
-                                  onComplete={handleQuestionComplete}
-                                />
+                                <QuestionInteraction question={step.question} />
                               )}
                             </div>
                           </div>
@@ -316,6 +353,7 @@ export function StepsAnimation({
                               </span>
                             </div>
                             <button
+                              ref={isCurrent ? understandBtnRef : undefined}
                               type="button"
                               className="rounded-lg bg-[color:var(--color-primary)] px-3 py-1.5 text-[11px] font-semibold text-white"
                               tabIndex={-1}
@@ -325,10 +363,18 @@ export function StepsAnimation({
                           </div>
 
                           {/* Animated mouse cursor moving to "I Understand".
-                              Only mounts once cursorReady is true, so its
-                              timing is independent of step dwell and any
-                              question interaction that precedes it. */}
-                          {cursorReady && <MouseCursor key={`cursor-${i}`} />}
+                              Only mounts once cursorReady is true, and its
+                              target coordinates are computed from the real
+                              button position via refs. Start delay is
+                              computed from step dwell so the click lands
+                              ~400ms before the step advances. */}
+                          {cursorReady && (
+                            <MouseCursor
+                              key={`cursor-${i}`}
+                              cardRef={cardRef}
+                              targetRef={understandBtnRef}
+                            />
+                          )}
                         </>
                       ) : (
                         /* Collapsed step */
@@ -473,18 +519,11 @@ export function StepsAnimation({
 /**
  * Typewriter animation for the student's question, then a pop-in tutor
  * reply. Mounts fresh every time its parent step becomes current, so
- * typing retriggers per cycle.
+ * typing retriggers per cycle. Plays independently of the cursor — the
+ * parent schedules the cursor on a dwell-based timer, not on this
+ * component's completion.
  */
-function QuestionInteraction({
-  question,
-  onComplete,
-}: {
-  question: AskAQuestion;
-  /** Called once the tutor reply has popped in — signals the parent that
-   *  the question interaction is finished and other per-step animations
-   *  (like the mouse cursor) can proceed. */
-  onComplete?: () => void;
-}) {
+function QuestionInteraction({ question }: { question: AskAQuestion }) {
   const [typedText, setTypedText] = useState("");
   const [showTutor, setShowTutor] = useState(false);
 
@@ -507,7 +546,6 @@ function QuestionInteraction({
           tutorTimer = setTimeout(() => {
             if (cancelled) return;
             setShowTutor(true);
-            onComplete?.();
           }, 650);
         }
       }, 38);
@@ -519,7 +557,7 @@ function QuestionInteraction({
       if (typingTimer) clearInterval(typingTimer);
       if (tutorTimer) clearTimeout(tutorTimer);
     };
-  }, [question.student, onComplete]);
+  }, [question.student]);
 
   const isTyping = typedText.length < question.student.length;
 
@@ -575,34 +613,131 @@ function QuestionInteraction({
 
 /**
  * Animated mouse cursor that moves toward the "I Understand" button,
- * simulating a click. Runs a fixed-length animation regardless of step
- * dwell — the parent mounts it when `cursorReady` is true, so its
- * start time is controlled externally (either after the body fade-in
- * for plain steps, or after the tutor reply pops in for question
- * steps).
+ * simulating a click. Target coordinates are computed from the real
+ * button's bounding rect (relative to the step card) at mount time,
+ * so the cursor lands on the button regardless of card size, step
+ * content, or viewport width.
+ *
+ * The parent mounts this when `cursorReady` is true, so its start time
+ * is controlled externally (via the dwell-based delay for plain steps,
+ * or via the question-interaction `onComplete` for question steps).
+ *
+ * Note on resizes: coordinates are read once at mount. If the user
+ * resizes the window mid-animation, the cursor target can drift. This
+ * is acceptable for a decorative demo that re-mounts on every step
+ * change anyway.
  */
-function MouseCursor() {
+type CursorTarget = {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+};
+
+function MouseCursor({
+  cardRef,
+  targetRef,
+}: {
+  cardRef: RefObject<HTMLDivElement | null>;
+  targetRef: RefObject<HTMLButtonElement | null>;
+}) {
+  // Compute pixel coordinates once, synchronously before paint, so the
+  // cursor's initial position is already correct on first render and
+  // there's no visible flash at (0, 0) or similar.
+  const [target, setTarget] = useState<CursorTarget | null>(null);
+
+  useLayoutEffect(() => {
+    let cancelled = false;
+    // Retry reading refs via rAF in case the parent's ref attachments
+    // aren't yet committed when this effect runs. In practice they
+    // always should be (refs commit before layout effects), but if
+    // strict mode double-mounts or React 19 concurrent scheduling ever
+    // shifts the order, we don't want the cursor to silently stay
+    // hidden forever. Cap retries at ~200ms (12 frames) so we fail
+    // loud instead of looping.
+    let attempts = 0;
+    const MAX_ATTEMPTS = 12;
+
+    const compute = () => {
+      if (cancelled) return;
+      const card = cardRef.current;
+      const btn = targetRef.current;
+      if (!card || !btn) {
+        if (attempts++ < MAX_ATTEMPTS) {
+          requestAnimationFrame(compute);
+        }
+        return;
+      }
+
+      const cardRect = card.getBoundingClientRect();
+      const btnRect = btn.getBoundingClientRect();
+
+      // Aim the click at the center of the I Understand button, in
+      // pixels relative to the (position: relative) card ancestor.
+      const toX = btnRect.left - cardRect.left + btnRect.width / 2;
+      const toY = btnRect.top - cardRect.top + btnRect.height / 2;
+
+      // Start position: upper-left area of the card, so the cursor has
+      // somewhere visible to glide in from. ~22% x ~30% of the card is
+      // a neutral origin that doesn't overlap the step title or body.
+      const fromX = cardRect.width * 0.22;
+      const fromY = cardRect.height * 0.3;
+
+      setTarget({ fromX, fromY, toX, toY });
+    };
+
+    compute();
+    return () => {
+      cancelled = true;
+    };
+  }, [cardRef, targetRef]);
+
+  // Until coords are computed, render nothing — avoids a one-frame
+  // flash at (0, 0) on the left edge of the card.
+  if (!target) return null;
+
   return (
     <motion.div
       className="pointer-events-none absolute z-20"
-      style={{ left: "22%", top: "30%" }}
-      initial={{ opacity: 0, scale: 1 }}
+      style={{ left: 0, top: 0 }}
+      initial={{
+        opacity: 0,
+        scale: 1,
+        x: target.fromX,
+        y: target.fromY,
+      }}
       animate={{
-        // Fixed 3.5s timeline (see CURSOR_ANIMATION_MS):
+        // Fixed 5s timeline (see CURSOR_ANIMATION_MS), click at 80%:
         //   0%   hidden at start position
-        //   14%  faded in
-        //   60%  finished gliding to the I Understand button
-        //   68%  click-down pulse
-        //   74%  click-up
-        //   90%  fade-out complete
+        //   10%  faded in (500ms)
+        //   64%  finished gliding to the button (3200ms — 2.7s of glide)
+        //   80%  click-down pulse (4000ms — 800ms of hover over button)
+        //   84%  click-up (4200ms)
+        //   96%  fade-out complete (4800ms)
         opacity: [0, 0.95, 0.95, 0.95, 0.95, 0, 0],
-        left: ["22%", "22%", "85%", "85%", "85%", "85%", "85%"],
-        top: ["30%", "30%", "92%", "92%", "92%", "92%", "92%"],
+        x: [
+          target.fromX,
+          target.fromX,
+          target.toX,
+          target.toX,
+          target.toX,
+          target.toX,
+          target.toX,
+        ],
+        y: [
+          target.fromY,
+          target.fromY,
+          target.toY,
+          target.toY,
+          target.toY,
+          target.toY,
+          target.toY,
+        ],
         scale: [1, 1, 1, 0.82, 1, 1, 1],
       }}
       transition={{
         duration: CURSOR_ANIMATION_MS / 1000,
-        times: [0, 0.14, 0.6, 0.68, 0.74, 0.9, 1],
+        times: [0, 0.1, 0.64, 0.8, 0.84, 0.96, 1],
         ease: "easeInOut",
       }}
     >
