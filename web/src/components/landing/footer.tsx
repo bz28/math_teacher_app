@@ -4,7 +4,6 @@ import { LogoMark } from "@/components/shared/logo-mark";
 type LinkItem = { label: string; href: string };
 
 const productLinks: LinkItem[] = [
-  { label: "Teachers", href: "/teachers" },
   { label: "For Students", href: "/students" },
   { label: "Math", href: "/subjects/math" },
   { label: "Physics", href: "/subjects/physics" },
@@ -12,8 +11,8 @@ const productLinks: LinkItem[] = [
 ];
 
 const companyLinks: LinkItem[] = [
-  { label: "Security", href: "/security" },
-  { label: "Book a demo", href: "/teachers#contact" },
+  { label: "Safety", href: "/safety" },
+  { label: "Book a demo", href: "/demo" },
 ];
 
 const resourceLinks: LinkItem[] = [

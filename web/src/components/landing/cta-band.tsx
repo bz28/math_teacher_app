@@ -18,9 +18,9 @@ export function CtaBand({
   headline,
   subhead,
   primaryLabel = "Book a demo",
-  primaryHref = "/teachers#contact",
+  primaryHref = "/demo",
   secondaryLabel = "Email us",
-  secondaryHref = "mailto:hello@veradicai.com",
+  secondaryHref = "mailto:support@veradicai.com",
 }: CtaBandProps) {
   return (
     <section className="relative overflow-hidden bg-[color:var(--color-invert)]">
