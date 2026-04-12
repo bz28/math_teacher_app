@@ -1,13 +1,20 @@
 import { Section } from "./section";
 import { Eyebrow } from "./eyebrow";
 
+const PAIN_POINTS = [
+  "Wishing you could give every student 1-on-1 time, but there's only one of you.",
+  "Wondering if your class actually got last week's lesson, or just nodded along.",
+  "Spending Sunday nights building problem sets instead of recharging.",
+  "Staring at a pile of papers that won't grade themselves.",
+];
+
 export function HomeProblem() {
   return (
     <Section variant="alt">
       <div className="grid gap-12 md:grid-cols-[1fr_1.2fr] md:items-center md:gap-16">
         <div>
           <Eyebrow>Why schools need a new kind of AI</Eyebrow>
-          <h2 className="mt-6 text-display-lg text-[color:var(--color-text)]">
+          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             AI chatbots are already in your classrooms.
             <br />
             <span className="text-[color:var(--color-text-secondary)]">
@@ -33,6 +40,27 @@ export function HomeProblem() {
             that&rsquo;s built to be on their side.
           </p>
         </div>
+      </div>
+
+      {/* ── Teacher pain points — the other half of "why schools need this" ── */}
+      <div className="mx-auto mt-20 max-w-3xl">
+        <div className="text-center">
+          <Eyebrow>Meanwhile, in your week</Eyebrow>
+          <h3 className="mt-5 text-2xl font-bold text-[color:var(--color-text)]">
+            You&rsquo;re already doing more than one human can.
+          </h3>
+        </div>
+
+        <ul className="mt-8 space-y-3">
+          {PAIN_POINTS.map((point) => (
+            <li
+              key={point}
+              className="rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-6 py-4 text-base leading-relaxed text-[color:var(--color-text-secondary)]"
+            >
+              {point}
+            </li>
+          ))}
+        </ul>
       </div>
     </Section>
   );

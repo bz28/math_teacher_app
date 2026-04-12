@@ -5,6 +5,8 @@ import { Footer } from "@/components/landing/footer";
 import { Section } from "@/components/landing/section";
 import { Eyebrow } from "@/components/landing/eyebrow";
 import { CtaBand } from "@/components/landing/cta-band";
+import { StepsAnimation } from "@/components/landing/steps-animation";
+import { mathDemo } from "@/components/landing/demos/math-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -44,7 +46,7 @@ const features = [
   },
   {
     title: "Get guided steps",
-    body: "Veradic breaks it down into steps and asks you the right questions. No dropped answers. You get there yourself, faster than you would have alone.",
+    body: "Veradic breaks every problem into small, digestible steps that explain the reasoning. If a step doesn't click, you can ask about just that step. No dropped answers. You get there yourself, faster than you would have alone.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4" />
@@ -101,11 +103,10 @@ export default function StudentsPage() {
           <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
             <Eyebrow>For students</Eyebrow>
             <h1 className="mt-6 text-display-xl text-[color:var(--color-text)]">
-              Homework help
+              Get unstuck.
               <br />
-              that{" "}
               <span className="bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
-                actually helps.
+                Step by step.
               </span>
             </h1>
             <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
@@ -137,6 +138,23 @@ export default function StudentsPage() {
             </p>
           </div>
         </section>
+
+        {/* See it in action — animated demo */}
+        <Section variant="invert">
+          <div className="mx-auto max-w-3xl text-center">
+            <Eyebrow variant="invert">See it in action</Eyebrow>
+            <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
+              This is what it looks like.
+            </h2>
+            <p className="mt-4 text-lg leading-relaxed text-[color:var(--color-invert-text-muted)]">
+              Veradic walks you through one step at a time. Ask when
+              you&rsquo;re stuck.
+            </p>
+          </div>
+          <div className="mx-auto mt-14 max-w-2xl">
+            <StepsAnimation data={mathDemo} />
+          </div>
+        </Section>
 
         {/* How it works */}
         <Section variant="alt">
@@ -268,7 +286,7 @@ export default function StudentsPage() {
           primaryLabel="Get started free"
           primaryHref="/register"
           secondaryLabel="Contact us"
-          secondaryHref="mailto:hello@veradicai.com"
+          secondaryHref="mailto:support@veradicai.com"
         />
       </main>
       <Footer />

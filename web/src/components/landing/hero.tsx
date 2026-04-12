@@ -34,14 +34,14 @@ export function Hero() {
           </h1>
 
           <p className="mt-7 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-            Veradic walks every student through the thinking, question by
-            question, step by step, until they get there themselves. Built for
-            schools, loved by teachers.
+            Veradic walks every student through the reasoning, step by step,
+            until they get there themselves. Built for schools, loved by
+            teachers and students.
           </p>
 
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
-              href="/teachers#contact"
+              href="/demo"
               className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)]"
             >
               Book a demo
@@ -83,7 +83,7 @@ export function Hero() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="relative"
         >
-          <StepsAnimation data={mathDemo} hideQuestions />
+          <StepsAnimation data={mathDemo} />
         </motion.div>
       </div>
     </section>
