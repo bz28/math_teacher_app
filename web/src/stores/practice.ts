@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { pollForState } from "@/lib/poll";
 import type { Subject } from "@/stores/learn";
+import type { Difficulty } from "@/components/shared/difficulty-picker";
 
 // ── Types ──
 
@@ -74,10 +75,10 @@ interface PracticeState {
   phase: PracticePhase;
   error: string | null;
 
-  startPracticeBatch: (problem: string, count: number, subject: Subject, difficulty?: string) => Promise<void>;
+  startPracticeBatch: (problem: string, count: number, subject: Subject, difficulty?: Difficulty) => Promise<void>;
   beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
-  practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: string) => Promise<void>;
+  practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: Difficulty) => Promise<void>;
   submitPracticeAnswer: (answer: string, subject: Subject) => Promise<void>;
   skipPracticeProblem: () => void;
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string, subject: Subject) => void;
@@ -127,7 +128,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     }
   },
 
-  async practiceFlaggedProblems(flaggedProblems, subject, difficulty = "same") {
+  async practiceFlaggedProblems(flaggedProblems, subject, difficulty: Difficulty = "same") {
     if (flaggedProblems.length === 0) return;
 
     set({ ...initialState, phase: "loading" as PracticePhase });
@@ -147,12 +148,13 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       });
 
       // Phase 2: solve each in parallel — user clicks Begin when ready
+      const batchId = sessionId;
       Promise.allSettled(
         similarQuestions.map((q, i) =>
           practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
             if (!res.problems[0]) return;
             const { practiceBatch: current } = get();
-            if (!current) return;
+            if (!current || current.sessionId !== batchId) return;
             const updated = [...current.problems];
             updated[i] = res.problems[0];
             set({ practiceBatch: { ...current, problems: updated } });
@@ -164,7 +166,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     }
   },
 
-  async startPracticeBatch(problem, count, subject, difficulty = "same") {
+  async startPracticeBatch(problem, count, subject, difficulty: Difficulty = "same") {
     set({ phase: "loading", error: null });
     try {
       // Phase 1: generate a similar question text (not the original)
@@ -180,9 +182,10 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       });
 
       // Phase 2: solve in background — user clicks Begin when ready
+      const batchId = sessionId;
       practiceApi.generate({ problem: similarQuestion, count: 0, subject }).then((res) => {
         const { practiceBatch: current } = get();
-        if (!current) return;
+        if (!current || current.sessionId !== batchId) return;
         const updated = [...current.problems];
         if (res.problems[0]) updated[0] = res.problems[0];
         set({ practiceBatch: { ...current, problems: updated } });

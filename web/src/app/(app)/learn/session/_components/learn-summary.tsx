@@ -13,7 +13,7 @@ import type { LearnQueue } from "@/stores/learn";
 interface LearnSummaryProps {
   learnQueue: LearnQueue;
   onToggleFlag: (index: number) => void;
-  onPracticeFlagged: (flagged: string[], difficulty: string) => Promise<void>;
+  onPracticeFlagged: (flagged: string[], difficulty: Difficulty) => Promise<void>;
   onReset: () => void;
 }
 

@@ -9,6 +9,7 @@ import {
   type DiagnosisResult,
 } from "@/lib/api";
 import type { Subject } from "@/stores/learn";
+import type { Difficulty } from "@/components/shared/difficulty-picker";
 
 // ── Types ──
 
@@ -26,7 +27,7 @@ export interface MockTest {
   flags: boolean[];
   currentIndex: number;
   timeLimitSeconds: number | null;
-  startedAt: number;
+  startedAt: number | null;
   submittedAt: number | null;
   results: MockTestResult[] | null;
   sessionId: string | null;
@@ -57,7 +58,7 @@ function createMockTest(
     flags: new Array(len).fill(false),
     currentIndex: 0,
     timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-    startedAt: 0,
+    startedAt: null,
     submittedAt: null,
     results: null,
     sessionId,
@@ -81,7 +82,7 @@ interface MockTestState {
     subject: Subject,
     problemQueue: { text: string; image?: string }[],
     multipleChoice?: boolean,
-    difficulty?: string,
+    difficulty?: Difficulty,
   ) => Promise<void>;
   beginMockTest: () => void;
   saveMockTestAnswer: (index: number, answer: string) => void;
@@ -101,7 +102,7 @@ const initialState = {
 export const useMockTestStore = create<MockTestState>((set, get, store) => ({
   ...initialState,
 
-  async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true, difficulty = "same") {
+  async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true, difficulty: Difficulty = "same") {
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
     try {
@@ -139,11 +140,12 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         set({ phase: "mock_test_preview" });
 
         // Fire solve calls for all generated questions in parallel
+        const batchSessionId = id;
         const solvePromises = questionTexts.map((q, i) =>
           practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
             if (res.problems.length > 0) {
               const { mockTest: current } = get();
-              if (!current) return;
+              if (!current || current.sessionId !== batchSessionId) return;
               const updated = [...current.questions];
               updated[i] = res.problems[0];
               set({ mockTest: { ...current, questions: updated } });
@@ -165,6 +167,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         set({ mockTest: mt, phase: "mock_test_preview" });
 
         // Fire all API calls in parallel, update each question as it resolves
+        const batchSessionId2 = id;
         const promises = problems.map((p, i) => {
           const image = imageMap.get(p);
           return practiceApi.generate({
@@ -173,7 +176,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }).then((res) => {
             if (res.problems.length > 0) {
               const { mockTest: current } = get();
-              if (!current) return;
+              if (!current || current.sessionId !== batchSessionId2) return;
               const updated = [...current.questions];
               updated[i] = res.problems[0];
               set({ mockTest: { ...current, questions: updated } });

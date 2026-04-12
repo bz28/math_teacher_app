@@ -17,7 +17,7 @@ interface LearnCompletedProps {
   onContinueAsking: () => void;
   onToggleFlag: (index: number) => void;
   onAdvanceQueue: () => Promise<void>;
-  onStartPractice: (problem: string, count: number, subject: Subject, difficulty?: string) => Promise<void>;
+  onStartPractice: (problem: string, count: number, subject: Subject, difficulty?: Difficulty) => Promise<void>;
   onReset: () => void;
 }
 

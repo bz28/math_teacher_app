@@ -42,9 +42,10 @@ export default function MockTestPage() {
 
   // Timer
   useEffect(() => {
-    if (!mockTest?.timeLimitSeconds || phase !== "mock_test_active") return;
+    if (!mockTest?.timeLimitSeconds || !mockTest.startedAt || phase !== "mock_test_active") return;
+    const startedAt = mockTest.startedAt;
     const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - mockTest.startedAt) / 1000);
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
       const remaining = mockTest.timeLimitSeconds! - elapsed;
       setTimeLeft(Math.max(0, remaining));
       if (remaining <= 0) {
