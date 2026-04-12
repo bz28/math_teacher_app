@@ -155,12 +155,14 @@ function LearnPageContent() {
               <button
                 key={key}
                 type="button"
+                disabled={starting}
                 onClick={() => router.push(`/learn?subject=${key}`)}
                 className={cn(
                   "inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition-all",
                   isActive
                     ? cn("text-white shadow-md bg-gradient-to-r", cfg.gradient)
                     : "border border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",
+                  starting && "pointer-events-none opacity-50",
                 )}
               >
                 {cfg.icon} {cfg.name}
@@ -188,10 +190,12 @@ function LearnPageContent() {
         ]).map((m) => (
           <button
             key={m.id}
+            disabled={starting}
             onClick={() => setMode(m.id)}
             className={cn(
               "relative z-10 flex-1 rounded-full py-2 text-sm font-semibold transition-colors",
               mode === m.id ? "text-white" : "text-text-secondary hover:text-text-primary",
+              starting && "pointer-events-none",
             )}
           >
             {m.label}
