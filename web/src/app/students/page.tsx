@@ -6,7 +6,7 @@ import { Section } from "@/components/landing/section";
 import { Eyebrow } from "@/components/landing/eyebrow";
 import { CtaBand } from "@/components/landing/cta-band";
 import { StepsAnimation } from "@/components/landing/steps-animation";
-import { mathDemo } from "@/components/landing/demos/math-demo";
+import { gardenDemo } from "@/components/landing/demos/garden-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -152,7 +152,7 @@ export default function StudentsPage() {
             </p>
           </div>
           <div className="mx-auto mt-14 max-w-2xl">
-            <StepsAnimation data={mathDemo} />
+            <StepsAnimation data={gardenDemo} />
           </div>
         </Section>
 

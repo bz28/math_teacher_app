@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { mathDemo } from "@/components/landing/demos/math-demo";
+import { calculusDemo } from "@/components/landing/demos/calculus-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -73,7 +73,7 @@ export default function MathPage() {
       icon={mathIcon}
       whyReasons={whyReasons}
       subjectProseBlock={subjectProseBlock}
-      demoData={mathDemo}
+      demoData={calculusDemo}
     />
   );
 }
