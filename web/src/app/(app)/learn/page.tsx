@@ -81,13 +81,6 @@ function LearnPageContent() {
     setInput("");
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleAddProblem();
-    }
-  }
-
   const [starting, setStarting] = useState(false);
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
   const [quotaConfirm, setQuotaConfirm] = useState(false);
