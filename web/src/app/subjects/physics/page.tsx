@@ -53,45 +53,14 @@ const physicsIcon = (
   </svg>
 );
 
-const topics = [
-  "Kinematics",
-  "Forces & Newton's Laws",
-  "Energy & Work",
-  "Momentum",
-  "Circular Motion",
-  "Gravity",
-  "Waves",
-  "Sound",
-  "Optics",
-  "Electricity",
-  "Magnetism",
-  "Thermodynamics",
-  "Modern Physics",
-];
-
-const differentiators = [
-  {
-    title: "Units that never drift",
-    description:
-      "Veradic tracks units through every step (meters, seconds, newtons, joules) and catches mismatches before they become wrong answers.",
-  },
-  {
-    title: "Multi-step problems, actually broken down",
-    description:
-      "Most physics problems are two, three, or four sub-problems glued together. Veradic teaches students to see and separate them.",
-  },
-  {
-    title: "Concept before calculation",
-    description:
-      "Students are asked what physics applies before they're asked to do arithmetic. You build intuition, not just plug-and-chug.",
-  },
-];
-
 const whyReasons = [
   "Covers the full physics curriculum from conceptual physics through AP Physics C: mechanics, electricity, magnetism, and modern physics.",
   "Walks students through free-body diagrams, unit conversions, and energy conservation: the moves that matter, not just the final numbers.",
   "Catches the unit errors, sign errors, and vector-component mistakes that trip up every physics student at least once a week.",
 ];
+
+const subjectProseBlock =
+  "Every problem starts with the physics, not the math. Students see which principle applies before they touch an equation — and they walk through free-body diagrams and unit tracking step by step, the way you'd teach at the board.";
 
 export default function PhysicsPage() {
   return (
@@ -104,9 +73,8 @@ export default function PhysicsPage() {
       educationalProgramDescription="AI-powered physics tutoring for classrooms, covering kinematics, forces, energy, waves, electricity, magnetism, and modern physics with step-by-step guidance and teacher-controlled content."
       badgeColor="#0984E3"
       icon={physicsIcon}
-      topics={topics}
-      differentiators={differentiators}
       whyReasons={whyReasons}
+      subjectProseBlock={subjectProseBlock}
       demoData={physicsDemo}
     />
   );

@@ -9,11 +9,6 @@ import { CtaBand } from "./cta-band";
 import { FAQ as SharedFAQ } from "./faq";
 import { StepsAnimation, type StepsAnimationData } from "./steps-animation";
 
-interface Differentiator {
-  title: string;
-  description: string;
-}
-
 interface SubjectPageProps {
   name: string;
   slug: "math" | "physics" | "chemistry";
@@ -25,12 +20,10 @@ interface SubjectPageProps {
   /** Hex used for inline subject pills */
   badgeColor: string;
   icon: React.ReactNode;
-  /** Topics grid — what we cover for this subject */
-  topics: string[];
-  /** Subject-specific differentiators */
-  differentiators: Differentiator[];
   /** 3 short reasons a teacher of this subject would want Veradic */
   whyReasons: string[];
+  /** One short paragraph on what makes this subject distinct on Veradic */
+  subjectProseBlock: string;
   /** Animated demo walkthrough — same component as the homepage hero */
   demoData?: StepsAnimationData;
 }
@@ -44,9 +37,8 @@ export function SubjectPage({
   educationalProgramDescription,
   badgeColor,
   icon,
-  topics,
-  differentiators,
   whyReasons,
+  subjectProseBlock,
   demoData,
 }: SubjectPageProps) {
   return (
@@ -139,7 +131,7 @@ export function SubjectPage({
               Try a problem
             </a>
             <Link
-              href="/teachers#contact"
+              href="/demo"
               className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-8 text-base font-semibold text-[color:var(--color-text)] transition-colors hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
             >
               Book a demo
@@ -148,43 +140,16 @@ export function SubjectPage({
         </div>
       </section>
 
-      {/* ── Topics grid ── */}
-      <Section variant="alt">
-        <div className="mx-auto max-w-3xl text-center">
-          <Eyebrow>Topics we cover</Eyebrow>
-          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-            Everything your students see in class.
-          </h2>
-          <p className="mt-4 text-lg text-[color:var(--color-text-secondary)]">
-            From the basics to the hardest problems on the AP exam. If it&rsquo;s
-            in the {name.toLowerCase()} curriculum, Veradic can walk a student
-            through it.
-          </p>
-        </div>
-
-        <div className="mt-12 flex flex-wrap justify-center gap-3">
-          {topics.map((topic) => (
-            <span
-              key={topic}
-              className="rounded-full border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-5 py-2.5 text-sm font-medium text-[color:var(--color-text-secondary)]"
-            >
-              {topic}
-            </span>
-          ))}
-        </div>
-      </Section>
-
       {/* ── Live demo — same animated component as the homepage hero ── */}
       {demoData && (
         <Section variant="invert" id="demo">
           <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow variant="invert">See it solve a problem</Eyebrow>
+            <Eyebrow variant="invert">See it in action</Eyebrow>
             <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
-              Watch Veradic teach {name.toLowerCase()}.
+              Watch Veradic walk through a {name.toLowerCase()} problem.
             </h2>
             <p className="mt-4 text-lg leading-relaxed text-[color:var(--color-invert-text-muted)] md:text-xl">
-              Not a glossy mockup. This is the real step-by-step output
-              your students see when they work a problem.
+              This is exactly what your students see when they open a problem.
             </p>
           </div>
 
@@ -194,37 +159,21 @@ export function SubjectPage({
         </Section>
       )}
 
-      {/* ── Differentiators ── */}
-      <Section variant="default">
-        <div className="mx-auto max-w-3xl text-center">
-          <Eyebrow>Built for {name.toLowerCase()}</Eyebrow>
+      {/* ── What makes {name} on Veradic different — subject-specific prose ── */}
+      <Section variant="alt">
+        <div className="mx-auto max-w-2xl text-center">
+          <Eyebrow>For {name.toLowerCase()} teachers specifically</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-            Why Veradic fits the subject.
+            What makes {name.toLowerCase()} on Veradic different.
           </h2>
-        </div>
-
-        <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {differentiators.map((d, i) => (
-            <div
-              key={d.title}
-              className="marketing-card rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8"
-            >
-              <span className="text-xs font-semibold tracking-widest text-[color:var(--color-text-muted)]">
-                0{i + 1}
-              </span>
-              <h3 className="mt-3 text-xl font-bold text-[color:var(--color-text)]">
-                {d.title}
-              </h3>
-              <p className="mt-3 text-base leading-relaxed text-[color:var(--color-text-secondary)]">
-                {d.description}
-              </p>
-            </div>
-          ))}
+          <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
+            {subjectProseBlock}
+          </p>
         </div>
       </Section>
 
       {/* ── Why for {name} teachers ── */}
-      <Section variant="alt">
+      <Section variant="default">
         <div className="mx-auto max-w-3xl">
           <Eyebrow>For {name.toLowerCase()} teachers</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">

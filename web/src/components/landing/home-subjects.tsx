@@ -14,21 +14,21 @@ const subjects: SubjectCard[] = [
   {
     slug: "math",
     name: "Math",
-    tagline: "Pre-algebra through calculus, word problems, and proofs.",
+    tagline: "Middle school math through AP Calculus BC, statistics, word problems, and proofs.",
     accent: "#6C5CE7",
     accentBg: "rgba(108, 92, 231, 0.08)",
   },
   {
     slug: "physics",
     name: "Physics",
-    tagline: "Kinematics, forces, energy, electricity, and modern physics.",
+    tagline: "Conceptual physics through AP Physics C — mechanics, electricity, magnetism, and beyond.",
     accent: "#0984E3",
     accentBg: "rgba(9, 132, 227, 0.08)",
   },
   {
     slug: "chemistry",
     name: "Chemistry",
-    tagline: "Stoichiometry, bonding, equilibrium, thermo, and organic.",
+    tagline: "Intro chem through AP Chemistry and organic — atoms, bonding, stoichiometry, and reactions.",
     accent: "#00B894",
     accentBg: "rgba(0, 184, 148, 0.08)",
   },
@@ -40,7 +40,7 @@ export function HomeSubjects() {
       <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
         <div>
           <Eyebrow>Subjects we support</Eyebrow>
-          <h2 className="mt-6 text-display-lg text-[color:var(--color-text)]">
+          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             One tutor. Every subject
             <br />
             your students need.
@@ -66,10 +66,7 @@ export function HomeSubjects() {
               >
                 {s.name}
               </div>
-              <h3 className="mt-6 text-3xl font-bold leading-tight text-[color:var(--color-text)]">
-                AI {s.name.toLowerCase()} tutoring, built for classrooms.
-              </h3>
-              <p className="mt-4 text-base leading-relaxed text-[color:var(--color-text-secondary)]">
+              <p className="mt-6 text-xl font-bold leading-tight text-[color:var(--color-text)]">
                 {s.tagline}
               </p>
             </div>
@@ -94,7 +91,7 @@ export function HomeSubjects() {
       <p className="mt-10 text-center text-sm text-[color:var(--color-text-muted)]">
         Teaching something else?{" "}
         <a
-          href="mailto:hello@veradicai.com?subject=Subject%20request"
+          href="mailto:support@veradicai.com?subject=Subject%20request"
           className="font-semibold text-[color:var(--color-primary)] hover:underline"
         >
           Tell us what you teach →

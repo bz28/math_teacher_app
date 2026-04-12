@@ -51,44 +51,14 @@ const mathIcon = (
   </svg>
 );
 
-const topics = [
-  "Pre-Algebra",
-  "Algebra I",
-  "Algebra II",
-  "Geometry",
-  "Trigonometry",
-  "Pre-Calculus",
-  "Calculus AB",
-  "Calculus BC",
-  "Statistics",
-  "Word Problems",
-  "Proofs",
-  "Linear Algebra",
-];
-
-const differentiators = [
-  {
-    title: "Proper LaTeX, not plain text",
-    description:
-      "Every expression, equation, and proof renders with textbook-quality typography. No more fighting with asterisks and slashes.",
-  },
-  {
-    title: "Word problems the right way",
-    description:
-      "Veradic doesn't just solve word problems. It teaches students how to translate English into math, which is the part they actually struggle with.",
-  },
-  {
-    title: "Proofs, step by step",
-    description:
-      "Geometry and algebra proofs are broken into logical moves. Students learn the structure, not just the answer.",
-  },
-];
-
 const whyReasons = [
   "Covers the full math curriculum from middle school through AP Calculus BC. One tool, every class you teach.",
   "Shows work the way you show work: factor, simplify, solve, verify. Not a black box that spits out a final number.",
   "Catches the common mistakes you see every week (sign errors, missed steps, distribution errors) and walks students past them.",
 ];
+
+const subjectProseBlock =
+  "Every step in Veradic's walk-through explains why the move works — not just that it does. Students see why you factor before applying the quadratic formula, why a substitution makes the integral tractable, why a proof follows the order it does. The thinking is the point.";
 
 export default function MathPage() {
   return (
@@ -101,9 +71,8 @@ export default function MathPage() {
       educationalProgramDescription="AI-powered math tutoring for classrooms, covering pre-algebra, algebra, geometry, trigonometry, pre-calculus, AP Calculus, and statistics with step-by-step guidance and teacher-controlled content."
       badgeColor="#6C5CE7"
       icon={mathIcon}
-      topics={topics}
-      differentiators={differentiators}
       whyReasons={whyReasons}
+      subjectProseBlock={subjectProseBlock}
       demoData={mathDemo}
     />
   );

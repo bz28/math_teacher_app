@@ -54,46 +54,14 @@ const chemIcon = (
   </svg>
 );
 
-const topics = [
-  "Atoms & Elements",
-  "Periodic Trends",
-  "Chemical Bonding",
-  "Naming Compounds",
-  "Balancing Equations",
-  "Stoichiometry",
-  "Gas Laws",
-  "Solutions & Molarity",
-  "Thermochemistry",
-  "Equilibrium",
-  "Acids & Bases",
-  "Redox & Electrochemistry",
-  "Kinetics",
-  "Organic Chemistry",
-];
-
-const differentiators = [
-  {
-    title: "Molecules rendered, not described",
-    description:
-      "Veradic renders real molecular structures from SMILES notation. Students see the actual bonds, not just a string of letters.",
-  },
-  {
-    title: "Stoichiometry that teaches the why",
-    description:
-      "Mole ratios, limiting reagents, percent yield: every step is explained in the context of the reaction, not as memorized formulas.",
-  },
-  {
-    title: "Balances equations with the student",
-    description:
-      "Instead of showing a pre-balanced equation, Veradic asks students to try, then guides them toward the fix when they're off.",
-  },
-];
-
 const whyReasons = [
   "Covers the full chemistry curriculum from intro chem through AP Chemistry and organic. One tool for every section in your course.",
   "Handles the unit gymnastics chemistry demands (grams to moles to molecules) without students giving up halfway through.",
   "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
 ];
+
+const subjectProseBlock =
+  "Structures render as real molecules, not strings of letters. Every reaction step explains the electrons, the bonds, and the logic — not just memorized products. Students build intuition about why chemistry works, not just what to write down.";
 
 export default function ChemistryPage() {
   return (
@@ -106,9 +74,8 @@ export default function ChemistryPage() {
       educationalProgramDescription="AI-powered chemistry tutoring for classrooms, covering atoms, bonding, stoichiometry, thermochemistry, equilibrium, acids and bases, electrochemistry, kinetics, and organic chemistry with step-by-step guidance and teacher-controlled content."
       badgeColor="#00B894"
       icon={chemIcon}
-      topics={topics}
-      differentiators={differentiators}
       whyReasons={whyReasons}
+      subjectProseBlock={subjectProseBlock}
       demoData={chemistryDemo}
     />
   );
