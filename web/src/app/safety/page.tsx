@@ -8,17 +8,17 @@ import { CtaBand } from "@/components/landing/cta-band";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Security, Privacy & Academic Integrity | Veradic AI",
+  title: "Safety, Privacy & Academic Integrity | Veradic AI",
   description:
     "How Veradic AI handles student data, safeguards academic integrity, moderates content, and stays safe in the classroom. Built for schools from day one.",
   openGraph: {
-    title: "Security & Privacy | Veradic AI",
+    title: "Safety & Privacy | Veradic AI",
     description:
       "How Veradic AI handles student data, safeguards academic integrity, and stays safe in the classroom.",
-    url: `${SITE_URL}/security`,
+    url: `${SITE_URL}/safety`,
   },
   alternates: {
-    canonical: `${SITE_URL}/security`,
+    canonical: `${SITE_URL}/safety`,
   },
 };
 
@@ -41,15 +41,7 @@ const pillars = [
   },
 ];
 
-const subprocessors = [
-  { name: "Anthropic", purpose: "Provides the Claude AI model that powers tutoring." },
-  { name: "Vercel", purpose: "Hosts the Veradic website and app infrastructure." },
-  { name: "Neon / managed Postgres", purpose: "Stores school, user, and session data in encrypted databases." },
-  { name: "Cloudflare", purpose: "CDN, DDoS protection, and edge routing." },
-  { name: "RevenueCat", purpose: "Manages subscription billing for individual plans." },
-];
-
-export default function SecurityPage() {
+export default function SafetyPage() {
   return (
     <>
       <Navbar />
@@ -59,7 +51,7 @@ export default function SecurityPage() {
           <div className="pointer-events-none absolute right-0 top-0 hidden h-[520px] w-[520px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/10 to-transparent blur-3xl md:block" />
 
           <div className="relative mx-auto w-full max-w-3xl px-6 py-12 md:px-8 md:py-16">
-            <Eyebrow>Security &amp; privacy</Eyebrow>
+            <Eyebrow>Safety &amp; privacy</Eyebrow>
             <h1 className="mt-6 text-display-lg text-[color:var(--color-text)]">
               Built to be safe in schools.
             </h1>
@@ -71,10 +63,10 @@ export default function SecurityPage() {
             <p className="mt-4 text-sm text-[color:var(--color-text-muted)]">
               Questions?{" "}
               <a
-                href="mailto:security@veradicai.com"
+                href="mailto:support@veradicai.com"
                 className="font-semibold text-[color:var(--color-primary)] hover:underline"
               >
-                security@veradicai.com
+                support@veradicai.com
               </a>
             </p>
           </div>
@@ -116,8 +108,8 @@ export default function SecurityPage() {
                   <p>
                     We don&rsquo;t build advertising profiles. We don&rsquo;t
                     sell data. We don&rsquo;t share identifiable student data
-                    with third parties except the processors listed at the
-                    bottom of this page.
+                    with third parties beyond the infrastructure providers
+                    needed to actually run the service.
                   </p>
                 </>
               }
@@ -129,8 +121,8 @@ export default function SecurityPage() {
                 <>
                   <p>
                     Student and school data is stored in encrypted databases
-                    hosted by our managed-Postgres provider, in United States
-                    data centers. Backups are encrypted at rest.
+                    hosted in United States data centers. Backups are
+                    encrypted at rest.
                   </p>
                   <p>
                     Schools can request full data export or deletion at any
@@ -156,14 +148,14 @@ export default function SecurityPage() {
                     <strong>Honest note:</strong> Veradic does not currently
                     hold formal FERPA or COPPA certifications. If your
                     district requires signed agreements around data handling,
-                    reach out to{" "}
+                    email us at{" "}
                     <a
-                      href="mailto:security@veradicai.com"
+                      href="mailto:support@veradicai.com"
                       className="text-[color:var(--color-primary)] hover:underline"
                     >
-                      security@veradicai.com
+                      support@veradicai.com
                     </a>{" "}
-                    and we&rsquo;ll work with your legal team.
+                    and we&rsquo;ll work something out.
                   </p>
                 </>
               }
@@ -209,25 +201,6 @@ export default function SecurityPage() {
                 </>
               }
             />
-
-            <Detail
-              heading="Subprocessors we use"
-              body={
-                <ul className="list-disc pl-5">
-                  {subprocessors.map((s) => (
-                    <li key={s.name} className="mt-2">
-                      <strong className="text-[color:var(--color-text)]">
-                        {s.name}
-                      </strong>
-                      <span className="text-[color:var(--color-text-secondary)]">
-                        {": "}
-                        {s.purpose}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              }
-            />
           </div>
         </Section>
 
@@ -263,12 +236,12 @@ export default function SecurityPage() {
 
         <CtaBand
           eyebrow="Still have questions?"
-          headline="We'll talk to your legal team."
-          subhead="Data-processing agreements, subprocessor questionnaires, security reviews. We've answered them all before."
-          primaryLabel="Email security"
-          primaryHref="mailto:security@veradicai.com"
+          headline="We want to answer them."
+          subhead="Reach out with anything — how we handle student data, how the integrity checker works, what happens in edge cases. We'll get back to you."
+          primaryLabel="Contact support"
+          primaryHref="mailto:support@veradicai.com"
           secondaryLabel="Book a demo"
-          secondaryHref="/teachers#contact"
+          secondaryHref="/demo"
         />
       </main>
       <Footer />

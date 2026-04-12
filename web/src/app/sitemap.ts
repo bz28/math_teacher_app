@@ -12,9 +12,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
-      url: `${baseUrl}/teachers`,
+      url: `${baseUrl}/demo`,
       lastModified: new Date(),
-      changeFrequency: "weekly",
+      changeFrequency: "monthly",
       priority: 0.9,
     },
     {
@@ -24,7 +24,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/security`,
+      url: `${baseUrl}/safety`,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.7,
