@@ -43,7 +43,7 @@ function LearnPageContent() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const { startMockTest } = useMockTestStore();
-  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements } = useEntitlementStore();
+  const { isPro, dailySessionsUsed, dailySessionsLimit, dailyScansUsed, dailyScansLimit, fetchEntitlements, incrementScansUsed } = useEntitlementStore();
   const remainingSessions = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
   const remainingScans = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
 
@@ -301,7 +301,7 @@ function LearnPageContent() {
           currentQueueLength={problemQueue.length}
           scansRemaining={remainingScans}
           onScanLimitReached={() => showUpgrade("image_scan", `You've used all ${FREE_DAILY_SCAN_LIMIT} image scans for today. Upgrade to Pro for unlimited scans.`)}
-          onExtractComplete={fetchEntitlements}
+          onExtractComplete={() => { incrementScansUsed(); fetchEntitlements(); }}
           onPhaseChange={setImagePhase}
         />
       </Card>
