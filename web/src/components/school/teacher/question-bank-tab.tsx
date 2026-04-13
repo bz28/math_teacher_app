@@ -75,7 +75,7 @@ export function QuestionBankTab({
   }, [courseId, statusFilter, counts.pending]);
 
   const newQuestionCount = pendingItems.filter(
-    (i) => i.source === "generated" && !i.parent_question_id,
+    (i) => (i.source === "generated" || i.source === "imported") && !i.parent_question_id,
   ).length;
   const variationPendingCount = pendingItems.filter(
     (i) => i.source === "practice",

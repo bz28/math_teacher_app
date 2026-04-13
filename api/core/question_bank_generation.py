@@ -98,6 +98,8 @@ Rules:
 - Skip headers, instructions, page numbers, and non-problem text
 - If you cannot read something clearly, skip it rather than guessing
 - Rate each problem's difficulty based on the content
+- Extract at most 40 problems. If the worksheet has more, extract the
+  first 40 and stop.
 """
 
 

@@ -46,12 +46,6 @@ export function UploadWorksheetModal({
       .finally(() => setLoading(false));
   }, [courseId]);
 
-  // Cleanup preview URLs on unmount
-  useEffect(
-    () => () => files.forEach((f) => URL.revokeObjectURL(f.preview)),
-    [files],
-  );
-
   const addFiles = useCallback(
     (incoming: File[]) => {
       const valid = incoming.filter((f) => ACCEPTED_TYPES.includes(f.type));
@@ -113,7 +107,7 @@ export function UploadWorksheetModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
+      onClick={submitting ? undefined : onClose}
     >
       <form
         className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
@@ -142,8 +136,8 @@ export function UploadWorksheetModal({
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <p className="text-sm text-text-muted">
             Upload photos of an existing worksheet or problem set. Claude will
-            extract each problem, solve it, and add it to your question bank for
-            review.
+            extract each problem (up to ~40 per upload), solve it, and add it to
+            your question bank for review.
           </p>
 
           {/* Drop zone */}
