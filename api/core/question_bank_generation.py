@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
-from api.core.llm_schemas import REGENERATE_QA_SCHEMA
+from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
 from api.core.practice import generate_distractors
 from api.core.subjects import get_config
 from api.database import get_session_factory
@@ -81,6 +81,84 @@ async def _run_job(job_id: uuid.UUID) -> None:
             await db.commit()
 
 
+_EXTRACT_WORKSHEET_TEMPLATE = """\
+You are a {professor_role} extracting problems from a teacher's worksheet.
+
+The teacher has uploaded images of an existing worksheet or problem set.
+Extract every individual problem exactly as written — do NOT rewrite,
+simplify, or invent new problems. Preserve the original wording and
+any LaTeX notation.
+
+Rules:
+- Extract each problem as a separate item
+- Use LaTeX with $ delimiters for math expressions
+- Use single backslashes for LaTeX commands (e.g. \\frac, \\sqrt)
+- If a problem references a diagram or figure, describe it in brackets
+  at the end of the problem text (same as image extraction rules)
+- Skip headers, instructions, page numbers, and non-problem text
+- If you cannot read something clearly, skip it rather than guessing
+- Rate each problem's difficulty based on the content
+- Extract at most 40 problems. If the worksheet has more, extract the
+  first 40 and stop.
+"""
+
+
+async def _extract_from_images(
+    images: list[dict[str, str]],
+    *,
+    subject: str,
+    user_id: str,
+) -> list[dict[str, str]]:
+    """Extract problems from worksheet images via Claude Vision.
+
+    Returns list of {"title", "text", "difficulty"} — same shape as
+    generate_questions() so the downstream pipeline is unchanged.
+    """
+    cfg = get_config(subject)
+    system_prompt = _EXTRACT_WORKSHEET_TEMPLATE.format(
+        professor_role=cfg["professor_role"],
+    )
+
+    content: list[dict[str, Any]] = []
+    for img in images:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": img["media_type"],
+                "data": img["data"],
+            },
+        })
+    content.append({
+        "type": "text",
+        "text": (
+            f"{system_prompt}\n\n"
+            "Extract all problems from the worksheet images above."
+        ),
+    })
+
+    result = await call_claude_vision(
+        content,
+        mode=LLMMode.BANK_EXTRACT,
+        tool_schema=GENERATE_QUESTIONS_SCHEMA,
+        user_id=user_id,
+        model=MODEL_REASON,
+        max_tokens=4096,
+    )
+
+    questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
+    normalized = []
+    for q in questions:
+        if not isinstance(q, dict) or "text" not in q:
+            continue
+        normalized.append({
+            "title": str(q.get("title") or "")[:120],
+            "text": str(q["text"]),
+            "difficulty": str(q.get("difficulty", "medium")),
+        })
+    return normalized
+
+
 async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     """Run the actual Claude calls and persist results.
 
@@ -104,54 +182,68 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         if unit:
             unit_name = unit.name
 
-    # Fetch document images for vision context
-    doc_ids = [uuid.UUID(d) for d in (job.source_doc_ids or [])]
-    images = await fetch_document_images(
-        db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
-    )
-
-    # If this is a "generate similar" job, fetch the seed question and
-    # weave it into the constraint so Claude produces variations of it.
-    constraint_text = job.constraint
-    if job.parent_question_id:
-        parent = (await db.execute(
-            select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
-        )).scalar_one_or_none()
-        if not parent:
+    # 1. Get question texts — either extract from uploaded images or
+    # generate via AI, depending on job mode.
+    if job.mode == "upload":
+        # Upload mode: extract problems from worksheet images stored on
+        # the job row. Images are [{data, media_type}].
+        raw_images = job.uploaded_images or []
+        if not raw_images:
+            raise RuntimeError("No images found on upload job")
+        question_dicts = await _extract_from_images(
+            raw_images,
+            subject=course.subject,
+            user_id=str(job.created_by_id),
+        )
+        if not question_dicts:
             raise RuntimeError(
-                "Parent question was deleted before its variations could be generated"
+                "No problems could be extracted from the uploaded images. "
+                "Make sure the images are clear and contain readable problems."
             )
-        seed_block = (
-            "Generate questions that are SIMILAR TO but DIFFERENT FROM "
-            "this reference question. Match the same topic, difficulty, "
-            "and pedagogical style, but use different numbers, contexts, "
-            "or framing so each variation is its own problem.\n\n"
-            f"Reference question:\n{parent.question}"
-        )
-        constraint_text = (
-            f"{seed_block}\n\nAdditional constraint: {job.constraint}"
-            if job.constraint else seed_block
+        # Set requested_count to actual extracted count (was 0 at creation)
+        job.requested_count = len(question_dicts)
+    else:
+        # Generate mode: AI invents new questions
+        doc_ids = [uuid.UUID(d) for d in (job.source_doc_ids or [])]
+        images = await fetch_document_images(
+            db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
         )
 
-    # 1. Generate question texts. The bank flow doesn't use a structured
-    # difficulty field — teachers describe what they want in the natural-
-    # language constraint instead. The legacy job.difficulty column is
-    # ignored at the prompt level.
-    question_dicts = await generate_questions(
-        unit_name=unit_name,
-        count=job.requested_count,
-        course_name=course.name,
-        subject=course.subject,
-        user_id=str(job.created_by_id),
-        images=images or None,
-        extra_instructions=constraint_text,
-    )
+        constraint_text = job.constraint
+        if job.parent_question_id:
+            parent = (await db.execute(
+                select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
+            )).scalar_one_or_none()
+            if not parent:
+                raise RuntimeError(
+                    "Parent question was deleted before its variations could be generated"
+                )
+            seed_block = (
+                "Generate questions that are SIMILAR TO but DIFFERENT FROM "
+                "this reference question. Match the same topic, difficulty, "
+                "and pedagogical style, but use different numbers, contexts, "
+                "or framing so each variation is its own problem.\n\n"
+                f"Reference question:\n{parent.question}"
+            )
+            constraint_text = (
+                f"{seed_block}\n\nAdditional constraint: {job.constraint}"
+                if job.constraint else seed_block
+            )
 
-    if not question_dicts:
-        raise RuntimeError(
-            "The AI didn't return any questions. Try adjusting your "
-            "instructions or selecting different source documents."
+        question_dicts = await generate_questions(
+            unit_name=unit_name,
+            count=job.requested_count,
+            course_name=course.name,
+            subject=course.subject,
+            user_id=str(job.created_by_id),
+            images=images or None,
+            extra_instructions=constraint_text,
         )
+        if not question_dicts:
+            raise RuntimeError(
+                "The AI didn't return any questions. Try adjusting your "
+                "instructions or selecting different source documents."
+            )
 
     # 2. Solve each question in parallel (capped concurrency inside)
     solved = await generate_solutions(
@@ -192,7 +284,17 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     # 3. Persist as bank items (status = pending). Commit in batches of
     # _PROGRESS_BATCH so the frontend's polling banner shows real progress
     # without N+1 transactions on every single question.
-    source_doc_id_strs = [str(d) for d in doc_ids] if doc_ids else None
+    source_doc_id_strs = (
+        [str(d) for d in job.source_doc_ids] if job.source_doc_ids else None
+    )
+    # Provenance: upload → imported, generate-similar → practice, else generated
+    if job.mode == "upload":
+        item_source = "imported"
+    elif job.parent_question_id:
+        item_source = "practice"
+    else:
+        item_source = "generated"
+
     for idx, (q, s) in enumerate(zip(question_dicts, solved), start=1):
         item = QuestionBankItem(
             course_id=job.course_id,
@@ -202,19 +304,13 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer"),
             distractors=distractor_lists[idx - 1] or None,
-            # Claude self-rates each generated question (easy/medium/hard)
-            # via the GENERATE_QUESTIONS_SCHEMA. We just store its rating —
-            # noisy but useful as a filter signal.
             difficulty=q.get("difficulty") or "medium",
             status="pending",
             source_doc_ids=source_doc_id_strs,
             generation_prompt=job.constraint,
             created_by_id=job.created_by_id,
             parent_question_id=job.parent_question_id,
-            # Children of a "make similar" job are practice variations.
-            # Bulk-generate jobs leave parent_question_id null and fall
-            # back to the model default of "generated".
-            source="practice" if job.parent_question_id else "generated",
+            source=item_source,
         )
         db.add(item)
         if idx % _PROGRESS_BATCH == 0:
