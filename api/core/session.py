@@ -4,6 +4,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -13,6 +14,7 @@ from api.core.constants import (
     MAX_PROBLEM_LENGTH,
     MAX_STUDENT_MESSAGES,
     RECENT_EXCHANGES_LIMIT,
+    WORK_SUBMISSION_TTL_MINUTES,
 )
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject
@@ -56,13 +58,17 @@ async def create_session(
             {"description": "Final answer", "final_answer": decomp.final_answer},
         ]
     else:
-        # Check for prior work submission to personalize learn mode
+        # Check for prior work submission to personalize learn mode.
+        # Only consider submissions within the TTL window — stale diagnoses
+        # from hours/days ago aren't useful for personalization.
         prior_diagnosis: dict[str, Any] | None = None
+        ttl_cutoff = datetime.now(UTC) - timedelta(minutes=WORK_SUBMISSION_TTL_MINUTES)
         ws_result = await db.execute(
             select(WorkSubmission.diagnosis, WorkSubmission.has_issues)
             .where(
                 WorkSubmission.user_id == user_id,
                 WorkSubmission.problem_text == problem,
+                WorkSubmission.created_at >= ttl_cutoff,
             )
             .order_by(WorkSubmission.created_at.desc())
             .limit(1)
@@ -74,13 +80,14 @@ async def create_session(
             # burning a fresh LLM call just to say "good job" at each step
             if has_issues:
                 prior_diagnosis = diagnosis_data
-            # Clean up — delete all work submissions for this user + problem
-            await db.execute(
-                delete(WorkSubmission).where(
-                    WorkSubmission.user_id == user_id,
-                    WorkSubmission.problem_text == problem,
-                )
+        # Clean up — delete all work submissions for this user + problem
+        # (including expired ones)
+        await db.execute(
+            delete(WorkSubmission).where(
+                WorkSubmission.user_id == user_id,
+                WorkSubmission.problem_text == problem,
             )
+        )
 
         # Full decomposition for learn mode
         decomposition = await decompose_problem(
@@ -303,30 +310,8 @@ async def _respond_learn_mode(
             total_steps=session.total_steps,
         )
 
-    # --- Final step: "I understand" or answer ---
-    if request_advance:
-        return await _complete_session(db, session)
-
-    correct_answer = step_data["final_answer"]
-    _add_exchange(session, "student", student_response)
-
-    # Direct string match (multiple-choice: student selects an exact option)
-    is_correct = student_response.strip() == correct_answer.strip()
-
-    if is_correct:
-        return await _complete_session(db, session)
-
-    # Wrong answer
-    feedback = "Not quite. Review the steps above and try again."
-    _add_exchange(session, "tutor", feedback)
-    await db.commit()
-    return StepResponse(
-        action="error",
-        feedback=feedback,
-        current_step=session.current_step,
-        total_steps=session.total_steps,
-        is_correct=False,
-    )
+    # --- Final step: "I understand" → complete ---
+    return await _complete_session(db, session)
 
 
 async def respond_to_step(
