@@ -167,6 +167,7 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
         "id": str(job.id),
         "course_id": str(job.course_id),
         "unit_id": str(job.unit_id) if job.unit_id else None,
+        "mode": job.mode,
         "status": job.status,
         "requested_count": job.requested_count,
         "difficulty": job.difficulty,

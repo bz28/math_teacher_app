@@ -105,6 +105,8 @@ class QuestionBankGenerationJob(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
     )
 
+    # mode: generate (AI invents questions) / upload (extract from worksheet images)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="generate")
     # status: queued / running / done / failed
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued", index=True)
     requested_count: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -118,6 +120,9 @@ class QuestionBankGenerationJob(Base):
         ForeignKey("question_bank_items.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Transient base64 images for upload-mode jobs. Not stored as Documents
+    # because they're one-time extraction inputs, not course materials.
+    uploaded_images: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     produced_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
