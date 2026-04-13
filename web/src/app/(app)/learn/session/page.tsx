@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
+import { EntitlementError } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { SkeletonStep } from "@/components/ui/skeleton";
@@ -72,18 +73,26 @@ export default function LearnSessionPage() {
     if (phase === "completed") fireConfetti();
   }, [phase, fireConfetti]);
 
+  const handleAdvance = useCallback(async () => {
+    try {
+      await advanceStep();
+    } catch (err) {
+      if (err instanceof EntitlementError) showUpgrade(err.entitlement, err.message);
+    }
+  }, [advanceStep, showUpgrade]);
+
   // Keyboard shortcut: Cmd/Ctrl+Enter to advance step
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && phase === "awaiting_input") {
         e.preventDefault();
-        advanceStep();
+        handleAdvance();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [phase, advanceStep]);
+  }, [phase, handleAdvance]);
 
   // Learn queue summary
   if (phase === "learn_summary" && learnQueue) {
@@ -138,7 +147,11 @@ export default function LearnSessionPage() {
     }
     const q = input.trim();
     setInput("");
-    await askAboutStep(q);
+    try {
+      await askAboutStep(q);
+    } catch (err) {
+      if (err instanceof EntitlementError) { showUpgrade(err.entitlement, err.message); return; }
+    }
     fetchEntitlements();
   }
 
@@ -478,7 +491,7 @@ export default function LearnSessionPage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={advanceStep}
+                    onClick={handleAdvance}
                     loading={isThinking}
                   >
                     I Understand

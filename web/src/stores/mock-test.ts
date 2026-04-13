@@ -5,6 +5,7 @@ import {
   session as sessionApi,
   practice as practiceApi,
   work as workApi,
+  EntitlementError,
   type PracticeProblem,
   type DiagnosisResult,
 } from "@/lib/api";
@@ -146,6 +147,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         Promise.allSettled(promises.slice(1));
       }
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },

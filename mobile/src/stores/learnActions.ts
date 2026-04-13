@@ -1,6 +1,7 @@
 import {
   createPracticeBatchSession,
   createSession,
+  EntitlementError,
   generatePracticeProblems,
   getSession,
   respondToStep,
@@ -18,6 +19,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const session = await createSession(problem, mode, subject, image);
         set({ session, phase: "awaiting_input", lastResponse: null });
       } catch (e) {
+        if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });
       }
     },
@@ -146,6 +148,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           phase: "practice_active",
         });
       } catch (e) {
+        if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });
       }
     },
@@ -168,6 +171,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           phase: isDone ? "completed" : "awaiting_input",
         });
       } catch (e) {
+        if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });
       }
     },
@@ -203,6 +207,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           },
         });
       } catch (e) {
+        if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });
       }
     },
@@ -217,6 +222,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         const newSession = await createSession(problem, "learn", subject);
         set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
       } catch (e) {
+        if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });
       }
     },

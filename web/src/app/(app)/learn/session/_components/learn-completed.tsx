@@ -7,7 +7,7 @@ import { Button, Card } from "@/components/ui";
 import { CheckIcon, ChatBubbleIcon, FlagIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import type { LearnQueue, Subject } from "@/stores/learn";
-import type { SessionResponse } from "@/lib/api";
+import { EntitlementError, type SessionResponse } from "@/lib/api";
 
 interface LearnCompletedProps {
   session: SessionResponse;
@@ -89,8 +89,15 @@ export function LearnCompleted({
                 loading={loading}
                 onClick={async () => {
                   setLoading(true);
-                  await onStartPractice(session.problem, 1, subject);
-                  router.push("/practice");
+                  try {
+                    await onStartPractice(session.problem, 1, subject);
+                    router.push("/practice");
+                  } catch (err) {
+                    setLoading(false);
+                    if (err instanceof EntitlementError) {
+                      router.push("/pricing");
+                    }
+                  }
                 }}
                 className="w-full"
               >
