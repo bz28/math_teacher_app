@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { cn, formatDuration } from "@/lib/utils";
+import { EntitlementError } from "@/lib/api";
 import type { PracticeBatch } from "@/stores/practice";
 
 interface PracticeSummaryProps {
@@ -147,9 +148,16 @@ export function PracticeSummary({
             loading={loading}
             onClick={async () => {
               setLoading(true);
-              const problems = flaggedQuestions.map((q) => q.question);
-              await onStartLearnQueue(problems);
-              router.push("/learn/session");
+              try {
+                const problems = flaggedQuestions.map((q) => q.question);
+                await onStartLearnQueue(problems);
+                router.push("/learn/session");
+              } catch (err) {
+                setLoading(false);
+                if (err instanceof EntitlementError) {
+                  router.push("/pricing");
+                }
+              }
             }}
             className="w-full"
           >

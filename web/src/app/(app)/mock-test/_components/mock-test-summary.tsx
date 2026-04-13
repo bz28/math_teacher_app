@@ -7,6 +7,7 @@ import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn, formatDuration } from "@/lib/utils";
+import { EntitlementError } from "@/lib/api";
 import type { MockTest } from "@/stores/mock-test";
 
 interface MockTestSummaryProps {
@@ -143,9 +144,16 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
             loading={loading}
             onClick={async () => {
               setLoading(true);
-              const problems = flaggedQuestions.map((q) => q.question);
-              await onStartLearnQueue(problems);
-              router.push("/learn/session");
+              try {
+                const problems = flaggedQuestions.map((q) => q.question);
+                await onStartLearnQueue(problems);
+                router.push("/learn/session");
+              } catch (err) {
+                setLoading(false);
+                if (err instanceof EntitlementError) {
+                  router.push("/pricing");
+                }
+              }
             }}
             className="w-full"
           >

@@ -24,6 +24,7 @@ import { UpgradePrompt } from "./UpgradePrompt";
 import { RectangleSelector } from "./RectangleSelector";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
+import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
@@ -210,14 +211,22 @@ export function SolveScreen({
 
     onSessionStart();
 
-    if (mode === "mock_test") {
-      const generateCount = examType === "generate_similar" ? allProblems.length : 0;
-      const timeLimit = untimed ? null : timeLimitMinutes;
-      await startMockTest(allProblems, generateCount, timeLimit, multipleChoice);
-    } else if (allProblems.length === 1) {
-      await startSession(allProblems[0], "learn");
-    } else {
-      await startLearnQueue(allProblems);
+    try {
+      if (mode === "mock_test") {
+        const generateCount = examType === "generate_similar" ? allProblems.length : 0;
+        const timeLimit = untimed ? null : timeLimitMinutes;
+        await startMockTest(allProblems, generateCount, timeLimit, multipleChoice);
+      } else if (allProblems.length === 1) {
+        await startSession(allProblems[0], "learn");
+      } else {
+        await startLearnQueue(allProblems);
+      }
+    } catch (e) {
+      if (e instanceof EntitlementError) {
+        onSessionError();
+        showUpgrade(e.entitlement, "Daily Limit Reached", e.message);
+        return;
+      }
     }
 
     const postPhase = useSessionStore.getState().phase;

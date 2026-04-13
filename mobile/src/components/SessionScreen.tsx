@@ -28,6 +28,7 @@ import { cleanMathPreview } from "./HistoryCards";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
+import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
@@ -187,8 +188,20 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     }
     const text = input.trim();
     setInput("");
-    await askAboutStep(text);
+    try {
+      await askAboutStep(text);
+    } catch (e) {
+      if (e instanceof EntitlementError) { showUpgrade(e.entitlement, "Chat Limit Reached", e.message); return; }
+    }
     fetchEntitlements();
+  };
+
+  const handleAdvance = async () => {
+    try {
+      await advanceStep();
+    } catch (e) {
+      if (e instanceof EntitlementError) showUpgrade(e.entitlement, "Daily Limit Reached", e.message);
+    }
   };
 
   const handleBack = () => {
@@ -338,7 +351,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                   setInput("");
                   // If the user has chat history, advance to next step
                   if ((chatHistory[session.current_step]?.length ?? 0) > 0) {
-                    advanceStep();
+                    handleAdvance();
                   }
                 }}
                 style={readerStyles.askUnderstandBtn}
@@ -365,7 +378,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           ) : (
             <View style={readerStyles.actionRow}>
               <TouchableOpacity
-                onPress={session.status === "completed" ? finishAsking : advanceStep}
+                onPress={session.status === "completed" ? finishAsking : handleAdvance}
                 style={readerStyles.primaryAction}
                 disabled={phase === "thinking"}
                 accessibilityRole="button"
