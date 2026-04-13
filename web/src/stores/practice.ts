@@ -81,7 +81,6 @@ interface PracticeState {
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string, subject: Subject) => void;
   nextPracticeProblem: () => void;
   togglePracticeFlag: (index: number) => void;
-  retryFlaggedProblems: (subject: Subject) => Promise<void>;
   reset: () => void;
 }
 
@@ -102,40 +101,16 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
   },
 
-  async retryFlaggedProblems(subject) {
-    const { practiceBatch } = get();
-    if (!practiceBatch) return;
-    const flaggedProblems = practiceBatch.problems.filter((_, i) => practiceBatch.flags[i]);
-    if (flaggedProblems.length === 0) return;
-
-    set({ ...initialState, phase: "loading" as PracticePhase });
-    try {
-      const allProblems: PracticeProblem[] = [];
-      for (const problem of flaggedProblems) {
-        const { problems } = await practiceApi.generate({ problem: problem.question, count: 1, subject });
-        allProblems.push(...problems);
-      }
-      const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0].question);
-      set({
-        practiceBatch: createPracticeBatch(allProblems, sessionId),
-        phase: "awaiting_input" as PracticePhase,
-      });
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
-    }
-  },
-
   async practiceFlaggedProblems(flaggedProblems, subject) {
     if (flaggedProblems.length === 0) return;
 
     set({ ...initialState, phase: "loading" as PracticePhase });
     try {
-      const allProblems: PracticeProblem[] = [];
-      for (const problem of flaggedProblems) {
-        const { problems } = await practiceApi.generate({ problem, count: 1, subject });
-        allProblems.push(...problems);
-      }
-      const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0]);
+      const [results, { id: sessionId }] = await Promise.all([
+        Promise.all(flaggedProblems.map((p) => practiceApi.generate({ problem: p, count: 1, subject }))),
+        sessionApi.createPracticeBatch(flaggedProblems[0]),
+      ]);
+      const allProblems = results.map((r) => r.problems[0]);
       set({
         practiceBatch: createPracticeBatch(allProblems, sessionId),
         phase: "awaiting_input" as PracticePhase,

@@ -223,46 +223,6 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
       set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
     },
 
-    retryFlaggedProblems: async () => {
-      const { practiceBatch, subject } = get();
-      if (!practiceBatch) return;
-
-      const flaggedQuestions = practiceBatch.problems
-        .filter((_, i) => practiceBatch.flags[i])
-        .map((p) => p.question);
-      if (flaggedQuestions.length === 0) return;
-
-      set({ ...initialState, subject, phase: "loading" });
-      try {
-        const [results, sessionId] = await Promise.all([
-          Promise.all(flaggedQuestions.map((q) => generatePracticeProblems(q, 1, subject))),
-          createPracticeBatchSession(flaggedQuestions[0]).then((r) => r.id).catch(() => null),
-        ]);
-        const similarProblems = results.map((r) => r.problems[0]);
-
-        set({
-          practiceBatch: {
-            problems: similarProblems,
-            currentIndex: 0,
-            results: [],
-            flags: new Array(similarProblems.length).fill(false),
-            loadingMore: false,
-            totalCount: similarProblems.length,
-            skippedProblems: [],
-            pendingChecks: 0,
-            workSubmissions: new Array(similarProblems.length).fill(null),
-            firstAttemptCorrect: new Array(similarProblems.length).fill(null),
-            currentFeedback: null,
-            sessionId,
-          },
-          phase: "awaiting_input",
-          error: null,
-        });
-      } catch (e) {
-        set({ phase: "error", error: errorMessage(e) });
-      }
-    },
-
     submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => {
       const { practiceBatch } = get();
       if (!practiceBatch) return;

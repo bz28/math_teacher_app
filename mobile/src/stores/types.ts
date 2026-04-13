@@ -126,7 +126,6 @@ export interface SessionState {
   askAboutStep: (question: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
-  retryFlaggedProblems: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
   switchToLearnMode: () => Promise<void>;
