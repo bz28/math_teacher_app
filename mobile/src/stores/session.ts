@@ -18,6 +18,6 @@ export const useSessionStore = create<SessionState>((set, get, store) => ({
 
   // Compose domain-specific actions
   ...createLearnActions(set, get),
-  ...createPracticeActions(set, get, store.subscribe),
+  ...createPracticeActions(set, get),
   ...createMockTestActions(set, get, store.subscribe),
 }));

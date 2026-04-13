@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   ScrollView,
   Text,
@@ -8,9 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
-import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { cleanMathPreview } from "./HistoryCards";
-import { completePracticeBatchSession } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
 import { useColors, spacing } from "../theme";
@@ -18,6 +16,12 @@ import { useColors, spacing } from "../theme";
 interface PracticeSummaryProps {
   onBack: () => void;
   onHome: () => void;
+}
+
+function formatTimeTaken(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
 }
 
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
@@ -31,35 +35,34 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
     reset,
   } = useSessionStore();
 
-  // Record practice batch in history
-  useEffect(() => {
-    if (!practiceBatch?.sessionId || practiceBatch.results.length === 0) return;
-    const correct = practiceBatch.results.filter((r) => r.isCorrect).length;
-    completePracticeBatchSession(
-      practiceBatch.sessionId,
-      practiceBatch.results.length,
-      correct,
-    ).catch(() => {}); // Silent fail — history is non-critical
-  }, [practiceBatch?.sessionId, practiceBatch?.results.length]);
+  if (!practiceBatch?.results) return null;
 
-  // Confetti on perfect practice score
-  const allCorrect = practiceBatch?.results.every((r) => r.isCorrect) ?? false;
-  useEffect(() => {
-    if (allCorrect) confettiRef.current?.fire(true);
-  }, []);
+  const results = practiceBatch.results;
+  const correct = results.filter((r) => r.isCorrect === true).length;
+  const answered = results.filter((r) => r.userAnswer !== null).length;
+  const unanswered = results.length - answered;
+  const score = answered > 0 ? Math.round((correct / results.length) * 100) : 0;
+  const timeTaken = practiceBatch.submittedAt && practiceBatch.startedAt
+    ? Math.floor((practiceBatch.submittedAt - practiceBatch.startedAt) / 1000)
+    : null;
 
-  if (!practiceBatch) return null;
-
-  const { results, flags, problems, skippedProblems, workSubmissions } = practiceBatch;
-  const correct = results.filter((r) => r.isCorrect).length;
-  const pct = correct / results.length;
   const encouragement =
-    pct === 1 ? "Perfect score!" :
-    pct >= 0.8 ? "Great job!" :
-    pct >= 0.5 ? "Good effort, keep practicing!" :
+    score === 100 ? "Perfect score!" :
+    score >= 90 ? "Excellent work!" :
+    score >= 70 ? "Good job!" :
+    score >= 50 ? "Keep practicing!" :
     "Don't give up — review and try again!";
 
-  const flaggedCount = flags.filter(Boolean).length;
+  const flaggedCount = practiceBatch.flags.filter(Boolean).length;
+  const flaggedQuestions = results
+    .map((r, i) => ({ question: r.question, index: i }))
+    .filter((_, i) => practiceBatch.flags[i]);
+
+  // Confetti on good score
+  useEffect(() => {
+    if (score === 100) confettiRef.current?.fire(true);
+    else if (score >= 70) confettiRef.current?.fire(false);
+  }, []);
 
   const handleBack = () => {
     reset();
@@ -68,7 +71,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 
   return (
     <View style={styles.container}>
-      {allCorrect && <ConfettiOverlay ref={confettiRef} />}
+      {score >= 70 && <ConfettiOverlay ref={confettiRef} />}
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }} accessibilityRole="button" accessibilityLabel="Go back">
@@ -80,77 +83,94 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Results</Text>
+          <Text style={styles.summaryTitle}>Practice Results</Text>
           <Text style={styles.summaryScore} accessibilityLabel={`${correct} out of ${results.length} correct`}>
-            {correct}/{results.length} correct
+            {correct}/{results.length}
           </Text>
           <Text style={styles.summaryEncouragement}>{encouragement}</Text>
           <View style={styles.summaryBar}>
             <View
               style={[
                 styles.summaryBarFill,
-                { width: `${(correct / results.length) * 100}%` },
+                { width: `${score}%` },
               ]}
             />
           </View>
+          {timeTaken != null && (
+            <Text style={styles.summaryTime}>Completed in {formatTimeTaken(timeTaken)}</Text>
+          )}
+          <View style={styles.summaryStats}>
+            <View style={styles.statDot}>
+              <View style={[styles.dot, { backgroundColor: colors.success }]} />
+              <Text style={styles.statText}>{correct} correct</Text>
+            </View>
+            <View style={styles.statDot}>
+              <View style={[styles.dot, { backgroundColor: colors.error }]} />
+              <Text style={styles.statText}>{answered - correct} wrong</Text>
+            </View>
+            {unanswered > 0 && (
+              <View style={styles.statDot}>
+                <View style={[styles.dot, { backgroundColor: colors.textMuted }]} />
+                <Text style={styles.statText}>{unanswered} skipped</Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {results.map((r, i) => {
-          const wasCorrect = r.isCorrect;
-          return (
-            <View
-              key={i}
-              style={[
-                styles.resultRow,
-                wasCorrect ? styles.resultCorrect : styles.resultWrong,
-              ]}
+        {/* Question breakdown */}
+        {results.map((r, i) => (
+          <View
+            key={i}
+            style={[
+              styles.resultRow,
+              r.isCorrect === true ? styles.resultCorrect :
+              r.isCorrect === false ? styles.resultWrong :
+              styles.resultSkipped,
+            ]}
+          >
+            <Ionicons
+              name={r.isCorrect === true ? "checkmark-circle" : r.isCorrect === false ? "close-circle" : "remove-circle-outline"}
+              size={20}
+              color={r.isCorrect === true ? colors.success : r.isCorrect === false ? colors.error : colors.textMuted}
+              style={{ marginRight: 10, marginTop: 1 }}
+            />
+            <View style={styles.resultContent}>
+              <Text style={styles.resultProblem}>{cleanMathPreview(r.question)}</Text>
+              {r.isCorrect === true && (
+                <>
+                  <Text style={styles.resultAnswer}>Your answer: {cleanMathPreview(r.userAnswer ?? "")}</Text>
+                  <Text style={[styles.resultAnswer, { color: colors.success }]}>Correct!</Text>
+                </>
+              )}
+              {r.isCorrect === false && (
+                <>
+                  <Text style={[styles.resultAnswer, { color: colors.error }]}>Your answer: {cleanMathPreview(r.userAnswer ?? "")}</Text>
+                  <Text style={styles.resultHint}>Flag this question and learn it to see the answer</Text>
+                </>
+              )}
+              {r.isCorrect == null && (
+                <>
+                  <Text style={styles.resultAnswer}>Unanswered</Text>
+                  <Text style={styles.resultHint}>Flag this question and learn it to see the answer</Text>
+                </>
+              )}
+            </View>
+            <AnimatedPressable
+              style={[styles.flagToggle, practiceBatch.flags[i] && styles.flagToggleActive]}
+              onPress={() => togglePracticeFlag(i)}
             >
-              <Ionicons
-                name={wasCorrect ? "checkmark-circle" : "close-circle"}
-                size={20}
-                color={wasCorrect ? colors.success : colors.error}
-                style={{ marginRight: 10, marginTop: 1 }}
-              />
-              <View style={styles.resultContent}>
-                <Text style={styles.resultProblem}>{cleanMathPreview(r.problem)}</Text>
-                <Text style={styles.resultAnswer}>
-                  {r.userAnswer === "(skipped)" ? "Skipped" : `Your answer: ${cleanMathPreview(r.userAnswer)}`}
-                </Text>
-                <DiagnosisTeaser diagnosis={workSubmissions[i]} />
-              </View>
-              <AnimatedPressable
-                style={[styles.flagToggle, flags[i] && styles.flagToggleActive]}
-                onPress={() => togglePracticeFlag(i)}
-              >
-                <Text style={[styles.flagToggleText, flags[i] && styles.flagToggleTextActive]}>
-                  {flags[i] ? "Flagged" : "Flag"}
-                </Text>
-              </AnimatedPressable>
-            </View>
-          );
-        })}
-
-        {skippedProblems.length > 0 && (
-          <View style={styles.skippedCard}>
-            <View style={styles.skippedHeader}>
-              <Ionicons name="alert-circle-outline" size={18} color={colors.warningDark} />
-              <Text style={styles.skippedTitle}>
-                {skippedProblems.length} problem{skippedProblems.length > 1 ? "s" : ""} couldn't be processed
+              <Text style={[styles.flagToggleText, practiceBatch.flags[i] && styles.flagToggleTextActive]}>
+                {practiceBatch.flags[i] ? "Flagged" : "Flag"}
               </Text>
-            </View>
-            {skippedProblems.map((p, i) => (
-              <Text key={i} style={styles.skippedProblem}>• {p}</Text>
-            ))}
+            </AnimatedPressable>
           </View>
-        )}
+        ))}
 
         {flaggedCount > 0 && (
           <AnimatedPressable
             style={styles.learnFlaggedButton}
             onPress={() => {
-              const flagged = problems
-                .filter((_, i) => flags[i])
-                .map((p) => p.question);
+              const flagged = flaggedQuestions.map((q) => q.question);
               startLearnQueue(flagged);
             }}
           >
