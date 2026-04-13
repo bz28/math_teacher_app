@@ -21,6 +21,7 @@ import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
 import { useMockTimer, formatTime } from "../hooks/useMockTimer";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
+import { shuffleChoices } from "../utils/quiz";
 
 interface Props {
   onBack: () => void;
@@ -214,13 +215,10 @@ export function MockTestScreen({ onBack }: Props) {
             currentQuestion.distractors && currentQuestion.distractors.length > 0 ? (
               <View style={styles.choicesGrid}>
                 {(() => {
-                  const choices = [currentQuestion.answer, ...currentQuestion.distractors];
-                  const seed = currentIndex;
-                  const shuffled = [...choices].sort((a, b) => {
-                    const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-                    const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-                    return ha - hb;
-                  });
+                  const shuffled = shuffleChoices(
+                    [currentQuestion.answer, ...currentQuestion.distractors],
+                    currentIndex,
+                  );
                   const letters = ["A", "B", "C", "D"];
                   return shuffled.map((choice, i) => {
                     const isSelected = localAnswer === choice;

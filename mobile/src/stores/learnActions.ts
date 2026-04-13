@@ -135,19 +135,15 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
         set({
           practiceBatch: {
             problems: practiceProblemsList,
-            currentIndex: 0,
-            results: [],
+            answers: {},
             flags: new Array(practiceProblemsList.length).fill(false),
-            loadingMore: false,
-            totalCount: practiceProblemsList.length,
-            skippedProblems: [],
-            pendingChecks: 0,
-            workSubmissions: new Array(practiceProblemsList.length).fill(null),
-            firstAttemptCorrect: new Array(practiceProblemsList.length).fill(null),
-            currentFeedback: null,
+            currentIndex: 0,
+            startedAt: Date.now(),
+            submittedAt: null,
+            results: null,
             sessionId,
           },
-          phase: "awaiting_input",
+          phase: "practice_active",
         });
       } catch (e) {
         set({ phase: "error", error: errorMessage(e) });

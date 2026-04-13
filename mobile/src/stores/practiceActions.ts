@@ -2,19 +2,33 @@ import {
   completePracticeBatchSession,
   createPracticeBatchSession,
   generatePracticeProblems,
-  submitWork,
   type PracticeProblem,
 } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
 import {
   initialState,
-  type PracticeResult,
   type StoreGet,
   type StoreSet,
-  type StoreSubscribe,
 } from "./types";
+import type { QuizResult } from "../utils/quiz";
 
-export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: StoreSubscribe) {
+function createBatch(
+  problems: PracticeProblem[],
+  sessionId: string | null,
+) {
+  return {
+    problems,
+    answers: {} as Record<number, string>,
+    flags: new Array(problems.length).fill(false) as boolean[],
+    currentIndex: 0,
+    startedAt: Date.now(),
+    submittedAt: null as number | null,
+    results: null as QuizResult[] | null,
+    sessionId,
+  };
+}
+
+export function createPracticeActions(set: StoreSet, get: StoreGet) {
   return {
     startPracticeBatch: async (problem: string, count: number) => {
       const { subject } = get();
@@ -25,193 +39,70 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
           createPracticeBatchSession(problem),
         ]);
         set({
-          practiceBatch: {
-            problems,
-            currentIndex: 0,
-            results: [],
-            flags: new Array(problems.length).fill(false),
-            loadingMore: false,
-            totalCount: problems.length,
-            skippedProblems: [],
-            pendingChecks: 0,
-            workSubmissions: new Array(problems.length).fill(null),
-            firstAttemptCorrect: new Array(problems.length).fill(null),
-            currentFeedback: null,
-            sessionId,
-          },
-          phase: "awaiting_input",
+          practiceBatch: createBatch(problems, sessionId),
+          phase: "practice_active",
         });
       } catch {
         set({ phase: "error", error: "Failed to generate practice problems" });
       }
     },
 
-    startPracticeQueue: async (problems: string[]) => {
-      if (problems.length === 0) return;
-      const { subject } = get();
-
-      const placeholders: PracticeProblem[] = problems.map((p) => ({ question: p, answer: "" }));
-      const sessionId = await createPracticeBatchSession(problems[0]).then((r) => r.id).catch(() => null);
-      set({
-        ...initialState,
-        subject,
-        practiceBatch: {
-          problems: placeholders,
-          currentIndex: 0,
-          results: [],
-          flags: new Array(problems.length).fill(false),
-          loadingMore: false,
-          totalCount: problems.length,
-          skippedProblems: [],
-          pendingChecks: 0,
-          workSubmissions: new Array(problems.length).fill(null),
-          firstAttemptCorrect: new Array(problems.length).fill(null),
-          currentFeedback: null,
-          sessionId,
-        },
-        phase: "awaiting_input",
-      });
-
-      // Resolve all answers in background
-      Promise.allSettled(
-        problems.map((p) => generatePracticeProblems(p, 0, subject)),
-      )
-        .then((outcomes) => {
-          const { practiceBatch } = get();
-          if (!practiceBatch) return;
-          const updated = [...practiceBatch.problems];
-          const skipped: string[] = [];
-          for (let i = 0; i < outcomes.length; i++) {
-            const outcome = outcomes[i];
-            if (outcome.status === "fulfilled" && outcome.value.problems[0]) {
-              updated[i] = { question: problems[i], answer: outcome.value.problems[0].answer };
-            } else {
-              skipped.push(problems[i]);
-            }
-          }
-          set({
-            practiceBatch: {
-              ...practiceBatch,
-              problems: updated,
-              skippedProblems: skipped,
-            },
-          });
-        });
-    },
-
-    submitPracticeAnswer: async (answer: string) => {
-      const { practiceBatch, subject } = get();
-      if (!practiceBatch) return;
-
-      const idx = practiceBatch.currentIndex;
-      const current = practiceBatch.problems[idx];
-
-      set({ phase: "thinking", error: null });
-
-      // Wait for correct answer to be resolved if needed (queue mode)
-      const getCorrectAnswer = (): Promise<string> => {
-        const batch = get().practiceBatch;
-        const correctAnswer = batch?.problems[idx]?.answer;
-        if (correctAnswer) return Promise.resolve(correctAnswer);
-        return new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            unsub();
-            reject(new Error("Timed out waiting for correct answer"));
-          }, 30_000);
-          const unsub = subscribe((state) => {
-            const ca = state.practiceBatch?.problems[idx]?.answer;
-            if (ca) { clearTimeout(timeout); unsub(); resolve(ca); }
-          });
-        });
-      };
-
-      try {
-        const correctAnswer = await getCorrectAnswer();
-
-        // MC: direct string comparison (no LLM call needed)
-        const is_correct = answer.trim() === correctAnswer.trim();
-
-        const batch = get().practiceBatch;
-        if (!batch) return;
-
-        // Track first-attempt result
-        const newFirstAttempt = [...batch.firstAttemptCorrect];
-        if (newFirstAttempt[idx] === null) newFirstAttempt[idx] = is_correct;
-
-        if (is_correct) {
-          const result: PracticeResult = {
-            problem: current.question,
-            userAnswer: answer,
-            correctAnswer: "",
-            isCorrect: true,
-          };
-          const newResults = [...batch.results, result];
-          const newFlags = [...batch.flags];
-          newFlags[idx] = false;
-          const nextIndex = idx + 1;
-          const isLast = nextIndex >= batch.problems.length && !batch.loadingMore;
-
-          set({
-            practiceBatch: {
-              ...batch,
-              results: newResults,
-              flags: newFlags,
-              firstAttemptCorrect: newFirstAttempt,
-              currentFeedback: "correct",
-              currentIndex: isLast ? idx : nextIndex,
-            },
-            phase: isLast ? "practice_summary" : "awaiting_input",
-          });
-        } else {
-          const newFlags = [...batch.flags];
-          newFlags[idx] = true;
-
-          set({
-            practiceBatch: {
-              ...batch,
-              flags: newFlags,
-              firstAttemptCorrect: newFirstAttempt,
-              currentFeedback: "wrong",
-            },
-            phase: "awaiting_input",
-          });
-        }
-      } catch {
-        set({ phase: "error", error: "Failed to check answer" });
-      }
-    },
-
-    skipPracticeProblem: () => {
+    savePracticeAnswer: (index: number, answer: string) => {
       const { practiceBatch } = get();
       if (!practiceBatch) return;
-      const idx = practiceBatch.currentIndex;
-      const current = practiceBatch.problems[idx];
+      set({
+        practiceBatch: {
+          ...practiceBatch,
+          answers: { ...practiceBatch.answers, [index]: answer },
+        },
+      });
+    },
 
+    setPracticeIndex: (index: number) => {
+      const { practiceBatch } = get();
+      if (!practiceBatch) return;
+      set({ practiceBatch: { ...practiceBatch, currentIndex: index } });
+    },
+
+    submitPractice: () => {
+      const { practiceBatch } = get();
+      if (!practiceBatch) return;
+
+      const results: QuizResult[] = practiceBatch.problems.map((q, i) => {
+        const userAnswer = practiceBatch.answers[i] ?? null;
+        if (!userAnswer) {
+          return { question: q.question, userAnswer: null, correctAnswer: q.answer, isCorrect: null };
+        }
+        // MCQ: exact string match
+        return {
+          question: q.question,
+          userAnswer,
+          correctAnswer: q.answer,
+          isCorrect: userAnswer.trim() === q.answer.trim(),
+        };
+      });
+
+      // Auto-flag incorrect and unanswered
       const newFlags = [...practiceBatch.flags];
-      newFlags[idx] = true;
-      const newFirstAttempt = [...practiceBatch.firstAttemptCorrect];
-      if (newFirstAttempt[idx] === null) newFirstAttempt[idx] = false;
+      results.forEach((r, i) => {
+        if (r.isCorrect !== true) newFlags[i] = true;
+      });
 
-      const result: PracticeResult = {
-        problem: current.question,
-        userAnswer: "(skipped)",
-        correctAnswer: "",
-        isCorrect: false,
-      };
-
-      const next = idx + 1;
-      const isLast = next >= practiceBatch.problems.length && !practiceBatch.loadingMore;
+      // Record in history (fire-and-forget)
+      if (practiceBatch.sessionId) {
+        const correct = results.filter((r) => r.isCorrect === true).length;
+        completePracticeBatchSession(practiceBatch.sessionId, results.length, correct)
+          .catch(() => {});
+      }
 
       set({
         practiceBatch: {
           ...practiceBatch,
-          results: [...practiceBatch.results, result],
+          results,
           flags: newFlags,
-          firstAttemptCorrect: newFirstAttempt,
-          currentFeedback: null,
-          currentIndex: isLast ? idx : next,
+          submittedAt: Date.now(),
         },
-        phase: isLast ? "practice_summary" : "awaiting_input",
+        phase: "practice_summary",
       });
     },
 
@@ -221,38 +112,6 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
       const newFlags = [...practiceBatch.flags];
       newFlags[index] = !newFlags[index];
       set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
-    },
-
-    submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => {
-      const { practiceBatch } = get();
-      if (!practiceBatch) return;
-
-      const problem = practiceBatch.problems[index];
-      if (!problem) return;
-
-      submitWork(imageBase64, problem.question, userAnswer, false, get().subject)
-        .then((resp) => {
-          const { practiceBatch: batch } = get();
-          if (!batch || !resp.diagnosis) return;
-
-          const diagnosis = resp.diagnosis;
-          const newSubmissions = [...batch.workSubmissions];
-          newSubmissions[index] = diagnosis;
-
-          const newFlags = [...batch.flags];
-          if (diagnosis.has_issues && !newFlags[index]) {
-            newFlags[index] = true;
-          }
-
-          set({
-            practiceBatch: {
-              ...batch,
-              workSubmissions: newSubmissions,
-              flags: newFlags,
-            },
-          });
-        })
-        .catch(() => {});
     },
   };
 }

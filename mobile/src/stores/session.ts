@@ -5,7 +5,7 @@ import { createPracticeActions } from "./practiceActions";
 import { initialState, type SessionState } from "./types";
 
 // Re-export types so consumers don't need to change imports
-export type { PracticeResult, MockTestResult, MockTest } from "./types";
+export type { QuizResult, MockTest } from "./types";
 
 export const useSessionStore = create<SessionState>((set, get, store) => ({
   ...initialState,
@@ -18,6 +18,6 @@ export const useSessionStore = create<SessionState>((set, get, store) => ({
 
   // Compose domain-specific actions
   ...createLearnActions(set, get),
-  ...createPracticeActions(set, get, store.subscribe),
+  ...createPracticeActions(set, get),
   ...createMockTestActions(set, get, store.subscribe),
 }));

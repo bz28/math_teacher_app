@@ -9,6 +9,7 @@ import { GradientButton } from "./GradientButton";
 import { cleanMathPreview } from "./HistoryCards";
 import { useSessionStore } from "../stores/session";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
+import { formatDuration } from "../utils/quiz";
 
 interface Props {
   onBack: () => void;
@@ -32,12 +33,6 @@ export function MockTestSummary({ onBack, onHome }: Props) {
   const timeTaken = mockTest.submittedAt && mockTest.startedAt
     ? Math.floor((mockTest.submittedAt - mockTest.startedAt) / 1000)
     : null;
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}m ${s}s`;
-  };
 
   const getMessage = () => {
     if (score >= 90) return "Excellent work!";
@@ -85,7 +80,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
           {timeTaken != null && (
             <View style={styles.timeRow}>
               <Ionicons name="time-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.timeText}>Completed in {formatTime(timeTaken)}</Text>
+              <Text style={styles.timeText}>Completed in {formatDuration(timeTaken)}</Text>
             </View>
           )}
 
