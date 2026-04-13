@@ -1,5 +1,4 @@
 import {
-  checkPracticeAnswer,
   completePracticeBatchSession,
   createPracticeBatchSession,
   generatePracticeProblems,
@@ -129,16 +128,8 @@ export function createPracticeActions(set: StoreSet, get: StoreGet, subscribe: S
       try {
         const correctAnswer = await getCorrectAnswer();
 
-        // Skip API call if exact match (avoids unnecessary LLM equivalence check)
-        let is_correct: boolean;
-        if (answer.trim() === correctAnswer.trim()) {
-          is_correct = true;
-        } else {
-          const resp = await checkPracticeAnswer(
-            current.question, correctAnswer, answer, subject,
-          );
-          is_correct = resp.is_correct;
-        }
+        // MC: direct string comparison (no LLM call needed)
+        const is_correct = answer.trim() === correctAnswer.trim();
 
         const batch = get().practiceBatch;
         if (!batch) return;

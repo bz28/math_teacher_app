@@ -120,7 +120,6 @@ export interface SessionState {
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
   startPracticeQueue: (problems: string[]) => Promise<void>;
   startLearnQueue: (problems: string[]) => Promise<void>;
-  submitAnswer: (answer: string) => Promise<void>;
   submitPracticeAnswer: (answer: string) => Promise<void>;
   skipPracticeProblem: () => void;
   advanceStep: () => Promise<void>;

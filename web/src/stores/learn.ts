@@ -74,7 +74,6 @@ interface SessionState {
   // Learn actions
   startSession: (problem: string, image?: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
-  submitAnswer: (answer: string) => Promise<void>;
   advanceStep: () => Promise<void>;
   askAboutStep: (question: string) => Promise<void>;
 
@@ -169,24 +168,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const session = await sessionApi.get(sessionId);
       set({ session, phase: "awaiting_input", chatHistory: {}, subject: session.subject as Subject });
-    } catch (err) {
-      set({ phase: "error", error: (err as Error).message });
-    }
-  },
-
-  async submitAnswer(answer) {
-    const { session } = get();
-    if (!session) return;
-    set({ phase: "thinking" });
-    try {
-      const response = await sessionApi.respond(session.id, {
-        student_response: answer,
-        request_advance: false,
-      });
-      // Re-fetch session to get updated steps/choices (matches mobile)
-      const updated = await sessionApi.get(session.id);
-      const nextPhase = response.action === "completed" ? "completed" : "awaiting_input";
-      set({ session: updated, lastResponse: response, phase: nextPhase as SessionPhase });
     } catch (err) {
       set({ phase: "error", error: (err as Error).message });
     }
