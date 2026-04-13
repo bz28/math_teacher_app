@@ -23,6 +23,11 @@ DECOMPOSITION_CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
 DECOMPOSITION_CACHE_MAX_SIZE = 200
 
 # ---------------------------------------------------------------------------
+# Work submission personalization
+# ---------------------------------------------------------------------------
+WORK_SUBMISSION_TTL_MINUTES = 30  # Discard work diagnosis after this window
+
+# ---------------------------------------------------------------------------
 # Image handling
 # ---------------------------------------------------------------------------
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode

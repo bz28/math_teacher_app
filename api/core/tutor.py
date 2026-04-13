@@ -143,7 +143,7 @@ async def completed_chat(
     user_id: str | None = None,
     subject: str = Subject.MATH,
 ) -> StepChatResult:
-    """Answer follow-up questions on a completed problem. Uses Haiku for cost."""
+    """Answer follow-up questions on a completed problem."""
     steps_text = "\n".join(
         f"  Step {i}: {s['description']}"
         for i, s in enumerate(steps)

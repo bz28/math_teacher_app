@@ -27,7 +27,6 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
   const {
     practiceBatch,
     togglePracticeFlag,
-    retryFlaggedProblems,
     startLearnQueue,
     reset,
   } = useSessionStore();
@@ -157,17 +156,6 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
           >
             <Text style={styles.learnFlaggedText}>
               Learn {flaggedCount} Flagged Problem{flaggedCount > 1 ? "s" : ""}
-            </Text>
-          </AnimatedPressable>
-        )}
-
-        {flaggedCount > 0 && (
-          <AnimatedPressable
-            style={styles.retryButton}
-            onPress={retryFlaggedProblems}
-          >
-            <Text style={styles.retryText}>
-              Practice {flaggedCount} Similar Problem{flaggedCount > 1 ? "s" : ""}
             </Text>
           </AnimatedPressable>
         )}

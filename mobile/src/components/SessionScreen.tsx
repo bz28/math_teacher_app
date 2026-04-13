@@ -15,11 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { AnimatedPressable } from "./AnimatedPressable";
 import { CompletedCard } from "./CompletedCard";
-import { FeedbackCard } from "./FeedbackCard";
-import { GradientButton } from "./GradientButton";
-import { MathKeyboard } from "./MathKeyboard";
 import { MockTestScreen } from "./MockTestScreen";
 import { MockTestSummary } from "./MockTestSummary";
 import { PracticeBatchView } from "./PracticeBatchView";
@@ -63,11 +59,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     error,
     practiceBatch,
     mockTest,
-    submitAnswer,
     advanceStep,
     askAboutStep,
     learnQueue,
-    switchToLearnMode,
     finishAsking,
     problemImages,
     chatHistory,
@@ -185,16 +179,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   if (!session) return null;
 
   const currentStep = session.steps[session.current_step];
-  const isPractice = session.mode === "practice";
-  const isLearn = !isPractice;
   const completedSteps = session.steps.slice(0, session.current_step);
-
-  const handleSubmit = async () => {
-    if (!input.trim()) return;
-    const text = input.trim();
-    setInput("");
-    await submitAnswer(text);
-  };
 
   const handleAsk = async () => {
     if (!input.trim()) return;
@@ -206,11 +191,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     setInput("");
     await askAboutStep(text);
     fetchEntitlements();
-  };
-
-  const handleInsert = (value: string) => {
-    setInput((prev) => prev + value);
-    inputRef.current?.focus();
   };
 
   const handleBack = () => {
@@ -243,7 +223,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
             <Ionicons name="image" size={14} color={colors.textMuted} />
           )}
         </View>
-        {isLearn && (
+        {(
           <View style={readerStyles.dotsRow}>
             {Array.from({ length: session.total_steps }).map((_, i) => (
               <View
@@ -265,7 +245,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         keyboardShouldPersistTaps="handled"
       >
         {/* Completed steps — tap to expand */}
-        {isLearn && completedSteps.length > 0 && (
+        {completedSteps.length > 0 && (
           <View style={compactStyles.historyContainer}>
             {completedSteps.map((step, i) => (
               <CompletedStepRow key={`step-${i}`} index={i} title={step.title} description={step.description} isLast={i === completedSteps.length - 1} />
@@ -274,7 +254,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         )}
 
         {/* Learn mode: show current step */}
-        {isLearn && !isCompleted && currentStep && (
+        {!isCompleted && currentStep && (
           <View style={[styles.stepDescCard, shadows.sm]}>
             <Text style={styles.stepDescLabel}>
               Step {session.current_step + 1}{currentStep.title ? ` — ${currentStep.title}` : ""}
@@ -284,7 +264,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         )}
 
         {/* iMessage-style chat thread above the current step (Learn mode) */}
-        {isLearn && !isCompleted && (chatHistory[session.current_step]?.length ?? 0) > 0 && (
+        {!isCompleted && (chatHistory[session.current_step]?.length ?? 0) > 0 && (
           <View style={chatStyles.thread}>
             {(chatHistory[session.current_step] ?? []).map((msg, i) => (
               <View
@@ -315,44 +295,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
           </View>
         )}
 
-        {/* Practice mode: prompt */}
-        {isPractice && !isCompleted && (
-          <Text style={styles.promptText}>Enter your final answer</Text>
-        )}
-
-        {/* Thinking indicator — only shown for practice mode (learn mode
-            shows thinking as a chat bubble in the thread above) */}
-        {isPractice && phase === "thinking" && (
-          <View style={[compactStyles.thinkingCard, shadows.sm]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={compactStyles.thinkingText}>Thinking...</Text>
-          </View>
-        )}
-
-        {/* Feedback */}
-        {/* FeedbackCard for practice-mode answer feedback only.
-            Learn-mode chat replies render as tutor bubbles in the chat
-            thread above the step — showing the FeedbackCard for them too
-            would duplicate the most recent reply. */}
-        {isPractice && lastResponse && phase !== "thinking" && (
-          <FeedbackCard response={lastResponse} />
-        )}
-
-        {/* Switch to Learn Mode (practice, wrong answer) */}
-        {isPractice && lastResponse && !lastResponse.is_correct && !isCompleted && (
-          <AnimatedPressable onPress={switchToLearnMode}>
-            <LinearGradient
-              colors={gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.switchModeButton}
-            >
-              <Ionicons name="book-outline" size={18} color={colors.white} style={{ marginRight: spacing.sm }} />
-              <Text style={styles.switchModeText}>Switch to Learn Mode</Text>
-            </LinearGradient>
-          </AnimatedPressable>
-        )}
-
         {error && (
           <View style={styles.errorWrap}>
             <Ionicons name="alert-circle" size={16} color={colors.error} />
@@ -363,40 +305,10 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         {/* Completed */}
         {isCompleted && <CompletedCard onBack={onBack} onHome={onHome} />}
 
-        {/* Practice mode: answer input stays in scroll body */}
-        {!isCompleted && session.status !== "completed" && isPractice && (
-          <>
-            <View>
-              <Text style={styles.inputLabel}>Your answer</Text>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                value={input}
-                onChangeText={setInput}
-                placeholder="Enter your answer..."
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="go"
-                onSubmitEditing={handleSubmit}
-                inputAccessoryViewID="math-session"
-              />
-            </View>
-            <View style={styles.buttons}>
-              <GradientButton
-                onPress={handleSubmit}
-                label="Answer"
-                loading={phase === "thinking"}
-                disabled={!input.trim()}
-                style={styles.submitButton}
-              />
-            </View>
-          </>
-        )}
       </ScrollView>
 
       {/* Sticky bottom action area for Learn mode */}
-      {isLearn && !isCompleted && (
+      {!isCompleted && (
         <View style={readerStyles.actionBar}>
           {askMode ? (
             <View style={readerStyles.askInputRow}>
@@ -490,7 +402,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         </View>
       )}
 
-      {!isLearn && <MathKeyboard onInsert={handleInsert} accessoryID="math-session" />}
       {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
       <UpgradePrompt {...promptProps} />
       <PaywallScreen

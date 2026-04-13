@@ -154,21 +154,6 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       }
     },
 
-    submitAnswer: async (answer: string) => {
-      const { session } = get();
-      if (!session) return;
-
-      set({ phase: "thinking", error: null });
-      try {
-        const resp = await respondToStep(session.id, answer);
-        const updated = await getSession(session.id);
-        const nextPhase: SessionPhase = resp.action === "completed" ? "completed" : "awaiting_input";
-        set({ session: updated, lastResponse: resp, phase: nextPhase });
-      } catch (e) {
-        set({ phase: "error", error: errorMessage(e) });
-      }
-    },
-
     advanceStep: async () => {
       const { session } = get();
       if (!session) return;
