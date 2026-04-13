@@ -9,6 +9,7 @@ import {
   type DiagnosisResult,
 } from "@/lib/api";
 import type { Subject } from "@/stores/learn";
+import type { QuizResult } from "@/lib/utils";
 
 // ── Types ──
 
@@ -27,18 +28,11 @@ export interface MockTest {
   timeLimitSeconds: number | null;
   startedAt: number;
   submittedAt: number | null;
-  results: MockTestResult[] | null;
+  results: QuizResult[] | null;
   sessionId: string | null;
   workImages: (string | null)[];
   workSubmissions: (DiagnosisResult | null)[];
   multipleChoice: boolean;
-}
-
-export interface MockTestResult {
-  question: string;
-  userAnswer: string | null;
-  correctAnswer: string;
-  isCorrect: boolean | null;
 }
 
 // ── Helpers ──
@@ -219,7 +213,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
       const mt = get().mockTest;
       if (!mt) return;
 
-      const results: MockTestResult[] = await Promise.all(
+      const results: QuizResult[] = await Promise.all(
         mt.questions.map(async (q, i) => {
           const userAnswer = mt.answers[i] ?? null;
           if (!userAnswer) {

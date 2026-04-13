@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import type { MockTest } from "@/stores/mock-test";
 
 interface MockTestSummaryProps {
@@ -38,12 +38,6 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
     return "Don't give up — review and try again!";
   };
 
-  const formatTimeTaken = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}m ${s}s`;
-  };
-
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Score card */}
@@ -63,7 +57,7 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
 
           {timeTaken != null && (
             <p className="text-xs text-text-muted">
-              Completed in {formatTimeTaken(timeTaken)}
+              Completed in {formatDuration(timeTaken)}
             </p>
           )}
 

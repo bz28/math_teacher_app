@@ -14,7 +14,7 @@ import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
-import { cn } from "@/lib/utils";
+import { cn, shuffleChoices, formatElapsed } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 
 export default function MockTestPage() {
@@ -128,12 +128,6 @@ export default function MockTestPage() {
   const currentAnswer = mockTest.answers[mockTest.currentIndex] ?? "";
   const isFlagged = mockTest.flags[mockTest.currentIndex];
 
-  function formatTime(seconds: number) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  }
-
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header with timer */}
@@ -147,7 +141,7 @@ export default function MockTestPage() {
                 timeLeft <= 60 ? "text-error" : "text-text-secondary",
               )}
             >
-              {formatTime(timeLeft)}
+              {formatElapsed(timeLeft)}
             </span>
           )}
           <Button
@@ -214,14 +208,10 @@ export default function MockTestPage() {
           current.distractors && current.distractors.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {(() => {
-                // Shuffle choices deterministically per question index
-                const choices = [current.answer, ...current.distractors];
-                const seed = mockTest.currentIndex;
-                const shuffled = [...choices].sort((a, b) => {
-                  const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-                  const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-                  return ha - hb;
-                });
+                const shuffled = shuffleChoices(
+                  [current.answer, ...current.distractors],
+                  mockTest.currentIndex,
+                );
                 return shuffled.map((choice) => (
                   <button
                     key={choice}
