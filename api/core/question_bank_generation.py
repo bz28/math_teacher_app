@@ -146,7 +146,7 @@ async def _extract_from_images(
         max_tokens=4096,
     )
 
-    questions: list[Any] = result.get("questions", [])
+    questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
     normalized = []
     for q in questions:
         if not isinstance(q, dict) or "text" not in q:
