@@ -83,9 +83,6 @@ export default function MockTestPage() {
           e.preventDefault();
           setMockTestIndex(idx);
         }
-      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        submitMockTest(subject);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -147,7 +144,13 @@ export default function MockTestPage() {
           <Button
             variant="danger"
             size="sm"
-            onClick={() => submitMockTest(subject)}
+            onClick={() => {
+              const unanswered = mockTest.questions.length - Object.keys(mockTest.answers).filter((k) => mockTest.answers[Number(k)]?.trim()).length;
+              const msg = unanswered > 0
+                ? `You have ${unanswered} unanswered question${unanswered > 1 ? "s" : ""}. Submit anyway?`
+                : "Submit your answers? You won't be able to change them.";
+              if (window.confirm(msg)) submitMockTest(subject);
+            }}
           >
             Submit Test
           </Button>

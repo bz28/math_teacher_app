@@ -78,9 +78,6 @@ export default function PracticePage() {
           e.preventDefault();
           setPracticeIndex(idx);
         }
-      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        submitPractice();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -135,7 +132,13 @@ export default function PracticePage() {
           <Button
             variant="danger"
             size="sm"
-            onClick={submitPractice}
+            onClick={() => {
+              const unanswered = practiceBatch.problems.length - Object.keys(practiceBatch.answers).filter((k) => practiceBatch.answers[Number(k)]?.trim()).length;
+              const msg = unanswered > 0
+                ? `You have ${unanswered} unanswered question${unanswered > 1 ? "s" : ""}. Submit anyway?`
+                : "Submit your answers? You won't be able to change them.";
+              if (window.confirm(msg)) submitPractice();
+            }}
           >
             Submit
           </Button>
