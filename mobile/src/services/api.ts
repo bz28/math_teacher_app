@@ -230,6 +230,15 @@ async function _fetchWithRefresh(url: string, init: RequestInit, timeoutMs = DEF
   return resp;
 }
 
+export class EntitlementError extends Error {
+  public entitlement: string;
+  constructor(message: string, entitlement: string) {
+    super(message);
+    this.name = "EntitlementError";
+    this.entitlement = entitlement;
+  }
+}
+
 async function apiPost<T>(path: string, body: object, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const resp = await _fetchWithRefresh(`${API_BASE}${path}`, {
     method: "POST",
@@ -238,6 +247,12 @@ async function apiPost<T>(path: string, body: object, timeoutMs = DEFAULT_TIMEOU
   }, timeoutMs);
   if (!resp.ok) {
     const data = await resp.json().catch(() => null);
+    if (resp.status === 403 && data?.error === "entitlement_required") {
+      throw new EntitlementError(
+        typeof data.message === "string" ? data.message : "Feature requires Pro subscription",
+        typeof data.entitlement === "string" ? data.entitlement : "",
+      );
+    }
     throw new Error(extractError(data, resp.status));
   }
   return resp.json();

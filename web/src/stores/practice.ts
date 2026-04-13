@@ -4,6 +4,7 @@ import { create } from "zustand";
 import {
   session as sessionApi,
   practice as practiceApi,
+  EntitlementError,
   type PracticeProblem,
 } from "@/lib/api";
 import type { Subject } from "@/stores/learn";
@@ -158,6 +159,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         phase: "practice_active" as PracticePhase,
       });
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },
@@ -174,6 +176,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         phase: "practice_active",
       });
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },

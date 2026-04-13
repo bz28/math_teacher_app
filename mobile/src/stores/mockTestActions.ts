@@ -2,6 +2,7 @@ import {
   checkPracticeAnswer,
   completeMockTestSession,
   createMockTestSession,
+  EntitlementError,
   generatePracticeProblems,
   submitWork,
   type PracticeProblem,
@@ -52,6 +53,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
             })
             .catch(() => {});
         } catch (e) {
+          if (e instanceof EntitlementError) throw e;
           set({ phase: "error", error: errorMessage(e) });
         }
         return;

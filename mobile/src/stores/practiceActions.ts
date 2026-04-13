@@ -1,6 +1,7 @@
 import {
   completePracticeBatchSession,
   createPracticeBatchSession,
+  EntitlementError,
   generatePracticeProblems,
   type PracticeProblem,
 } from "../services/api";
@@ -42,7 +43,8 @@ export function createPracticeActions(set: StoreSet, get: StoreGet) {
           practiceBatch: createBatch(problems, sessionId),
           phase: "practice_active",
         });
-      } catch {
+      } catch (e) {
+        if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: "Failed to generate practice problems" });
       }
     },

@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import {
   session as sessionApi,
+  EntitlementError,
   type SessionResponse,
   type StepResponse,
 } from "@/lib/api";
@@ -158,6 +159,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       });
       set({ session, sessionImage: image ?? null, phase: "awaiting_input", chatHistory: {} });
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },
@@ -187,6 +189,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const nextPhase = response.action === "completed" ? "completed" : "awaiting_input";
       set({ session: updated, lastResponse: response, phase: nextPhase as SessionPhase });
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },
@@ -229,6 +232,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         lastResponse: response,
       }));
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "awaiting_input" as SessionPhase, error: (err as Error).message });
     }
   },
@@ -278,7 +282,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               },
             });
           })
-          .catch(console.error);
+          .catch(() => {}); // Silently skip — preload failures are non-critical
       });
     }
   },
