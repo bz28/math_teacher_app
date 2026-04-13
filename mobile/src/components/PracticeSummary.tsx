@@ -12,16 +12,11 @@ import { cleanMathPreview } from "./HistoryCards";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
 import { useColors, spacing } from "../theme";
+import { formatDuration } from "../utils/quiz";
 
 interface PracticeSummaryProps {
   onBack: () => void;
   onHome: () => void;
-}
-
-function formatTimeTaken(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}m ${s}s`;
 }
 
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
@@ -97,7 +92,7 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
             />
           </View>
           {timeTaken != null && (
-            <Text style={styles.summaryTime}>Completed in {formatTimeTaken(timeTaken)}</Text>
+            <Text style={styles.summaryTime}>Completed in {formatDuration(timeTaken)}</Text>
           )}
           <View style={styles.summaryStats}>
             <View style={styles.statDot}>

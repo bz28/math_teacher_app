@@ -15,16 +15,11 @@ import { GradientButton } from "./GradientButton";
 import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
+import { shuffleChoices, formatElapsed } from "../utils/quiz";
 import { StyleSheet } from "react-native";
 
 interface PracticeBatchViewProps {
   onBack: () => void;
-}
-
-function formatElapsed(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
@@ -40,6 +35,15 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
     reset,
   } = useSessionStore();
 
+  // Build shuffled MCQ choices — must be before early returns (rules of hooks)
+  const currentQuestion = practiceBatch?.problems[practiceBatch.currentIndex];
+  const choices = useMemo(() => {
+    if (!currentQuestion?.answer || !currentQuestion.distractors?.length) return [];
+    const all = [currentQuestion.answer, ...currentQuestion.distractors];
+    const seed = practiceBatch?.currentIndex ?? 0;
+    return shuffleChoices(all, seed);
+  }, [currentQuestion, practiceBatch?.currentIndex]);
+
   // Elapsed timer
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -53,7 +57,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
   if (!practiceBatch) return null;
 
   const { problems, answers, flags, currentIndex } = practiceBatch;
-  const currentQuestion = problems[currentIndex];
+  const current = problems[currentIndex];
   const currentAnswer = answers[currentIndex] ?? "";
 
   const handleNavigate = (index: number) => {
@@ -97,18 +101,6 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
       },
     ]);
   };
-
-  // Build shuffled MCQ choices
-  const choices = useMemo(() => {
-    if (!currentQuestion?.answer || !currentQuestion.distractors?.length) return [];
-    const all = [currentQuestion.answer, ...currentQuestion.distractors];
-    const seed = currentIndex;
-    return [...all].sort((a, b) => {
-      const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-      const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
-      return ha - hb;
-    });
-  }, [currentQuestion, currentIndex]);
 
   const letters = ["A", "B", "C", "D"];
 
@@ -176,7 +168,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
 
         {/* Question card */}
         <View style={[styles.questionCard, shadows.sm]}>
-          <MathText text={currentQuestion.question} style={styles.questionText} />
+          <MathText text={current.question} style={styles.questionText} />
         </View>
 
         {/* MCQ choices */}

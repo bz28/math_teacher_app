@@ -4,6 +4,9 @@ import type {
   StepResponse,
   WorkDiagnosis,
 } from "../services/api";
+import type { QuizResult } from "../utils/quiz";
+
+export type { QuizResult } from "../utils/quiz";
 
 export type SessionPhase =
   | "idle"
@@ -18,13 +21,6 @@ export type SessionPhase =
   | "mock_test_summary"
   | "error";
 
-export interface PracticeResult {
-  question: string;
-  userAnswer: string | null;
-  correctAnswer: string;
-  isCorrect: boolean | null;
-}
-
 export interface PracticeBatch {
   problems: PracticeProblem[];
   answers: Record<number, string>;
@@ -32,7 +28,7 @@ export interface PracticeBatch {
   currentIndex: number;
   startedAt: number;
   submittedAt: number | null;
-  results: PracticeResult[] | null;
+  results: QuizResult[] | null;
   sessionId: string | null;
 }
 
@@ -44,13 +40,6 @@ export interface LearnQueue {
   preloadedSessions: Record<number, SessionData>;
 }
 
-export interface MockTestResult {
-  question: string;
-  userAnswer: string | null;
-  correctAnswer: string;
-  isCorrect: boolean | null;
-}
-
 export interface MockTest {
   sessionId: string | null;
   questions: PracticeProblem[];
@@ -60,7 +49,7 @@ export interface MockTest {
   timeLimitSeconds: number | null;
   startedAt: number;
   submittedAt: number | null;
-  results: MockTestResult[] | null;
+  results: QuizResult[] | null;
   /** Base64 photos held locally until test submit */
   workImages: (string | null)[];
   /** Diagnosis results from submitted work photos, parallel to questions array */

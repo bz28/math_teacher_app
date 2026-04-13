@@ -7,10 +7,10 @@ import {
 import { errorMessage } from "../utils/errorMessage";
 import {
   initialState,
-  type PracticeResult,
   type StoreGet,
   type StoreSet,
 } from "./types";
+import type { QuizResult } from "../utils/quiz";
 
 function createBatch(
   problems: PracticeProblem[],
@@ -23,7 +23,7 @@ function createBatch(
     currentIndex: 0,
     startedAt: Date.now(),
     submittedAt: null as number | null,
-    results: null as PracticeResult[] | null,
+    results: null as QuizResult[] | null,
     sessionId,
   };
 }
@@ -68,7 +68,7 @@ export function createPracticeActions(set: StoreSet, get: StoreGet) {
       const { practiceBatch } = get();
       if (!practiceBatch) return;
 
-      const results: PracticeResult[] = practiceBatch.problems.map((q, i) => {
+      const results: QuizResult[] = practiceBatch.problems.map((q, i) => {
         const userAnswer = practiceBatch.answers[i] ?? null;
         if (!userAnswer) {
           return { question: q.question, userAnswer: null, correctAnswer: q.answer, isCorrect: null };
