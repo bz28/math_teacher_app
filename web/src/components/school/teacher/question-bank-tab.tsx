@@ -14,6 +14,7 @@ import { ReviewBanner } from "./question-bank/review-banner";
 import { ReviewQueue } from "./question-bank/review-queue";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
+import { UploadWorksheetModal } from "./question-bank/upload-worksheet-modal";
 import { PendingTray } from "./question-bank/pending-tray";
 import { ReviewModal } from "./question-bank/review-modal";
 
@@ -50,6 +51,7 @@ export function QuestionBankTab({
   }, [items, searchQuery]);
 
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
   const [editFromReviewItem, setEditFromReviewItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
@@ -242,13 +244,22 @@ export function QuestionBankTab({
             ))}
           </div>
         </div>
-        <button
-          type="button"
-          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
-          onClick={() => setShowGenerate(true)}
-        >
-          + Generate Questions
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-sm font-bold text-text-primary hover:bg-bg-subtle"
+            onClick={() => setShowUpload(true)}
+          >
+            Upload Worksheet
+          </button>
+          <button
+            type="button"
+            className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+            onClick={() => setShowGenerate(true)}
+          >
+            + Generate Questions
+          </button>
+        </div>
       </div>
 
       {/* Review banner — only on approved tab when pending items exist */}
@@ -278,18 +289,26 @@ export function QuestionBankTab({
                 : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10"
           }`}
         >
-          {activeJob.status === "queued" && "Generation queued..."}
+          {activeJob.status === "queued" &&
+            (activeJob.mode === "upload"
+              ? "Extracting problems from worksheet..."
+              : "Generation queued...")}
           {activeJob.status === "running" &&
-            (activeJob.produced_count > 0
-              ? `Generating questions... ${activeJob.produced_count}/${activeJob.requested_count}`
-              : `Generating ${activeJob.requested_count} questions...`)}
+            (activeJob.mode === "upload"
+              ? activeJob.produced_count > 0
+                ? `Extracting & solving... ${activeJob.produced_count} questions so far`
+                : "Extracting problems from worksheet..."
+              : activeJob.produced_count > 0
+                ? `Generating questions... ${activeJob.produced_count}/${activeJob.requested_count}`
+                : `Generating ${activeJob.requested_count} questions...`)}
           {activeJob.status === "done" && (
             <span>
-              Generated {activeJob.produced_count}/{activeJob.requested_count} questions
+              {activeJob.mode === "upload" ? "Extracted" : "Generated"}{" "}
+              {activeJob.produced_count} question{activeJob.produced_count !== 1 ? "s" : ""}
             </span>
           )}
           {activeJob.status === "failed" &&
-            `Generation failed: ${activeJob.error_message ?? "unknown error"}`}
+            `${activeJob.mode === "upload" ? "Extraction" : "Generation"} failed: ${activeJob.error_message ?? "unknown error"}`}
         </div>
       )}
 
@@ -357,6 +376,17 @@ export function QuestionBankTab({
           onClose={() => setShowGenerate(false)}
           onStarted={(job) => {
             setShowGenerate(false);
+            setActiveJob(job);
+          }}
+        />
+      )}
+
+      {showUpload && (
+        <UploadWorksheetModal
+          courseId={courseId}
+          onClose={() => setShowUpload(false)}
+          onStarted={(job) => {
+            setShowUpload(false);
             setActiveJob(job);
           }}
         />
@@ -436,7 +466,7 @@ function emptyStateFor(
 ): string {
   const total = counts.pending + counts.approved + counts.rejected;
   if (total === 0) {
-    return "No questions yet. Hit \u201cGenerate Questions\u201d to create some.";
+    return "No questions yet. Generate or upload a worksheet to get started.";
   }
   if (statusFilter === "pending") {
     return "No pending review. New generations land here.";
