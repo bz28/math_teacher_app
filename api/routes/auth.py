@@ -362,7 +362,6 @@ async def me(
         subscription_status=user.subscription_status,
         subscription_expires_at=user.subscription_expires_at,
         is_pro=is_pro(user),
-        is_preview=user.is_preview,
     )
 
 

@@ -16,19 +16,13 @@ export default function AccountPage() {
   const router = useRouter();
 
   const isPro = useEntitlementStore((s) => s.isPro);
-  // School-linked students are entitlement-wise Pro (their school covers
-  // access), but they have no personal subscription and nothing to
-  // manage. Hide the Pro badge + Subscription card for them; show a
-  // neutral "School" pill instead so the teacher/student context is
-  // still visible at a glance.
+  // School-linked students (including teacher "View as Student"
+  // previews, which inherit school_id from their teacher) have no
+  // personal subscription, no per-day quota, and nothing to upgrade.
+  // Gate every subscription-oriented UI piece on this flag instead
+  // of on isPro, because a preview whose teacher has no section
+  // enrollments yet still reads back as isPro=false from /entitlements.
   const isSchoolStudent = !!user?.school_id;
-  // Preview accounts are shadow students teachers create via "View as
-  // Student". They're not real users, have nothing to pay for, and
-  // shouldn't see subscription/usage/upgrade UI at all. Covered
-  // separately from isSchoolStudent because a preview without real
-  // section enrollments can fall into the personal-free path and show
-  // FREE + Upgrade to Pro otherwise.
-  const isPreview = !!user?.is_preview;
   const loaded = useEntitlementStore((s) => s.loaded);
   const dailySessionsUsed = useEntitlementStore((s) => s.dailySessionsUsed);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
@@ -111,9 +105,7 @@ export default function AccountPage() {
         <h1 className="mt-4 text-xl font-bold text-text-primary">{user.name}</h1>
         <p className="mt-1 text-sm text-text-muted">{user.email}</p>
         <div className="mt-3">
-          {isPreview ? (
-            <Badge variant="muted">Preview</Badge>
-          ) : isSchoolStudent ? (
+          {isSchoolStudent ? (
             <Badge variant="muted">School</Badge>
           ) : (
             <Badge variant={isPro ? "success" : "muted"}>
@@ -124,9 +116,9 @@ export default function AccountPage() {
         </div>
       </motion.div>
 
-      {/* Subscription card — hidden for school students and previews
-          (no personal subscription to manage). */}
-      {isPro && !isSchoolStudent && !isPreview && (
+      {/* Subscription card — hidden for school students (no personal
+          subscription to manage). */}
+      {isPro && !isSchoolStudent && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -160,9 +152,9 @@ export default function AccountPage() {
         </motion.div>
       )}
 
-      {/* Usage card — free users (preview accounts skip — quotas don't
-          apply in a teacher's view-as-student session). */}
-      {!isPro && !isPreview && loaded && dailySessionsLimit < Infinity && (
+      {/* Usage card — personal free users only. School-linked users
+          (including previews) don't have per-day quotas to show. */}
+      {!isPro && !isSchoolStudent && loaded && dailySessionsLimit < Infinity && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -178,9 +170,9 @@ export default function AccountPage() {
         </motion.div>
       )}
 
-      {/* Upgrade button — free users (preview accounts skip — teacher
-          already has Pro; the preview doesn't need to purchase anything). */}
-      {!isPro && !isPreview && (
+      {/* Upgrade button — personal free users only. School-linked
+          users (including previews) have nothing to upgrade. */}
+      {!isPro && !isSchoolStudent && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
