@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -176,15 +177,35 @@ async def invite_student(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student already in section")
         db.add(SectionEnrollment(section_id=section_id, student_id=existing_user.id))
         _stamp_school_id(existing_user, course)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Raced with another invite — the uq_section_student constraint
+            # caught a duplicate. Treat as success: the student is in the
+            # section, which is all the caller needed.
+            await db.rollback()
         logger.info(
             "AUDIT: teacher=%s enrolled existing user=%s into section=%s",
             current_user.user_id, existing_user.id, section_id,
         )
         return {"status": "enrolled", "student_id": str(existing_user.id)}
 
-    invite = await _create_or_refresh_invite(db, section_id, email, current_user.user_id)
-    await db.commit()
+    try:
+        invite = await _create_or_refresh_invite(db, section_id, email, current_user.user_id)
+        await db.commit()
+    except IntegrityError:
+        # Raced with another invite. The partial unique index on
+        # (section_id, email) WHERE status='pending' ensures exactly
+        # one pending row wins; re-read it and continue as if we were
+        # the refresher.
+        await db.rollback()
+        invite = (await db.execute(
+            select(SectionInvite).where(
+                SectionInvite.section_id == section_id,
+                SectionInvite.email == email,
+                SectionInvite.status == "pending",
+            )
+        )).scalar_one()
     await db.refresh(invite)
 
     _send_invite_email(
