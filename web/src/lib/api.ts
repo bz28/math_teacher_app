@@ -773,6 +773,16 @@ export const teacher = {
   documents(courseId: string) {
     return apiFetch<{ documents: TeacherDocument[] }>(`/teacher/courses/${courseId}/documents`);
   },
+  document(courseId: string, docId: string) {
+    return apiFetch<{
+      id: string;
+      filename: string;
+      file_type: string;
+      file_size: number;
+      image_data: string | null;
+      created_at: string;
+    }>(`/teacher/courses/${courseId}/documents/${docId}`);
+  },
   uploadDocument(courseId: string, data: { image_base64: string; filename: string; unit_id?: string | null }) {
     return apiFetch<{ id: string }>(`/teacher/courses/${courseId}/documents`, {
       method: "POST",
