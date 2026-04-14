@@ -44,14 +44,16 @@ async def overview(
         select(func.count(func.distinct(Session.user_id))).where(*session_filters)
     )).scalar() or 0
 
-    # New users registered in period
+    # New users registered in period (excludes preview/shadow accounts)
     new_users = (await db.execute(
-        select(func.count()).select_from(User).where(User.created_at >= since)
+        select(func.count()).select_from(User).where(
+            User.created_at >= since, User.is_preview.is_(False),
+        )
     )).scalar() or 0
 
-    # Total registered users (lifetime)
+    # Total registered users (lifetime, excludes preview)
     total_users = (await db.execute(
-        select(func.count()).select_from(User)
+        select(func.count()).select_from(User).where(User.is_preview.is_(False))
     )).scalar() or 0
 
     # Total cost in period
@@ -122,8 +124,8 @@ async def overview(
         select(AppStat.value).where(AppStat.key == "deleted_accounts")
     )).scalar() or 0
 
-    # Top spenders in period
-    spender_filters = [LLMCall.created_at >= since]
+    # Top spenders in period (preview accounts excluded — they're internal)
+    spender_filters = [LLMCall.created_at >= since, User.is_preview.is_(False)]
     top_spenders = (await db.execute(
         select(
             User.name,
