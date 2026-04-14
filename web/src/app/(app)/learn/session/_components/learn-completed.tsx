@@ -17,7 +17,7 @@ interface LearnCompletedProps {
   onContinueAsking: () => void;
   onToggleFlag: (index: number) => void;
   onAdvanceQueue: () => Promise<void>;
-  onStartPractice: (problem: string, count: number, subject: Subject, difficulty?: Difficulty) => Promise<void>;
+  onStartPractice: (problem: string, subject: Subject, difficulty?: Difficulty) => Promise<void>;
   onReset: () => void;
 }
 
@@ -94,7 +94,7 @@ export function LearnCompleted({
                   setLoading(true);
                   try {
                     // onStartPractice returns after Phase 1 (practice_preview set); Phase 2 runs in background
-                    await onStartPractice(session.problem, 1, subject, difficulty);
+                    await onStartPractice(session.problem, subject, difficulty);
                     router.push("/practice");
                   } catch (err) {
                     setLoading(false);

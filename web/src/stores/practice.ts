@@ -76,7 +76,7 @@ interface PracticeState {
   phase: PracticePhase;
   error: string | null;
 
-  startPracticeBatch: (problem: string, count: number, subject: Subject, difficulty?: Difficulty) => Promise<void>;
+  startPracticeBatch: (problem: string, subject: Subject, difficulty?: Difficulty) => Promise<void>;
   beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
   practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: Difficulty) => Promise<void>;
@@ -85,7 +85,6 @@ interface PracticeState {
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string, subject: Subject) => void;
   nextPracticeProblem: () => void;
   togglePracticeFlag: (index: number) => void;
-  retryFlaggedProblems: (subject: Subject) => Promise<void>;
   reset: () => void;
 }
 
@@ -104,30 +103,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     const newFlags = [...practiceBatch.flags];
     newFlags[index] = !newFlags[index];
     set({ practiceBatch: { ...practiceBatch, flags: newFlags } });
-  },
-
-  async retryFlaggedProblems(subject) {
-    const { practiceBatch } = get();
-    if (!practiceBatch) return;
-    const flaggedProblems = practiceBatch.problems.filter((_, i) => practiceBatch.flags[i]);
-    if (flaggedProblems.length === 0) return;
-
-    set({ ...initialState, phase: "loading" as PracticePhase });
-    try {
-      const allProblems: PracticeProblem[] = [];
-      for (const problem of flaggedProblems) {
-        const { problems } = await practiceApi.generate({ problem: problem.question, count: 1, subject });
-        allProblems.push(...problems);
-      }
-      const { id: sessionId } = await sessionApi.createPracticeBatch(flaggedProblems[0].question);
-      set({
-        practiceBatch: createPracticeBatch(allProblems, sessionId),
-        phase: "awaiting_input" as PracticePhase,
-      });
-    } catch (err) {
-      if (err instanceof EntitlementError) throw err;
-      set({ phase: "error", error: (err as Error).message });
-    }
   },
 
   async practiceFlaggedProblems(flaggedProblems, subject, difficulty: Difficulty = "same") {
@@ -162,14 +137,20 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
             set({ practiceBatch: { ...current, problems: updated } });
           }),
         ),
-      );
+      ).then(() => {
+        const { practiceBatch: current } = get();
+        if (!current || current.sessionId !== batchId) return;
+        if (current.problems.every((p) => p.answer === "")) {
+          set({ phase: "error", error: "Failed to generate answers. Please try again." });
+        }
+      });
     } catch (err) {
       if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },
 
-  async startPracticeBatch(problem, count, subject, difficulty: Difficulty = "same") {
+  async startPracticeBatch(problem, subject, difficulty: Difficulty = "same") {
     set({ phase: "loading", error: null });
     try {
       // Phase 1: generate a similar question text (not the original)
@@ -189,8 +170,12 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       practiceApi.generate({ problem: similarQuestion, count: 0, subject }).then((res) => {
         const { practiceBatch: current } = get();
         if (!current || current.sessionId !== batchId) return;
+        if (!res.problems[0]) {
+          set({ phase: "error", error: "Failed to generate answer. Please try again." });
+          return;
+        }
         const updated = [...current.problems];
-        if (res.problems[0]) updated[0] = res.problems[0];
+        updated[0] = res.problems[0];
         set({ practiceBatch: { ...current, problems: updated } });
       }).catch((err) => {
         set({ phase: "error", error: (err as Error).message });

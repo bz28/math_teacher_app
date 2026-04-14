@@ -107,14 +107,9 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         const hasImages = problems.some((p) => !!imageMap.get(p));
         let questionTexts: string[];
         if (hasImages) {
+          // Images can't be batched — generate similar texts individually
           const results = await Promise.all(
-            problems.map((p) => {
-              const image = imageMap.get(p);
-              return practiceApi.generate({
-                problem: p, count: 1, subject, difficulty,
-                ...(image && { image_base64: image }),
-              });
-            }),
+            problems.map((p) => practiceApi.generate({ problems: [p], subject, difficulty })),
           );
           questionTexts = results.flatMap((r) => r.problems.map((p) => p.question));
         } else {
@@ -148,8 +143,15 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }),
         );
 
-        // Solve in background for both timed and untimed — user clicks Begin when ready
-        Promise.allSettled(solvePromises);
+        // Solve in background — transition to error if all fail
+        Promise.allSettled(solvePromises).then((results) => {
+          const { mockTest: current } = get();
+          if (!current || current.sessionId !== batchSessionId) return;
+          const allFailed = current.questions.every((q) => q.answer === "");
+          if (allFailed) {
+            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          }
+        });
       } else {
         const placeholders: PracticeProblem[] = problems.map((p) => ({
           question: p,
@@ -179,8 +181,15 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           });
         });
 
-        // Solve in background for both timed and untimed — user clicks Begin when ready
-        Promise.allSettled(promises);
+        // Solve in background — transition to error if all fail
+        Promise.allSettled(promises).then((results) => {
+          const { mockTest: current } = get();
+          if (!current || current.sessionId !== batchSessionId2) return;
+          const allFailed = current.questions.every((q) => q.answer === "");
+          if (allFailed) {
+            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          }
+        });
       }
     } catch (err) {
       if (err instanceof EntitlementError) throw err;

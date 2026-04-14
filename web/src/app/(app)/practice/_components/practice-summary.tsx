@@ -111,11 +111,15 @@ export function PracticeSummary({
               loading={loading}
               onClick={async () => {
                 setLoading(true);
-                const flaggedProblems = results
-                  .filter((_, i) => flags[i])
-                  .map((r) => r.problem);
-                await onStartLearnQueue(flaggedProblems);
-                router.push("/learn/session");
+                try {
+                  const flaggedProblems = results
+                    .filter((_, i) => flags[i])
+                    .map((r) => r.problem);
+                  await onStartLearnQueue(flaggedProblems);
+                  router.push("/learn/session");
+                } catch {
+                  setLoading(false);
+                }
               }}
               className="w-full"
             >

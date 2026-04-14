@@ -309,7 +309,7 @@ function PracticeSimilarButton({ problem, subject }: { problem: string; subject:
             setLoading(true);
             try {
               useSessionStore.getState().setSubject(subject as "math" | "chemistry");
-              await usePracticeStore.getState().startPracticeBatch(problem, 1, subject as "math" | "chemistry", difficulty);
+              await usePracticeStore.getState().startPracticeBatch(problem, subject as "math" | "chemistry", difficulty);
               router.push("/practice");
             } finally {
               setLoading(false);

@@ -63,9 +63,13 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
               loading={loading}
               onClick={async () => {
                 setLoading(true);
-                const flagged = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
-                await onPracticeFlagged(flagged, difficulty);
-                router.push("/practice");
+                try {
+                  const flagged = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
+                  await onPracticeFlagged(flagged, difficulty);
+                  router.push("/practice");
+                } catch {
+                  setLoading(false);
+                }
               }}
               className="w-full"
             >
