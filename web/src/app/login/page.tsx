@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { clearTokens, auth as authApi } from "@/lib/api";
@@ -10,6 +10,14 @@ import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showForgot, setShowForgot] = useState(false);
@@ -18,6 +26,8 @@ export default function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const { login, loading, error, clearError } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect");
   const toast = useToast();
 
   async function handleForgotPassword(e: FormEvent) {
@@ -43,12 +53,19 @@ export default function LoginPage() {
     try {
       await login(email, password);
       const user = useAuthStore.getState().user;
+      // Only same-origin relative paths. Protocol-relative ("//evil.com")
+      // and absolute URLs are rejected — they'd send users off-domain.
+      const safeRedirect =
+        redirect && redirect.startsWith("/") && !redirect.startsWith("//")
+          ? redirect
+          : null;
       const dest =
-        user?.role === "teacher"
+        safeRedirect ??
+        (user?.role === "teacher"
           ? "/school/teacher"
           : user?.role === "student" && user.school_id
             ? "/school/student"
-            : "/home";
+            : "/home");
       router.replace(dest);
     } catch {
       const msg = useAuthStore.getState().error;

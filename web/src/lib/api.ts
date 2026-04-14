@@ -36,6 +36,15 @@ export interface InviteData {
   school_id: string;
 }
 
+export interface SectionInviteData {
+  email: string;
+  section_id: string;
+  section_name: string;
+  course_id: string;
+  course_name: string;
+  school_name: string;
+}
+
 export interface EnrolledCourse {
   id: string;
   name: string;
@@ -356,12 +365,25 @@ export const auth = {
     return apiFetch<InviteData>(`/auth/invite/${token}`);
   },
 
+  validateSectionInvite(token: string) {
+    return apiFetch<SectionInviteData>(`/auth/invite/section/${token}`);
+  },
+
+  claimSectionInvite(token: string) {
+    return apiFetch<{ status: string; section_id: string }>(
+      "/auth/invite/section/claim",
+      { method: "POST", body: JSON.stringify({ token }) },
+    );
+  },
+
   register(data: {
     email: string;
     password: string;
     name: string;
     grade_level: number;
     invite_token?: string;
+    section_invite_token?: string;
+    join_code?: string;
   }) {
     return apiFetch<TokenPair>("/auth/register", {
       method: "POST",
@@ -607,13 +629,26 @@ export interface TeacherSection {
   join_code_expires_at: string | null;
 }
 
+export interface TeacherSectionInvite {
+  id: string;
+  email: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface TeacherSectionDetail {
   id: string;
   name: string;
   join_code: string | null;
   join_code_expires_at: string | null;
   students: { id: string; name: string; email: string }[];
+  pending_invites: TeacherSectionInvite[];
 }
+
+export type InviteStudentResult =
+  | { status: "enrolled"; student_id: string }
+  | { status: "invited"; invite: TeacherSectionInvite };
 
 export interface TeacherDocument {
   id: string;
@@ -658,6 +693,7 @@ export interface TeacherSubmission {
   id: string;
   student_name: string;
   student_email: string;
+  is_preview: boolean;
   status: string;
   submitted_at: string | null;
   is_late: boolean;
@@ -706,11 +742,23 @@ export const teacher = {
   deleteSection(courseId: string, sectionId: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}`, { method: "DELETE" });
   },
-  addStudent(courseId: string, sectionId: string, email: string) {
-    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}/students`, {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
+  inviteStudent(courseId: string, sectionId: string, email: string) {
+    return apiFetch<InviteStudentResult>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/invites`,
+      { method: "POST", body: JSON.stringify({ email }) },
+    );
+  },
+  resendInvite(courseId: string, sectionId: string, inviteId: string) {
+    return apiFetch<{ status: string; invite: TeacherSectionInvite }>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/invites/${inviteId}/resend`,
+      { method: "POST" },
+    );
+  },
+  revokeInvite(courseId: string, sectionId: string, inviteId: string) {
+    return apiFetch<{ status: string }>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/invites/${inviteId}`,
+      { method: "DELETE" },
+    );
   },
   removeStudent(courseId: string, sectionId: string, studentId: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}`, { method: "DELETE" });
@@ -977,6 +1025,7 @@ export interface TeacherSubmissionRow {
   id: string;
   student_name: string;
   student_email: string;
+  is_preview: boolean;
   status: string;
   submitted_at: string | null;
   is_late: boolean;

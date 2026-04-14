@@ -625,12 +625,15 @@ async def list_submissions(
 ) -> dict[str, Any]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
-    # Get all submissions with grades (exclude preview students)
+    # Include preview submissions so teachers can verify their own
+    # "View as Student" tests; the is_preview flag is surfaced on each
+    # row so the UI can distinguish them. Aggregate stats elsewhere
+    # still filter preview out.
     rows = (await db.execute(
-        select(Submission, SubmissionGrade, User.name, User.email)
+        select(Submission, SubmissionGrade, User.name, User.email, User.is_preview)
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .join(User, User.id == Submission.student_id)
-        .where(Submission.assignment_id == a.id, User.is_preview.is_(False))
+        .where(Submission.assignment_id == a.id)
         .order_by(Submission.submitted_at.desc())
     )).all()
 
@@ -648,7 +651,7 @@ async def list_submissions(
         integrity_by_sub.setdefault(ip.submission_id, []).append(ip)
 
     submissions = []
-    for sub, grade, student_name, student_email in rows:
+    for sub, grade, student_name, student_email, is_preview in rows:
         # Derive a lightweight integrity overview for the list pill.
         problems = integrity_by_sub.get(sub.id, [])
         if not problems:
@@ -677,6 +680,7 @@ async def list_submissions(
             "id": str(sub.id),
             "student_name": student_name or "",
             "student_email": student_email,
+            "is_preview": bool(is_preview),
             "status": sub.status,
             "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
             "is_late": sub.is_late,

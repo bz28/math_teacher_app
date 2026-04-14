@@ -26,6 +26,8 @@ interface AuthState {
     name: string;
     grade_level: number;
     invite_token?: string;
+    section_invite_token?: string;
+    join_code?: string;
   }) => Promise<void>;
 
   logout: () => void;
