@@ -30,6 +30,7 @@ function RegisterPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
+  const [joinCode, setJoinCode] = useState("");
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
   const { register, loading, error, clearError } = useAuthStore();
@@ -96,6 +97,7 @@ function RegisterPageContent() {
     e.preventDefault();
     if (emailError) return;
 
+    const trimmedCode = joinCode.trim().toUpperCase();
     try {
       await register({
         email,
@@ -104,9 +106,14 @@ function RegisterPageContent() {
         grade_level: gradeLevel,
         ...(inviteToken ? { invite_token: inviteToken } : {}),
         ...(sectionInviteToken ? { section_invite_token: sectionInviteToken } : {}),
+        ...(trimmedCode ? { join_code: trimmedCode } : {}),
       });
       router.replace(
-        invite ? "/school/teacher" : sectionInvite ? "/school/student" : "/home",
+        invite
+          ? "/school/teacher"
+          : sectionInvite || trimmedCode
+            ? "/school/student"
+            : "/home",
       );
     } catch {
       const msg = useAuthStore.getState().error;
@@ -292,6 +299,25 @@ function RegisterPageContent() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Join code — students self-signing up; hidden for invite flows */}
+          {!lockEmail && (
+            <div>
+              <Input
+                label="Join code (optional)"
+                placeholder="e.g. 3FH7KP"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                maxLength={10}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                Got one from your teacher? We&apos;ll add you to the class.
+              </p>
             </div>
           )}
 

@@ -383,6 +383,7 @@ export const auth = {
     grade_level: number;
     invite_token?: string;
     section_invite_token?: string;
+    join_code?: string;
   }) {
     return apiFetch<TokenPair>("/auth/register", {
       method: "POST",
