@@ -164,6 +164,8 @@ export function UploadWorksheetModal({
                 <div className="flex flex-wrap justify-center gap-3">
                   {files.map((f, i) => (
                     <div key={f.preview} className="group relative">
+                      {/* blob: URL preview — next/image can't optimize these */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={f.preview}
                         alt={f.file.name}
