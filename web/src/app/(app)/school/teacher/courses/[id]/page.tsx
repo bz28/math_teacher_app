@@ -1,7 +1,8 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
 import {
@@ -26,14 +27,48 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "settings", label: "Settings" },
 ];
 
+const TAB_KEYS = TABS.map((t) => t.key);
+const DEFAULT_TAB: TabKey = "sections";
+
 const ACTIVE_JOB_STORAGE_KEY = (courseId: string) => `bank.activeJob.${courseId}`;
 
 export default function CourseWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+  // Suspense boundary required because the inner component reads
+  // useSearchParams, which opts the page into dynamic rendering and
+  // needs a fallback while the client hydrates the query string.
+  return (
+    <Suspense>
+      <CourseWorkspaceContent params={params} />
+    </Suspense>
+  );
+}
+
+function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [course, setCourse] = useState<TeacherCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("sections");
+
+  // Tab state lives in the URL (?tab=materials) so refresh, back/
+  // forward, and deep-linked URLs all land on the right tab. Any
+  // unknown value falls back to the default.
+  const tabParam = searchParams.get("tab");
+  const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey)
+    ? (tabParam as TabKey)
+    : DEFAULT_TAB;
+  const setTab = useCallback(
+    (next: TabKey) => {
+      const qs = new URLSearchParams(searchParams.toString());
+      if (next === DEFAULT_TAB) qs.delete("tab");
+      else qs.set("tab", next);
+      const q = qs.toString();
+      router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
   // Lifted from QuestionBankTab so the active generation job survives
   // when the teacher switches tabs. The polling effect lives here too,
   // so the job keeps ticking in the background and a small indicator
