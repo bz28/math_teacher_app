@@ -1,101 +1,91 @@
 import Link from "next/link";
 import { LogoMark } from "@/components/shared/logo-mark";
 
+type LinkItem = { label: string; href: string };
+
+const productLinks: LinkItem[] = [
+  { label: "For Students", href: "/students" },
+  { label: "Math", href: "/subjects/math" },
+  { label: "Physics", href: "/subjects/physics" },
+  { label: "Chemistry", href: "/subjects/chemistry" },
+];
+
+const companyLinks: LinkItem[] = [
+  { label: "For Teachers", href: "/for-teachers" },
+  { label: "Safety", href: "/safety" },
+  { label: "Book a demo", href: "/demo" },
+];
+
+const resourceLinks: LinkItem[] = [
+  { label: "Support", href: "/support" },
+  { label: "Sign in", href: "/login" },
+  { label: "Create account", href: "/register" },
+];
+
+const legalLinks: LinkItem[] = [
+  { label: "Privacy", href: "/privacy" },
+  { label: "Terms", href: "/terms" },
+];
+
+function FooterColumn({
+  heading,
+  links,
+}: {
+  heading: string;
+  links: LinkItem[];
+}) {
+  return (
+    <div>
+      <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+        {heading}
+      </h3>
+      <ul className="space-y-3 text-sm">
+        {links.map((link) => (
+          <li key={link.href}>
+            <Link
+              href={link.href}
+              className="text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
+            >
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function Footer() {
   return (
-    <footer className="border-t border-border-light px-6 py-12">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
+    <footer className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface)]">
+      <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-20">
+        <div className="grid gap-12 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
           {/* Brand */}
-          <div>
+          <div className="md:pr-8">
             <div className="flex items-center gap-2.5">
-              <LogoMark size={28} />
-              <span className="text-base font-semibold text-text-primary">Veradic AI</span>
+              <LogoMark size={32} />
+              <span className="text-lg font-bold tracking-tight text-[color:var(--color-text)]">
+                Veradic AI
+              </span>
             </div>
-            <p className="mt-3 text-sm text-text-muted leading-relaxed">
-              Veradic breaks any math or science problem into steps you actually understand.
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
+              The AI tutor that teaches instead of telling. Built for schools, loved by teachers.
             </p>
           </div>
 
-          {/* Subjects */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-text-primary">Subjects</h3>
-            <ul className="space-y-2 text-sm text-text-muted">
-              <li>
-                <Link href="/subjects/math" className="hover:text-primary transition-colors">
-                  Math Tutor
-                </Link>
-              </li>
-              <li>
-                <Link href="/subjects/physics" className="hover:text-primary transition-colors">
-                  Physics Tutor
-                </Link>
-              </li>
-              <li>
-                <Link href="/subjects/chemistry" className="hover:text-primary transition-colors">
-                  Chemistry Tutor
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Product */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-text-primary">Product</h3>
-            <ul className="space-y-2 text-sm text-text-muted">
-              <li>
-                <Link href="/#features" className="hover:text-primary transition-colors">
-                  Features
-                </Link>
-              </li>
-              <li>
-                <Link href="/#faq" className="hover:text-primary transition-colors">
-                  FAQ
-                </Link>
-              </li>
-              <li>
-                <Link href="/teachers" className="hover:text-primary transition-colors">
-                  For Schools
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Get Started */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-text-primary">Get Started</h3>
-            <ul className="space-y-2 text-sm text-text-muted">
-              <li>
-                <Link href="/register" className="hover:text-primary transition-colors">
-                  Sign Up Free
-                </Link>
-              </li>
-              <li>
-                <Link href="/login" className="hover:text-primary transition-colors">
-                  Sign In
-                </Link>
-              </li>
-              <li>
-                <Link href="/support" className="hover:text-primary transition-colors">
-                  Support
-                </Link>
-              </li>
-            </ul>
-          </div>
+          <FooterColumn heading="Product" links={productLinks} />
+          <FooterColumn heading="Company" links={companyLinks} />
+          <FooterColumn heading="Resources" links={resourceLinks} />
+          <FooterColumn heading="Legal" links={legalLinks} />
         </div>
 
-        {/* Legal + Copyright */}
-        <div className="mt-10 border-t border-border-light pt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-          <div className="flex gap-4 text-sm text-text-muted">
-            <Link href="/privacy" className="hover:text-primary transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="/terms" className="hover:text-primary transition-colors">
-              Terms of Service
-            </Link>
-          </div>
-          <p className="text-sm text-text-muted">
+        {/* Bottom bar */}
+        <div className="mt-16 flex flex-col items-start gap-4 border-t border-[color:var(--color-border-light)] pt-8 md:flex-row md:items-center md:justify-between">
+          <p className="text-xs text-[color:var(--color-text-muted)]">
             &copy; {new Date().getFullYear()} Veradic LLC. All rights reserved.
+          </p>
+          <p className="text-xs text-[color:var(--color-text-muted)]">
+            Made for classrooms in the United States.
           </p>
         </div>
       </div>

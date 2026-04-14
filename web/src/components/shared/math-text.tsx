@@ -31,6 +31,41 @@ type Segment =
   | { type: "bold"; content: string }
   | { type: "diagram"; data: DiagramData };
 
+/**
+ * Restore LaTeX commands whose leading backslash was consumed by a JSON
+ * string-escape collision. Commands like \rightarrow, \times, \frac, \vec,
+ * \bullet arrive from the API with a literal control character in place
+ * of the backslash (\r → U+000D, \t → U+0009, \f → U+000C, \v → U+000B,
+ * \b → U+0008) because the server serialized them as raw Python string
+ * literals instead of double-escaping before JSON encoding.
+ *
+ * This function is only ever called on content that's already been
+ * bracketed by `$...$` or `$$...$$` delimiters — i.e. math mode — so
+ * a control character followed by an alphabetic run is guaranteed to
+ * be a broken LaTeX command and not legitimate whitespace. Applying it
+ * only inside math segments avoids corrupting tab-indented prose,
+ * code snippets, or carriage-return line endings in plain text.
+ *
+ * This is a client-side safety net. The real fix lives on the backend
+ * (use raw strings or explicit double-escape before json.dumps), but
+ * existing responses in the wild need to render correctly too.
+ */
+function restoreBrokenLatexCommands(mathSegment: string): string {
+  return (
+    mathSegment
+      // \r ate a backslash: \rightarrow, \right, \rho, \rangle, \rceil, \rfloor, \rvert, \rbrace, \rbrack, \rm, \rule, …
+      .replace(/\r([a-zA-Z]+)/g, "\\r$1")
+      // \t ate a backslash: \times, \theta, \text, \tau, \to, \top, \triangle, \tilde, \tan, \tanh, …
+      .replace(/\t([a-zA-Z]+)/g, "\\t$1")
+      // \f ate a backslash: \frac, \forall, \fbox, \flat, \frown, …
+      .replace(/\f([a-zA-Z]+)/g, "\\f$1")
+      // \v ate a backslash: \vec, \varepsilon, \varphi, \vartheta, \vdots, \vee, \vspace, \vert, \vphantom, …
+      .replace(/\v([a-zA-Z]+)/g, "\\v$1")
+      // \x08 (backspace) ate a backslash: \backslash, \beta, \because, \binom, \bigcap, \bullet, \bar, \bot, …
+      .replace(/\x08([a-zA-Z]+)/g, "\\b$1")
+  );
+}
+
 function parse(input: string): Segment[] {
   // Clean up before parsing
   let text = input.replace(/<br\s*\/?>/gi, "\n");
@@ -56,9 +91,15 @@ function parse(input: string): Segment[] {
         segments.push({ type: "text", content: m });
       }
     } else if (m.startsWith("$$") && m.endsWith("$$")) {
-      segments.push({ type: "math-display", content: m.slice(2, -2).trim() });
+      segments.push({
+        type: "math-display",
+        content: restoreBrokenLatexCommands(m.slice(2, -2).trim()),
+      });
     } else if (m.startsWith("$") && m.endsWith("$")) {
-      segments.push({ type: "math-inline", content: m.slice(1, -1).trim() });
+      segments.push({
+        type: "math-inline",
+        content: restoreBrokenLatexCommands(m.slice(1, -1).trim()),
+      });
     } else if (m.startsWith("<svg")) {
       segments.push({ type: "svg", content: m });
     } else if (m.startsWith("**") && m.endsWith("**")) {

@@ -1,35 +1,36 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
+import { chemistryDemo } from "@/components/landing/demos/chemistry-demo";
 import { SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Veradic AI Chemistry Tutor — Step-by-Step Chemistry Help",
+  title: "AI Chemistry Tutor for Schools: Stoichiometry to Organic | Veradic AI",
   description:
-    "Veradic is an AI chemistry tutor that breaks any equation balancing, stoichiometry, or organic chemistry problem into guided steps you actually understand.",
+    "Veradic is the AI chemistry tutor built for classrooms. Guides students through stoichiometry, bonding, equilibrium, thermodynamics, and organic step by step, without ever giving the answer away.",
   keywords: [
-    "veradic",
-    "veradic chemistry tutor",
-    "AI chemistry tutor",
+    "ai chemistry tutor for schools",
+    "ai chemistry tutor",
     "chemistry homework help",
-    "chemistry solver",
-    "step-by-step chemistry",
+    "step by step chemistry",
     "stoichiometry help",
+    "ap chemistry tutor",
     "organic chemistry tutor",
-    "chemistry practice problems",
-    "online chemistry tutor",
-    "AI chemistry help",
+    "ai tutor for teachers",
+    "classroom chemistry ai",
+    "chatgpt alternative chemistry",
     "balancing equations",
+    "veradic chemistry tutor",
   ],
   openGraph: {
-    title: "Veradic — Your AI Chemistry Tutor",
+    title: "AI Chemistry Tutor for Schools | Veradic AI",
     description:
-      "Break any chemistry problem into steps you actually understand. Reactions, stoichiometry, organic chemistry, and more.",
+      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step, without ever giving the answer away.",
     url: `${SITE_URL}/subjects/chemistry`,
   },
   twitter: {
-    title: "Veradic — Your AI Chemistry Tutor",
+    title: "AI Chemistry Tutor for Schools | Veradic AI",
     description:
-      "Break any chemistry problem into steps you actually understand. Reactions, stoichiometry, organic chemistry, and more.",
+      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step, without ever giving the answer away.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/chemistry`,
@@ -37,58 +38,45 @@ export const metadata: Metadata = {
 };
 
 const chemIcon = (
-  <svg className="h-10 w-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 3h6v7l4 9H5l4-9V3z" />
-    <line x1="9" y1="3" x2="15" y2="3" />
+  <svg
+    className="h-8 w-8"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M10 2v7.31" />
+    <path d="M14 9.3V2" />
+    <path d="M8.5 2h7" />
+    <path d="M14 9.3a6.5 6.5 0 1 1-4 0" />
   </svg>
 );
 
-const examples = [
-  { topic: "Balancing Equations", problem: "Balance: Fe₂O₃ + CO → Fe + CO₂" },
-  { topic: "Stoichiometry", problem: "How many grams of CO₂ are produced from burning 10g of CH₄?" },
-  { topic: "Acids & Bases", problem: "Find the pH of a 0.05 M HCl solution" },
-  { topic: "Organic Chemistry", problem: "Draw the product of an SN2 reaction between CH₃Br and NaOH" },
-  { topic: "Thermochemistry", problem: "Calculate the enthalpy change for: 2H₂ + O₂ → 2H₂O" },
-  { topic: "Molarity", problem: "How many mL of 2M NaOH are needed to neutralize 50 mL of 1M H₂SO₄?" },
-  { topic: "Gas Laws", problem: "A gas at 2 atm and 300K is heated to 450K at constant volume. Find the new pressure." },
-  { topic: "Electrochemistry", problem: "Calculate the standard cell potential for a Zn/Cu galvanic cell." },
+const whyReasons = [
+  "Covers the full chemistry curriculum from intro chem through AP Chemistry and organic. One tool for every section in your course.",
+  "Handles the unit gymnastics chemistry demands (grams to moles to molecules) without students giving up halfway through.",
+  "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
 ];
 
-const features = [
-  {
-    title: "Step-by-Step Solutions",
-    description: "Every chemistry problem is broken down — identify reactants and products, balance equations step by step, apply stoichiometric ratios, and verify units. Clear and systematic.",
-  },
-  {
-    title: "Ask Questions at Any Step",
-    description: "Not sure why you need to find the limiting reagent first? Ask your Veradic tutor and get a clear, concept-linked explanation.",
-  },
-  {
-    title: "Unlimited Practice Variations",
-    description: "Practice balancing different types of reactions, calculating yields, and converting between moles and grams. Veradic generates fresh problems so you build confidence through repetition.",
-  },
-  {
-    title: "Photo Scan Your Homework",
-    description: "Snap a photo of your chemistry worksheet. Veradic reads the problems — including chemical formulas — and guides you step by step.",
-  },
-];
+const subjectProseBlock =
+  "Structures render as real molecules, not strings of letters. Every reaction step explains the electrons, the bonds, and the logic — not just memorized products. Students build intuition about why chemistry works, not just what to write down.";
 
 export default function ChemistryPage() {
   return (
-    <>
-      <SubjectPage
-        name="Chemistry"
-        slug="chemistry"
-        tagline="Your AI Chemistry Tutor"
-        description="From balancing equations to organic chemistry, Veradic breaks any chemistry problem into guided steps you actually understand — then generates unlimited practice until you master it."
-        detailedDescription="Whether you're balancing redox reactions, calculating molar masses, or working through organic synthesis, Veradic breaks down each chemistry problem into manageable steps. Build real understanding of the science."
-        educationalProgramDescription="AI-powered chemistry tutoring with step-by-step solutions for reactions, stoichiometry, organic chemistry, and more."
-        gradient="from-success to-[#55EFC4]"
-        badgeColor="#00B894"
-        icon={chemIcon}
-        examples={examples}
-        features={features}
-      />
-    </>
+    <SubjectPage
+      name="Chemistry"
+      slug="chemistry"
+      tagline="AI chemistry tutoring, built for classrooms."
+      description="From balancing equations through organic synthesis, Veradic walks every student through the chemistry, so they get the answer, and they actually understand the reaction behind it."
+      detailedDescription="Whether your students are just learning the periodic table or prepping for AP Chemistry, Veradic meets them where they are and guides them forward through stoichiometry, bonding, equilibrium, and beyond, one step at a time."
+      educationalProgramDescription="AI-powered chemistry tutoring for classrooms, covering atoms, bonding, stoichiometry, thermochemistry, equilibrium, acids and bases, electrochemistry, kinetics, and organic chemistry with step-by-step guidance and teacher-controlled content."
+      badgeColor="#00B894"
+      icon={chemIcon}
+      whyReasons={whyReasons}
+      subjectProseBlock={subjectProseBlock}
+      demoData={chemistryDemo}
+    />
   );
 }
