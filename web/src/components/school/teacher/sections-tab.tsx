@@ -124,7 +124,9 @@ function SectionCard({
     setDetail(await teacher.section(courseId, section.id));
   };
 
-  const addStudent = () =>
+  const [flash, setFlash] = useState<string | null>(null);
+
+  const inviteStudent = () =>
     run(async () => {
       const email = studentEmail.trim();
       if (!email) return;
@@ -132,11 +134,17 @@ function SectionCard({
         setError("Please enter a valid email address");
         return;
       }
-      await teacher.addStudent(courseId, section.id, email);
+      const result = await teacher.inviteStudent(courseId, section.id, email);
       setStudentEmail("");
+      setFlash(
+        result.status === "enrolled"
+          ? `Added ${email} — they already have an account.`
+          : `Invite sent to ${email}. They'll appear in the roster once they accept.`,
+      );
+      setTimeout(() => setFlash(null), 4000);
       await reloadDetail();
       onChanged();
-    }, "Failed to add student");
+    }, "Failed to invite student");
 
   const removeStudent = (studentId: string) =>
     run(async () => {
@@ -144,6 +152,20 @@ function SectionCard({
       await reloadDetail();
       onChanged();
     }, "Failed to remove student");
+
+  const resendInvite = (inviteId: string) =>
+    run(async () => {
+      await teacher.resendInvite(courseId, section.id, inviteId);
+      setFlash("Invite email resent.");
+      setTimeout(() => setFlash(null), 3000);
+      await reloadDetail();
+    }, "Failed to resend invite");
+
+  const revokeInvite = (inviteId: string) =>
+    run(async () => {
+      await teacher.revokeInvite(courseId, section.id, inviteId);
+      await reloadDetail();
+    }, "Failed to revoke invite");
 
   const regenerateCode = () =>
     run(async () => {
@@ -294,11 +316,50 @@ function SectionCard({
                   ))}
                 </div>
 
+                {detail.pending_invites.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      Pending invites ({detail.pending_invites.length})
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {detail.pending_invites.map((i) => (
+                        <div
+                          key={i.id}
+                          className="flex items-center justify-between rounded-[--radius-sm] border border-dashed border-border-light px-3 py-2 text-sm"
+                        >
+                          <div>
+                            <div className="font-semibold text-text-primary">{i.email}</div>
+                            <div className="text-xs text-text-muted">
+                              Expires {new Date(i.expires_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => resendInvite(i.id)}
+                              disabled={busy}
+                              className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
+                            >
+                              Resend
+                            </button>
+                            <button
+                              onClick={() => revokeInvite(i.id)}
+                              disabled={busy}
+                              className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <form
                   className="mt-4 flex gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    addStudent();
+                    inviteStudent();
                   }}
                 >
                   <input
@@ -314,9 +375,10 @@ function SectionCard({
                     disabled={busy}
                     className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
                   >
-                    Add
+                    Invite
                   </button>
                 </form>
+                {flash && <p className="mt-2 text-xs text-green-700">{flash}</p>}
               </div>
             </>
           )}
