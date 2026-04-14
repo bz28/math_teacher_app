@@ -53,14 +53,19 @@ function LoginPageContent() {
     try {
       await login(email, password);
       const user = useAuthStore.getState().user;
-      const dest =
-        redirect && redirect.startsWith("/")
+      // Only same-origin relative paths. Protocol-relative ("//evil.com")
+      // and absolute URLs are rejected — they'd send users off-domain.
+      const safeRedirect =
+        redirect && redirect.startsWith("/") && !redirect.startsWith("//")
           ? redirect
-          : user?.role === "teacher"
-            ? "/school/teacher"
-            : user?.role === "student" && user.school_id
-              ? "/school/student"
-              : "/home";
+          : null;
+      const dest =
+        safeRedirect ??
+        (user?.role === "teacher"
+          ? "/school/teacher"
+          : user?.role === "student" && user.school_id
+            ? "/school/student"
+            : "/home");
       router.replace(dest);
     } catch {
       const msg = useAuthStore.getState().error;
