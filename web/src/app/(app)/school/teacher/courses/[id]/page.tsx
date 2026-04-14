@@ -134,7 +134,11 @@ export default function CourseWorkspacePage({ params }: { params: Promise<{ id: 
     !(activeJob.status === "done" && !activeJob.parent_question_id);
 
   const reloadCourse = async () => {
-    setLoading(true);
+    // Never flip loading back to true — that would swap the page out
+    // for the <Loading…> splash, unmounting the active tab and losing
+    // its in-memory state (e.g. the folder MaterialsTab is viewing).
+    // The initial load is handled by useState(true) + the first
+    // successful fetch clearing it below.
     try {
       setCourse(await teacher.course(id));
       setError(null);
