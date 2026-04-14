@@ -171,6 +171,30 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         if section_course and section_course.school_id is not None:
             school_id = section_course.school_id
 
+    # Join code (student): validate up-front so we don't create a user if
+    # the code is bad. Mutually exclusive with invite flows (either invite
+    # already picked the section/school, or the student is self-signing up).
+    join_section_obj: Section | None = None
+    if body.join_code:
+        if body.invite_token or body.section_invite_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot use a join code together with an invite",
+            )
+        code = body.join_code.strip().upper()
+        join_section_obj = (await db.execute(
+            select(Section).where(Section.join_code == code)
+        )).scalar_one_or_none()
+        if not join_section_obj:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid join code")
+        if join_section_obj.join_code_expires_at and join_section_obj.join_code_expires_at < datetime.now(UTC):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Join code expired")
+        join_course = (await db.execute(
+            select(Course).where(Course.id == join_section_obj.course_id)
+        )).scalar_one_or_none()
+        if join_course and join_course.school_id is not None:
+            school_id = join_course.school_id
+
     user = User(
         email=body.email,
         name=body.name,
@@ -185,6 +209,8 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     if section_invite is not None:
         db.add(SectionEnrollment(section_id=section_invite.section_id, student_id=user.id))
         section_invite.status = "accepted"
+    if join_section_obj is not None:
+        db.add(SectionEnrollment(section_id=join_section_obj.id, student_id=user.id))
 
     await db.commit()
     await db.refresh(user)

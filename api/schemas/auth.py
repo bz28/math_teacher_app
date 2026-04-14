@@ -12,6 +12,7 @@ class RegisterRequest(BaseModel):
     role: str = "student"
     invite_token: str | None = None
     section_invite_token: str | None = None
+    join_code: str | None = None
 
     @field_validator("password")
     @classmethod
