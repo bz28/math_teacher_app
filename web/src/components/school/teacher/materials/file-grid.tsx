@@ -9,9 +9,10 @@ interface FileGridProps {
   docs: TeacherDocument[];
   selectedIds: Set<string>;
   onCardClick: (doc: TeacherDocument, e: MouseEvent) => void;
+  onPreview: (doc: TeacherDocument) => void;
 }
 
-export function FileGrid({ docs, selectedIds, onCardClick }: FileGridProps) {
+export function FileGrid({ docs, selectedIds, onCardClick, onPreview }: FileGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {docs.map((d) => (
@@ -20,6 +21,7 @@ export function FileGrid({ docs, selectedIds, onCardClick }: FileGridProps) {
           doc={d}
           selected={selectedIds.has(d.id)}
           onCardClick={onCardClick}
+          onPreview={onPreview}
         />
       ))}
     </div>
@@ -30,6 +32,7 @@ interface FileCardProps {
   doc: TeacherDocument;
   selected: boolean;
   onCardClick: (doc: TeacherDocument, e: MouseEvent) => void;
+  onPreview: (doc: TeacherDocument) => void;
 }
 
 const KIND_STYLES = {
@@ -45,7 +48,7 @@ const KIND_STYLES = {
   },
 } as const;
 
-const FileCard = memo(function FileCard({ doc, selected, onCardClick }: FileCardProps) {
+const FileCard = memo(function FileCard({ doc, selected, onCardClick, onPreview }: FileCardProps) {
   const kind = fileKind(doc);
   const date = formatDate(doc.created_at);
   const styles = KIND_STYLES[kind];
@@ -54,7 +57,12 @@ const FileCard = memo(function FileCard({ doc, selected, onCardClick }: FileCard
     <button
       type="button"
       onClick={(e) => onCardClick(doc, e)}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        onPreview(doc);
+      }}
       aria-pressed={selected}
+      title="Click to select · Double-click to preview"
       className={[
         "group/card relative flex items-start gap-3 rounded-[--radius-md] border p-3 text-left text-xs",
         "transition-all duration-200 ease-out",
@@ -90,6 +98,29 @@ const FileCard = memo(function FileCard({ doc, selected, onCardClick }: FileCard
           {date && <span> · {date}</span>}
         </div>
       </div>
+      {/* Hover-only preview affordance — double-click also works but isn't
+          discoverable, especially on touch devices where hover maps to long-
+          press. Rendered as <span> with onClick, not <button>, so it
+          doesn't nest inside the outer <button> (invalid HTML). */}
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPreview(doc);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            onPreview(doc);
+          }
+        }}
+        aria-label={`Preview ${doc.filename}`}
+        className="absolute right-1.5 top-1.5 rounded-[--radius-sm] bg-surface/90 px-1.5 py-0.5 text-[10px] font-bold text-text-secondary opacity-0 shadow-sm ring-1 ring-border-light backdrop-blur-sm transition-opacity hover:text-primary group-hover/card:opacity-100 focus-visible:opacity-100"
+      >
+        View
+      </span>
     </button>
   );
 });

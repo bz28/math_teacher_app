@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/icons";
 import { FolderTree } from "./materials/folder-tree";
 import { FileGrid } from "./materials/file-grid";
+import { FilePreviewModal } from "./materials/file-preview-modal";
 import { UploadDropzone } from "./materials/upload-dropzone";
 import { MoveDialog } from "./materials/move-dialog";
 import { DeleteFolderDialog } from "./materials/delete-folder-dialog";
@@ -53,6 +54,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   const [sort, setSort] = useState<SortMode>("name");
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<TeacherDocument | null>(null);
   const [liveMessage, setLiveMessage] = useState("");
   const [pendingCollisions, setPendingCollisions] = useState<{
     collisions: Collision[];
@@ -485,6 +487,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
                     docs={visibleDocs}
                     selectedIds={selectedDocIds}
                     onCardClick={handleCardClick}
+                    onPreview={setPreviewDoc}
                   />
                 </div>
               )}
@@ -554,6 +557,14 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         onClose={() => setBulkMoveOpen(false)}
         onConfirm={(target) => moveDocuments([...selectedDocIds], target)}
       />
+
+      {previewDoc && (
+        <FilePreviewModal
+          courseId={courseId}
+          doc={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
     </div>
   );
 }
