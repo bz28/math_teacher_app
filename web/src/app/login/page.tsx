@@ -17,6 +17,20 @@ export default function LoginPage() {
   );
 }
 
+// Accept only same-origin redirects. URL parsing handles every weird
+// case (protocol-relative //host, backslashes Chrome normalizes to /,
+// encoded slashes, authority injection) without regex whack-a-mole.
+function sameOriginRedirect(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw, window.location.origin);
+    if (u.origin !== window.location.origin) return null;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return null;
+  }
+}
+
 function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,14 +67,8 @@ function LoginPageContent() {
     try {
       await login(email, password);
       const user = useAuthStore.getState().user;
-      // Only same-origin relative paths. Protocol-relative ("//evil.com")
-      // and absolute URLs are rejected — they'd send users off-domain.
-      const safeRedirect =
-        redirect && redirect.startsWith("/") && !redirect.startsWith("//")
-          ? redirect
-          : null;
       const dest =
-        safeRedirect ??
+        sameOriginRedirect(redirect) ??
         (user?.role === "teacher"
           ? "/school/teacher"
           : user?.role === "student" && user.school_id
