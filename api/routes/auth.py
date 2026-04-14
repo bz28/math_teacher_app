@@ -122,6 +122,11 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     # Handle teacher invite flow
     school_id = None
     role = body.role
+    if body.invite_token and body.section_invite_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot use a teacher invite and a section invite together",
+        )
     if body.invite_token:
         invite = (await db.execute(
             select(TeacherInvite).where(TeacherInvite.token == body.invite_token, TeacherInvite.status == "pending")
@@ -143,22 +148,10 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         role = "teacher"
         invite.status = "accepted"
 
-    elif role == "teacher":
-        # Teachers can only register via invite
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Teacher registration requires a school invite",
-        )
-
     # Section invite (student): claim after user is created so we can enroll.
     section_invite: SectionInvite | None = None
     section_course: Course | None = None
     if body.section_invite_token:
-        if body.invite_token:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot use a teacher invite and a section invite together",
-            )
         section_invite, _, section_course, _ = await _load_section_invite(
             db, body.section_invite_token,
         )
@@ -170,6 +163,16 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         role = "student"
         if section_course and section_course.school_id is not None:
             school_id = section_course.school_id
+
+    # A bare "role=teacher" (no invite) is always rejected. Done AFTER the
+    # invite blocks so a section invite with role=teacher gets the clearer
+    # "section invite forces student role" outcome — the invite wins and
+    # the role is overridden to student above.
+    if role == "teacher" and not body.invite_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teacher registration requires a school invite",
+        )
 
     # Join code (student): validate up-front so we don't create a user if
     # the code is bad. Mutually exclusive with invite flows (either invite
@@ -263,12 +266,23 @@ async def _load_section_invite(
     invite = (await db.execute(
         select(SectionInvite).where(SectionInvite.token == token)
     )).scalar_one_or_none()
-    if not invite or invite.status != "pending":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid or expired invite")
-    if invite.expires_at < datetime.now(UTC):
-        invite.status = "expired"
-        await db.commit()
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Invite has expired")
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if invite.status == "revoked":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="This invite was revoked by the teacher. Ask them to send a new one.",
+        )
+    if invite.status == "accepted":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="This invite has already been used.",
+        )
+    if invite.status == "expired" or invite.expires_at < datetime.now(UTC):
+        if invite.status != "expired":
+            invite.status = "expired"
+            await db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="This invite has expired")
     section = (await db.execute(
         select(Section).where(Section.id == invite.section_id)
     )).scalar_one_or_none()
