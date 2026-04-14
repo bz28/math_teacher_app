@@ -2,6 +2,7 @@ import {
   checkPracticeAnswer,
   completeMockTestSession,
   createMockTestSession,
+  EntitlementError,
   generatePracticeProblems,
   submitWork,
   type PracticeProblem,
@@ -9,7 +10,7 @@ import {
 import { errorMessage } from "../utils/errorMessage";
 import {
   initialState,
-  type MockTestResult,
+  type QuizResult,
   type StoreGet,
   type StoreSet,
   type StoreSubscribe,
@@ -52,6 +53,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
             })
             .catch(() => {});
         } catch (e) {
+          if (e instanceof EntitlementError) throw e;
           set({ phase: "error", error: errorMessage(e) });
         }
         return;
@@ -185,7 +187,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           }
         });
 
-        const results: MockTestResult[] = await Promise.all(checkPromises);
+        const results: QuizResult[] = await Promise.all(checkPromises);
         const currentMockTest = get().mockTest;
         if (!currentMockTest) return;
 

@@ -4,6 +4,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -13,6 +14,7 @@ from api.core.constants import (
     MAX_PROBLEM_LENGTH,
     MAX_STUDENT_MESSAGES,
     RECENT_EXCHANGES_LIMIT,
+    WORK_SUBMISSION_TTL_MINUTES,
 )
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject
@@ -56,13 +58,17 @@ async def create_session(
             {"description": "Final answer", "final_answer": decomp.final_answer},
         ]
     else:
-        # Check for prior work submission to personalize learn mode
+        # Check for prior work submission to personalize learn mode.
+        # Only consider submissions within the TTL window — stale diagnoses
+        # from hours/days ago aren't useful for personalization.
         prior_diagnosis: dict[str, Any] | None = None
+        ttl_cutoff = datetime.now(UTC) - timedelta(minutes=WORK_SUBMISSION_TTL_MINUTES)
         ws_result = await db.execute(
             select(WorkSubmission.diagnosis, WorkSubmission.has_issues)
             .where(
                 WorkSubmission.user_id == user_id,
                 WorkSubmission.problem_text == problem,
+                WorkSubmission.created_at >= ttl_cutoff,
             )
             .order_by(WorkSubmission.created_at.desc())
             .limit(1)
@@ -74,13 +80,14 @@ async def create_session(
             # burning a fresh LLM call just to say "good job" at each step
             if has_issues:
                 prior_diagnosis = diagnosis_data
-            # Clean up — delete all work submissions for this user + problem
-            await db.execute(
-                delete(WorkSubmission).where(
-                    WorkSubmission.user_id == user_id,
-                    WorkSubmission.problem_text == problem,
-                )
+        # Clean up — delete all work submissions for this user + problem
+        # (including expired ones)
+        await db.execute(
+            delete(WorkSubmission).where(
+                WorkSubmission.user_id == user_id,
+                WorkSubmission.problem_text == problem,
             )
+        )
 
         # Full decomposition for learn mode
         decomposition = await decompose_problem(
@@ -261,71 +268,44 @@ async def _respond_learn_mode(
 ) -> StepResponse:
     """Handle learn mode: steps shown upfront, chat scoped to current step.
 
-    Non-final steps: student reads the step, can ask questions, clicks
-    "I understand" (request_advance=True) to advance.
-
-    Final step: student must provide the final answer. The step is NOT
-    shown — we ask them what the answer is and evaluate it.
+    All steps (including final): student reads the step, can ask
+    questions, and clicks "I understand" (request_advance=True) to
+    advance. Final step advance completes the session.
     """
     step_data = session.steps[session.current_step]
     is_final_step = session.current_step >= session.total_steps - 1
 
-    # --- Non-final step: advance or chat ---
-    if not is_final_step:
-        if request_advance:
-            session.current_step += 1
-            await db.commit()
-            return StepResponse(
-                action="advance",
-                feedback="",
-                current_step=session.current_step,
-                total_steps=session.total_steps,
-                is_correct=True,
-            )
-
-        # Chat: answer questions about this step
-        _add_exchange(session, "student", student_response)
-        chat_result = await step_chat(
-            problem=session.problem,
-            step=step_data,
-            exchanges=session.exchanges,
-            student_input=student_response,
-            session_id=str(session.id),
-            user_id=str(session.user_id),
-            subject=getattr(session, "subject", Subject.MATH),
-        )
-        _add_exchange(session, "tutor", chat_result.feedback)
+    if request_advance:
+        if is_final_step:
+            return await _complete_session(db, session)
+        session.current_step += 1
         await db.commit()
         return StepResponse(
-            action="conversation",
-            feedback=chat_result.feedback,
+            action="advance",
+            feedback="",
             current_step=session.current_step,
             total_steps=session.total_steps,
+            is_correct=True,
         )
 
-    # --- Final step: "I understand" or answer ---
-    if request_advance:
-        return await _complete_session(db, session)
-
-    correct_answer = step_data["final_answer"]
+    # Chat: answer questions about this step (works on any step including final)
     _add_exchange(session, "student", student_response)
-
-    # Direct string match (multiple-choice: student selects an exact option)
-    is_correct = student_response.strip() == correct_answer.strip()
-
-    if is_correct:
-        return await _complete_session(db, session)
-
-    # Wrong answer
-    feedback = "Not quite. Review the steps above and try again."
-    _add_exchange(session, "tutor", feedback)
+    chat_result = await step_chat(
+        problem=session.problem,
+        step=step_data,
+        exchanges=session.exchanges,
+        student_input=student_response,
+        session_id=str(session.id),
+        user_id=str(session.user_id),
+        subject=getattr(session, "subject", Subject.MATH),
+    )
+    _add_exchange(session, "tutor", chat_result.feedback)
     await db.commit()
     return StepResponse(
-        action="error",
-        feedback=feedback,
+        action="conversation",
+        feedback=chat_result.feedback,
         current_step=session.current_step,
         total_steps=session.total_steps,
-        is_correct=False,
     )
 
 

@@ -189,8 +189,8 @@ async def test_correct_answer_advances(client: AsyncClient, auth_token: str) -> 
 
 
 @pytest.mark.anyio
-async def test_wrong_answer_gives_feedback(client: AsyncClient, auth_token: str) -> None:
-    """Learn mode: wrong answer on the final step gives error feedback."""
+async def test_final_step_chat_question(client: AsyncClient, auth_token: str) -> None:
+    """Learn mode: asking a question on the final step uses step_chat (not completion)."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
         mock_decompose.return_value = _mock_decomposition()
         create_resp = await client.post(
@@ -207,16 +207,19 @@ async def test_wrong_answer_gives_feedback(client: AsyncClient, auth_token: str)
         headers=_auth_headers(auth_token),
     )
 
-    # Now on final step — submit wrong answer (multiple-choice: just string match)
-    resp = await client.post(
-        f"/v1/session/{session_id}/respond",
-        json={"student_response": "wrong answer"},
-        headers=_auth_headers(auth_token),
-    )
+    # Now on final step — ask a question (should chat, not complete)
+    with patch("api.core.session.step_chat", new_callable=AsyncMock) as mock_chat:
+        from api.core.tutor import StepChatResult
+        mock_chat.return_value = StepChatResult(feedback="x = 3 because we divided both sides by 2.")
+
+        resp = await client.post(
+            f"/v1/session/{session_id}/respond",
+            json={"student_response": "How do I get the final answer?"},
+            headers=_auth_headers(auth_token),
+        )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["action"] == "error"
-    assert data["is_correct"] is False
+    assert data["action"] == "conversation"
 
 
 @pytest.mark.anyio
@@ -246,8 +249,8 @@ async def test_step_chat_question(client: AsyncClient, auth_token: str) -> None:
 
 
 @pytest.mark.anyio
-async def test_advance_then_correct_final_answer(client: AsyncClient, auth_token: str) -> None:
-    """Learn mode: advance non-final step, then submit correct final answer."""
+async def test_advance_then_complete_final_step(client: AsyncClient, auth_token: str) -> None:
+    """Learn mode: advance non-final step, then advance final step to complete."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
         mock_decompose.return_value = _mock_decomposition()
         create_resp = await client.post(
@@ -266,10 +269,10 @@ async def test_advance_then_correct_final_answer(client: AsyncClient, auth_token
     assert resp.json()["action"] == "advance"
     assert resp.json()["current_step"] == 1
 
-    # Submit correct answer for final step (x = 3)
+    # Advance final step → completes session
     resp = await client.post(
         f"/v1/session/{session_id}/respond",
-        json={"student_response": "x = 3"},
+        json={"student_response": "", "request_advance": True},
         headers=_auth_headers(auth_token),
     )
     assert resp.status_code == 200
@@ -297,10 +300,10 @@ async def test_continue_asking_after_completion(client: AsyncClient, auth_token:
         headers=_auth_headers(auth_token),
     )
 
-    # Submit correct answer for final step
+    # Advance final step to complete
     await client.post(
         f"/v1/session/{session_id}/respond",
-        json={"student_response": "x = 3"},
+        json={"student_response": "", "request_advance": True},
         headers=_auth_headers(auth_token),
     )
 
@@ -319,7 +322,7 @@ async def test_continue_asking_after_completion(client: AsyncClient, auth_token:
 
 @pytest.mark.anyio
 async def test_session_completion(client: AsyncClient, auth_token: str) -> None:
-    """Learn mode: advance non-final steps, then submit correct final answer."""
+    """Learn mode: advance non-final steps, then advance final step to complete."""
     with patch("api.core.session.decompose_problem", new_callable=AsyncMock) as mock_decompose:
         mock_decompose.return_value = _mock_decomposition()
         create_resp = await client.post(
@@ -336,10 +339,10 @@ async def test_session_completion(client: AsyncClient, auth_token: str) -> None:
         headers=_auth_headers(auth_token),
     )
 
-    # Submit correct answer for final step (x = 3)
+    # Advance final step to complete
     resp = await client.post(
         f"/v1/session/{session_id}/respond",
-        json={"student_response": "x = 3"},
+        json={"student_response": "", "request_advance": True},
         headers=_auth_headers(auth_token),
     )
 

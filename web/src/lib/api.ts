@@ -865,6 +865,16 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
+  uploadWorksheet(courseId: string, data: {
+    images: string[];
+    unit_id?: string | null;
+  }) {
+    return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/upload`, {
+      method: "POST",
+      body: JSON.stringify(data),
+      timeout: 30_000,
+    });
+  },
   bankJob(courseId: string, jobId: string) {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/generation-jobs/${jobId}`);
   },
@@ -1058,6 +1068,7 @@ export interface BankJob {
   id: string;
   course_id: string;
   unit_id: string | null;
+  mode: "generate" | "upload";
   status: "queued" | "running" | "done" | "failed";
   requested_count: number;
   difficulty: string;

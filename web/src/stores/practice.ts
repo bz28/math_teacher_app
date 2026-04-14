@@ -5,6 +5,7 @@ import {
   session as sessionApi,
   practice as practiceApi,
   work as workApi,
+  EntitlementError,
   type PracticeProblem,
   type DiagnosisResult,
 } from "@/lib/api";
@@ -124,6 +125,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         phase: "awaiting_input" as PracticePhase,
       });
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },
@@ -162,6 +164,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         ),
       );
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },
@@ -193,6 +196,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         set({ phase: "error", error: (err as Error).message });
       });
     } catch (err) {
+      if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
   },

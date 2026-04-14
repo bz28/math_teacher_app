@@ -61,6 +61,7 @@ function LearnPageContent() {
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
   const [difficulty, setDifficulty] = useState<Difficulty>("same");
+  const [multipleChoice, setMultipleChoice] = useState(true);
 
   useEffect(() => {
     setSubject(subject);
@@ -125,7 +126,7 @@ function LearnPageContent() {
       } else {
         const generateCount = examType === "generate_similar" ? problems.length : 0;
         const timeLimit = untimed ? null : timeLimitMinutes;
-        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, true, examType === "generate_similar" ? difficulty : "same");
+        await startMockTest(problems, generateCount, timeLimit, subject, problemQueue, multipleChoice, examType === "generate_similar" ? difficulty : "same");
         router.push(`/mock-test?subject=${subject}`);
       }
     } catch (err) {
@@ -288,6 +289,30 @@ function LearnPageContent() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Answer format — inline pill toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted">Answers:</span>
+              <div className="flex rounded-full border border-border bg-surface p-0.5">
+                {([
+                  { id: true as const, label: "Multiple choice" },
+                  { id: false as const, label: "Free response" },
+                ]).map((opt) => (
+                  <button
+                    key={String(opt.id)}
+                    onClick={() => setMultipleChoice(opt.id)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                      multipleChoice === opt.id
+                        ? "bg-primary text-white"
+                        : "text-text-secondary hover:text-text-primary",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
           </div>

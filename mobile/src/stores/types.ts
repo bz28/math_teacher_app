@@ -4,6 +4,9 @@ import type {
   StepResponse,
   WorkDiagnosis,
 } from "../services/api";
+import type { QuizResult } from "../utils/quiz";
+
+export type { QuizResult } from "../utils/quiz";
 
 export type SessionPhase =
   | "idle"
@@ -11,39 +14,21 @@ export type SessionPhase =
   | "awaiting_input"
   | "thinking"
   | "completed"
+  | "practice_active"
   | "practice_summary"
   | "learn_summary"
   | "mock_test_active"
   | "mock_test_summary"
   | "error";
 
-export interface PracticeResult {
-  problem: string;
-  userAnswer: string;
-  correctAnswer: string;
-  isCorrect: boolean;
-}
-
 export interface PracticeBatch {
   problems: PracticeProblem[];
-  currentIndex: number;
-  results: PracticeResult[];
+  answers: Record<number, string>;
   flags: boolean[];
-  /** True while remaining problems are being generated in the background */
-  loadingMore: boolean;
-  /** Total number of problems requested (original + similar) */
-  totalCount: number;
-  /** Problems that failed to process and were skipped */
-  skippedProblems: string[];
-  /** Number of answer checks still in flight */
-  pendingChecks: number;
-  /** Diagnosis results from submitted work photos, parallel to problems array */
-  workSubmissions: (WorkDiagnosis | null)[];
-  /** Tracks first-attempt correctness per problem: null = not attempted, true/false = first attempt result */
-  firstAttemptCorrect: (boolean | null)[];
-  /** Inline feedback for the current problem after an answer check */
-  currentFeedback: 'correct' | 'wrong' | null;
-  /** Backend session ID for history tracking */
+  currentIndex: number;
+  startedAt: number;
+  submittedAt: number | null;
+  results: QuizResult[] | null;
   sessionId: string | null;
 }
 
@@ -55,13 +40,6 @@ export interface LearnQueue {
   preloadedSessions: Record<number, SessionData>;
 }
 
-export interface MockTestResult {
-  question: string;
-  userAnswer: string | null;
-  correctAnswer: string;
-  isCorrect: boolean | null;
-}
-
 export interface MockTest {
   sessionId: string | null;
   questions: PracticeProblem[];
@@ -71,7 +49,7 @@ export interface MockTest {
   timeLimitSeconds: number | null;
   startedAt: number;
   submittedAt: number | null;
-  results: MockTestResult[] | null;
+  results: QuizResult[] | null;
   /** Base64 photos held locally until test submit */
   workImages: (string | null)[];
   /** Diagnosis results from submitted work photos, parallel to questions array */
@@ -118,16 +96,14 @@ export interface SessionState {
   startSession: (problem: string, mode?: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
   startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
-  startPracticeQueue: (problems: string[]) => Promise<void>;
   startLearnQueue: (problems: string[]) => Promise<void>;
-  submitAnswer: (answer: string) => Promise<void>;
-  submitPracticeAnswer: (answer: string) => Promise<void>;
-  skipPracticeProblem: () => void;
+  savePracticeAnswer: (index: number, answer: string) => void;
+  setPracticeIndex: (index: number) => void;
+  submitPractice: () => void;
   advanceStep: () => Promise<void>;
   askAboutStep: (question: string) => Promise<void>;
   togglePracticeFlag: (index: number) => void;
   toggleLearnFlag: (index: number) => void;
-  retryFlaggedProblems: () => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   practiceFlaggedFromLearnQueue: () => Promise<void>;
   switchToLearnMode: () => Promise<void>;
@@ -140,7 +116,6 @@ export interface SessionState {
   toggleMockTestFlag: (index: number) => void;
   submitMockTest: () => Promise<void>;
   attachWorkImage: (index: number, imageBase64: string) => void;
-  submitPracticeWork: (index: number, imageBase64: string, userAnswer: string) => void;
   reset: () => void;
 }
 

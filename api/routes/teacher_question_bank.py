@@ -14,6 +14,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.image_utils import validate_and_decode_image
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
@@ -55,6 +56,20 @@ class GenerateRequest(BaseModel):
     def _validate_count(cls, v: int) -> int:
         if v < 1 or v > 50:
             raise ValueError("count must be between 1 and 50")
+        return v
+
+
+class UploadWorksheetRequest(BaseModel):
+    images: list[str]  # base64-encoded JPEG/PNG
+    unit_id: uuid.UUID | None = None
+
+    @field_validator("images")
+    @classmethod
+    def _validate_images(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("At least one image is required")
+        if len(v) > 10:
+            raise ValueError("Maximum 10 images per upload")
         return v
 
 
@@ -167,6 +182,7 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
         "id": str(job.id),
         "course_id": str(job.course_id),
         "unit_id": str(job.unit_id) if job.unit_id else None,
+        "mode": job.mode,
         "status": job.status,
         "requested_count": job.requested_count,
         "difficulty": job.difficulty,
@@ -277,6 +293,67 @@ async def generate_bank_questions(
         difficulty="mixed",
         constraint=body.constraint,
         source_doc_ids=[str(d) for d in body.document_ids] if body.document_ids else None,
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    schedule_generation_job(job.id)
+    return _serialize_job(job)
+
+
+@router.post("/courses/{course_id}/question-bank/upload", status_code=status.HTTP_202_ACCEPTED)
+async def upload_worksheet(
+    course_id: uuid.UUID,
+    body: UploadWorksheetRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Extract problems from uploaded worksheet images into the bank.
+
+    Each image is validated (JPEG/PNG, ≤5MB), then stored on the job row
+    for async extraction. The job pipeline extracts problems via Vision,
+    solves each one, and persists them as pending bank items.
+    """
+    await get_teacher_course(db, course_id, current_user.user_id)
+
+    if body.unit_id is not None:
+        from api.models.unit import Unit
+        unit = (await db.execute(
+            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+        )).scalar_one_or_none()
+        if unit is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unit not found in this course",
+            )
+        if unit.parent_unit_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded questions must save into a top-level unit, not a subfolder",
+            )
+
+    # Validate each image and build the stored payload
+    validated_images = []
+    for i, img_b64 in enumerate(body.images):
+        try:
+            _, media_type = validate_and_decode_image(img_b64)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Image {i + 1}: {e}",
+            ) from e
+        validated_images.append({"data": img_b64, "media_type": media_type})
+
+    job = QuestionBankGenerationJob(
+        course_id=course_id,
+        unit_id=body.unit_id,
+        created_by_id=current_user.user_id,
+        mode="upload",
+        status="queued",
+        requested_count=0,  # set by worker after extraction
+        difficulty="mixed",
+        uploaded_images=validated_images,
     )
     db.add(job)
     await db.commit()

@@ -47,6 +47,7 @@ class LLMMode:
     INTEGRITY_EXTRACT = "integrity_extract"
     INTEGRITY_GENERATE = "integrity_generate"
     INTEGRITY_SCORE = "integrity_score"
+    BANK_EXTRACT = "bank_extract"
 
 _client: anthropic.AsyncAnthropic | None = None
 
