@@ -814,7 +814,10 @@ export function WorkshopModal({
               {solutionOpen && (
                 <div className="mt-3 space-y-3">
                   {previewSteps && previewSteps.length > 0 ? (
-                    previewSteps.map((s, i) => (
+                    // Historical data can contain null entries from an
+                    // early version of the accept path. Skip them rather
+                    // than crashing on s.title.
+                    previewSteps.filter((s) => s != null).map((s, i) => (
                       <div
                         key={i}
                         className={`rounded-[--radius-lg] border p-4 ${
@@ -830,10 +833,10 @@ export function WorkshopModal({
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-semibold text-text-primary">
                               {stepsChanged || isProposalPending ? (
-                                <MathText text={s.title} />
+                                <MathText text={s.title ?? ""} />
                               ) : (
                                 <ClickToEditText
-                                  value={s.title}
+                                  value={s.title ?? ""}
                                   inline
                                   onSave={(next) => saveStep(i, "title", next)}
                                   busy={busy}
@@ -843,10 +846,10 @@ export function WorkshopModal({
                             <div className="mt-2 h-px bg-border-light" />
                             <div className="mt-2 text-xs leading-relaxed text-text-secondary">
                               {stepsChanged || isProposalPending ? (
-                                <MathText text={s.description} />
+                                <MathText text={s.description ?? ""} />
                               ) : (
                                 <ClickToEditText
-                                  value={s.description}
+                                  value={s.description ?? ""}
                                   multiline
                                   onSave={(next) => saveStep(i, "description", next)}
                                   busy={busy}

@@ -226,10 +226,24 @@ async def chat_with_bank_item(
     proposal: dict[str, Any] | None = None
     if isinstance(proposal_raw, dict):
         steps_raw = proposal_raw.get("solution_steps")
+        # Filter to well-formed steps only: {title: str, description: str}.
+        # Claude almost always honors the schema, but if a malformed step
+        # slips through it would be stored in chat_messages and applied
+        # to item.solution_steps on accept, crashing the frontend render.
+        cleaned_steps: list[dict[str, Any]] | None = None
+        if isinstance(steps_raw, list):
+            cleaned_steps = [
+                {"title": s["title"], "description": s["description"]}
+                for s in steps_raw
+                if isinstance(s, dict)
+                and isinstance(s.get("title"), str)
+                and isinstance(s.get("description"), str)
+            ]
+            if not cleaned_steps:
+                cleaned_steps = None
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
-            # Treat empty list as null — an empty solution is never a valid edit
-            "solution_steps": steps_raw if isinstance(steps_raw, list) and len(steps_raw) > 0 else None,
+            "solution_steps": cleaned_steps,
             "final_answer": proposal_raw.get("final_answer")
             if proposal_raw.get("final_answer")
             else None,

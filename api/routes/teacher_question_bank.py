@@ -656,7 +656,19 @@ async def accept_chat_proposal(
     if proposal.get("question") is not None:
         item.question = str(proposal["question"]).strip()
     if proposal.get("solution_steps") is not None:
-        item.solution_steps = proposal["solution_steps"]
+        # Belt-and-suspenders: defense against malformed steps lingering
+        # in old chat_messages written before question_bank_chat.py
+        # started filtering (see cleaned_steps there). A single bad
+        # entry would crash the frontend render at workshop-modal.tsx.
+        raw_steps = proposal["solution_steps"]
+        if isinstance(raw_steps, list):
+            item.solution_steps = [
+                {"title": s["title"], "description": s["description"]}
+                for s in raw_steps
+                if isinstance(s, dict)
+                and isinstance(s.get("title"), str)
+                and isinstance(s.get("description"), str)
+            ]
     if proposal.get("final_answer") is not None:
         item.final_answer = str(proposal["final_answer"])
 
