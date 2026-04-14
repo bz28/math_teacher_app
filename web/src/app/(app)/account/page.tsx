@@ -22,6 +22,13 @@ export default function AccountPage() {
   // neutral "School" pill instead so the teacher/student context is
   // still visible at a glance.
   const isSchoolStudent = !!user?.school_id;
+  // Preview accounts are shadow students teachers create via "View as
+  // Student". They're not real users, have nothing to pay for, and
+  // shouldn't see subscription/usage/upgrade UI at all. Covered
+  // separately from isSchoolStudent because a preview without real
+  // section enrollments can fall into the personal-free path and show
+  // FREE + Upgrade to Pro otherwise.
+  const isPreview = !!user?.is_preview;
   const loaded = useEntitlementStore((s) => s.loaded);
   const dailySessionsUsed = useEntitlementStore((s) => s.dailySessionsUsed);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
@@ -104,7 +111,9 @@ export default function AccountPage() {
         <h1 className="mt-4 text-xl font-bold text-text-primary">{user.name}</h1>
         <p className="mt-1 text-sm text-text-muted">{user.email}</p>
         <div className="mt-3">
-          {isSchoolStudent ? (
+          {isPreview ? (
+            <Badge variant="muted">Preview</Badge>
+          ) : isSchoolStudent ? (
             <Badge variant="muted">School</Badge>
           ) : (
             <Badge variant={isPro ? "success" : "muted"}>
@@ -115,9 +124,9 @@ export default function AccountPage() {
         </div>
       </motion.div>
 
-      {/* Subscription card — hidden for school students (no personal
-          subscription to manage). */}
-      {isPro && !isSchoolStudent && (
+      {/* Subscription card — hidden for school students and previews
+          (no personal subscription to manage). */}
+      {isPro && !isSchoolStudent && !isPreview && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -151,8 +160,9 @@ export default function AccountPage() {
         </motion.div>
       )}
 
-      {/* Usage card — free users */}
-      {!isPro && loaded && dailySessionsLimit < Infinity && (
+      {/* Usage card — free users (preview accounts skip — quotas don't
+          apply in a teacher's view-as-student session). */}
+      {!isPro && !isPreview && loaded && dailySessionsLimit < Infinity && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -168,8 +178,9 @@ export default function AccountPage() {
         </motion.div>
       )}
 
-      {/* Upgrade button — free users */}
-      {!isPro && (
+      {/* Upgrade button — free users (preview accounts skip — teacher
+          already has Pro; the preview doesn't need to purchase anything). */}
+      {!isPro && !isPreview && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}

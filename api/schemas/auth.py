@@ -67,6 +67,10 @@ class UserResponse(BaseModel):
     subscription_status: str = "none"
     subscription_expires_at: datetime | None = None
     is_pro: bool = False
+    # True for the shadow account a teacher creates via "View as Student".
+    # UI uses this to hide personal-subscription affordances that don't
+    # apply to a preview session.
+    is_preview: bool = False
 
 
 class DeleteAccountRequest(BaseModel):

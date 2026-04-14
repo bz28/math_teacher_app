@@ -28,6 +28,9 @@ export interface User {
   subscription_status: string;
   subscription_expires_at: string | null;
   is_pro: boolean;
+  /** True when the account is a teacher-created "View as Student"
+   *  shadow. UI hides personal-subscription affordances for previews. */
+  is_preview: boolean;
 }
 
 export interface InviteData {
