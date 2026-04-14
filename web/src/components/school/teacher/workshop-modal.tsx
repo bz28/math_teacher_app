@@ -59,11 +59,10 @@ export function WorkshopModal({
 }: {
   item?: BankItem;
   queue?: BankItem[];
-  // When true, hide Approve/Reject buttons regardless of status. Used
-  // when the modal is opened from inside the new ReviewModal so the
-  // teacher uses the review surface for status changes (avoids the
-  // two-surfaces-fighting bug where workshop's approve doesn't sync
-  // with review's queue advance).
+  // When true, hide Approve/Reject buttons regardless of status. Kept
+  // as a prop for future edit-only contexts (e.g. opening from inside
+  // another flow where the parent owns status transitions). Not used
+  // now that the unified queue mode lives in this component.
   editOnly?: boolean;
   onClose: () => void;
   onChanged: () => void;
@@ -94,14 +93,25 @@ export function WorkshopModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
-  // Chat starts open in single mode, collapsed in queue mode (the teacher
-  // wanted scan-and-decide focus). Persists across queue items in the same
-  // session.
-  const [chatOpen, setChatOpen] = useState(!isQueueMode);
+  // Chat is open by default in both modes — the panel is almost always
+  // needed during review and should be discoverable. Toggleable via the
+  // 💬 AI button or C key.
+  const [chatOpen, setChatOpen] = useState(true);
   // "Add to Homework" picker for single-mode pending items. Replaces
-  // the legacy bare Approve button so the workshop's approval path
-  // matches the ReviewModal contract: approval requires a destination.
+  // the legacy bare Approve button so approval always commits to a
+  // destination.
   const [showAddToHomeworkPicker, setShowAddToHomeworkPicker] = useState(false);
+
+  // Queue mode: sticky homework destination. The first Approve in a
+  // primary queue opens the picker; the chosen homework sticks for the
+  // rest of the session. Subsequent Approves auto-attach without
+  // reopening the picker. Teacher can change it via the header pill.
+  // Variation queues (every item has a parent_question_id) don't use
+  // this — variations aren't HW-attached the same way.
+  const isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
+  const [stickyHomework, setStickyHomework] = useState<TeacherAssignment | null>(null);
+  const [showStickyPicker, setShowStickyPicker] = useState(false);
+
   const { busy, error, setError, run } = useAsyncAction();
 
   // ── Item sync ────────────────────────────────────────────────────
@@ -330,18 +340,75 @@ export function WorkshopModal({
       setShowUndo(false);
     });
 
-  const approve = () =>
+  // Queue-mode primary Approve: if no homework is sticky yet, open the
+  // picker and wait for a choice. Once set, this approve() fast-paths
+  // straight through — subsequent clicks attach to the sticky homework.
+  const approve = () => {
+    if (isQueueMode && !isVariationQueue && !stickyHomework) {
+      setShowAddToHomeworkPicker(true);
+      return;
+    }
     run(async () => {
       if (!liveItem || blockIfPending()) return;
-      await teacher.approveBankItem(liveItem.id);
-      // Use replaceLiveItem so queueState stays consistent with liveItem.
-      // Even though the stale entry isn't displayed today, keeping the two
-      // stores in sync removes a footgun for any future reader of queueState.
+      const opts =
+        isQueueMode && !isVariationQueue && stickyHomework
+          ? { assignmentId: stickyHomework.id }
+          : undefined;
+      await teacher.approveBankItem(liveItem.id, opts);
       replaceLiveItem({ ...liveItem, status: "approved" });
       if (isQueueMode) {
         setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
         advanceQueue();
       }
+    });
+  };
+
+  // Queue-mode first approval goes through the picker below. When the
+  // teacher picks a homework, attach + mark sticky + advance. Stays
+  // sticky for the rest of the session.
+  const approveToStickyExisting = (assignment: TeacherAssignment) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      await teacher.approveBankItem(liveItem.id, { assignmentId: assignment.id });
+      setStickyHomework(assignment);
+      setShowAddToHomeworkPicker(false);
+      replaceLiveItem({ ...liveItem, status: "approved" });
+      setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
+      advanceQueue();
+    });
+
+  const approveToStickyNew = (title: string, unitIds: string[]) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      const created = await teacher.createAssignment(liveItem.course_id, {
+        title,
+        type: "homework",
+        unit_ids: unitIds,
+      });
+      await teacher.approveBankItem(liveItem.id, { assignmentId: created.id });
+      setStickyHomework({
+        id: created.id,
+        course_id: liveItem.course_id,
+        unit_ids: unitIds,
+        title,
+        type: "homework",
+        source_type: "manual",
+        due_at: null,
+        late_policy: "block",
+        status: created.status,
+        section_ids: [],
+        section_names: [],
+        problem_count: 0,
+        total_students: 0,
+        submitted: 0,
+        graded: 0,
+        avg_score: null,
+        created_at: new Date().toISOString(),
+      });
+      setShowAddToHomeworkPicker(false);
+      replaceLiveItem({ ...liveItem, status: "approved" });
+      setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
+      advanceQueue();
     });
 
   // Variation single-mode flow: approve + refresh parent + close.
@@ -359,8 +426,8 @@ export function WorkshopModal({
 
   // Single-mode pending: clicking "→ Add to Homework" opens the picker;
   // picking a HW fires the atomic approve+attach call, then closes the
-  // workshop. Same contract as ReviewModal Flow A so the workshop entry
-  // path can't bypass the "approval requires a destination" rule.
+  // workshop. The workshop entry path can't bypass the "approval
+  // requires a destination" rule.
   const addToExistingHomework = (assignment: TeacherAssignment) =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
@@ -401,6 +468,16 @@ export function WorkshopModal({
     if (!liveItem || blockIfPending() || !isQueueMode) return;
     setResolved((prev) => ({ ...prev, [queueIndex]: "skipped" }));
     advanceQueue();
+  };
+
+  // Walk backwards through the queue — useful if the teacher wants to
+  // revisit the item they just judged. Loops to the tail from position 0
+  // so it's always non-disabled in a non-empty queue.
+  const previous = () => {
+    setError(null);
+    if (!isQueueMode || total === 0) return;
+    const prevIdx = (queueIndex - 1 + total) % total;
+    setQueueIndex(prevIdx);
   };
 
   const remove = () =>
@@ -531,6 +608,47 @@ export function WorkshopModal({
                 {resolvedCount + 1} / {total}
               </span>
             )}
+            {isQueueMode && !isVariationQueue && stickyHomework && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowStickyPicker((v) => !v)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/40 bg-primary-bg/40 px-2 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
+                  title="Change the homework these approvals attach to"
+                >
+                  → {stickyHomework.title}
+                  <span className="text-[9px] opacity-60">change</span>
+                </button>
+                {showStickyPicker && (
+                  <DestinationPicker
+                    courseId={liveItem.course_id}
+                    busy={busy}
+                    align="start"
+                    onClose={() => setShowStickyPicker(false)}
+                    onPickExisting={(a) => {
+                      setStickyHomework(a);
+                      setShowStickyPicker(false);
+                    }}
+                    onCreateNew={async (title, unitIds) => {
+                      const created = await teacher.createAssignment(liveItem.course_id, {
+                        title,
+                        type: "homework",
+                        unit_ids: unitIds,
+                      });
+                      setStickyHomework({
+                        ...stickyHomework,
+                        id: created.id,
+                        title,
+                        unit_ids: unitIds,
+                        status: created.status,
+                      });
+                      setShowStickyPicker(false);
+                    }}
+                  />
+                )}
+              </div>
+            )}
             <span
               className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
                 STATUS_BADGE[liveItem.status] ?? ""
@@ -560,6 +678,17 @@ export function WorkshopModal({
                 ])}
               </select>
             </label>
+            {liveItem.source_doc_ids && liveItem.source_doc_ids.length > 0 && (
+              <span
+                className="text-[11px] font-semibold text-text-muted"
+                title={`Generated from ${liveItem.source_doc_ids.length} source document${
+                  liveItem.source_doc_ids.length === 1 ? "" : "s"
+                }`}
+              >
+                · {liveItem.source_doc_ids.length} source
+                {liveItem.source_doc_ids.length === 1 ? "" : "s"}
+              </span>
+            )}
             {showUndo && (
               <button
                 onClick={undo}
@@ -779,22 +908,17 @@ export function WorkshopModal({
               </div>
             )}
 
-            {/* Source + constraint footer */}
-            <div className="mt-5 space-y-1 border-t border-border-light pt-3 text-[11px] text-text-muted">
-              {liveItem.source_doc_ids && liveItem.source_doc_ids.length > 0 && (
-                <div>
-                  <span className="font-bold uppercase tracking-wider">Source:</span>{" "}
-                  {liveItem.source_doc_ids.length} document
-                  {liveItem.source_doc_ids.length === 1 ? "" : "s"}
-                </div>
-              )}
-              {liveItem.generation_prompt && (
+            {/* Constraint footer — kept in the body because it's long
+                and narrative. The short "Source: N docs" chip lives in
+                the header now, next to the unit picker. */}
+            {liveItem.generation_prompt && (
+              <div className="mt-5 space-y-1 border-t border-border-light pt-3 text-[11px] text-text-muted">
                 <div>
                   <span className="font-bold uppercase tracking-wider">Constraint:</span>{" "}
                   &ldquo;{liveItem.generation_prompt}&rdquo;
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
           </div>
@@ -831,12 +955,22 @@ export function WorkshopModal({
           showAddToHomeworkPicker={showAddToHomeworkPicker}
           onOpenAddToHomework={() => setShowAddToHomeworkPicker(true)}
           onCloseAddToHomework={() => setShowAddToHomeworkPicker(false)}
-          onPickExistingHomework={addToExistingHomework}
-          onCreateNewHomework={createHomeworkAndAdd}
+          onPickExistingHomework={
+            isQueueMode && !isVariationQueue ? approveToStickyExisting : addToExistingHomework
+          }
+          onCreateNewHomework={
+            isQueueMode && !isVariationQueue ? approveToStickyNew : createHomeworkAndAdd
+          }
           onApprove={approve}
           onApproveAsVariation={approveAsVariation}
           onReject={reject}
           onSkip={skip}
+          onPrevious={previous}
+          approveLabel={
+            isQueueMode && !isVariationQueue && stickyHomework
+              ? `Approve & add to "${truncate(stickyHomework.title, 24)}"`
+              : undefined
+          }
           onToggleChat={() => setChatOpen((v) => !v)}
           onAcceptProposal={acceptProposal}
           onDiscardProposal={discardProposal}
@@ -870,6 +1004,10 @@ export function WorkshopModal({
 // Vim's status line: tells the teacher what they're doing right now.
 // ─────────────────────────────────────────────────────────────────────
 
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
 function ModeLineFooter({
   isQueueMode,
   isProposalPending,
@@ -889,6 +1027,8 @@ function ModeLineFooter({
   onApproveAsVariation,
   onReject,
   onSkip,
+  onPrevious,
+  approveLabel,
   onToggleChat,
   onAcceptProposal,
   onDiscardProposal,
@@ -914,6 +1054,10 @@ function ModeLineFooter({
   onApproveAsVariation: () => void;
   onReject: () => void;
   onSkip: () => void;
+  onPrevious: () => void;
+  /** Override the Approve label text — used in queue mode to show the
+   *  sticky homework destination ("Approve & add to HW X"). */
+  approveLabel?: string;
   onToggleChat: () => void;
   onAcceptProposal: () => void;
   onDiscardProposal: () => void;
@@ -986,7 +1130,7 @@ function ModeLineFooter({
   // Default: reading mode. Show approve/reject/skip/chat/delete.
   // In single mode, hide Approve/Reject if the question isn't pending
   // (since they've already been resolved). editOnly forces them off
-  // regardless — used when opened from inside ReviewModal.
+  // regardless — useful when a parent surface owns status transitions.
   const showApproveReject = !editOnly && (isQueueMode || status === "pending");
   // Single-mode pending replaces bare Approve with "→ Add to Homework"
   // for PRIMARY problems (no parent_question_id). Variations follow
@@ -1003,25 +1147,47 @@ function ModeLineFooter({
   return (
     <div className="border-t border-border-light px-6 py-3">
       <div className="flex flex-wrap items-center gap-2">
+        {/* LEFT — destructive cluster: Reject + Delete. Grouped so the
+            teacher's muscle memory for "this question is bad" stays
+            in one place. */}
         {showApproveReject && (
-          <>
-            <FooterButton
-              onClick={onReject}
-              disabled={busy}
-              variant="reject"
-              shortcut="X"
-              label="Reject"
-            />
-            {isQueueMode && (
-              <FooterButton
-                onClick={onSkip}
-                disabled={busy}
-                variant="neutral"
-                shortcut="S"
-                label="Skip"
-              />
-            )}
-          </>
+          <FooterButton
+            onClick={onReject}
+            disabled={busy}
+            variant="reject"
+            shortcut="X"
+            label="Reject"
+          />
+        )}
+        <button
+          onClick={onStartDelete}
+          disabled={busy}
+          title="Delete question"
+          aria-label="Delete question"
+          className="rounded-[--radius-md] border border-red-300 px-2.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+        >
+          🗑
+        </button>
+
+        {/* MIDDLE — neutral navigation/chat. Queue-mode gets Previous +
+            Skip. Chat toggle is always present. */}
+        {isQueueMode && (
+          <FooterButton
+            onClick={onPrevious}
+            disabled={busy}
+            variant="neutral"
+            shortcut=""
+            label="← Previous"
+          />
+        )}
+        {showApproveReject && isQueueMode && (
+          <FooterButton
+            onClick={onSkip}
+            disabled={busy}
+            variant="neutral"
+            shortcut="S"
+            label="Skip"
+          />
         )}
         <FooterButton
           onClick={onToggleChat}
@@ -1030,18 +1196,33 @@ function ModeLineFooter({
           shortcut="C"
           label={chatOpen ? "💬 Hide" : "💬 AI"}
         />
-        {/* Queue-mode kept the legacy bare Approve (it's already
-            destination-aware via its parent flow). Single-mode pending
-            uses the destination picker. */}
+
+        {/* RIGHT — primary cluster: the "keep this question" actions.
+            Queue mode uses Approve (attaches to sticky homework on first
+            click, fast-paths thereafter). Single-mode pending uses the
+            "Add to Homework" picker, or "Approve as practice" for
+            variations. ml-auto pushes the whole cluster to the right. */}
         {showApproveReject && isQueueMode && (
-          <FooterButton
-            onClick={onApprove}
-            disabled={busy}
-            variant="approve"
-            shortcut="↵"
-            label="Approve"
-            isLast
-          />
+          <div className="relative ml-auto">
+            <FooterButton
+              onClick={onApprove}
+              disabled={busy}
+              variant="approve"
+              shortcut="↵"
+              label={approveLabel ?? "Approve"}
+              isLast
+            />
+            {showAddToHomeworkPicker && (
+              <DestinationPicker
+                courseId={courseId}
+                busy={busy}
+                align="end"
+                onClose={onCloseAddToHomework}
+                onPickExisting={onPickExistingHomework}
+                onCreateNew={onCreateNewHomework}
+              />
+            )}
+          </div>
         )}
         {showAddToHomework && (
           <div className="relative ml-auto">
@@ -1078,15 +1259,6 @@ function ModeLineFooter({
             </button>
           </div>
         )}
-        <button
-          onClick={onStartDelete}
-          disabled={busy}
-          title="Delete question"
-          aria-label="Delete question"
-          className="ml-2 rounded-[--radius-md] border border-red-300 px-2.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-        >
-          🗑
-        </button>
       </div>
       <p className="mt-2 hidden text-[10px] text-text-muted md:block">
         ↵ approve · X reject {isQueueMode && "· S skip"} · C chat · ↑↓ toggle solution · Esc close
