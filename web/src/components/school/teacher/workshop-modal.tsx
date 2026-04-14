@@ -1310,9 +1310,24 @@ function ChatPanel({
   onCancelClear: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  // Optimistic teacher message shown the instant Send is clicked.
+  // Without this the teacher watches their message disappear into the
+  // input and see "AI is thinking…" with no visible proof the message
+  // was received. Cleared after onSend resolves — the server's
+  // authoritative chat_messages list replaces it in the next render.
+  const [optimistic, setOptimistic] = useState<{ text: string; ts: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const messages = item.chat_messages;
-  const teacherMessageCount = messages.filter((m) => m.role === "teacher").length;
+  const serverMessages = item.chat_messages;
+  // Merge the optimistic message in for rendering only if it's not
+  // already reflected in the server list (belt + suspenders against a
+  // fast round-trip where server data arrives before optimistic clears).
+  const messages = optimistic
+    ? [
+        ...serverMessages,
+        { role: "teacher" as const, text: optimistic.text, ts: optimistic.ts },
+      ]
+    : serverMessages;
+  const teacherMessageCount = serverMessages.filter((m) => m.role === "teacher").length;
   const atSoftCap = teacherMessageCount >= item.chat_soft_cap;
 
   useEffect(() => {
@@ -1323,8 +1338,15 @@ function ChatPanel({
   const submit = async () => {
     const text = draft.trim();
     if (!text || busy) return;
+    setOptimistic({ text, ts: new Date().toISOString() });
+    setDraft("");
     const ok = await onSend(text);
-    if (ok) setDraft("");
+    setOptimistic(null);
+    if (!ok) {
+      // Failure: restore the draft so the teacher can retry without
+      // retyping. The error toast is surfaced by useAsyncAction.
+      setDraft(text);
+    }
   };
 
   return (
