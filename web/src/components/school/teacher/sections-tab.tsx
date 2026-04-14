@@ -125,6 +125,7 @@ function SectionCard({
   };
 
   const [flash, setFlash] = useState<string | null>(null);
+  const [confirmingRevokeId, setConfirmingRevokeId] = useState<string | null>(null);
 
   const inviteStudent = () =>
     run(async () => {
@@ -164,6 +165,7 @@ function SectionCard({
   const revokeInvite = (inviteId: string) =>
     run(async () => {
       await teacher.revokeInvite(courseId, section.id, inviteId);
+      setConfirmingRevokeId(null);
       await reloadDetail();
     }, "Failed to revoke invite");
 
@@ -334,20 +336,42 @@ function SectionCard({
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => resendInvite(i.id)}
-                              disabled={busy}
-                              className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
-                            >
-                              Resend
-                            </button>
-                            <button
-                              onClick={() => revokeInvite(i.id)}
-                              disabled={busy}
-                              className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
-                            >
-                              Revoke
-                            </button>
+                            {confirmingRevokeId === i.id ? (
+                              <>
+                                <span className="text-xs font-semibold text-red-700">Revoke?</span>
+                                <button
+                                  onClick={() => revokeInvite(i.id)}
+                                  disabled={busy}
+                                  className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+                                >
+                                  Yes, revoke
+                                </button>
+                                <button
+                                  onClick={() => setConfirmingRevokeId(null)}
+                                  disabled={busy}
+                                  className="text-xs font-semibold text-text-secondary hover:underline disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => resendInvite(i.id)}
+                                  disabled={busy}
+                                  className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
+                                >
+                                  Resend
+                                </button>
+                                <button
+                                  onClick={() => setConfirmingRevokeId(i.id)}
+                                  disabled={busy}
+                                  className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+                                >
+                                  Revoke
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
