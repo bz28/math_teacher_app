@@ -135,7 +135,7 @@ export function UploadWorksheetModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <p className="text-sm text-text-muted">
-            Upload photos of an existing worksheet or problem set. Claude will
+            Upload photos of an existing worksheet or problem set. Veradic will
             extract each problem (up to ~40 per upload), solve it, and add it to
             your question bank for review.
           </p>

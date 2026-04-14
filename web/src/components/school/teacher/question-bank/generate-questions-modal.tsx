@@ -195,8 +195,8 @@ export function GenerateQuestionsModal({
               </span>
             </div>
             <p className="mt-1 text-[11px] text-text-muted">
-              Pick the materials Claude should read. Without sources, generation falls back to
-              the topic name only. PDFs aren&rsquo;t AI-readable yet.
+              Pick the materials Veradic should read. Without sources, generation falls back
+              to the topic name only. PDFs aren&rsquo;t readable yet.
             </p>
 
             {loading ? (
@@ -343,7 +343,7 @@ export function GenerateQuestionsModal({
           {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
           {onlyPdfsSelected && (
             <p className="mt-3 text-[11px] text-amber-600">
-              Heads up: every selected doc is a PDF, which Claude can&rsquo;t read yet. Pick at
+              Heads up: every selected doc is a PDF, which isn&rsquo;t readable yet. Pick at
               least one image or unselect everything.
             </p>
           )}
