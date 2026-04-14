@@ -393,8 +393,15 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                   className="flex cursor-pointer items-center justify-between rounded-[--radius-sm] border border-border bg-surface p-4 hover:border-primary"
                 >
                   <div>
-                    <div className="text-sm font-semibold text-text-primary">
-                      {r.student_name || r.student_email}
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold text-text-primary">
+                        {r.student_name || r.student_email}
+                      </div>
+                      {r.is_preview && (
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-500/20">
+                          Preview
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 text-xs text-text-muted">{r.student_email}</div>
                   </div>

@@ -693,6 +693,7 @@ export interface TeacherSubmission {
   id: string;
   student_name: string;
   student_email: string;
+  is_preview: boolean;
   status: string;
   submitted_at: string | null;
   is_late: boolean;
@@ -1024,6 +1025,7 @@ export interface TeacherSubmissionRow {
   id: string;
   student_name: string;
   student_email: string;
+  is_preview: boolean;
   status: string;
   submitted_at: string | null;
   is_late: boolean;
