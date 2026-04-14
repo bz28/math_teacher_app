@@ -567,6 +567,19 @@ export function WorkshopModal({
   const questionChanged = pendingProposal?.question != null;
   const stepsChanged = pendingProposal?.solution_steps != null;
   const answerChanged = pendingProposal?.final_answer != null;
+  // When solution_steps is proposed, highlight only the individual steps
+  // that actually differ from the current version. Index-by-index
+  // compare on title+description: if a step is new (no prev at that
+  // index) or its text doesn't match, it's changed. This lets Claude
+  // return the full steps list (per prompt) without lighting up every
+  // card blue when only one was edited.
+  const stepChanged = (idx: number): boolean => {
+    if (!stepsChanged) return false;
+    const prev = liveItem.solution_steps?.[idx];
+    const next = previewSteps?.[idx];
+    if (!prev || !next) return true;
+    return prev.title !== next.title || prev.description !== next.description;
+  };
 
   const resolvedCount = Object.keys(resolved).length;
   const progressPct = isQueueMode ? (resolvedCount / total) * 100 : 0;
@@ -780,6 +793,11 @@ export function WorkshopModal({
                   <span className="text-blue-700 dark:text-blue-300">Preview</span>
                 )}
               </div>
+              {questionChanged && (
+                <BeforeBlock>
+                  <MathText text={liveItem.question} />
+                </BeforeBlock>
+              )}
               <div className="mt-3 text-base leading-relaxed text-text-primary">
                 {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />
@@ -814,49 +832,67 @@ export function WorkshopModal({
               {solutionOpen && (
                 <div className="mt-3 space-y-3">
                   {previewSteps && previewSteps.length > 0 ? (
-                    previewSteps.map((s, i) => (
-                      <div
-                        key={i}
-                        className={`rounded-[--radius-lg] border p-4 ${
-                          stepsChanged
-                            ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
-                            : "border-border-light bg-surface"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
-                            {i + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-semibold text-text-primary">
-                              {stepsChanged || isProposalPending ? (
-                                <MathText text={s.title} />
-                              ) : (
-                                <ClickToEditText
-                                  value={s.title}
-                                  inline
-                                  onSave={(next) => saveStep(i, "title", next)}
-                                  busy={busy}
-                                />
-                              )}
+                    // Historical data can contain null entries from an
+                    // early version of the accept path. Skip them rather
+                    // than crashing on s.title.
+                    previewSteps.filter((s) => s != null).map((s, i) => {
+                      const changed = stepChanged(i);
+                      const prev = liveItem.solution_steps?.[i];
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded-[--radius-lg] border p-4 ${
+                            changed
+                              ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                              : "border-border-light bg-surface"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
+                              {i + 1}
                             </div>
-                            <div className="mt-2 h-px bg-border-light" />
-                            <div className="mt-2 text-xs leading-relaxed text-text-secondary">
-                              {stepsChanged || isProposalPending ? (
-                                <MathText text={s.description} />
-                              ) : (
-                                <ClickToEditText
-                                  value={s.description}
-                                  multiline
-                                  onSave={(next) => saveStep(i, "description", next)}
-                                  busy={busy}
-                                />
+                            <div className="min-w-0 flex-1">
+                              {changed && prev && (
+                                <BeforeBlock>
+                                  <div className="text-sm font-semibold text-text-secondary">
+                                    <MathText text={prev.title ?? ""} />
+                                  </div>
+                                  <div className="mt-2 h-px bg-border-light/70" />
+                                  <div className="mt-2 text-xs leading-relaxed text-text-muted">
+                                    <MathText text={prev.description ?? ""} />
+                                  </div>
+                                </BeforeBlock>
                               )}
+                              <div className="text-sm font-semibold text-text-primary">
+                                {isProposalPending ? (
+                                  <MathText text={s.title ?? ""} />
+                                ) : (
+                                  <ClickToEditText
+                                    value={s.title ?? ""}
+                                    inline
+                                    onSave={(next) => saveStep(i, "title", next)}
+                                    busy={busy}
+                                  />
+                                )}
+                              </div>
+                              <div className="mt-2 h-px bg-border-light" />
+                              <div className="mt-2 text-xs leading-relaxed text-text-secondary">
+                                {isProposalPending ? (
+                                  <MathText text={s.description ?? ""} />
+                                ) : (
+                                  <ClickToEditText
+                                    value={s.description ?? ""}
+                                    multiline
+                                    onSave={(next) => saveStep(i, "description", next)}
+                                    busy={busy}
+                                  />
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="rounded-[--radius-md] bg-bg-subtle p-4 text-xs italic text-text-muted">
                       No solution steps recorded.
@@ -881,6 +917,13 @@ export function WorkshopModal({
                     <span className="text-blue-700 dark:text-blue-300">Preview</span>
                   )}
                 </div>
+                {answerChanged && liveItem.final_answer && (
+                  <BeforeBlock>
+                    <div className="text-base font-bold text-text-muted">
+                      <MathText text={liveItem.final_answer} />
+                    </div>
+                  </BeforeBlock>
+                )}
                 <div className="mt-2 text-lg font-bold text-text-primary">
                   {answerChanged || isProposalPending ? (
                     <MathText text={previewAnswer ?? ""} />
@@ -1310,21 +1353,45 @@ function ChatPanel({
   onCancelClear: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  // Optimistic teacher message shown the instant Send is clicked.
+  // Without this the teacher watches their message disappear into the
+  // input and see "AI is thinking…" with no visible proof the message
+  // was received. Cleared after onSend resolves — the server's
+  // authoritative chat_messages list replaces it in the next render.
+  const [optimistic, setOptimistic] = useState<{ text: string; ts: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const messages = item.chat_messages;
-  const teacherMessageCount = messages.filter((m) => m.role === "teacher").length;
+  const serverMessages = item.chat_messages;
+  // Merge the optimistic message in for rendering only if it's not
+  // already reflected in the server list (belt + suspenders against a
+  // fast round-trip where server data arrives before optimistic clears).
+  const messages = optimistic
+    ? [
+        ...serverMessages,
+        { role: "teacher" as const, text: optimistic.text, ts: optimistic.ts },
+      ]
+    : serverMessages;
+  const teacherMessageCount = serverMessages.filter((m) => m.role === "teacher").length;
   const atSoftCap = teacherMessageCount >= item.chat_soft_cap;
+
+  const sendingChat = optimistic !== null;
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, busy]);
+  }, [messages.length, sendingChat]);
 
   const submit = async () => {
     const text = draft.trim();
     if (!text || busy) return;
+    setOptimistic({ text, ts: new Date().toISOString() });
+    setDraft("");
     const ok = await onSend(text);
-    if (ok) setDraft("");
+    setOptimistic(null);
+    if (!ok) {
+      // Failure: restore the draft so the teacher can retry without
+      // retyping. The error toast is surfaced by useAsyncAction.
+      setDraft(text);
+    }
   };
 
   return (
@@ -1373,7 +1440,12 @@ function ChatPanel({
             onDiscard={onDiscard}
           />
         ))}
-        {busy && (
+        {/* Only show the thinking indicator while we're actually
+            waiting on a chat round-trip. `busy` flips true for any
+            async action in the modal (save, approve, reject), so
+            gating on it would flash "AI is thinking…" every time the
+            teacher clicks out of a manual edit. */}
+        {sendingChat && (
           <div className="flex items-center gap-1.5 rounded-[--radius-md] bg-surface p-3 text-xs italic text-text-muted shadow-sm">
             <span className="inline-flex gap-1">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
@@ -1455,6 +1527,23 @@ function ChatPanel({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Nested "Before" card shown above a changed field inside the preview
+ * overlay. Demotes the prior value visually (muted fill, smaller label,
+ * softer typography) so the teacher's eye lands on the proposed value
+ * below without strikethrough tricks that would mangle rendered math.
+ */
+function BeforeBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-3 rounded-[--radius-md] border border-border-light/60 bg-bg-subtle/60 p-3">
+      <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-text-muted">
+        Before
+      </div>
+      <div className="mt-1.5 opacity-70">{children}</div>
     </div>
   );
 }
