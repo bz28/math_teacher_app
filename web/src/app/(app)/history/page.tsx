@@ -92,6 +92,14 @@ function PersonalHistory() {
 
 // ── School-student view: one tab per enrolled course ──────────────────────
 
+// TODO(school-history): This tab will be empty in practice until school
+// students have an entry point that creates section-tagged Session rows.
+// Today they reach the tutor only through the homework/practice flow,
+// which writes BankConsumption + Submission, not Session. Two known
+// ways to close the gap: (a) add an "Ask a problem" button inside
+// /school/student that opens a section-scoped learn page, or (b) change
+// this endpoint to read BankConsumption and render practice history.
+// Neither is in scope for this PR — see plans/school-portal-cleanup-round-2.md.
 function SchoolHistory() {
   const router = useRouter();
   const [courses, setCourses] = useState<EnrolledCourse[] | null>(null);

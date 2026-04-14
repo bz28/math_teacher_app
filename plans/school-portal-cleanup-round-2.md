@@ -109,3 +109,14 @@ Rough ordering — each commit stands on its own and passes CI.
 - Moving shell-account cleanup for preview students (separate concern).
 - Reordering tabs by recent activity.
 - Surfacing course name on each history row.
+
+## Known gap — history is empty for school students today
+
+The history-by-course UI (item 1) is in place, but the underlying data source doesn't exist yet. School students reach the tutor only through the homework/practice flow, which writes `BankConsumption` + `Submission`, not `Session`. And `/learn?section=X` — the only path that produces section-tagged `Session` rows — is not reachable for school students (item 2 hides it, and `/home` course cards are gated because `/home` redirects school students to `/school/student`).
+
+So a school student opening History today sees course tabs with empty lists. The tab is intentionally kept in place so the shape is ready; a follow-up PR needs to pick one of these two directions to actually populate it:
+
+- **(a)** Add an "Ask a problem" entry inside `/school/student` that opens a scoped learn page, tagging the resulting `Session` with the section. Keeps the current history data source, introduces a new user flow.
+- **(b)** Change `GET /session/history` (or add a parallel endpoint) to read `BankConsumption` + `Submission` for school students, mapping those rows into the existing history-item shape. Uses data that already exists, redefines what "history" means for this audience.
+
+TODO comment in `history/page.tsx:SchoolHistory` references this section.
