@@ -1330,10 +1330,12 @@ function ChatPanel({
   const teacherMessageCount = serverMessages.filter((m) => m.role === "teacher").length;
   const atSoftCap = teacherMessageCount >= item.chat_soft_cap;
 
+  const sendingChat = optimistic !== null;
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, busy]);
+  }, [messages.length, sendingChat]);
 
   const submit = async () => {
     const text = draft.trim();
@@ -1395,7 +1397,12 @@ function ChatPanel({
             onDiscard={onDiscard}
           />
         ))}
-        {busy && (
+        {/* Only show the thinking indicator while we're actually
+            waiting on a chat round-trip. `busy` flips true for any
+            async action in the modal (save, approve, reject), so
+            gating on it would flash "AI is thinking…" every time the
+            teacher clicks out of a manual edit. */}
+        {sendingChat && (
           <div className="flex items-center gap-1.5 rounded-[--radius-md] bg-surface p-3 text-xs italic text-text-muted shadow-sm">
             <span className="inline-flex gap-1">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
