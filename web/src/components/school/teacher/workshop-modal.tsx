@@ -793,6 +793,11 @@ export function WorkshopModal({
                   <span className="text-blue-700 dark:text-blue-300">Preview</span>
                 )}
               </div>
+              {questionChanged && (
+                <BeforeBlock>
+                  <MathText text={liveItem.question} />
+                </BeforeBlock>
+              )}
               <div className="mt-3 text-base leading-relaxed text-text-primary">
                 {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />
@@ -832,6 +837,7 @@ export function WorkshopModal({
                     // than crashing on s.title.
                     previewSteps.filter((s) => s != null).map((s, i) => {
                       const changed = stepChanged(i);
+                      const prev = liveItem.solution_steps?.[i];
                       return (
                         <div
                           key={i}
@@ -846,6 +852,17 @@ export function WorkshopModal({
                               {i + 1}
                             </div>
                             <div className="min-w-0 flex-1">
+                              {changed && prev && (
+                                <BeforeBlock>
+                                  <div className="text-sm font-semibold text-text-secondary">
+                                    <MathText text={prev.title ?? ""} />
+                                  </div>
+                                  <div className="mt-2 h-px bg-border-light/70" />
+                                  <div className="mt-2 text-xs leading-relaxed text-text-muted">
+                                    <MathText text={prev.description ?? ""} />
+                                  </div>
+                                </BeforeBlock>
+                              )}
                               <div className="text-sm font-semibold text-text-primary">
                                 {isProposalPending ? (
                                   <MathText text={s.title ?? ""} />
@@ -900,6 +917,13 @@ export function WorkshopModal({
                     <span className="text-blue-700 dark:text-blue-300">Preview</span>
                   )}
                 </div>
+                {answerChanged && liveItem.final_answer && (
+                  <BeforeBlock>
+                    <div className="text-base font-bold text-text-muted">
+                      <MathText text={liveItem.final_answer} />
+                    </div>
+                  </BeforeBlock>
+                )}
                 <div className="mt-2 text-lg font-bold text-text-primary">
                   {answerChanged || isProposalPending ? (
                     <MathText text={previewAnswer ?? ""} />
@@ -1503,6 +1527,23 @@ function ChatPanel({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Nested "Before" card shown above a changed field inside the preview
+ * overlay. Demotes the prior value visually (muted fill, smaller label,
+ * softer typography) so the teacher's eye lands on the proposed value
+ * below without strikethrough tricks that would mangle rendered math.
+ */
+function BeforeBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-3 rounded-[--radius-md] border border-border-light/60 bg-bg-subtle/60 p-3">
+      <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-text-muted">
+        Before
+      </div>
+      <div className="mt-1.5 opacity-70">{children}</div>
     </div>
   );
 }
