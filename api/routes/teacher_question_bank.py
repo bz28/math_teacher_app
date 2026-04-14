@@ -639,10 +639,10 @@ async def accept_chat_proposal(
     chat message as accepted."""
     _ensure_unlocked(item)
 
-    messages = list(item.chat_messages or [])
-    if body.message_index < 0 or body.message_index >= len(messages):
+    existing = item.chat_messages or []
+    if body.message_index < 0 or body.message_index >= len(existing):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message index")
-    msg = messages[body.message_index]
+    msg = existing[body.message_index]
     if msg.get("role") != "ai":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not an AI message")
     proposal = msg.get("proposal")
@@ -660,18 +660,25 @@ async def accept_chat_proposal(
     if proposal.get("final_answer") is not None:
         item.final_answer = str(proposal["final_answer"])
 
-    # Mark the message accepted (and any other pending proposals as superseded)
-    for i, m in enumerate(messages):
-        if i == body.message_index:
-            m["accepted"] = True
-        elif (
+    # Build a NEW list with NEW dict copies for any modified message.
+    # In-place dict mutation (e.g. `m["accepted"] = True`) would be a
+    # no-op at flush time: SQLAlchemy compares old list vs new list
+    # element-wise, and because a shallow `list(...)` shares dict refs
+    # with the original, both sides of the comparison would show the
+    # same mutated state — no UPDATE generated. Using {**m, ...} mints
+    # a fresh dict so old and new actually differ. Same pattern already
+    # used in core/question_bank_chat.py's superseded_history.
+    item.chat_messages = [
+        {**m, "accepted": True} if i == body.message_index
+        else {**m, "superseded": True} if (
             m.get("role") == "ai"
             and m.get("proposal")
             and not m.get("accepted")
             and not m.get("discarded")
-        ):
-            m["superseded"] = True
-    item.chat_messages = messages
+        )
+        else m
+        for i, m in enumerate(existing)
+    ]
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
@@ -683,17 +690,21 @@ async def discard_chat_proposal(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Mark a proposal as discarded. No live content change."""
-    messages = list(item.chat_messages or [])
-    if body.message_index < 0 or body.message_index >= len(messages):
+    existing = item.chat_messages or []
+    if body.message_index < 0 or body.message_index >= len(existing):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message index")
-    msg = messages[body.message_index]
+    msg = existing[body.message_index]
     if msg.get("role") != "ai" or not msg.get("proposal"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a proposal message")
     if msg.get("accepted") or msg.get("discarded"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proposal already resolved")
 
-    msg["discarded"] = True
-    item.chat_messages = messages
+    # New dict for the discarded message — see accept_chat_proposal
+    # above for why in-place mutation doesn't persist.
+    item.chat_messages = [
+        {**m, "discarded": True} if i == body.message_index else m
+        for i, m in enumerate(existing)
+    ]
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 

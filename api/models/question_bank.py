@@ -74,9 +74,16 @@ class QuestionBankItem(Base):
     # Workshop chat thread. List of {role, text, proposal?, accepted?,
     # discarded?, ts}. Persists across modal close so the conversation
     # survives. See plans/question-bank-workshop-v2.md.
-    # MutableList wrapping makes SQLAlchemy auto-track in-place dict
-    # mutations (e.g. msg["discarded"] = True) — without it, callers
-    # would need flag_modified() after every nested mutation.
+    #
+    # IMPORTANT: MutableList only tracks LIST-level mutations (append,
+    # pop, __setitem__ of the whole element). It does NOT track mutations
+    # of nested dicts. Callers that want to flip a flag on a message
+    # must build a fresh dict — e.g. [{**m, "accepted": True} if ...]
+    # — so old-vs-new comparison at flush time sees a real difference.
+    # In-place `m["accepted"] = True` plus reassignment of a shallow
+    # list copy is a no-op (both sides of the comparison share the
+    # mutated dict ref). See accept_chat_proposal / discard_chat_proposal
+    # in teacher_question_bank.py for the working pattern.
     chat_messages: Mapped[list[Any]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=False, default=list,
     )
