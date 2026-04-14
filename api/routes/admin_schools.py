@@ -11,6 +11,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.config import settings
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
@@ -281,7 +282,7 @@ async def invite_teacher(
     db.add(invite)
     await db.commit()
 
-    invite_url = f"https://veradicai.com/register?invite={token}"
+    invite_url = f"{settings.frontend_url}/register?invite={token}"
     logger.info(
         "AUDIT: admin=%s invited teacher email=%s to school=%s (%s), invite_id=%s",
         current_user.user_id, body.email, school_id, school.name, invite.id,
