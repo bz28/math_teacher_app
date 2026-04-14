@@ -211,7 +211,7 @@ export function GenerateQuestionsModal({
                 {docGroups.map((group) => (
                   <div key={group.id}>
                     <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      📁 {group.label}
+                      {group.label}
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {group.docs.map((d) => (
@@ -251,18 +251,35 @@ export function GenerateQuestionsModal({
                     {n}
                   </button>
                 ))}
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={count}
-                  onChange={(e) => {
-                    const n = Number.parseInt(e.target.value, 10);
-                    if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
-                  }}
-                  aria-label="Custom quantity"
-                  className="w-14 rounded-[--radius-pill] border border-border-light bg-bg-base px-2 py-1 text-center text-xs font-bold text-text-primary focus:border-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
+                {/* Custom input — only shown when the user has picked a
+                    non-preset number, so the active chip isn't mirrored
+                    back in an adjacent input (which looks like a dupe). */}
+                {!QUANTITY_CHIPS.includes(count as (typeof QUANTITY_CHIPS)[number]) && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={count}
+                    onChange={(e) => {
+                      const n = Number.parseInt(e.target.value, 10);
+                      if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
+                    }}
+                    aria-label="Custom quantity"
+                    className="w-14 rounded-[--radius-pill] border border-primary bg-primary-bg/30 px-2 py-1 text-center text-xs font-bold text-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCount(3)}
+                  className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
+                    !QUANTITY_CHIPS.includes(count as (typeof QUANTITY_CHIPS)[number])
+                      ? "border border-primary bg-primary-bg text-primary"
+                      : "border border-dashed border-border-light text-text-muted hover:bg-bg-subtle"
+                  }`}
+                  aria-label="Set a custom quantity"
+                >
+                  Custom
+                </button>
               </div>
             </div>
           </div>
@@ -273,12 +290,11 @@ export function GenerateQuestionsModal({
           <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-bg-base/40 p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <label className="text-sm font-bold text-text-primary">
-                📂 Save to{" "}
-                <span className="font-normal text-text-muted">· required</span>
+                Save to <span className="text-red-500">*</span>
               </label>
               {autoApplied && (
                 <span className="text-[11px] font-semibold text-text-muted">
-                  💡 Auto-picked from your selected docs
+                  Auto-picked from your selected docs
                 </span>
               )}
             </div>
@@ -334,8 +350,8 @@ export function GenerateQuestionsModal({
             )}
             {explicitUncategorized && (
               <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
-                ⚠ These questions won&rsquo;t be organized under any unit and won&rsquo;t
-                show up when filtering by unit. You can move them later.
+                Heads up: these questions won&rsquo;t be organized under any unit and
+                won&rsquo;t show up when filtering by unit. You can move them later.
               </p>
             )}
           </div>
@@ -365,7 +381,7 @@ export function GenerateQuestionsModal({
             }
             className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
-            {submitting ? "Starting…" : "✨ Generate"}
+            {submitting ? "Starting…" : "Generate"}
           </button>
         </div>
       </form>
