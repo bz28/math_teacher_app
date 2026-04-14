@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { teacher, enterPreviewMode } from "@/lib/api";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
 
@@ -82,7 +81,6 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <span className="hidden text-sm font-medium text-text-secondary sm:block">
               {user?.name}
             </span>
@@ -222,16 +220,13 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             <span className="truncate text-xs font-medium text-text-muted">
               {user?.name}
             </span>
-            <div className="flex items-center gap-1">
-              <ThemeToggle />
-              <button
-                onClick={logout}
-                className="rounded-[--radius-sm] p-1.5 text-text-muted transition-colors hover:bg-error-light hover:text-error"
-                title="Sign out"
-              >
-                <LogoutIcon />
-              </button>
-            </div>
+            <button
+              onClick={logout}
+              className="rounded-[--radius-sm] p-1.5 text-text-muted transition-colors hover:bg-error-light hover:text-error"
+              title="Sign out"
+            >
+              <LogoutIcon />
+            </button>
           </div>
         </div>
       </aside>
@@ -245,15 +240,12 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
               {user?.school_name || "Teacher"}
             </span>
           </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <button
-              onClick={logout}
-              className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-error"
-            >
-              Sign Out
-            </button>
-          </div>
+          <button
+            onClick={logout}
+            className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-error"
+          >
+            Sign Out
+          </button>
         </header>
 
         <main id="main-content" className="flex-1 px-6 py-8">
