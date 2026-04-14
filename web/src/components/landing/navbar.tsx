@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogoMark } from "@/components/shared/logo-mark";
 
 const primaryLinks = [
@@ -69,7 +68,6 @@ export function Navbar() {
 
         {/* Desktop CTAs — flex-1 right-aligned */}
         <div className="hidden flex-1 items-center justify-end gap-3 md:flex">
-          <ThemeToggle />
           <Link
             href="/login"
             className="text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
@@ -139,12 +137,6 @@ export function Navbar() {
                 Sign In
               </Link>
 
-              <div className="flex items-center justify-between rounded-xl px-4 py-3">
-                <span className="text-base font-medium text-[color:var(--color-text-secondary)]">
-                  Theme
-                </span>
-                <ThemeToggle />
-              </div>
             </div>
 
             {/* Pinned CTA at bottom */}

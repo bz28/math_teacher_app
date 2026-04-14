@@ -143,7 +143,7 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
+            __html: `(function(){try{var p=location.pathname;var isApp=/^\\/(home|learn|account|mock-test|practice|pricing|school|history|onboarding|register|login|set-password)/.test(p);if(!isApp)return;var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
           }}
         />
       </head>
