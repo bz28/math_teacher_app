@@ -82,8 +82,11 @@ async def list_sections(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
+    # Exclude preview (shadow) students so the count reflects real enrollment.
     enrollment_count = (
         select(SectionEnrollment.section_id, func.count().label("c"))
+        .join(User, User.id == SectionEnrollment.student_id)
+        .where(User.is_preview.is_(False))
         .group_by(SectionEnrollment.section_id).subquery()
     )
     rows = (await db.execute(
@@ -111,7 +114,7 @@ async def get_section(
     students = (await db.execute(
         select(User.id, User.name, User.email)
         .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
-        .where(SectionEnrollment.section_id == section_id)
+        .where(SectionEnrollment.section_id == section_id, User.is_preview.is_(False))
         .order_by(User.name)
     )).all()
     invites = (await db.execute(
