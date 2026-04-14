@@ -50,7 +50,6 @@ const STATUS_BADGE: Record<string, string> = {
 export function WorkshopModal({
   item: initialItem,
   queue,
-  editOnly = false,
   onClose,
   onChanged,
   onJobStarted,
@@ -59,11 +58,6 @@ export function WorkshopModal({
 }: {
   item?: BankItem;
   queue?: BankItem[];
-  // When true, hide Approve/Reject buttons regardless of status. Kept
-  // as a prop for future edit-only contexts (e.g. opening from inside
-  // another flow where the parent owns status transitions). Not used
-  // now that the unified queue mode lives in this component.
-  editOnly?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onJobStarted?: (job: BankJob) => void;
@@ -380,12 +374,18 @@ export function WorkshopModal({
   const approveToStickyNew = (title: string, unitIds: string[]) =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
+      // Approve first, then create the HW with the now-approved item
+      // already attached. Matches the single-mode createHomeworkAndAdd
+      // pattern. Order matters: if step 2 fails, we're left with an
+      // approved-but-unassigned question (recoverable from the approved
+      // list) rather than an empty homework the teacher never wanted.
+      await teacher.approveBankItem(liveItem.id);
       const created = await teacher.createAssignment(liveItem.course_id, {
         title,
         type: "homework",
         unit_ids: unitIds,
+        bank_item_ids: [liveItem.id],
       });
-      await teacher.approveBankItem(liveItem.id, { assignmentId: created.id });
       setStickyHomework({
         id: created.id,
         course_id: liveItem.course_id,
@@ -398,7 +398,7 @@ export function WorkshopModal({
         status: created.status,
         section_ids: [],
         section_names: [],
-        problem_count: 0,
+        problem_count: 1,
         total_students: 0,
         submitted: 0,
         graded: 0,
@@ -470,16 +470,6 @@ export function WorkshopModal({
     advanceQueue();
   };
 
-  // Walk backwards through the queue — useful if the teacher wants to
-  // revisit the item they just judged. Loops to the tail from position 0
-  // so it's always non-disabled in a non-empty queue.
-  const previous = () => {
-    setError(null);
-    if (!isQueueMode || total === 0) return;
-    const prevIdx = (queueIndex - 1 + total) % total;
-    setQueueIndex(prevIdx);
-  };
-
   const remove = () =>
     run(async () => {
       if (!liveItem) return;
@@ -535,7 +525,7 @@ export function WorkshopModal({
       // Most action shortcuts are gated when a proposal is pending
       if (isProposalPending) return;
 
-      if (!editOnly && (e.key === "Enter" || e.key === "a" || e.key === "A")) {
+      if (e.key === "Enter" || e.key === "a" || e.key === "A") {
         e.preventDefault();
         // Single-mode pending: route Enter/A to the destination picker
         // instead of bare approve. Same contract as the click handler.
@@ -544,10 +534,10 @@ export function WorkshopModal({
         } else {
           handlersRef.current.approve();
         }
-      } else if (!editOnly && (e.key === "x" || e.key === "X")) {
+      } else if (e.key === "x" || e.key === "X") {
         e.preventDefault();
         handlersRef.current.reject();
-      } else if (!editOnly && (e.key === "s" || e.key === "S")) {
+      } else if (e.key === "s" || e.key === "S") {
         if (isQueueMode) {
           e.preventDefault();
           handlersRef.current.skip();
@@ -562,12 +552,9 @@ export function WorkshopModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [allResolved, busy, isProposalPending, isQueueMode, editOnly, liveItem?.status, onClose]);
+  }, [allResolved, busy, isProposalPending, isQueueMode, liveItem?.status, onClose]);
 
-  // ── Render: empty queue or completion ────────────────────────────
-  if (isQueueMode && total === 0) {
-    return <EmptyQueueModal onClose={onClose} />;
-  }
+  // ── Render: completion ──────────────────────────────────────────
   if (allResolved) {
     return <CompletionModal counts={counts} total={total} onClose={onClose} />;
   }
@@ -949,7 +936,6 @@ export function WorkshopModal({
           chatOpen={chatOpen}
           busy={busy}
           status={liveItem.status}
-          editOnly={editOnly}
           courseId={liveItem.course_id}
           isVariation={!!liveItem.parent_question_id}
           showAddToHomeworkPicker={showAddToHomeworkPicker}
@@ -965,7 +951,6 @@ export function WorkshopModal({
           onApproveAsVariation={approveAsVariation}
           onReject={reject}
           onSkip={skip}
-          onPrevious={previous}
           approveLabel={
             isQueueMode && !isVariationQueue && stickyHomework
               ? `Approve & add to "${truncate(stickyHomework.title, 24)}"`
@@ -1015,7 +1000,6 @@ function ModeLineFooter({
   chatOpen,
   busy,
   status,
-  editOnly,
   courseId,
   isVariation,
   showAddToHomeworkPicker,
@@ -1027,7 +1011,6 @@ function ModeLineFooter({
   onApproveAsVariation,
   onReject,
   onSkip,
-  onPrevious,
   approveLabel,
   onToggleChat,
   onAcceptProposal,
@@ -1042,7 +1025,6 @@ function ModeLineFooter({
   chatOpen: boolean;
   busy: boolean;
   status: string;
-  editOnly: boolean;
   courseId: string;
   isVariation: boolean;
   showAddToHomeworkPicker: boolean;
@@ -1054,7 +1036,6 @@ function ModeLineFooter({
   onApproveAsVariation: () => void;
   onReject: () => void;
   onSkip: () => void;
-  onPrevious: () => void;
   /** Override the Approve label text — used in queue mode to show the
    *  sticky homework destination ("Approve & add to HW X"). */
   approveLabel?: string;
@@ -1129,9 +1110,8 @@ function ModeLineFooter({
 
   // Default: reading mode. Show approve/reject/skip/chat/delete.
   // In single mode, hide Approve/Reject if the question isn't pending
-  // (since they've already been resolved). editOnly forces them off
-  // regardless — useful when a parent surface owns status transitions.
-  const showApproveReject = !editOnly && (isQueueMode || status === "pending");
+  // (since they've already been resolved).
+  const showApproveReject = isQueueMode || status === "pending";
   // Single-mode pending replaces bare Approve with "→ Add to Homework"
   // for PRIMARY problems (no parent_question_id). Variations follow
   // a different rule: they're practice scaffolding, not HW problems,
@@ -1140,9 +1120,9 @@ function ModeLineFooter({
   // as a HW primary regardless, but hiding the button removes the
   // footgun at the source.
   const showAddToHomework =
-    !editOnly && !isQueueMode && status === "pending" && !isVariation;
+    !isQueueMode && status === "pending" && !isVariation;
   const showApproveAsVariation =
-    !editOnly && !isQueueMode && status === "pending" && isVariation;
+    !isQueueMode && status === "pending" && isVariation;
 
   return (
     <div className="border-t border-border-light px-6 py-3">
@@ -1169,17 +1149,11 @@ function ModeLineFooter({
           🗑
         </button>
 
-        {/* MIDDLE — neutral navigation/chat. Queue-mode gets Previous +
-            Skip. Chat toggle is always present. */}
-        {isQueueMode && (
-          <FooterButton
-            onClick={onPrevious}
-            disabled={busy}
-            variant="neutral"
-            shortcut=""
-            label="← Previous"
-          />
-        )}
+        {/* MIDDLE — neutral navigation/chat. Queue-mode gets Skip so the
+            teacher can defer a question they're not sure about. Chat
+            toggle is always present. Forward navigation is implicit via
+            Approve/Reject/Skip; backward nav is intentionally omitted so
+            teachers can't land on already-resolved items and re-approve. */}
         {showApproveReject && isQueueMode && (
           <FooterButton
             onClick={onSkip}
@@ -1598,29 +1572,8 @@ function ChatMessageBubble({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Empty + completion screens (queue mode only)
+// Completion screen (queue mode only)
 // ─────────────────────────────────────────────────────────────────────
-
-function EmptyQueueModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-sm text-text-muted">
-          Nothing to review — generate questions or approve from the list.
-        </p>
-        <button
-          onClick={onClose}
-          className="mt-4 rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
-        >
-          Done
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function CompletionModal({
   counts,
