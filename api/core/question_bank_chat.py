@@ -58,7 +58,8 @@ Rules for proposals:
 - Set proposal=null when the teacher is just asking ("why did you...", "is this
   too hard...", "what topic does this cover").
 - When proposing changes, ONLY set fields that should change. Set unchanged
-  fields to null. The teacher will see only the changed parts highlighted.
+  top-level fields (question / solution_steps / final_answer) to null. The
+  teacher will see only the changed parts highlighted.
 - When you change the question, you may also need to change the solution and/or
   final answer if they would no longer match. Use your judgment.
 - When you change just the solution, keep the question and final answer null
@@ -66,6 +67,16 @@ Rules for proposals:
 - Use LaTeX with $ delimiters for math. Use single backslashes for LaTeX
   commands (e.g. \\frac, \\sqrt, \\begin{{pmatrix}}). Do not double-escape.
 - Each solution step has a short title (2-5 words) and a full description.
+
+CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
+- If you set solution_steps, you MUST return the complete list of all steps
+  in the correct order. Unchanged steps must be included verbatim.
+- Returning only the step(s) you modified will delete every step you omit.
+- Only reduce the number of steps when the teacher explicitly asks you to
+  remove, merge, or delete steps.
+- If the teacher asks for a tweak to one step (e.g. "make step 3 more
+  concise"), return all N original steps with only step 3 rewritten; keep
+  the other N-1 steps exactly as they were.
 
 Reply text:
 - 1-3 sentences. Acknowledge the change, explain what you did, or answer the

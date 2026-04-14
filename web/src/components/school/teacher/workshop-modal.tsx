@@ -567,6 +567,19 @@ export function WorkshopModal({
   const questionChanged = pendingProposal?.question != null;
   const stepsChanged = pendingProposal?.solution_steps != null;
   const answerChanged = pendingProposal?.final_answer != null;
+  // When solution_steps is proposed, highlight only the individual steps
+  // that actually differ from the current version. Index-by-index
+  // compare on title+description: if a step is new (no prev at that
+  // index) or its text doesn't match, it's changed. This lets Claude
+  // return the full steps list (per prompt) without lighting up every
+  // card blue when only one was edited.
+  const stepChanged = (idx: number): boolean => {
+    if (!stepsChanged) return false;
+    const prev = liveItem.solution_steps?.[idx];
+    const next = previewSteps?.[idx];
+    if (!prev || !next) return true;
+    return prev.title !== next.title || prev.description !== next.description;
+  };
 
   const resolvedCount = Object.keys(resolved).length;
   const progressPct = isQueueMode ? (resolvedCount / total) * 100 : 0;
@@ -817,49 +830,52 @@ export function WorkshopModal({
                     // Historical data can contain null entries from an
                     // early version of the accept path. Skip them rather
                     // than crashing on s.title.
-                    previewSteps.filter((s) => s != null).map((s, i) => (
-                      <div
-                        key={i}
-                        className={`rounded-[--radius-lg] border p-4 ${
-                          stepsChanged
-                            ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
-                            : "border-border-light bg-surface"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
-                            {i + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-semibold text-text-primary">
-                              {stepsChanged || isProposalPending ? (
-                                <MathText text={s.title ?? ""} />
-                              ) : (
-                                <ClickToEditText
-                                  value={s.title ?? ""}
-                                  inline
-                                  onSave={(next) => saveStep(i, "title", next)}
-                                  busy={busy}
-                                />
-                              )}
+                    previewSteps.filter((s) => s != null).map((s, i) => {
+                      const changed = stepChanged(i);
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded-[--radius-lg] border p-4 ${
+                            changed
+                              ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                              : "border-border-light bg-surface"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
+                              {i + 1}
                             </div>
-                            <div className="mt-2 h-px bg-border-light" />
-                            <div className="mt-2 text-xs leading-relaxed text-text-secondary">
-                              {stepsChanged || isProposalPending ? (
-                                <MathText text={s.description ?? ""} />
-                              ) : (
-                                <ClickToEditText
-                                  value={s.description ?? ""}
-                                  multiline
-                                  onSave={(next) => saveStep(i, "description", next)}
-                                  busy={busy}
-                                />
-                              )}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-semibold text-text-primary">
+                                {isProposalPending ? (
+                                  <MathText text={s.title ?? ""} />
+                                ) : (
+                                  <ClickToEditText
+                                    value={s.title ?? ""}
+                                    inline
+                                    onSave={(next) => saveStep(i, "title", next)}
+                                    busy={busy}
+                                  />
+                                )}
+                              </div>
+                              <div className="mt-2 h-px bg-border-light" />
+                              <div className="mt-2 text-xs leading-relaxed text-text-secondary">
+                                {isProposalPending ? (
+                                  <MathText text={s.description ?? ""} />
+                                ) : (
+                                  <ClickToEditText
+                                    value={s.description ?? ""}
+                                    multiline
+                                    onSave={(next) => saveStep(i, "description", next)}
+                                    busy={busy}
+                                  />
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="rounded-[--radius-md] bg-bg-subtle p-4 text-xs italic text-text-muted">
                       No solution steps recorded.
