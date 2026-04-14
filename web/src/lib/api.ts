@@ -474,11 +474,15 @@ export const session = {
     );
   },
 
-  history(subject: string, limit = 20, offset = 0) {
+  history(
+    filter: { subject: string } | { section_id: string },
+    limit = 20,
+    offset = 0,
+  ) {
     const params = new URLSearchParams({
-      subject,
       limit: String(limit),
       offset: String(offset),
+      ...filter,
     });
     return apiFetch<SessionHistoryResponse>(`/session/history?${params}`);
   },

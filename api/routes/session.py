@@ -159,27 +159,44 @@ async def create(
 
 @router.get("/history", response_model=SessionHistoryResponse)
 async def history(
-    subject: str = Query(...),
+    subject: str | None = Query(default=None),
+    section_id: uuid.UUID | None = Query(default=None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SessionHistoryResponse:
-    """List past learn-mode sessions for a subject."""
-    if subject not in VALID_SUBJECTS:
+    """List past learn/practice sessions filtered by subject or section.
+
+    Callers pass either `subject` (personal student flow) or `section_id`
+    (school-student flow, one tab per enrolled course). At least one is
+    required so the UI doesn't accidentally pull the user's entire
+    history unfiltered.
+    """
+    if not subject and not section_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Must provide either subject or section_id",
+        )
+    if subject and subject not in VALID_SUBJECTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}",
         )
 
+    filters = [
+        SessionModel.user_id == user.id,
+        SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
+        SessionModel.total_steps > 0,  # Exclude analytics-only records
+    ]
+    if subject:
+        filters.append(SessionModel.subject == subject)
+    if section_id:
+        filters.append(SessionModel.section_id == section_id)
+
     query = (
         select(SessionModel)
-        .where(
-            SessionModel.user_id == user.id,
-            SessionModel.subject == subject,
-            SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
-            SessionModel.total_steps > 0,  # Exclude analytics-only records
-        )
+        .where(*filters)
         .order_by(SessionModel.created_at.desc())
         .offset(offset)
         .limit(limit + 1)
