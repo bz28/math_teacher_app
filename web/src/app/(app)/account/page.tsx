@@ -16,6 +16,12 @@ export default function AccountPage() {
   const router = useRouter();
 
   const isPro = useEntitlementStore((s) => s.isPro);
+  // School-linked students are entitlement-wise Pro (their school covers
+  // access), but they have no personal subscription and nothing to
+  // manage. Hide the Pro badge + Subscription card for them; show a
+  // neutral "School" pill instead so the teacher/student context is
+  // still visible at a glance.
+  const isSchoolStudent = !!user?.school_id;
   const loaded = useEntitlementStore((s) => s.loaded);
   const dailySessionsUsed = useEntitlementStore((s) => s.dailySessionsUsed);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
@@ -98,15 +104,20 @@ export default function AccountPage() {
         <h1 className="mt-4 text-xl font-bold text-text-primary">{user.name}</h1>
         <p className="mt-1 text-sm text-text-muted">{user.email}</p>
         <div className="mt-3">
-          <Badge variant={isPro ? "success" : "muted"}>
-            {isPro && <StarIcon />}
-            {isPro ? "PRO" : "FREE"}
-          </Badge>
+          {isSchoolStudent ? (
+            <Badge variant="muted">School</Badge>
+          ) : (
+            <Badge variant={isPro ? "success" : "muted"}>
+              {isPro && <StarIcon />}
+              {isPro ? "PRO" : "FREE"}
+            </Badge>
+          )}
         </div>
       </motion.div>
 
-      {/* Subscription card */}
-      {isPro && (
+      {/* Subscription card — hidden for school students (no personal
+          subscription to manage). */}
+      {isPro && !isSchoolStudent && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
