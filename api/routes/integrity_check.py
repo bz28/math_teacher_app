@@ -79,10 +79,11 @@ class IntegrityStateResponse(BaseModel):
 
 class TurnRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
-    # Clamped to a sane wall-clock range. Negative or absurdly large
-    # values from a tampered client would otherwise land in the DB and
-    # leak into the teacher transcript.
-    seconds_on_turn: int | None = Field(default=None, ge=0, le=3600)
+    # Clamped so a tampered client can't land negative/absurd values in
+    # the teacher transcript. Upper bound = 24h; students can legitimately
+    # leave the chat open, walk away, and come back much later than an
+    # hour to finish — so the cap only filters tampering, not real use.
+    seconds_on_turn: int | None = Field(default=None, ge=0, le=86400)
 
 
 class DismissRequest(BaseModel):
@@ -261,8 +262,10 @@ async def post_student_turn(
     await process_student_turn(check, message, body.seconds_on_turn, db)
     await db.commit()
 
-    # Re-read from the DB to build the response with the freshest state.
-    await db.refresh(check)
+    # `check` was mutated in-memory and the session uses
+    # expire_on_commit=False, so attrs are already current. Problems +
+    # transcript are re-read fresh so the response reflects any tool
+    # calls that landed during the agent loop.
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
     return IntegrityStateResponse(
@@ -457,8 +460,14 @@ async def teacher_dismiss_problem(
 
     # Recompute overall_badge from the surviving problems so the
     # submission header doesn't keep flagging the student on a verdict
-    # the teacher has overruled.
+    # the teacher has overruled. When no flagged problems remain,
+    # clear the agent's confidence + summary too — both described the
+    # now-dismissed verdict and would be misleading otherwise.
     all_problems = await _load_problems(db, check.id)
-    check.overall_badge = _recompute_overall_badge(all_problems)
+    new_badge = _recompute_overall_badge(all_problems)
+    check.overall_badge = new_badge
+    if new_badge is None:
+        check.overall_confidence = None
+        check.overall_summary = None
 
     await db.commit()

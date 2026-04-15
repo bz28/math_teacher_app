@@ -903,6 +903,10 @@ async def test_teacher_dismiss_recomputes_overall_badge(
         headers=_auth(world["teacher_token"]),
     )).json()
     assert detail2["overall_badge"] is None
+    # Confidence + summary described the now-dismissed verdict, so
+    # they should also be cleared.
+    assert detail2["overall_confidence"] is None
+    assert detail2["overall_summary"] is None
 
 
 async def test_verdict_rejected_on_teacher_dismissed_problem(
@@ -1015,12 +1019,15 @@ async def test_turn_request_rejects_out_of_range_seconds(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
     """`seconds_on_turn` is clamped so a tampered client can't land
-    negative or absurd values in the teacher transcript."""
+    negative or absurd values in the teacher transcript — but the
+    upper bound must be generous enough to cover a student who
+    legitimately walks away and comes back hours later."""
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
-    for bad in (-1, 10_000):
+    # Tampered values are rejected.
+    for bad in (-1, 10_000_000):
         r = await client.post(
             f"/v1/school/student/integrity/submissions/{submission_id}/turn",
             headers=_auth(world["student_token"]),
@@ -1030,6 +1037,17 @@ async def test_turn_request_rejects_out_of_range_seconds(
             },
         )
         assert r.status_code == 422, r.text
+
+    # A long legitimate pause (90 min) is accepted.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={
+            "message": "Back from lunch. Here's my actual answer.",
+            "seconds_on_turn": 5400,
+        },
+    )
+    assert r.status_code == 200, r.text
 
 
 async def test_verdict_rejects_bool_confidence(
