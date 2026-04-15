@@ -73,6 +73,12 @@ class IntegrityStateResponse(BaseModel):
     submission_id: str
     overall_status: str
     overall_badge: str | None
+    student_flagged_extraction: bool
+    # Vision-extracted steps from the student's own handwritten work.
+    # Surfaced so the confirm screen can show the reader's take before
+    # the chat starts. All sampled problems share one extraction, so
+    # this lives on the response root rather than per-problem.
+    extraction: dict[str, Any] | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
 
@@ -170,6 +176,58 @@ def _problem_summaries(
     ]
 
 
+def _first_extraction(
+    problems: list[IntegrityCheckProblem],
+) -> dict[str, Any] | None:
+    """All sampled problems share one extraction today (the pipeline
+    writes the same dict to every row in start_integrity_check). Pick
+    any non-null copy. Returns None when no problems exist or none
+    carry an extraction (pathological edge case). If per-problem
+    extractions ever diverge, revisit this — callers expect one
+    extraction per submission.
+    """
+    for p in problems:
+        if p.student_work_extraction:
+            return p.student_work_extraction
+    return None
+
+
+def _build_state_response(
+    submission_id: uuid.UUID,
+    check: IntegrityCheckSubmission | None,
+    problems: list[IntegrityCheckProblem],
+    turns: list[IntegrityConversationTurn],
+    *,
+    fallback_status: str,
+) -> IntegrityStateResponse:
+    """One source of truth for the student-facing state payload.
+
+    `fallback_status` is used when the submission has no
+    IntegrityCheckSubmission row yet — "extracting" when the pipeline
+    is still running in the background, "no_check" when integrity is
+    disabled on the assignment.
+    """
+    if check is None:
+        return IntegrityStateResponse(
+            submission_id=str(submission_id),
+            overall_status=fallback_status,
+            overall_badge=None,
+            student_flagged_extraction=False,
+            extraction=None,
+            problems=[],
+            transcript=[],
+        )
+    return IntegrityStateResponse(
+        submission_id=str(submission_id),
+        overall_status=check.status,
+        overall_badge=check.overall_badge,
+        student_flagged_extraction=check.student_flagged_extraction,
+        extraction=_first_extraction(problems),
+        problems=_problem_summaries(problems),
+        transcript=_student_facing_transcript(turns),
+    )
+
+
 # ── Student endpoints ───────────────────────────────────────────────
 
 @router.get("/school/student/integrity/submissions/{submission_id}")
@@ -199,24 +257,15 @@ async def get_my_integrity_state(
             select(Assignment.integrity_check_enabled)
             .where(Assignment.id == submission.assignment_id)
         )).scalar_one_or_none()
-        overall_status = "extracting" if enabled else "no_check"
-        return IntegrityStateResponse(
-            submission_id=str(submission_id),
-            overall_status=overall_status,
-            overall_badge=None,
-            problems=[],
-            transcript=[],
+        return _build_state_response(
+            submission_id, None, [], [],
+            fallback_status="extracting" if enabled else "no_check",
         )
 
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
-
-    return IntegrityStateResponse(
-        submission_id=str(submission_id),
-        overall_status=check.status,
-        overall_badge=check.overall_badge,
-        problems=_problem_summaries(problems),
-        transcript=_student_facing_transcript(turns),
+    return _build_state_response(
+        submission_id, check, problems, turns, fallback_status="no_check",
     )
 
 
@@ -259,7 +308,10 @@ async def post_student_turn(
             status_code=409, detail="Integrity check already complete",
         )
 
-    await process_student_turn(check, message, body.seconds_on_turn, db)
+    await process_student_turn(
+        check, message, body.seconds_on_turn, db,
+        user_id=str(user.id),
+    )
     await db.commit()
 
     # `check` was mutated in-memory and the session uses
@@ -268,12 +320,47 @@ async def post_student_turn(
     # calls that landed during the agent loop.
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
-    return IntegrityStateResponse(
-        submission_id=str(submission_id),
-        overall_status=check.status,
-        overall_badge=check.overall_badge,
-        problems=_problem_summaries(problems),
-        transcript=_student_facing_transcript(turns),
+    return _build_state_response(
+        submission_id, check, problems, turns, fallback_status="no_check",
+    )
+
+
+@router.post(
+    "/school/student/integrity/submissions/{submission_id}/flag-extraction"
+)
+async def flag_extraction(
+    submission_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> IntegrityStateResponse:
+    """Student-raised flag: the Vision reader got my work wrong.
+
+    Idempotent — re-flagging is a no-op. Un-flagging is not supported:
+    once raised, the teacher sees the flag as an audit signal. 409s if
+    the check is already complete (too late to influence the agent's
+    judgment — the flag is meant to weigh the verdict as it's being
+    formed).
+    """
+    await _load_my_submission(db, submission_id, user.id)
+    check = await _load_check_for_submission(db, submission_id)
+    if check is None:
+        raise HTTPException(
+            status_code=404, detail="No integrity check for this submission",
+        )
+    if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
+        raise HTTPException(
+            status_code=409,
+            detail="Integrity check already finalized",
+        )
+
+    if not check.student_flagged_extraction:
+        check.student_flagged_extraction = True
+        await db.commit()
+
+    problems = await _load_problems(db, check.id)
+    turns = await _load_transcript(db, check.id)
+    return _build_state_response(
+        submission_id, check, problems, turns, fallback_status="no_check",
     )
 
 
@@ -308,6 +395,7 @@ class TeacherIntegrityDetail(BaseModel):
     overall_badge: str | None
     overall_confidence: float | None
     overall_summary: str | None
+    student_flagged_extraction: bool
     problems: list[TeacherIntegrityProblemRow]
     transcript: list[TeacherTranscriptTurn]
 
@@ -336,6 +424,7 @@ async def teacher_get_integrity_detail(
             overall_badge=None,
             overall_confidence=None,
             overall_summary=None,
+            student_flagged_extraction=False,
             problems=[],
             transcript=[],
         )
@@ -389,6 +478,7 @@ async def teacher_get_integrity_detail(
         overall_badge=check.overall_badge,
         overall_confidence=check.overall_confidence,
         overall_summary=check.overall_summary,
+        student_flagged_extraction=check.student_flagged_extraction,
         problems=problem_rows,
         transcript=transcript_rows,
     )

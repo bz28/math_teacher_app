@@ -1296,6 +1296,12 @@ export const schoolStudent = {
       { method: "POST", body: JSON.stringify(body) },
     );
   },
+  flagIntegrityExtraction(submissionId: string) {
+    return apiFetch<IntegrityStateResponse>(
+      `/school/student/integrity/submissions/${submissionId}/flag-extraction`,
+      { method: "POST" },
+    );
+  },
 };
 
 // ── Integrity check types (mirror api/routes/integrity_check.py) ──
@@ -1336,6 +1342,10 @@ export interface IntegrityStateResponse {
   submission_id: string;
   overall_status: IntegrityOverallStatus;
   overall_badge: IntegrityBadge | null;
+  student_flagged_extraction: boolean;
+  /** Vision extraction of the student's own work. Null when no check
+   *  has started yet (pipeline still extracting or integrity disabled). */
+  extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
 }
@@ -1388,6 +1398,7 @@ export interface TeacherIntegrityDetail {
   overall_badge: IntegrityBadge | null;
   overall_confidence: number | null;
   overall_summary: string | null;
+  student_flagged_extraction: boolean;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
 }

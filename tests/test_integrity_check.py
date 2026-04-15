@@ -1098,3 +1098,137 @@ async def test_verdict_rejects_bool_confidence(
             .where(IntegrityConversationTurn.role == "tool_result")
         )).scalars().all()
         assert any("confidence must be a number" in t.content for t in tool_results)
+
+
+# ── Extraction flag ────────────────────────────────────────────────
+
+
+async def test_flag_extraction_sets_flag_idempotent_and_terminal_409(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """`flag-extraction` raises the student's "reader got it wrong"
+    signal, is idempotent on re-flag, and 409s once the check has
+    gone terminal."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Initial state shows the flag is False.
+    state = (await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )).json()
+    assert state["student_flagged_extraction"] is False
+
+    # Raise the flag.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["student_flagged_extraction"] is True
+
+    # Idempotent — second call is a no-op, still returns True.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["student_flagged_extraction"] is True
+
+    # Teacher detail surfaces the flag too.
+    teacher_detail = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    assert teacher_detail["student_flagged_extraction"] is True
+
+    # Drive the check to terminal state and verify the flag endpoint
+    # 409s — once the agent has finalized, the flag can't change the
+    # picture.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "likely",
+                    "confidence": 0.9,
+                    "reasoning": "ok",
+                },
+                use_id="u1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "overall_badge": "likely",
+                    "overall_confidence": 0.9,
+                    "summary": "done",
+                },
+                use_id="u2",
+            ),
+        ],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "My reasoning on this problem."},
+    )
+    assert r.status_code == 200
+    assert r.json()["overall_status"] == "complete"
+
+    # Flag endpoint now rejects with 409.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 409
+
+
+async def test_flag_extraction_404_for_outsider(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["outsider_token"]),
+    )
+    assert r.status_code == 404
+
+
+async def test_flag_extraction_404_when_no_check_exists(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A submission without a running integrity check 404s on flag —
+    there's nothing to flag."""
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE assignments SET integrity_check_enabled=false WHERE id=:id"),
+            {"id": world["assignment_id"]},
+        )
+        await s.commit()
+
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 404
