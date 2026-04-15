@@ -1327,11 +1327,65 @@ export const schoolStudent = {
       { method: "POST", body: JSON.stringify(body) },
     );
   },
+  // ── Learn history ──
+  historyList(courseId?: string) {
+    const qs = courseId ? `?course_id=${encodeURIComponent(courseId)}` : "";
+    return apiFetch<SchoolHistoryResponse>(`/school/student/history${qs}`);
+  },
+  historyDetail(consumptionId: string) {
+    return apiFetch<SchoolHistoryDetail>(
+      `/school/student/history/${consumptionId}`,
+    );
+  },
 };
 
 export interface SchoolChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+// ── Learn history types (mirror api/routes/school_student_practice.py) ──
+
+export interface SchoolHistoryItem {
+  consumption_id: string;
+  variation_title: string | null;
+  variation_question: string;
+  anchor_position: number;
+  status: "completed" | "in_progress";
+  served_at: string;
+  completed_at: string | null;
+}
+
+export interface SchoolHistoryHomeworkGroup {
+  assignment_id: string;
+  assignment_title: string;
+  most_recent_activity: string;
+  items: SchoolHistoryItem[];
+}
+
+export interface SchoolHistoryCourseGroup {
+  course_id: string;
+  course_name: string;
+  homeworks: SchoolHistoryHomeworkGroup[];
+}
+
+export interface SchoolHistoryResponse {
+  courses: SchoolHistoryCourseGroup[];
+}
+
+export interface SchoolHistoryDetail {
+  consumption_id: string;
+  assignment_id: string;
+  assignment_title: string;
+  course_id: string;
+  course_name: string;
+  anchor_bank_item_id: string;
+  anchor_question: string;
+  anchor_position: number;
+  variation: VariationPayload;
+  status: "completed" | "in_progress";
+  served_at: string;
+  completed_at: string | null;
 }
 
 // ── Integrity check types (mirror api/routes/integrity_check.py) ──
