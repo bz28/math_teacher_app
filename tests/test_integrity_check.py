@@ -1,23 +1,17 @@
-"""Integration tests for the integrity-checker pipeline + trigger.
+"""End-to-end tests for the conversational integrity checker.
 
-Reuses the seeded `world` fixture from test_school_student_practice
-(teacher / student / course / section / approved primary / variations
-/ published HW / outsider student) so we don't duplicate setup.
+Reuses the seeded `world` fixture from conftest (teacher / student /
+outsider / course / section / approved primary / published HW) so we
+don't duplicate setup.
 
-Tests cover:
-- Pipeline trigger from submit_homework: rows created, statuses
-  correct, idempotent on retry
-- integrity_check_enabled=False: no rows created
-- HW with > MAX_SAMPLE primaries: only the first MAX_SAMPLE sampled
-- HW with 0 primaries: no rows, no error
-- Quizzes (assignment.type != homework): no rows even if submit
-  somehow reaches that path
-- Pipeline failure isolation: a forced exception in the pipeline
-  must NOT roll back the kid's submission
+Covers the pipeline trigger, the /turn endpoint loop (including tool
+calls + server-side guardrails), and the teacher detail / dismiss
+endpoints.
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 from unittest.mock import patch
 
@@ -25,28 +19,26 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 
 from api.database import get_session_factory
-from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckResponse
+from api.models.integrity_check import (
+    IntegrityCheckProblem,
+    IntegrityCheckSubmission,
+    IntegrityConversationTurn,
+)
 from api.models.question_bank import QuestionBankItem
 from api.routes.school_student_practice import drain_integrity_background_tasks
-from tests.conftest import TINY_PNG
-from tests.conftest import auth_headers as _auth
-
-# AI mocks (extract / generate / score) are applied globally via the
-# autouse `_mock_integrity_ai` fixture in conftest.py so every test
-# that hits the submit endpoint — including ones outside this file —
-# doesn't make real Claude calls through the background task.
+from tests.conftest import (
+    TINY_PNG,
+    make_text,
+    make_tool_use,
+    set_agent_script,
+)
+from tests.conftest import (
+    auth_headers as _auth,
+)
 
 
 async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
-    """Submit the HW and wait for the background integrity pipeline to
-    finish.
-
-    The pipeline runs as a fire-and-forget asyncio task in prod (so
-    the kid's submit doesn't block on 20–60s of LLM calls). Tests
-    still need to assert on the resulting integrity rows, so we
-    drain the task set before returning — mocked AI means the drain
-    completes instantly.
-    """
+    """Submit the HW and wait for the background integrity pipeline."""
     response = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
@@ -56,47 +48,50 @@ async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
     return response
 
 
-async def test_submit_creates_integrity_rows(
+# ── Pipeline trigger ────────────────────────────────────────────────
+
+
+async def test_submit_creates_check_and_opening_turn(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    # Script the opener so the test is deterministic.
+    set_agent_script([[make_text("Hi! How did you factor problem 1?")]])
+
     r = await _submit(client, world)
     assert r.status_code == 200, r.text
+    submission_id = r.json()["submission_id"]
 
     async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "awaiting_student"
+        assert check.overall_badge is None
+
         problems = (await s.execute(
             select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == r.json()["submission_id"])
-            .order_by(IntegrityCheckProblem.sample_position.asc())
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalars().all()
-        # The seeded world has exactly 1 primary problem
         assert len(problems) == 1
         p = problems[0]
         assert str(p.bank_item_id) == str(world["primary_id"])
-        assert p.sample_position == 0
-        assert p.status == "awaiting_student"
+        assert p.status == "pending"
         assert p.student_work_extraction is not None
-        assert p.badge is None  # not yet scored
-        assert p.teacher_dismissed is False
 
-        responses = (await s.execute(
-            select(IntegrityCheckResponse)
-            .where(IntegrityCheckResponse.integrity_check_problem_id == p.id)
-            .order_by(IntegrityCheckResponse.question_index.asc())
+        turns = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.integrity_check_submission_id == check.id)
+            .order_by(IntegrityConversationTurn.ordinal.asc())
         )).scalars().all()
-        # Stub returns 2 questions per problem
-        assert len(responses) == 2
-        assert responses[0].question_index == 0
-        assert responses[1].question_index == 1
-        assert responses[0].question_text
-        assert responses[0].student_answer is None
-        assert responses[0].answer_verdict is None
-        assert responses[0].rephrase_used is False
+        assert len(turns) == 1
+        assert turns[0].role == "agent"
+        assert turns[0].content == "Hi! How did you factor problem 1?"
 
 
 async def test_submit_with_integrity_disabled_creates_no_rows(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # Flip the per-HW toggle off
     async with get_session_factory()() as s:
         await s.execute(
             text("UPDATE assignments SET integrity_check_enabled=false WHERE id=:id"),
@@ -108,27 +103,25 @@ async def test_submit_with_integrity_disabled_creates_no_rows(
     assert r.status_code == 200
 
     async with get_session_factory()() as s:
-        problems = (await s.execute(
-            select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == r.json()["submission_id"])
+        checks = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == r.json()["submission_id"])
         )).scalars().all()
-        assert problems == []
+        assert checks == []
 
 
 async def test_submit_caps_sample_at_max_sample(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # Replace the HW content with 7 primary problems (more than the
-    # MAX_SAMPLE cap of 5). We seed extra approved primaries by
-    # cloning the existing one.
     from api.core.integrity_pipeline import MAX_SAMPLE
 
+    # Seed extra primary problems so the HW has more than MAX_SAMPLE.
     extra_ids: list[str] = []
     async with get_session_factory()() as s:
         original = (await s.execute(
             select(QuestionBankItem).where(QuestionBankItem.id == world["primary_id"])
         )).scalar_one()
-        for i in range(6):
+        for i in range(MAX_SAMPLE + 2):
             clone = QuestionBankItem(
                 course_id=original.course_id,
                 title=f"Extra {i}",
@@ -142,7 +135,6 @@ async def test_submit_caps_sample_at_max_sample(
             s.add(clone)
             await s.flush()
             extra_ids.append(str(clone.id))
-        # Build the new content array: original + 6 extras = 7 total
         new_problems = [str(world["primary_id"])] + extra_ids
         await s.execute(
             text("UPDATE assignments SET content=:c WHERE id=:id"),
@@ -160,21 +152,21 @@ async def test_submit_caps_sample_at_max_sample(
     assert r.status_code == 200
 
     async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == r.json()["submission_id"])
+        )).scalar_one()
         problems = (await s.execute(
             select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == r.json()["submission_id"])
-            .order_by(IntegrityCheckProblem.sample_position.asc())
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalars().all()
-        # Capped at MAX_SAMPLE (5), even though the HW has 7 primaries
         assert len(problems) == MAX_SAMPLE
-        # Sample positions are 0..MAX_SAMPLE-1 in order
-        assert [p.sample_position for p in problems] == list(range(MAX_SAMPLE))
+        assert sorted(p.sample_position for p in problems) == list(range(MAX_SAMPLE))
 
 
 async def test_submit_with_zero_primaries_no_error(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # Empty the assignment's content
     async with get_session_factory()() as s:
         await s.execute(
             text("UPDATE assignments SET content=:c WHERE id=:id"),
@@ -183,69 +175,108 @@ async def test_submit_with_zero_primaries_no_error(
         await s.commit()
 
     r = await _submit(client, world)
-    # Submit must still succeed even though there's nothing to integrity-check
     assert r.status_code == 200
 
     async with get_session_factory()() as s:
-        problems = (await s.execute(
-            select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == r.json()["submission_id"])
+        checks = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == r.json()["submission_id"])
         )).scalars().all()
-        assert problems == []
+        assert checks == []
 
 
 async def test_pipeline_failure_does_not_roll_back_submission(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # Force the stub to throw. The submission must still land.
     with patch(
         "api.core.integrity_pipeline.extract_student_work",
         side_effect=RuntimeError("simulated pipeline failure"),
     ):
         r = await _submit(client, world)
-
     assert r.status_code == 200
     submission_id = r.json()["submission_id"]
 
     async with get_session_factory()() as s:
-        # Submission row exists
         sub_rows = (await s.execute(
             text("SELECT id FROM submissions WHERE id=:id"),
             {"id": submission_id},
         )).all()
         assert len(sub_rows) == 1
-        # No integrity rows because the pipeline failed
-        problems = (await s.execute(
-            select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == submission_id)
+        checks = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
         )).scalars().all()
-        assert problems == []
+        assert checks == []
 
 
-async def test_resubmit_does_not_duplicate_integrity_rows(
+async def test_unreadable_gate_skips_entire_check(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # First submit creates rows.
-    r1 = await _submit(client, world)
-    assert r1.status_code == 200
-
-    # Second submit is rejected at the application layer (409),
-    # so the pipeline never re-runs anyway. Confirm there's still
-    # exactly one set of integrity rows for this student's submission.
-    r2 = await _submit(client, world)
-    assert r2.status_code == 409
+    """When extraction confidence is below the threshold, the whole
+    check is marked skipped_unreadable and no conversation is
+    started."""
+    low_conf = {"steps": [], "confidence": 0.05}
+    with patch(
+        "api.core.integrity_pipeline.extract_student_work",
+        return_value=low_conf,
+    ):
+        r = await _submit(client, world)
+    assert r.status_code == 200
+    submission_id = r.json()["submission_id"]
 
     async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "skipped_unreadable"
+        assert check.overall_badge == "unreadable"
+
         problems = (await s.execute(
             select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == r1.json()["submission_id"])
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalars().all()
         assert len(problems) == 1
+        assert problems[0].status == "skipped_unreadable"
+        assert problems[0].badge == "unreadable"
+
+        turns = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.integrity_check_submission_id == check.id)
+        )).scalars().all()
+        assert turns == []
 
 
-async def test_get_state_after_submit_returns_in_progress(
+async def test_pipeline_idempotent_on_direct_re_call(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    from api.core.integrity_pipeline import start_integrity_check
+    from api.models.assignment import Submission
+
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == submission_id)
+        )).scalar_one()
+        await start_integrity_check(sub.id, s)
+        await s.commit()
+
+        checks = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == sub.id)
+        )).scalars().all()
+        assert len(checks) == 1
+
+
+# ── Student state + turn endpoints ──────────────────────────────────
+
+
+async def test_get_state_after_submit_returns_awaiting_student(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    set_agent_script([[make_text("Hi there!")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
@@ -255,24 +286,19 @@ async def test_get_state_after_submit_returns_in_progress(
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["overall_status"] == "in_progress"
+    assert body["overall_status"] == "awaiting_student"
     assert len(body["problems"]) == 1
-    p = body["problems"][0]
-    assert p["question_count"] == 2
-    assert p["answered_count"] == 0
-    assert p["status"] == "awaiting_student"
+    assert body["problems"][0]["status"] == "pending"
+    assert len(body["transcript"]) == 1
+    assert body["transcript"][0]["role"] == "agent"
+    assert body["transcript"][0]["content"] == "Hi there!"
 
 
-async def test_get_state_returns_pending_when_enabled_but_no_rows(
+async def test_get_state_returns_extracting_before_pipeline_writes(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """When the background pipeline has not yet inserted rows and the
-    HW has integrity enabled, the state endpoint should report
-    "pending" so the frontend can show a preparing screen and poll."""
-    # Create a Submission row directly (simulating the brief window
-    # after submit but before the background task has committed).
-    # We do NOT call _submit here — that would drain background
-    # tasks and we'd never observe the pending state.
+    """Before the pipeline has created any rows, the endpoint should
+    report "extracting" when integrity is enabled."""
     from api.models.assignment import Submission
     async with get_session_factory()() as s:
         sub = Submission(
@@ -296,17 +322,14 @@ async def test_get_state_returns_pending_when_enabled_but_no_rows(
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["overall_status"] == "pending"
+    assert body["overall_status"] == "extracting"
     assert body["problems"] == []
+    assert body["transcript"] == []
 
 
-async def test_get_state_returns_no_check_when_disabled_and_no_rows(
+async def test_get_state_returns_no_check_when_disabled(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """When integrity is disabled on the HW and there are no rows, the
-    state endpoint should report "no_check" — NOT "pending". The
-    distinction matters because the frontend would poll forever on
-    "pending" but go straight to the submitted view on "no_check"."""
     async with get_session_factory()() as s:
         await s.execute(
             text("UPDATE assignments SET integrity_check_enabled=false WHERE id=:id"),
@@ -314,8 +337,6 @@ async def test_get_state_returns_no_check_when_disabled_and_no_rows(
         )
         await s.commit()
 
-    # With integrity disabled, _submit will skip the background task
-    # entirely (see submit_homework), so no rows get created.
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
@@ -326,7 +347,6 @@ async def test_get_state_returns_no_check_when_disabled_and_no_rows(
     assert r.status_code == 200
     body = r.json()
     assert body["overall_status"] == "no_check"
-    assert body["problems"] == []
 
 
 async def test_get_state_404_for_outsider(
@@ -342,217 +362,386 @@ async def test_get_state_404_for_outsider(
     assert r.status_code == 404
 
 
-async def test_get_next_returns_first_unanswered(
+async def test_turn_rejects_short_messages(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    set_agent_script([[make_text("Opener")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
-    r = await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["done"] is False
-    assert body["question_index"] == 0
-    assert body["problem_position"] == 1
-    assert body["total_problems"] == 1
-    assert body["questions_in_problem"] == 2
-    assert "question_text" in body
-    assert "question_id" in body
-
-
-async def test_answer_happy_path_advances_and_scores(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-
-    # Get question 1
-    nxt = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-    q1_id = nxt["question_id"]
-
-    # Submit a "good" answer (>= 30 chars per the stub)
-    long_answer = "I factored the quadratic into two binomials and set each to zero."
     r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
         headers=_auth(world["student_token"]),
-        json={"question_id": q1_id, "answer": long_answer},
-    )
-    assert r.status_code == 200
-    nxt2 = r.json()
-    # Should now be on question 2
-    assert nxt2["done"] is False
-    assert nxt2["question_index"] == 1
-    assert nxt2["question_id"] != q1_id
-
-    # Answer question 2 → done + badge computed
-    r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
-        headers=_auth(world["student_token"]),
-        json={"question_id": nxt2["question_id"], "answer": long_answer},
-    )
-    assert r.status_code == 200
-    assert r.json() == {"done": True}
-
-    # Verify problem is now complete + has a badge
-    state = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}",
-        headers=_auth(world["student_token"]),
-    )).json()
-    assert state["overall_status"] == "complete"
-    p = state["problems"][0]
-    assert p["status"] == "complete"
-    assert p["answered_count"] == 2
-
-    # And badge is "likely" (both answers were "good")
-    async with get_session_factory()() as s:
-        problem = (await s.execute(
-            select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == submission_id)
-        )).scalar_one()
-        assert problem.badge == "likely"
-        assert problem.raw_score == 1.0
-        assert problem.ai_reasoning is not None
-
-
-async def test_answer_rejects_short_answers(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-
-    nxt = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-
-    r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
-        headers=_auth(world["student_token"]),
-        json={"question_id": nxt["question_id"], "answer": "x"},
+        json={"message": "x"},
     )
     assert r.status_code == 400
 
 
-async def test_answer_idempotent_overwrites_previous(
+async def test_turn_happy_path_verdict_then_finish(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    # Opener, then the student sends one message. Agent responds with
+    # submit_problem_verdict; server accepts; agent calls
+    # finish_check; server accepts; conversation goes to "complete".
+    set_agent_script([
+        [make_text("Opener: walk me through factoring problem 1.")],
+    ])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
-    nxt = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-    q_id = nxt["question_id"]
+    # Grab the problem_id for the agent script.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
 
-    # First answer: weak (5..29 chars)
-    await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
-        headers=_auth(world["student_token"]),
-        json={"question_id": q_id, "answer": "short answer"},
-    )
+    # Script: first agent call (after student turn) returns a verdict.
+    # Second call (after tool_result) returns finish_check.
+    set_agent_script([
+        [
+            make_text("Nice — sounds like you get it."),
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "likely",
+                    "confidence": 0.85,
+                    "reasoning": "Explained factoring with specific numbers.",
+                },
+                use_id="u1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "overall_badge": "likely",
+                    "overall_confidence": 0.85,
+                    "summary": "Student explained the factoring clearly.",
+                },
+                use_id="u2",
+            ),
+        ],
+    ])
 
-    # Re-answer the SAME question id with a "good" answer — overwrites
     r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
         headers=_auth(world["student_token"]),
         json={
-            "question_id": q_id,
-            "answer": "I factored the quadratic into two binomials and solved each.",
+            "message": "I looked for two numbers that multiply to 6 and add to -5.",
+            "seconds_on_turn": 12,
         },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert body["overall_badge"] == "likely"
+
+    # Transcript visible to the student: opener, their own message,
+    # the agent's acknowledgement, and the closing message. Tool call
+    # rows must not leak into the student view.
+    roles = [t["role"] for t in body["transcript"]]
+    assert "tool_call" not in roles
+    assert "tool_result" not in roles
+
+    # DB state: problem verdict_submitted, check complete.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.overall_summary is not None
+        assert check.overall_confidence == 0.85
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        assert problem.status == "verdict_submitted"
+        assert problem.badge == "likely"
+        assert problem.confidence == 0.85
+
+
+async def test_turn_finish_before_all_verdicts_rejected(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """If the agent calls finish_check before every sampled problem
+    has a verdict, the server rejects with a tool_result and the
+    status stays in_progress."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "overall_badge": "likely",
+                    "overall_confidence": 0.9,
+                    "summary": "Trying to finish early.",
+                },
+                use_id="u1",
+            ),
+        ],
+        # After the rejection, the agent falls back to plain text.
+        [make_text("Let me ask a bit more first.")],
+    ])
+
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Hmm, I'm not sure about step 2."},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["overall_status"] == "in_progress"
+    assert body["overall_badge"] is None
+
+    # The rejection reason should be recorded on the hidden transcript.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "tool_result",
+            )
+        )).scalars().all()
+        assert tool_results
+        assert any("still missing" in t.content for t in tool_results)
+
+
+async def test_turn_verdict_floor_rejects_when_no_student_turn_yet(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """If the agent somehow tries to verdict on a problem before any
+    student turn has landed on it, the server rejects it. We simulate
+    this by patching VERDICT_STUDENT_TURN_FLOOR higher than the count
+    the student has accumulated on this turn."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "likely",
+                    "confidence": 0.9,
+                    "reasoning": "Premature.",
+                },
+                use_id="u1",
+            ),
+        ],
+        [make_text("Let me actually ask.")],
+    ])
+
+    # Bump the floor to 2 so this student turn (which brings count to
+    # 1) isn't enough to allow a verdict.
+    with patch(
+        "api.core.integrity_pipeline.VERDICT_STUDENT_TURN_FLOOR", 2,
+    ):
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "First message from the student."},
+        )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        assert problem.status == "pending"
+        assert problem.badge is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "tool_result",
+            )
+        )).scalars().all()
+        assert any("need at least" in t.content for t in tool_results)
+
+
+async def test_turn_verdict_rejects_invalid_problem_id(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    bogus_id = str(uuid.uuid4())
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": bogus_id,
+                    "badge": "likely",
+                    "confidence": 0.9,
+                    "reasoning": "bogus",
+                },
+                use_id="u1",
+            ),
+        ],
+        [make_text("Recovering.")],
+    ])
+
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Hello, this is a real message."},
     )
     assert r.status_code == 200
 
     async with get_session_factory()() as s:
-        response = (await s.execute(
-            select(IntegrityCheckResponse).where(IntegrityCheckResponse.id == q_id)
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
         )).scalar_one()
-        # Verdict should now be "good", not "weak"
-        assert response.answer_verdict == "good"
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "tool_result",
+            )
+        )).scalars().all()
+        assert any("does not match" in t.content for t in tool_results)
 
 
-async def test_answer_404_for_outsider(
+async def test_turn_hard_cap_force_finalizes(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    """Send enough student turns to hit MAX_STUDENT_TURNS; the check
+    should force-finalize with `uncertain`."""
+    from api.core.integrity_pipeline import MAX_STUDENT_TURNS
+
+    set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
-    nxt = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
+    for i in range(MAX_STUDENT_TURNS):
+        # Empty agent script on each iteration → default text reply.
+        set_agent_script([])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": f"Turn number {i + 1} from the student here."},
+        )
+        assert r.status_code == 200
+
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert body["overall_badge"] == "uncertain"
+
+    # An 11th turn attempt is now rejected.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
         headers=_auth(world["student_token"]),
-    )).json()
+        json={"message": "One more message after the cap."},
+    )
+    assert r.status_code == 409
+
+
+async def test_turn_409_when_complete(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Once the check is complete, /turn returns 409."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "likely",
+                    "confidence": 0.9,
+                    "reasoning": "ok",
+                },
+                use_id="u1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "overall_badge": "likely",
+                    "overall_confidence": 0.9,
+                    "summary": "done",
+                },
+                use_id="u2",
+            ),
+        ],
+    ])
 
     r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
-        headers=_auth(world["outsider_token"]),
-        json={
-            "question_id": nxt["question_id"],
-            "answer": "long enough answer here",
-        },
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "My reasoning on this problem."},
     )
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["overall_status"] == "complete"
 
-
-async def test_rephrase_endpoint_removed(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    """The rephrase endpoint was removed in PR 4."""
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-
+    # Another turn → 409.
     r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/rephrase",
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
         headers=_auth(world["student_token"]),
-        json={"question_id": "00000000-0000-0000-0000-000000000000"},
+        json={"message": "Can I say something else?"},
     )
-    # Expect 404 or 405 — the route no longer exists
-    assert r.status_code in (404, 405)
+    assert r.status_code == 409
 
 
-async def test_resume_returns_same_question_after_partial(
+# ── Teacher endpoints ──────────────────────────────────────────────
+
+
+async def test_teacher_get_detail_includes_extraction_and_transcript(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """A kid who answers question 0 and then leaves should resume at
-    question 1 — not get question 0 again."""
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-
-    nxt = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-    q1_id = nxt["question_id"]
-
-    await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/answer",
-        headers=_auth(world["student_token"]),
-        json={
-            "question_id": q1_id,
-            "answer": "I solved it step by step over the course of a few minutes.",
-        },
-    )
-
-    # "Quit" — fetch next again, should be question 1 (not 0)
-    nxt2 = (await client.get(
-        f"/v1/school/student/integrity/submissions/{submission_id}/next",
-        headers=_auth(world["student_token"]),
-    )).json()
-    assert nxt2["done"] is False
-    assert nxt2["question_index"] == 1
-    assert nxt2["question_id"] != q1_id
-
-
-# ── Teacher endpoints ──
-
-async def test_teacher_get_integrity_detail(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
+    set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
@@ -562,17 +751,19 @@ async def test_teacher_get_integrity_detail(
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["overall_status"] == "in_progress"
+    assert body["overall_status"] == "awaiting_student"
     assert len(body["problems"]) == 1
     p = body["problems"][0]
-    assert p["badge"] is None  # not yet scored
-    assert len(p["responses"]) == 2
-    assert all(r["student_answer"] is None for r in p["responses"])
+    assert p["student_work_extraction"] is not None
+    assert p["question"]  # surfaced alongside extraction for context
+    assert len(body["transcript"]) == 1
+    assert body["transcript"][0]["role"] == "agent"
 
 
 async def test_teacher_get_integrity_403_for_other_teacher(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
@@ -580,7 +771,7 @@ async def test_teacher_get_integrity_403_for_other_teacher(
         from api.core.auth import create_access_token, hash_password
         from api.models.user import User
         other = User(
-            email=f"other_t_{__import__('uuid').uuid4().hex[:6]}@t.com",
+            email=f"other_t_{uuid.uuid4().hex[:6]}@t.com",
             password_hash=hash_password("x"),
             grade_level=12,
             role="teacher",
@@ -600,6 +791,7 @@ async def test_teacher_get_integrity_403_for_other_teacher(
 async def test_teacher_dismiss_marks_problem(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
@@ -612,7 +804,7 @@ async def test_teacher_dismiss_marks_problem(
     r = await client.post(
         f"/v1/teacher/integrity/submissions/{submission_id}/dismiss",
         headers=_auth(world["teacher_token"]),
-        json={"problem_id": problem_id, "reason": "AI question was bad"},
+        json={"problem_id": problem_id, "reason": "AI question was off"},
     )
     assert r.status_code == 204
 
@@ -622,52 +814,269 @@ async def test_teacher_dismiss_marks_problem(
     )).json()
     p = detail2["problems"][0]
     assert p["teacher_dismissed"] is True
-    assert p["teacher_dismissal_reason"] == "AI question was bad"
+    assert p["teacher_dismissal_reason"] == "AI question was off"
     assert p["status"] == "dismissed"
 
-    # Re-dismiss with a different reason updates the reason (the
-    # earlier impl silently dropped the new value via an `if not
-    # already_dismissed` guard — reverted that to allow updates).
+    # Re-dismiss with a new reason updates the reason.
     r = await client.post(
         f"/v1/teacher/integrity/submissions/{submission_id}/dismiss",
         headers=_auth(world["teacher_token"]),
-        json={"problem_id": problem_id, "reason": "actually it was a typo in the rubric"},
+        json={"problem_id": problem_id, "reason": "revised reason"},
     )
     assert r.status_code == 204
-
     detail3 = (await client.get(
         f"/v1/teacher/integrity/submissions/{submission_id}",
         headers=_auth(world["teacher_token"]),
     )).json()
-    p = detail3["problems"][0]
-    assert p["teacher_dismissed"] is True
-    assert p["teacher_dismissal_reason"] == "actually it was a typo in the rubric"
+    assert detail3["problems"][0]["teacher_dismissal_reason"] == "revised reason"
 
 
-async def test_pipeline_idempotent_on_direct_re_call(
+async def test_teacher_dismiss_recomputes_overall_badge(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # Submit once via the API (creates one set of rows), then call
-    # start_integrity_check directly with the same submission_id —
-    # the idempotency guard should bail and the row count should
-    # stay at 1.
-    from api.core.integrity_pipeline import start_integrity_check
-    from api.models.assignment import Submission
-
+    """When a teacher dismisses the only `unlikely` problem, the
+    overall header badge must stop flagging the student."""
+    set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
     async with get_session_factory()() as s:
-        sub = (await s.execute(
-            select(Submission).where(Submission.id == submission_id)
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
         )).scalar_one()
-        # Second call must be a no-op
-        await start_integrity_check(sub.id, s)
-        await s.commit()
-
-        problems = (await s.execute(
+        problem = (await s.execute(
             select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.submission_id == sub.id)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    # Run the happy path to completion with an `unlikely` verdict + overall.
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "unlikely",
+                    "confidence": 0.9,
+                    "reasoning": "Couldn't explain the factoring.",
+                },
+                use_id="u1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "overall_badge": "unlikely",
+                    "overall_confidence": 0.9,
+                    "summary": "student stuck.",
+                },
+                use_id="u2",
+            ),
+        ],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I think I factored it wrong."},
+    )
+    assert r.status_code == 200
+    detail = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    assert detail["overall_badge"] == "unlikely"
+
+    # Teacher dismisses the only flagged problem. The submission no
+    # longer has an active unlikely verdict → overall_badge is None.
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{submission_id}/dismiss",
+        headers=_auth(world["teacher_token"]),
+        json={"problem_id": problem_id, "reason": "irrelevant"},
+    )
+    assert r.status_code == 204
+
+    detail2 = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    assert detail2["overall_badge"] is None
+
+
+async def test_verdict_rejected_on_teacher_dismissed_problem(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Teacher's dismiss outranks the agent. A subsequent agent
+    verdict on the same problem is rejected with a tool_result."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    # Teacher dismisses mid-conversation.
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{submission_id}/dismiss",
+        headers=_auth(world["teacher_token"]),
+        json={"problem_id": problem_id, "reason": "ignore"},
+    )
+    assert r.status_code == 204
+
+    # Agent now tries to submit a verdict on the same problem.
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "likely",
+                    "confidence": 0.9,
+                    "reasoning": "late verdict",
+                },
+                use_id="u1",
+            ),
+        ],
+        [make_text("Moving on.")],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Here's my explanation."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.id == uuid.UUID(problem_id))
+        )).scalar_one()
+        # Dismissed status preserved; agent did NOT overwrite.
+        assert problem.status == "dismissed"
+        assert problem.teacher_dismissed is True
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.role == "tool_result",
+            )
         )).scalars().all()
-        # Still exactly one row (the seeded HW has 1 primary)
-        assert len(problems) == 1
+        assert any("dismissed" in t.content for t in tool_results)
+
+
+async def test_turn_force_finalizes_on_agent_failure_at_cap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """If the agent call fails on the student's final allowed turn,
+    the check must still force-finalize so the teacher sees a
+    resolved state instead of a permanently `in_progress` row."""
+    from api.core.integrity_pipeline import MAX_STUDENT_TURNS
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Burn MAX_STUDENT_TURNS - 1 successful student turns with the
+    # default script (empty → default text reply).
+    for i in range(MAX_STUDENT_TURNS - 1):
+        set_agent_script([])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": f"Turn number {i + 1} from the student."},
+        )
+        assert r.status_code == 200
+
+    # 10th turn: make the agent call raise. Check must still complete.
+    with patch(
+        "api.core.integrity_pipeline.run_agent_turn",
+        side_effect=RuntimeError("simulated LLM failure"),
+    ):
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "Tenth turn that triggers the failure."},
+        )
+    assert r.status_code == 200
+    assert r.json()["overall_status"] == "complete"
+    assert r.json()["overall_badge"] == "uncertain"
+
+
+async def test_turn_request_rejects_out_of_range_seconds(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """`seconds_on_turn` is clamped so a tampered client can't land
+    negative or absurd values in the teacher transcript."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    for bad in (-1, 10_000):
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={
+                "message": "This is a valid message.",
+                "seconds_on_turn": bad,
+            },
+        )
+        assert r.status_code == 422, r.text
+
+
+async def test_verdict_rejects_bool_confidence(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Booleans are a Python `int` subclass. Confidence=true/false must
+    be rejected by the tool-call validator."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "badge": "likely",
+                    "confidence": True,
+                    "reasoning": "bool",
+                },
+                use_id="u1",
+            ),
+        ],
+        [make_text("Fine, moving on.")],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "My first real message."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any("confidence must be a number" in t.content for t in tool_results)
