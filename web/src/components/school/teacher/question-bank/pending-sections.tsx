@@ -18,6 +18,10 @@ interface PendingSectionsProps {
   /** A pre-fetched lookup of approved parents by id, so practice
    *  problem groups can render the parent's title without a refetch. */
   parentLookup?: Map<string, BankItem>;
+  /** True after the parent lookup's first fetch has resolved. Lets
+   *  VariationGroupRow distinguish "still loading" (show a spinner)
+   *  from "parent really isn't here" (show "removed" copy). */
+  parentLookupLoaded?: boolean;
 }
 
 /**
@@ -32,6 +36,7 @@ export function PendingSections({
   onReviewAllNew,
   onReviewVariationsForParent,
   parentLookup,
+  parentLookupLoaded = false,
 }: PendingSectionsProps) {
   const primaries = useMemo(
     () => items.filter((i) => !i.parent_question_id),
@@ -102,6 +107,7 @@ export function PendingSections({
                 <VariationGroupRow
                   key={parentId}
                   parent={parent}
+                  parentLoaded={parentLookupLoaded}
                   pendingCount={vs.length}
                   onViewParent={() => parent && onOpenItem(parent)}
                   onReview={() => onReviewVariationsForParent(parentId)}
@@ -161,20 +167,23 @@ function Section({
 
 function VariationGroupRow({
   parent,
+  parentLoaded,
   pendingCount,
   onViewParent,
   onReview,
 }: {
   parent?: BankItem;
+  parentLoaded: boolean;
   pendingCount: number;
   onViewParent: () => void;
   onReview: () => void;
 }) {
-  // The parent question is fetched out-of-band (parentLookup); it might
-  // not be loaded yet when this renders. Fall back to a plain card with
-  // no preview/click — Review still works because it uses the parent_id
-  // which the variation already carries.
   const hasParent = !!parent;
+  // Three states:
+  //   loaded + parent  → normal display, View original enabled
+  //   not loaded yet   → spinner placeholder, View original hidden
+  //   loaded + no parent → "Parent question removed" copy, no link
+  const parentMissing = parentLoaded && !parent;
 
   return (
     <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50/40 p-3 transition-all hover:border-amber-300 dark:border-amber-500/30 dark:bg-amber-500/5">
@@ -184,22 +193,41 @@ function VariationGroupRow({
           {pendingCount} pending
         </span>
       </div>
-      <button
-        type="button"
-        onClick={hasParent ? onViewParent : undefined}
-        disabled={!hasParent}
-        className="group mt-1.5 block w-full rounded-[--radius-sm] px-1 py-1 text-left transition-colors hover:bg-amber-100/40 disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-amber-500/10"
-        title={hasParent ? "View the original problem" : undefined}
-      >
-        <div className="line-clamp-1 text-sm font-bold text-text-primary group-hover:text-primary">
-          {parent?.title ?? "Loading parent question..."}
-        </div>
-        {parent && (
+
+      {hasParent ? (
+        <button
+          type="button"
+          onClick={onViewParent}
+          className="group mt-1.5 block w-full rounded-[--radius-sm] px-1 py-1 text-left transition-colors hover:bg-amber-100/40 dark:hover:bg-amber-500/10"
+          title="View the original problem"
+        >
+          <div className="line-clamp-1 text-sm font-bold text-text-primary group-hover:text-primary">
+            {parent.title}
+          </div>
           <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-text-muted">
             <MathText text={parent.question} />
           </div>
-        )}
-      </button>
+        </button>
+      ) : parentMissing ? (
+        <div className="mt-1.5 px-1 py-1">
+          <div className="text-sm font-bold italic text-text-muted">
+            Parent question removed
+          </div>
+          <div className="mt-1 text-xs text-text-muted">
+            The original problem is no longer in the bank. You can still review
+            or reject these orphaned practice problems.
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1.5 flex items-center gap-2 px-1 py-1">
+          <span
+            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700"
+            aria-hidden
+          />
+          <span className="text-xs text-text-muted">Loading parent question…</span>
+        </div>
+      )}
+
       <div className="mt-2 flex items-center justify-end gap-3 px-1 text-[11px] font-semibold">
         {hasParent && (
           <button
