@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { teacher, type TeacherUnit } from "@/lib/api";
 import { topUnits } from "@/lib/units";
+import { SelectableChip } from "./selectable-chip";
 
 // Compact multi-select for picking 1+ units. Used by the homework
 // creation flows. Single-select is the dominant case (a HW for one
@@ -61,53 +62,23 @@ export function UnitMultiSelect({
   }
   if (units.length === 0) {
     return (
-      <p className="text-xs text-text-muted italic">
+      <p className="text-xs italic text-text-muted">
         No units yet. Create one in the Materials tab first.
       </p>
     );
   }
 
-  const tops = topUnits(units);
-
   return (
     <div className="flex flex-wrap gap-1.5">
-      {tops.map((top) => (
-        <UnitChip
+      {topUnits(units).map((top) => (
+        <SelectableChip
           key={top.id}
           label={top.name}
-          active={selected.includes(top.id)}
+          selected={selected.includes(top.id)}
           disabled={disabled}
           onToggle={() => toggle(top.id)}
         />
       ))}
     </div>
-  );
-}
-
-function UnitChip({
-  label,
-  active,
-  disabled,
-  onToggle,
-}: {
-  label: string;
-  active: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      disabled={disabled}
-      className={`rounded-[--radius-pill] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
-        active
-          ? "border-primary bg-primary text-white"
-          : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
-      }`}
-    >
-      {active && <span className="mr-1">✓</span>}
-      {label}
-    </button>
   );
 }
