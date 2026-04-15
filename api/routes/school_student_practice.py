@@ -32,7 +32,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1031,4 +1031,252 @@ async def learn_this_problem(
         consumption_id=str(consumption.id),
         anchor_bank_item_id=str(anchor_id),
         remaining=remaining,
+    )
+
+
+# ── Learn history ──
+#
+# Populates the /history tab for school students by reading their own
+# Learn-mode BankConsumption rows (grouped by HW, newest first). The
+# plan deliberately excludes Practice rows — a past MCQ is disposable
+# and re-opening it for review adds nothing. Learn rows ARE worth
+# surfacing: the timeline walks through a worked solution and the
+# student may want to re-read it later.
+
+
+class HistoryItem(BaseModel):
+    """One Learn attempt shown in the History list."""
+
+    consumption_id: str
+    variation_title: str | None
+    variation_question: str
+    anchor_position: int
+    status: Literal["completed", "in_progress"]
+    served_at: datetime
+    completed_at: datetime | None
+
+
+class HistoryHomeworkGroup(BaseModel):
+    assignment_id: str
+    assignment_title: str
+    most_recent_activity: datetime
+    items: list[HistoryItem]
+
+
+class HistoryCourseGroup(BaseModel):
+    course_id: str
+    course_name: str
+    homeworks: list[HistoryHomeworkGroup]
+
+
+class HistoryResponse(BaseModel):
+    courses: list[HistoryCourseGroup]
+
+
+class HistoryDetailResponse(BaseModel):
+    consumption_id: str
+    assignment_id: str
+    assignment_title: str
+    course_id: str
+    course_name: str
+    anchor_bank_item_id: str
+    anchor_question: str
+    anchor_position: int
+    variation: VariationPayload
+    status: Literal["completed", "in_progress"]
+    served_at: datetime
+    completed_at: datetime | None
+
+
+@router.get("/history")
+async def learn_history(
+    course_id: uuid.UUID | None = None,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> HistoryResponse:
+    """Return every Learn attempt belonging to the requesting student,
+    grouped by course then homework. Practice attempts are excluded —
+    revisiting a past MCQ adds no learning value. In-progress rows
+    (completed_at is null) are included alongside completed ones.
+
+    The endpoint joins BankConsumption → Assignment → Course so we can
+    group server-side and ship a shape the History page renders with
+    zero reshaping. Access is scoped to courses the student is
+    currently enrolled in; unenrollment immediately hides history for
+    that course (FK cascade + the enrollment join).
+    """
+    # Rows the student owns, scoped to Learn attempts only. The
+    # enrollment gate is an EXISTS subquery rather than a join because
+    # a join on AssignmentSection can produce duplicate rows when the
+    # student is enrolled in multiple sections receiving the same HW;
+    # DISTINCT doesn't work on the outer select because Assignment.content
+    # is JSON and Postgres has no equality operator for JSON. EXISTS
+    # sidesteps both. Ordered by served_at desc so within-group
+    # ordering comes straight out of the query.
+    enrollment_exists = exists(
+        select(1)
+        .select_from(SectionEnrollment)
+        .join(
+            AssignmentSection,
+            AssignmentSection.section_id == SectionEnrollment.section_id,
+        )
+        .where(
+            SectionEnrollment.student_id == BankConsumption.student_id,
+            AssignmentSection.assignment_id == BankConsumption.assignment_id,
+        )
+    )
+    stmt = (
+        select(
+            BankConsumption,
+            QuestionBankItem,
+            Assignment,
+            Course,
+        )
+        .join(QuestionBankItem, QuestionBankItem.id == BankConsumption.bank_item_id)
+        .join(Assignment, Assignment.id == BankConsumption.assignment_id)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(
+            BankConsumption.student_id == user.id,
+            BankConsumption.context == "learn",
+            enrollment_exists,
+        )
+        .order_by(BankConsumption.served_at.desc())
+    )
+    if course_id is not None:
+        stmt = stmt.where(Course.id == course_id)
+
+    rows = (await db.execute(stmt)).all()
+
+    # Precompute the HW primary → position map per assignment so we can
+    # label each row "Similar to Problem N". Done once per unique
+    # assignment to avoid re-parsing the content JSON for every row.
+    anchor_position: dict[tuple[str, str], int] = {}
+    for _, _, assignment, _ in rows:
+        aid = str(assignment.id)
+        primary_ids = problem_ids_in_content(assignment.content)
+        for pos, pid in enumerate(primary_ids, start=1):
+            anchor_position[(aid, pid)] = pos
+
+    # Two-level group: course → homework → items. `dict` insertion
+    # order preserves the served_at-desc ordering we selected on.
+    course_map: dict[str, HistoryCourseGroup] = {}
+    hw_map: dict[tuple[str, str], HistoryHomeworkGroup] = {}
+
+    for consumption, item, assignment, course in rows:
+        cid = str(course.id)
+        aid = str(assignment.id)
+
+        if cid not in course_map:
+            course_map[cid] = HistoryCourseGroup(
+                course_id=cid,
+                course_name=course.name,
+                homeworks=[],
+            )
+
+        hw_key = (cid, aid)
+        if hw_key not in hw_map:
+            group = HistoryHomeworkGroup(
+                assignment_id=aid,
+                assignment_title=assignment.title,
+                most_recent_activity=consumption.served_at,
+                items=[],
+            )
+            hw_map[hw_key] = group
+            course_map[cid].homeworks.append(group)
+
+        hw_map[hw_key].items.append(HistoryItem(
+            consumption_id=str(consumption.id),
+            variation_title=item.title,
+            variation_question=item.question,
+            anchor_position=anchor_position.get(
+                (aid, str(consumption.anchor_bank_item_id)),
+                0,
+            ),
+            status=(
+                "completed" if consumption.completed_at is not None else "in_progress"
+            ),
+            served_at=consumption.served_at,
+            completed_at=consumption.completed_at,
+        ))
+
+    return HistoryResponse(courses=list(course_map.values()))
+
+
+@router.get("/history/{consumption_id}")
+async def learn_history_detail(
+    consumption_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> HistoryDetailResponse:
+    """Return everything the history detail page needs to render a
+    past Learn attempt: the variation itself, the anchor question and
+    its HW position, and the HW / course names for the breadcrumb.
+
+    No new BankConsumption row is created — re-reading a completed
+    Learn attempt isn't a new mode-attempt. The row is the archive.
+    """
+    # Mirror the list endpoint's enrollment gate: current enrollment
+    # in at least one section the assignment was published to. A
+    # student who dropped the course should lose access to past
+    # attempts here as the plan requires.
+    enrollment_exists = exists(
+        select(1)
+        .select_from(SectionEnrollment)
+        .join(
+            AssignmentSection,
+            AssignmentSection.section_id == SectionEnrollment.section_id,
+        )
+        .where(
+            SectionEnrollment.student_id == BankConsumption.student_id,
+            AssignmentSection.assignment_id == BankConsumption.assignment_id,
+        )
+    )
+    row = (await db.execute(
+        select(BankConsumption, QuestionBankItem, Assignment, Course)
+        .join(QuestionBankItem, QuestionBankItem.id == BankConsumption.bank_item_id)
+        .join(Assignment, Assignment.id == BankConsumption.assignment_id)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(
+            BankConsumption.id == consumption_id,
+            BankConsumption.student_id == user.id,
+            BankConsumption.context == "learn",
+            enrollment_exists,
+        )
+    )).first()
+    # Single 404 branch covers every access-denied case (wrong owner,
+    # practice row, missing enrollment) so we never disclose which of
+    # those applies.
+    if row is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    consumption, item, assignment, course = row
+
+    # Position of the HW primary this attempt anchors to — drives
+    # "Similar to Problem N" on the detail page.
+    primary_ids = problem_ids_in_content(assignment.content)
+    anchor_str = str(consumption.anchor_bank_item_id)
+    try:
+        anchor_position = primary_ids.index(anchor_str) + 1
+    except ValueError:
+        anchor_position = 0
+
+    anchor_item = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id == consumption.anchor_bank_item_id)
+    )).scalar_one_or_none()
+
+    return HistoryDetailResponse(
+        consumption_id=str(consumption.id),
+        assignment_id=str(assignment.id),
+        assignment_title=assignment.title,
+        course_id=str(course.id),
+        course_name=course.name,
+        anchor_bank_item_id=anchor_str,
+        anchor_question=anchor_item.question if anchor_item else "",
+        anchor_position=anchor_position,
+        variation=_serialize(item),
+        status=(
+            "completed" if consumption.completed_at is not None else "in_progress"
+        ),
+        served_at=consumption.served_at,
+        completed_at=consumption.completed_at,
     )
