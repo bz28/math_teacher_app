@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     ]
 
     # LLM Models
-    llm_model_sonnet: str = "claude-sonnet-4-20250514"
+    # Sonnet 4.6 is priced identically to Sonnet 4.0 per Anthropic's
+    # pricing table ($3 input / $15 output per MTok), so the bump is
+    # cost-neutral. Env var override still available via LLM_MODEL_SONNET.
+    llm_model_sonnet: str = "claude-sonnet-4-6"
     llm_model_haiku: str = "claude-haiku-4-5-20251001"
 
     # Cost Alerting

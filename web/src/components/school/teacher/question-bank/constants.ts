@@ -20,4 +20,8 @@ export const DIFFICULTY_STYLE: Record<string, { label: string; cls: string }> = 
   },
 };
 
-export const QUANTITY_CHIPS = [1, 5, 10, 20, 50] as const;
+// Preset quantities for "How many?" generations. 3 covers the common
+// "give me a few similar ones" case; 50 was struck because AI-generated
+// batches that large are rarely review-worthy — teachers who really
+// want more can still use Custom (backend cap is 50).
+export const QUANTITY_CHIPS = [1, 3, 5, 10, 20] as const;

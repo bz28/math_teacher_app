@@ -21,7 +21,9 @@ import { PracticeSummary } from "@/components/school/student/practice-summary";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
+import { IntegrityConfirmView } from "@/components/school/student/integrity-confirm-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
+import type { IntegrityExtraction } from "@/lib/api";
 
 type Mode =
   | { kind: "homework" }
@@ -38,6 +40,11 @@ type Mode =
   | { kind: "summary"; problem: StudentHomeworkProblem }
   | { kind: "integrity_pending" }
   | { kind: "integrity_pending_timeout" }
+  | {
+      kind: "integrity_confirm";
+      extraction: IntegrityExtraction;
+      imageDataUrl: string;
+    }
   | { kind: "integrity_chat" };
 
 export default function HomeworkPage() {
@@ -47,6 +54,14 @@ export default function HomeworkPage() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
+  // Client-side flag: the student clicked through the post-extraction
+  // confirm screen in this session, so we should not keep shoving it
+  // in their face if they come back before sending their first turn.
+  // Backend has no explicit "confirmed_at" on the submission — once
+  // they send a message the status flips to `in_progress` and routing
+  // naturally skips the confirm branch, so this flag only covers the
+  // brief window before their first turn.
+  const [confirmedThisSession, setConfirmedThisSession] = useState(false);
   // Practice results live here (not in PracticeLoopSurface) so they
   // survive a Practice → Learn → Practice lens swap, which re-mounts
   // the practice surface and would otherwise wipe local state.
@@ -68,15 +83,34 @@ export default function HomeworkPage() {
         if (integrity) {
           // Auto-route based on integrity state:
           //   "extracting"       → show the preparing screen + poll
-          //   "awaiting_student" / "in_progress" → open the chat
+          //   "awaiting_student" → one-time confirm screen (unless the
+          //                         student has already clicked through
+          //                         this session), then chat
+          //   "in_progress"      → open the chat
           //   "complete" / "skipped_unreadable" / "no_check"
           //                      → stay on homework view
           if (integrity.overall_status === "extracting") {
             setMode({ kind: "integrity_pending" });
-          } else if (
-            integrity.overall_status === "awaiting_student" ||
-            integrity.overall_status === "in_progress"
-          ) {
+          } else if (integrity.overall_status === "awaiting_student") {
+            // Show the confirm screen only when we have everything
+            // needed to make it meaningful: the extraction steps AND
+            // the photo to compare them against. Without the photo
+            // the student would be asked to confirm a reading they
+            // can't verify — skip straight to chat instead.
+            const canConfirm =
+              !confirmedThisSession &&
+              integrity.extraction !== null &&
+              sub?.image_data != null;
+            if (canConfirm) {
+              setMode({
+                kind: "integrity_confirm",
+                extraction: integrity.extraction!,
+                imageDataUrl: sub!.image_data!,
+              });
+            } else {
+              setMode({ kind: "integrity_chat" });
+            }
+          } else if (integrity.overall_status === "in_progress") {
             setMode({ kind: "integrity_chat" });
           }
         }
@@ -89,6 +123,11 @@ export default function HomeworkPage() {
   useEffect(() => {
     if (!assignmentId) return;
     loadAll(assignmentId);
+    // loadAll intentionally reads component state via closure (mode,
+    // confirmedThisSession, etc.) — adding it to deps would re-fetch
+    // on every unrelated state change. Route only re-runs on route
+    // change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
   function appendResult(r: LoopResult) {
@@ -234,6 +273,25 @@ export default function HomeworkPage() {
           Refresh
         </button>
       </div>
+    );
+  }
+
+  if (mode.kind === "integrity_confirm" && hw.submission_id) {
+    const submissionId = hw.submission_id;
+    return (
+      <IntegrityConfirmView
+        submissionId={submissionId}
+        submittedImageDataUrl={mode.imageDataUrl}
+        extraction={mode.extraction}
+        onContinue={() => {
+          setConfirmedThisSession(true);
+          setMode({ kind: "integrity_chat" });
+        }}
+        onFlagged={() => {
+          setConfirmedThisSession(true);
+          setMode({ kind: "integrity_chat" });
+        }}
+      />
     );
   }
 
