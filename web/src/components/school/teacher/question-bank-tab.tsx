@@ -34,8 +34,8 @@ export function QuestionBankTab({
     courseId, statusFilter,
   );
 
-  // Client-side search filter (unit filtering moved into ApprovedTable
-  // for the approved view; pending/rejected still use this).
+  // Client-side search filter — applied across all status sub-tabs.
+  // Unit filtering happens server-side via the bank() params already.
   const filteredItems = useMemo(() => {
     let out = items;
     const q = searchQuery.trim().toLowerCase();
@@ -75,12 +75,21 @@ export function QuestionBankTab({
   //      of an opaque ID.
   //   2. Restoring an approved parent item when the variation review
   //      queue closes (see openVariationReview below).
+  // approvedCacheLoaded distinguishes "still fetching" from "fetched
+  // and parent really isn't there" — used downstream to render
+  // accurate copy in VariationGroupRow.
   const [approvedCache, setApprovedCache] = useState<BankItem[]>([]);
+  const [approvedCacheLoaded, setApprovedCacheLoaded] = useState(false);
   useEffect(() => {
     let cancelled = false;
     teacher.bank(courseId, { status: "approved" }).then((res) => {
-      if (!cancelled) setApprovedCache(res.items);
-    }).catch(() => {});
+      if (!cancelled) {
+        setApprovedCache(res.items);
+        setApprovedCacheLoaded(true);
+      }
+    }).catch(() => {
+      if (!cancelled) setApprovedCacheLoaded(true);
+    });
     return () => { cancelled = true; };
   }, [courseId, counts.approved]);
 
@@ -288,6 +297,7 @@ export function QuestionBankTab({
               if (parent) openVariationReview(parent);
             }}
             parentLookup={parentLookup}
+            parentLookupLoaded={approvedCacheLoaded}
           />
         ) : statusFilter === "rejected" ? (
           <div className="space-y-2">
