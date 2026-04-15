@@ -69,18 +69,24 @@ export function QuestionBankTab({
   // Inline review queue state — opens WorkshopModal in queue mode
   const [inlineReviewQueue, setInlineReviewQueue] = useState<BankItem[] | null>(null);
 
-  // Approved items cache used for two reasons:
-  //   1. Looking up the title of a parent question on the Pending tab,
-  //      so practice-problem groups can show "Practice for: X" instead
-  //      of an opaque ID.
-  //   2. Restoring an approved parent item when the variation review
-  //      queue closes (see openVariationReview below).
+  // Approved items cache used to look up parent titles for the
+  // Pending tab's practice-problem groups (so they can show
+  // "Practice for: X" + a snippet instead of an opaque ID), and to
+  // restore the parent item when a variation review queue closes.
+  //
+  // Only the Pending tab consumes this cache. Skip the fetch on
+  // Approved/Rejected — refetching every time counts.approved bumped
+  // was wasteful when the data wasn't being read. counts.approved
+  // stays in the deps so a new approval lands in the cache before
+  // its variations show up in Pending.
+  //
   // approvedCacheLoaded distinguishes "still fetching" from "fetched
-  // and parent really isn't there" — used downstream to render
-  // accurate copy in VariationGroupRow.
+  // and parent really isn't there" — drives the spinner / removed-
+  // copy split in VariationGroupRow.
   const [approvedCache, setApprovedCache] = useState<BankItem[]>([]);
   const [approvedCacheLoaded, setApprovedCacheLoaded] = useState(false);
   useEffect(() => {
+    if (statusFilter !== "pending") return;
     let cancelled = false;
     teacher.bank(courseId, { status: "approved" }).then((res) => {
       if (!cancelled) {
@@ -91,7 +97,7 @@ export function QuestionBankTab({
       if (!cancelled) setApprovedCacheLoaded(true);
     });
     return () => { cancelled = true; };
-  }, [courseId, counts.approved]);
+  }, [courseId, statusFilter, counts.approved]);
 
   const parentLookup = useMemo(
     () => new Map(approvedCache.map((i) => [i.id, i])),
