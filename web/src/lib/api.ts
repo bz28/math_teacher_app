@@ -906,11 +906,21 @@ export const teacher = {
     );
   },
   // ── Question bank ──
-  bank(courseId: string, filters?: { status?: string; unit_id?: string; difficulty?: string }) {
+  bank(
+    courseId: string,
+    filters?: {
+      status?: string;
+      unit_id?: string;
+      difficulty?: string;
+      parent_question_id?: string;
+    },
+  ) {
     const params = new URLSearchParams();
     if (filters?.status) params.set("status_filter", filters.status);
     if (filters?.unit_id) params.set("unit_id", filters.unit_id);
     if (filters?.difficulty) params.set("difficulty", filters.difficulty);
+    if (filters?.parent_question_id)
+      params.set("parent_question_id", filters.parent_question_id);
     const qs = params.toString();
     return apiFetch<{ items: BankItem[]; counts: BankCounts }>(
       `/teacher/courses/${courseId}/question-bank${qs ? `?${qs}` : ""}`,

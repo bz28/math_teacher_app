@@ -11,13 +11,6 @@ const subjectStyles: Record<string, { bg: string; text: string; label: string }>
   chemistry: { bg: "bg-green-50 dark:bg-green-500/10", text: "text-green-600", label: "Chemistry" },
 };
 
-const statusStyles: Record<string, string> = {
-  active: "bg-green-50 text-green-600 dark:bg-green-500/10",
-  published: "bg-green-50 text-green-600 dark:bg-green-500/10",
-  draft: "bg-amber-50 text-amber-600 dark:bg-amber-500/10",
-  archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
-};
-
 export default function SchoolTeacherDashboard() {
   const [courses, setCourses] = useState<TeacherCourse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,26 +87,21 @@ export default function SchoolTeacherDashboard() {
               href={`/school/teacher/courses/${course.id}`}
               className="group block rounded-[--radius-xl] border border-border-light bg-surface p-5 transition-all hover:border-primary/30 hover:shadow-sm"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sub.bg} ${sub.text}`}>
-                      {sub.label}
-                    </span>
-                    {course.grade_level && (
-                      <span className="text-xs text-text-muted">Grade {course.grade_level}</span>
-                    )}
-                  </div>
-                  <h2 className="mt-2 truncate text-lg font-bold text-text-primary group-hover:text-primary">
-                    {course.name}
-                  </h2>
-                  {course.description && (
-                    <p className="mt-1 line-clamp-1 text-xs text-text-muted">{course.description}</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sub.bg} ${sub.text}`}>
+                    {sub.label}
+                  </span>
+                  {course.grade_level && (
+                    <span className="text-xs text-text-muted">Grade {course.grade_level}</span>
                   )}
                 </div>
-                <span className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusStyles[course.status] ?? statusStyles.draft}`}>
-                  {course.status}
-                </span>
+                <h2 className="mt-2 truncate text-lg font-bold text-text-primary group-hover:text-primary">
+                  {course.name}
+                </h2>
+                {course.description && (
+                  <p className="mt-1 line-clamp-1 text-xs text-text-muted">{course.description}</p>
+                )}
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2 text-center">

@@ -204,6 +204,7 @@ async def list_bank_items(
     status_filter: str | None = None,
     unit_id: uuid.UUID | None = None,
     difficulty: str | None = None,
+    parent_question_id: uuid.UUID | None = None,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -227,6 +228,8 @@ async def list_bank_items(
         query = query.where(QuestionBankItem.unit_id == unit_id)
     if difficulty:
         query = query.where(QuestionBankItem.difficulty == difficulty)
+    if parent_question_id:
+        query = query.where(QuestionBankItem.parent_question_id == parent_question_id)
     query = query.order_by(QuestionBankItem.created_at.desc())
 
     items = (await db.execute(query)).scalars().all()

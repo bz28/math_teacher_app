@@ -55,6 +55,8 @@ export function WorkshopModal({
   onJobStarted,
   activeJob,
   onReviewVariations,
+  parentTitle,
+  onJumpToParent,
 }: {
   item?: BankItem;
   queue?: BankItem[];
@@ -69,6 +71,14 @@ export function WorkshopModal({
   // Receives the full BankItem so the parent can stash it for later
   // restoration regardless of which status tab is active.
   onReviewVariations?: (parent: BankItem) => void;
+  // When viewing a variation, the parent's title is shown in the
+  // banner so the teacher knows which problem this scaffolds. Looked
+  // up by the parent (QuestionBankTab) since this component doesn't
+  // fetch on its own.
+  parentTitle?: string;
+  // Click handler for the parent title link. When present, shown as a
+  // clickable link; teacher clicks → parent swaps in.
+  onJumpToParent?: () => void;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -764,17 +774,41 @@ export function WorkshopModal({
           >
             {/* Variation banner — shown only for items with a parent.
                 Makes it obvious the teacher is reviewing practice
-                scaffolding, not a standalone HW problem. */}
+                scaffolding, not a standalone HW problem. Surfaces the
+                parent title so the teacher always knows which problem
+                this scaffolds. Clicking the parent title swaps to the
+                parent (gated when a proposal is pending so unsaved
+                chat doesn't get lost). */}
             {liveItem.parent_question_id && (
               <div className="mb-4 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 text-xs dark:border-amber-500/40 dark:bg-amber-500/10">
-                <div className="font-bold text-amber-900 dark:text-amber-200">
-                  ✨ Generated practice variation
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="font-bold text-amber-900 dark:text-amber-200">
+                    ✨ Practice problem
+                  </div>
+                  {parentTitle && onJumpToParent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isProposalPending) {
+                          setError("Accept or discard the AI proposal first.");
+                          return;
+                        }
+                        onJumpToParent();
+                      }}
+                      className="text-[11px] font-semibold text-amber-900 underline-offset-2 hover:underline dark:text-amber-200"
+                    >
+                      View parent question →
+                    </button>
+                  )}
                 </div>
-                <div className="mt-1 text-amber-800 dark:text-amber-300">
-                  Approving this makes it available as practice scaffolding for its
-                  parent problem (the one you generated similar from). Variations are
-                  served via the student practice loop — they&apos;re never added to a
-                  homework as standalone problems.
+                {parentTitle && (
+                  <div className="mt-1 text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+                    Practice for: <span className="font-bold">{parentTitle}</span>
+                  </div>
+                )}
+                <div className="mt-1 text-amber-800/90 dark:text-amber-300/80">
+                  Approving this makes it available as practice scaffolding —
+                  served via the student practice loop, not added to a homework.
                 </div>
               </div>
             )}

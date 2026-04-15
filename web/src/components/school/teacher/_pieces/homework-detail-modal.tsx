@@ -773,8 +773,8 @@ function toLocalDatetimeInputValue(iso: string): string {
 // ── Problem row ──
 //
 // Fat card with the math-rendered question as the focal element.
-// Mirrors approved-table's expanded row but read-only (clicking does
-// nothing — editing happens via the Edit problems button).
+// Read-only — clicking does nothing; editing happens via the Edit
+// problems button at the top of this modal.
 function ProblemRow({ problem }: { problem: AssignmentProblem }) {
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
