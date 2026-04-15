@@ -33,7 +33,12 @@ export function BankPicker({
     ])
       .then(([b, u]) => {
         if (cancelled) return;
-        setItems(b.items);
+        // Practice variations (items with a parent_question_id) can't
+        // be added to a homework as standalone problems — they're
+        // scaffolding attached to their parent primary, served via the
+        // Practice/Learn loops. Hide them from the picker so teachers
+        // don't see duplicates or accidentally attach a variation.
+        setItems(b.items.filter((i) => i.parent_question_id === null));
         setUnits(u.units);
       })
       .catch((e) => {
