@@ -102,20 +102,9 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
     set({ phase: "loading", error: null });
     try {
       if (generateCount > 0) {
-        // Phase 1: batch generate question texts (1 Claude call)
-        // If any problem has an image, fall back to parallel individual calls
-        const hasImages = problems.some((p) => !!imageMap.get(p));
-        let questionTexts: string[];
-        if (hasImages) {
-          // Images can't be batched — generate similar texts individually
-          const results = await Promise.all(
-            problems.map((p) => practiceApi.generate({ problems: [p], subject, difficulty })),
-          );
-          questionTexts = results.flatMap((r) => r.problems.map((p) => p.question));
-        } else {
-          const res = await practiceApi.generate({ problems, subject, difficulty });
-          questionTexts = res.problems.map((p) => p.question);
-        }
+        // Phase 1: batch generate similar question texts (1 Claude call)
+        const res = await practiceApi.generate({ problems, subject, difficulty });
+        const questionTexts = res.problems.map((p) => p.question);
 
         // Phase 2: show exam immediately with placeholders, solve in parallel
         const placeholders: PracticeProblem[] = questionTexts.map((q) => ({

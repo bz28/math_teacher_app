@@ -8,6 +8,7 @@ import { Button, Card } from "@/components/ui";
 import { CheckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
+import { EntitlementError } from "@/lib/api";
 import type { LearnQueue } from "@/stores/learn";
 
 interface LearnSummaryProps {
@@ -67,8 +68,11 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
                   const flagged = learnQueue.problems.filter((_, i) => learnQueue.flags[i]);
                   await onPracticeFlagged(flagged, difficulty);
                   router.push("/practice");
-                } catch {
+                } catch (err) {
                   setLoading(false);
+                  if (err instanceof EntitlementError) {
+                    router.push("/pricing");
+                  }
                 }
               }}
               className="w-full"

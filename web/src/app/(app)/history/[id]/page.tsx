@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { session as sessionApi, type SessionResponse } from "@/lib/api";
+import { session as sessionApi, EntitlementError, type SessionResponse } from "@/lib/api";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
@@ -311,6 +311,10 @@ function PracticeSimilarButton({ problem, subject }: { problem: string; subject:
               useSessionStore.getState().setSubject(subject as "math" | "chemistry");
               await usePracticeStore.getState().startPracticeBatch(problem, subject as "math" | "chemistry", difficulty);
               router.push("/practice");
+            } catch (err) {
+              if (err instanceof EntitlementError) {
+                router.push("/pricing");
+              }
             } finally {
               setLoading(false);
             }

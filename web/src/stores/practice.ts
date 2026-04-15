@@ -178,6 +178,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         updated[0] = res.problems[0];
         set({ practiceBatch: { ...current, problems: updated } });
       }).catch((err) => {
+        const { practiceBatch: current } = get();
+        if (!current || current.sessionId !== batchId) return;
         set({ phase: "error", error: (err as Error).message });
       });
     } catch (err) {
