@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   teacher,
   type IntegrityBadge,
-  type IntegrityExtraction,
   type IntegrityOverview,
   type TeacherIntegrityDetail,
   type TeacherIntegrityProblemRow,
@@ -12,6 +11,7 @@ import {
   type TeacherSubmissionDetail,
   type TeacherSubmissionRow,
 } from "@/lib/api";
+import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { cn } from "@/lib/utils";
 
 // ── Integrity badge pill ──
@@ -334,36 +334,6 @@ function ProblemCard({
             </button>
           )}
         </>
-      )}
-    </div>
-  );
-}
-
-function ExtractionView({ extraction }: { extraction: IntegrityExtraction }) {
-  return (
-    <div className="mt-2 rounded-[--radius-sm] bg-background p-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-        Extraction confidence: {Math.round((extraction.confidence ?? 0) * 100)}%
-      </div>
-      {extraction.steps.length === 0 ? (
-        <p className="mt-1 text-xs italic text-text-muted">
-          No legible steps extracted.
-        </p>
-      ) : (
-        <ol className="mt-1 list-decimal space-y-1 pl-4 text-xs text-text-secondary">
-          {extraction.steps.map((s, i) => (
-            <li key={`${s.step_num}-${i}`}>
-              <span className="font-medium text-text-primary">
-                {s.plain_english}
-              </span>
-              {s.latex && (
-                <span className="ml-2 font-mono text-[11px] text-text-muted">
-                  {s.latex}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
       )}
     </div>
   );
