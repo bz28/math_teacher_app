@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   schoolStudent,
@@ -47,6 +47,8 @@ type Mode =
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +125,47 @@ export default function HomeworkPage() {
     // change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  // Deep-link: `?practice=<bank_item_id>` auto-starts a Practice loop
+  // on the named primary after the HW detail is loaded. Used by the
+  // History detail page's "Practice similar" CTA so the student
+  // transitions directly into the loop instead of landing on the HW
+  // page and clicking again. A ref guards against double-firing in
+  // React strict mode (useEffect runs twice) and across any re-render
+  // triggered by loadAll before we clear the URL param.
+  //
+  // Gate on `mode.kind === "homework"` so this never overrides
+  // integrity-chat routing: if the student submitted the HW and the
+  // integrity pipeline is awaiting/in-progress, loadAll will have
+  // switched mode and the auto-practice must not silently bypass the
+  // academic-integrity verification. Post-integrity-complete mode
+  // stays "homework", so practice deep-links still work after the
+  // check closes out.
+  const autoPracticeFiredRef = useRef(false);
+  useEffect(() => {
+    if (
+      !hw ||
+      !assignmentId ||
+      autoPracticeFiredRef.current ||
+      mode.kind !== "homework"
+    ) {
+      return;
+    }
+    const target = searchParams.get("practice");
+    if (!target) return;
+    const problem = hw.problems.find((p) => p.bank_item_id === target);
+    if (!problem) {
+      // Unknown primary — strip the param so we don't keep retrying,
+      // and just show the HW page.
+      router.replace(`/school/student/courses/${courseId}/homework/${assignmentId}`);
+      return;
+    }
+    autoPracticeFiredRef.current = true;
+    // Strip the query param so a refresh doesn't re-trigger the loop.
+    router.replace(`/school/student/courses/${courseId}/homework/${assignmentId}`);
+    startLoop(problem, "practice");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hw, assignmentId, searchParams]);
 
   async function pivotToLearnThis(
     problem: StudentHomeworkProblem,
