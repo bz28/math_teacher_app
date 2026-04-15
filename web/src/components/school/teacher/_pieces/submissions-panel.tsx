@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   teacher,
+  type IntegrityBadge,
+  type IntegrityExtraction,
   type IntegrityOverview,
   type TeacherIntegrityDetail,
   type TeacherIntegrityProblemRow,
+  type TeacherIntegrityTranscriptTurn,
   type TeacherSubmissionDetail,
   type TeacherSubmissionRow,
 } from "@/lib/api";
@@ -13,11 +16,51 @@ import { cn } from "@/lib/utils";
 
 // ── Integrity badge pill ──
 
-const BADGE_CONFIG = {
-  likely: { label: "Likely", icon: "✓", cls: "bg-green-100 text-green-700 dark:bg-green-500/20" },
-  uncertain: { label: "Uncertain", icon: "⚠", cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/20" },
-  unlikely: { label: "Unlikely", icon: "✗", cls: "bg-red-100 text-red-700 dark:bg-red-500/20" },
-} as const;
+const BADGE_CONFIG: Record<
+  IntegrityBadge,
+  { label: string; icon: string; cls: string }
+> = {
+  likely: {
+    label: "Likely",
+    icon: "✓",
+    cls: "bg-green-100 text-green-700 dark:bg-green-500/20",
+  },
+  uncertain: {
+    label: "Uncertain",
+    icon: "⚠",
+    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/20",
+  },
+  unlikely: {
+    label: "Unlikely",
+    icon: "✗",
+    cls: "bg-red-100 text-red-700 dark:bg-red-500/20",
+  },
+  unreadable: {
+    label: "Unreadable",
+    icon: "？",
+    cls: "bg-gray-100 text-gray-600 dark:bg-gray-500/20",
+  },
+};
+
+function IntegrityBadgePill({
+  badge,
+  subtle,
+}: {
+  badge: IntegrityBadge;
+  subtle?: boolean;
+}) {
+  const cfg = BADGE_CONFIG[badge];
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-xs font-bold",
+        subtle ? "bg-gray-100 text-gray-500 dark:bg-gray-500/20" : cfg.cls,
+      )}
+    >
+      {cfg.icon} {cfg.label}
+    </span>
+  );
+}
 
 function IntegrityBadge({ overview }: { overview: IntegrityOverview | null }) {
   if (!overview) return null;
@@ -29,23 +72,8 @@ function IntegrityBadge({ overview }: { overview: IntegrityOverview | null }) {
       </span>
     );
   }
-  const cfg = BADGE_CONFIG[overview.overall_badge];
-  return (
-    <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold", cfg.cls)}>
-      {cfg.icon} {cfg.label}
-    </span>
-  );
+  return <IntegrityBadgePill badge={overview.overall_badge} />;
 }
-
-// ── Verdict pill for individual Q&A rows ──
-
-const VERDICT_CONFIG: Record<string, { label: string; cls: string }> = {
-  good: { label: "Good", cls: "text-green-600" },
-  weak: { label: "Weak", cls: "text-amber-600" },
-  bad: { label: "Bad", cls: "text-red-600" },
-  skipped: { label: "Skipped", cls: "text-gray-400" },
-  rephrased: { label: "Rephrased", cls: "text-blue-500" },
-};
 
 // ── Integrity detail section (expandable inside submission detail) ──
 
@@ -54,6 +82,7 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
   const [data, setData] = useState<TeacherIntegrityDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [dismissReason, setDismissReason] = useState("");
   const [dismissConfirm, setDismissConfirm] = useState<string | null>(null);
@@ -74,14 +103,17 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
   function toggle() {
     const next = !open;
     setOpen(next);
-    if (next && !data && !loading) load();
+    // Always refetch on open so teachers don't see stale data after
+    // the student keeps chatting or another teacher dismisses a
+    // problem. The existing `loading` guard prevents parallel fetches
+    // if they spam the toggle.
+    if (next && !loading) load();
   }
 
   async function dismiss(problemId: string) {
     setDismissingId(problemId);
     try {
       await teacher.dismissIntegrityProblem(submissionId, problemId, dismissReason);
-      // Refresh data after dismiss
       await load();
       setDismissConfirm(null);
       setDismissReason("");
@@ -93,15 +125,18 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <button
         onClick={toggle}
         className="flex w-full items-center gap-2 text-sm font-semibold text-text-primary hover:text-primary"
       >
         <span className="text-xs">{open ? "▼" : "▶"}</span>
         Understanding Check
-        {data && data.overall_status === "complete" && data.problems.length > 0 && (
-          <OverallBadgePill problems={data.problems} />
+        {data && data.overall_badge && (
+          <OverallHeaderBadge
+            badge={data.overall_badge}
+            confidence={data.overall_confidence}
+          />
         )}
       </button>
 
@@ -111,11 +146,25 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
       {open && data && (
         <>
           {data.overall_status === "no_check" && (
-            <p className="text-xs text-text-muted">No integrity check for this submission.</p>
+            <p className="text-xs text-text-muted">
+              No integrity check for this submission.
+            </p>
           )}
+
           {data.problems.length === 0 && data.overall_status !== "no_check" && (
-            <p className="text-xs text-text-muted">Waiting for student to complete the check.</p>
+            <p className="text-xs text-text-muted">
+              {data.overall_status === "extracting"
+                ? "Preparing the check…"
+                : "Waiting for student to complete the check."}
+            </p>
           )}
+
+          {data.overall_summary && (
+            <p className="text-sm italic text-text-secondary">
+              {data.overall_summary}
+            </p>
+          )}
+
           {data.problems.map((p) => (
             <ProblemCard
               key={p.problem_id}
@@ -123,28 +172,54 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
               dismissConfirm={dismissConfirm}
               dismissReason={dismissReason}
               dismissingId={dismissingId}
-              onStartDismiss={(id) => { setDismissConfirm(id); setDismissReason(""); }}
+              onStartDismiss={(id) => {
+                setDismissConfirm(id);
+                setDismissReason("");
+              }}
               onCancelDismiss={() => setDismissConfirm(null)}
               onDismiss={dismiss}
               onDismissReasonChange={setDismissReason}
             />
           ))}
+
+          {data.transcript.length > 0 && (
+            <div>
+              <button
+                onClick={() => setTranscriptOpen((v) => !v)}
+                className="flex w-full items-center gap-2 text-xs font-semibold text-text-secondary hover:text-primary"
+              >
+                <span>{transcriptOpen ? "▼" : "▶"}</span>
+                Full conversation ({data.transcript.length} turns)
+              </button>
+              {transcriptOpen && (
+                <TranscriptView transcript={data.transcript} />
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function OverallBadgePill({ problems }: { problems: TeacherIntegrityProblemRow[] }) {
-  const badges = problems.filter((p) => p.badge && !p.teacher_dismissed).map((p) => p.badge!);
-  if (badges.length === 0) return null;
-  let worst: "likely" | "uncertain" | "unlikely" = "likely";
-  if (badges.includes("unlikely")) worst = "unlikely";
-  else if (badges.includes("uncertain")) worst = "uncertain";
-  const cfg = BADGE_CONFIG[worst];
+function OverallHeaderBadge({
+  badge,
+  confidence,
+}: {
+  badge: IntegrityBadge;
+  confidence: number | null;
+}) {
+  const cfg = BADGE_CONFIG[badge];
   return (
-    <span className={cn("ml-auto rounded-full px-2 py-0.5 text-xs font-bold", cfg.cls)}>
+    <span
+      className={cn("ml-auto rounded-full px-2 py-0.5 text-xs font-bold", cfg.cls)}
+    >
       {cfg.icon} {cfg.label}
+      {confidence != null && (
+        <span className="ml-1 font-normal">
+          · {Math.round(confidence * 100)}%
+        </span>
+      )}
     </span>
   );
 }
@@ -168,13 +243,13 @@ function ProblemCard({
   onDismiss: (id: string) => void;
   onDismissReasonChange: (v: string) => void;
 }) {
-  const badge = p.badge ? BADGE_CONFIG[p.badge as keyof typeof BADGE_CONFIG] : null;
   const isDismissed = p.teacher_dismissed;
+  const [sawOpen, setSawOpen] = useState(false);
 
   return (
     <div
       className={cn(
-        "rounded-[--radius-sm] border p-3 space-y-2",
+        "space-y-2 rounded-[--radius-sm] border p-3",
         isDismissed ? "border-border-light bg-background opacity-60" : "border-border bg-surface",
       )}
     >
@@ -188,14 +263,12 @@ function ProblemCard({
               Dismissed
             </span>
           )}
-          {badge && !isDismissed && (
-            <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold", badge.cls)}>
-              {badge.icon} {badge.label}
-            </span>
+          {p.badge && !isDismissed && (
+            <IntegrityBadgePill badge={p.badge} />
           )}
-          {p.raw_score !== null && !isDismissed && (
+          {p.confidence !== null && !isDismissed && (
             <span className="text-xs text-text-muted">
-              ({Math.round(p.raw_score * 100)}%)
+              {Math.round(p.confidence * 100)}%
             </span>
           )}
         </div>
@@ -211,41 +284,21 @@ function ProblemCard({
         </p>
       )}
 
-      {/* Q&A rows */}
-      {!isDismissed && p.responses.length > 0 && (
-        <div className="space-y-1.5">
-          {p.responses.map((r) => {
-            const verdict = r.answer_verdict ? VERDICT_CONFIG[r.answer_verdict] : null;
-            return (
-              <div key={r.response_id} className="rounded-[--radius-sm] bg-background p-2 text-xs">
-                <div className="font-medium text-text-primary">Q: {r.question_text}</div>
-                {r.student_answer ? (
-                  <div className="mt-0.5 text-text-secondary">A: {r.student_answer}</div>
-                ) : (
-                  <div className="mt-0.5 italic text-text-muted">No answer yet</div>
-                )}
-                <div className="mt-1 flex items-center gap-3 text-text-muted">
-                  {verdict && (
-                    <span className={cn("font-semibold", verdict.cls)}>{verdict.label}</span>
-                  )}
-                  {r.seconds_on_question !== null && (
-                    <span>{r.seconds_on_question}s</span>
-                  )}
-                  {r.tab_switch_count > 0 && (
-                    <span className="text-amber-600">{r.tab_switch_count} tab switch{r.tab_switch_count > 1 ? "es" : ""}</span>
-                  )}
-                  {r.rephrase_used && (
-                    <span className="text-blue-500">Rephrased</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* What the agent saw — collapsible, collapsed by default */}
+      {p.student_work_extraction && !isDismissed && (
+        <div>
+          <button
+            onClick={() => setSawOpen((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-text-muted hover:text-primary"
+          >
+            <span className="text-[10px]">{sawOpen ? "▼" : "▶"}</span>
+            What the agent saw
+          </button>
+          {sawOpen && <ExtractionView extraction={p.student_work_extraction} />}
         </div>
       )}
 
-      {/* Dismiss action */}
-      {!isDismissed && p.status === "complete" && (
+      {!isDismissed && (
         <>
           {dismissConfirm === p.problem_id ? (
             <div className="space-y-1.5">
@@ -286,6 +339,97 @@ function ProblemCard({
   );
 }
 
+function ExtractionView({ extraction }: { extraction: IntegrityExtraction }) {
+  return (
+    <div className="mt-2 rounded-[--radius-sm] bg-background p-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+        Extraction confidence: {Math.round((extraction.confidence ?? 0) * 100)}%
+      </div>
+      {extraction.steps.length === 0 ? (
+        <p className="mt-1 text-xs italic text-text-muted">
+          No legible steps extracted.
+        </p>
+      ) : (
+        <ol className="mt-1 list-decimal space-y-1 pl-4 text-xs text-text-secondary">
+          {extraction.steps.map((s, i) => (
+            <li key={`${s.step_num}-${i}`}>
+              <span className="font-medium text-text-primary">
+                {s.plain_english}
+              </span>
+              {s.latex && (
+                <span className="ml-2 font-mono text-[11px] text-text-muted">
+                  {s.latex}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function TranscriptView({
+  transcript,
+}: {
+  transcript: TeacherIntegrityTranscriptTurn[];
+}) {
+  return (
+    <div className="mt-2 space-y-2 rounded-[--radius-sm] border border-border-light bg-background p-3">
+      {transcript.map((t) => (
+        <TranscriptTurn key={`${t.ordinal}-${t.role}`} turn={t} />
+      ))}
+    </div>
+  );
+}
+
+function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
+  const ts = new Date(turn.created_at);
+  const stamp = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  if (turn.role === "tool_call") {
+    return (
+      <div className="text-[11px] text-text-muted">
+        <span className="font-semibold">Agent tool:</span>{" "}
+        <span className="font-mono">{turn.tool_name ?? "(tool)"}</span>
+        <span className="ml-2 font-mono text-text-muted">{turn.content}</span>
+      </div>
+    );
+  }
+  if (turn.role === "tool_result") {
+    return (
+      <div className="text-[11px] italic text-text-muted">
+        <span className="font-semibold">Tool result:</span> {turn.content}
+      </div>
+    );
+  }
+
+  const isStudent = turn.role === "student";
+  return (
+    <div className={cn("flex gap-2", isStudent ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "max-w-[85%] rounded-[--radius-sm] px-2 py-1 text-xs",
+          isStudent
+            ? "bg-primary/10 text-text-primary"
+            : "bg-surface text-text-primary",
+        )}
+      >
+        <div className="font-semibold">
+          {isStudent ? "Student" : "Agent"}
+          <span className="ml-2 font-normal text-text-muted">{stamp}</span>
+          {turn.seconds_on_turn != null && isStudent && (
+            <span className="ml-2 font-normal text-text-muted">
+              · {turn.seconds_on_turn}s
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 whitespace-pre-wrap">{turn.content}</div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main panel ──
 
 interface Props {
@@ -296,23 +440,13 @@ interface Props {
 /**
  * Modal that lists all submissions for a homework, with a click-to-
  * expand per-submission detail subview. Wired up from the
- * `⚙ Submissions` button in homework-detail-modal.tsx (was a
- * placeholder; now a real view).
- *
- * No grading or annotations in this PR — just "here's what they
- * turned in." Reuses the existing list endpoint
- * `/v1/teacher/assignments/{id}/submissions` and the new detail
- * endpoint `/v1/teacher/submissions/{id}`.
+ * `⚙ Submissions` button in homework-detail-modal.tsx.
  */
 export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   const [rows, setRows] = useState<TeacherSubmissionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
-  // Derived: we're loading the detail iff a row is open, the detail
-  // object hasn't arrived, AND no error has been recorded. Excluding
-  // the error state prevents the spinner from getting stuck "Loading…"
-  // forever next to the error message when the fetch fails.
   const detailLoading = openId !== null && detail === null && error === null;
 
   useEffect(() => {
@@ -323,11 +457,6 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   }, [assignmentId]);
 
   useEffect(() => {
-    // Only fetch when transitioning into the detail view. Clearing
-    // the detail when openId becomes null happens in the close-row
-    // handler below — keeping the effect "fetch only" satisfies
-    // the no-cascading-render rule and matches the React docs'
-    // recommended pattern (https://react.dev/learn/you-might-not-need-an-effect).
     if (!openId) return;
     let cancelled = false;
     teacher
@@ -350,9 +479,6 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
   }
 
   return (
-    // z-[60] (one layer above the homework detail modal's z-50) so the
-    // panel paints on top instead of behind it. Click outside the
-    // dialog body closes the panel for a snappy escape.
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
@@ -363,7 +489,9 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
       >
         <div className="flex items-center justify-between border-b border-border-light px-6 py-4">
           <h2 className="text-lg font-bold text-text-primary">
-            {openId && detail ? `${detail.student_name} — ${detail.assignment_title}` : "Submissions"}
+            {openId && detail
+              ? `${detail.student_name} — ${detail.assignment_title}`
+              : "Submissions"}
           </h2>
           <button
             onClick={openId ? closeDetail : onClose}
@@ -438,11 +566,9 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
               </div>
 
               <div>
-                <div className="text-sm font-semibold text-text-primary">Submitted work</div>
-                {/* image_data is always a full data URL — the
-                    SubmissionPanel keeps the prefix intact and the
-                    backend's magic-byte check rejects anything that
-                    isn't PNG or JPEG. */}
+                <div className="text-sm font-semibold text-text-primary">
+                  Submitted work
+                </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={detail.image_data ?? ""}

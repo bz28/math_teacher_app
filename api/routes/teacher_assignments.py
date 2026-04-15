@@ -6,20 +6,23 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import Integer, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.integrity_pipeline import (
-    BADGE_LIKELY,
-    BADGE_UNCERTAIN,
-    BADGE_UNLIKELY,
-    TERMINAL_STATUSES,
+    STATUS_COMPLETE as INTEGRITY_COMPLETE,
+)
+from api.core.integrity_pipeline import (
+    STATUS_SKIPPED_UNREADABLE as INTEGRITY_SKIPPED,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
-from api.models.integrity_check import IntegrityCheckProblem
+from api.models.integrity_check import (
+    IntegrityCheckProblem,
+    IntegrityCheckSubmission,
+)
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
@@ -637,43 +640,57 @@ async def list_submissions(
         .order_by(Submission.submitted_at.desc())
     )).all()
 
-    # Batch-load integrity problems for all submissions in one query
-    # so the list page doesn't N+1.
+    # Batch-load integrity checks for all submissions in one query so
+    # the list page doesn't N+1. With the conversational redesign the
+    # submission row itself carries overall_badge + overall_status so
+    # no second query is needed.
     sub_ids = [sub.id for sub, *_ in rows]
-    integrity_rows = (await db.execute(
-        select(IntegrityCheckProblem)
-        .where(IntegrityCheckProblem.submission_id.in_(sub_ids))
+    check_rows = (await db.execute(
+        select(IntegrityCheckSubmission)
+        .where(IntegrityCheckSubmission.submission_id.in_(sub_ids))
     )).scalars().all() if sub_ids else []
 
-    # Group by submission_id → list of problems
-    integrity_by_sub: dict[uuid.UUID, list[IntegrityCheckProblem]] = {}
-    for ip in integrity_rows:
-        integrity_by_sub.setdefault(ip.submission_id, []).append(ip)
+    check_by_sub: dict[uuid.UUID, IntegrityCheckSubmission] = {
+        c.submission_id: c for c in check_rows
+    }
+
+    # For in-progress checks, we also want to show progress — how
+    # many sampled problems have received a verdict. One grouped
+    # query gives us that.
+    problem_count_by_check: dict[uuid.UUID, tuple[int, int]] = {}
+    if check_rows:
+        done_expr = func.sum(
+            case((IntegrityCheckProblem.badge.isnot(None), 1), else_=0),
+        ).cast(Integer)
+        counts = (await db.execute(
+            select(
+                IntegrityCheckProblem.integrity_check_submission_id,
+                func.count(IntegrityCheckProblem.id),
+                done_expr,
+            )
+            .where(
+                IntegrityCheckProblem.integrity_check_submission_id.in_(
+                    [c.id for c in check_rows],
+                ),
+            )
+            .group_by(IntegrityCheckProblem.integrity_check_submission_id)
+        )).all()
+        for cid, total, done in counts:
+            problem_count_by_check[cid] = (int(total), int(done or 0))
 
     submissions = []
     for sub, grade, student_name, student_email, is_preview in rows:
-        # Derive a lightweight integrity overview for the list pill.
-        problems = integrity_by_sub.get(sub.id, [])
-        if not problems:
+        check = check_by_sub.get(sub.id)
+        if check is None:
             integrity_overview = None
         else:
-            all_terminal = all(p.status in TERMINAL_STATUSES for p in problems)
-            badges = [p.badge for p in problems if p.badge is not None]
-            # "Worst badge" logic: unlikely > uncertain > likely.
-            # Teacher cares about flags, not averages.
-            if BADGE_UNLIKELY in badges:
-                worst = BADGE_UNLIKELY
-            elif BADGE_UNCERTAIN in badges:
-                worst = BADGE_UNCERTAIN
-            elif badges:
-                worst = BADGE_LIKELY
-            else:
-                worst = None
+            total, done = problem_count_by_check.get(check.id, (0, 0))
+            terminal = check.status in (INTEGRITY_COMPLETE, INTEGRITY_SKIPPED)
             integrity_overview = {
-                "overall_status": "complete" if all_terminal else "in_progress",
-                "overall_badge": worst if all_terminal else None,
-                "problem_count": len(problems),
-                "complete_count": sum(1 for p in problems if p.status in TERMINAL_STATUSES),
+                "overall_status": "complete" if terminal else "in_progress",
+                "overall_badge": check.overall_badge if terminal else None,
+                "problem_count": total,
+                "complete_count": done,
             }
 
         submissions.append({

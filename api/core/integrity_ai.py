@@ -1,9 +1,14 @@
-"""Real AI helpers for the integrity-checker pipeline.
+"""AI helpers for the conversational integrity checker.
 
-Replaces the stubs from PR 1. Three functions:
-- extract_student_work: Vision call to read the student's uploaded photo
-- generate_questions: Sonnet call to create 2-3 targeted follow-ups
-- score_answer: Sonnet call to evaluate whether the answer shows understanding
+Two surfaces:
+- `extract_student_work`: one-time Vision pass over the submitted
+  image (unchanged from the previous pipeline — still works, still
+  gates unreadable submissions).
+- `run_agent_turn`: one round trip with Claude as a teacher-agent.
+  Gets the system prompt, the per-problem extraction snapshot, and
+  the full conversation transcript so far; returns the raw response
+  content blocks so the caller can process text + tool calls and
+  decide whether to loop again with a tool_result.
 """
 
 from __future__ import annotations
@@ -19,21 +24,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.llm_client import (
     MODEL_REASON,
     LLMMode,
-    call_claude_json,
+    call_claude_conversation,
     call_claude_vision,
 )
 from api.core.llm_schemas import (
     INTEGRITY_EXTRACT_SCHEMA,
-    INTEGRITY_GENERATE_SCHEMA,
-    INTEGRITY_SCORE_SCHEMA,
+    INTEGRITY_FINISH_CHECK_SCHEMA,
+    INTEGRITY_SUBMIT_VERDICT_SCHEMA,
 )
 from api.models.assignment import Submission
 
 logger = logging.getLogger(__name__)
 
 # Below this confidence threshold the handwriting is considered
-# unreadable and the problem is skipped (no questions generated).
+# unreadable and the check is skipped.
 UNREADABLE_THRESHOLD = 0.3
+
+# Max tokens per agent turn. Keeps the agent terse and caps per-turn
+# cost regardless of how chatty the model wants to be.
+AGENT_MAX_TOKENS_PER_TURN = 400
 
 
 def _strip_data_url_prefix(data: str) -> tuple[str, str]:
@@ -50,13 +59,12 @@ def _strip_data_url_prefix(data: str) -> tuple[str, str]:
         if media_type == "image/jpg":
             media_type = "image/jpeg"
         return data[m.end():], media_type
-    # Raw base64 — sniff by magic bytes
     if data.startswith("iVBOR"):
         return data, "image/png"
     return data, "image/jpeg"
 
 
-# ── Extraction ──
+# ── Extraction ──────────────────────────────────────────────────────
 
 _EXTRACT_SYSTEM = """\
 You are a world-class math professor examining a student's handwritten homework submission. \
@@ -81,7 +89,9 @@ async def extract_student_work(
     )).scalar_one_or_none()
 
     if not image_data:
-        logger.warning("extract_student_work: no image for submission %s", submission_id)
+        logger.warning(
+            "extract_student_work: no image for submission %s", submission_id,
+        )
         return {"steps": [], "confidence": 0.0}
 
     base64_data, media_type = _strip_data_url_prefix(image_data)
@@ -114,108 +124,107 @@ async def extract_student_work(
     return result
 
 
-# ── Question Generation ──
+# ── Conversational agent ────────────────────────────────────────────
 
-_GENERATE_SYSTEM = """\
-You are a world-class professor who deeply cares about your students' learning. \
-A student has submitted homework and you want to verify they understand their own work — \
-not to catch cheaters, but because you genuinely want to know if they learned something.
+AGENT_SYSTEM_PROMPT = """\
+You are a math teacher meeting one-on-one with a student who just turned in \
+handwritten homework. Your goal is to determine, with strong confidence within \
+a few minutes, whether this student genuinely understands the material and did \
+the work themselves.
 
-Given the problem text and the student's extracted work steps, generate 2-3 short \
-follow-up questions. These questions should:
+You have the student's extracted work steps for each sampled problem. Confidence \
+is earned when the student explains SPECIFIC things they wrote — which numbers \
+they picked, why they applied a particular rule, what a symbol in their work \
+represents. Confidence is NOT earned by assertion ("I understand it"), by \
+correct final answers ("the answer is 5"), or by generic textbook definitions.
 
-1. Reference something SPECIFIC the student wrote (a particular step, operation, or choice).
-2. Be answerable in 1-2 sentences by a student who actually did the work themselves.
-3. NOT be answerable by a student who only copied the final answer.
-4. Use grade-appropriate, friendly language — no trick questions.
-5. NOT ask the student to re-derive or re-solve the problem.
-6. Test understanding of WHY they did what they did, not just WHAT they did.
+Probe like a teacher who cares. Start with an open question about what they \
+wrote. If the answer is specific and grounded in their steps, move on. If it's \
+vague, contradictory, or generic, ask a focused follow-up about the specific \
+step. Aim for 1-3 student turns per problem — move on as soon as you have real \
+signal.
 
-Good example: "You factored x² + 2x - 15 into (x+5)(x-3). How did you determine those two numbers?"
-Bad example: "What is factoring?" (too generic, anyone could answer this)
-Bad example: "Solve x² + 2x - 15 = 0." (re-derivation)"""
+Red flags: the student's explanation contradicts their own written work; they \
+admit they didn't do it; they can't explain any step on a problem they got \
+right. Green flags: they reference specific numbers/operations from their work; \
+small mistakes in explanation are fine if the reasoning is theirs.
+
+When you have reached strong confidence on a problem (positive or negative), \
+call `submit_problem_verdict`. When every sampled problem has a verdict, call \
+`finish_check` with an overall badge and one-sentence summary. If you hit a \
+turn cap without confidence, submit `uncertain`.
+
+Tone: warm, curious, never accusatory. Never use the words "cheat," "honest," \
+or "verify" with the student. The student sees this as a quick chat about their \
+work. One question per turn. Keep replies short — two or three sentences tops."""
 
 
-def _format_extraction(extraction: dict[str, Any]) -> str:
-    """Format the extraction into a readable string for the prompt."""
-    steps = extraction.get("steps", [])
-    if not steps:
-        return "No work steps were extracted."
-    lines = []
-    for s in steps:
-        lines.append(f"Step {s.get('step_num', '?')}: {s.get('plain_english', '')} [{s.get('latex', '')}]")
+AGENT_TOOL_SCHEMAS = [
+    INTEGRITY_SUBMIT_VERDICT_SCHEMA,
+    INTEGRITY_FINISH_CHECK_SCHEMA,
+]
+
+
+def build_problems_briefing(
+    problems: list[dict[str, Any]],
+) -> str:
+    """Format the per-problem briefing that prefixes every agent call.
+
+    `problems` is a list of dicts with keys:
+      - problem_id: UUID string (what the agent passes to submit_problem_verdict)
+      - sample_position: 0-based index
+      - question: bank item question text
+      - extraction: dict with `steps` and `confidence`
+      - verdict_status: "pending" | "verdict_submitted"
+    """
+    lines: list[str] = [
+        "You will be talking to the student about the problems below. "
+        "Each problem has a problem_id you must pass back to "
+        "`submit_problem_verdict`.",
+    ]
+    for p in problems:
+        lines.append("")
+        lines.append(
+            f"--- Problem {p['sample_position'] + 1} "
+            f"(problem_id: {p['problem_id']}) ---",
+        )
+        lines.append(f"Question: {p['question']}")
+        lines.append("Student's extracted work:")
+        steps = (p.get("extraction") or {}).get("steps") or []
+        if not steps:
+            lines.append("  (no legible steps)")
+        else:
+            for s in steps:
+                lines.append(
+                    f"  Step {s.get('step_num', '?')}: "
+                    f"{s.get('plain_english', '')} "
+                    f"[{s.get('latex', '')}]",
+                )
+        status = p.get("verdict_status", "pending")
+        lines.append(f"Current verdict: {status}")
     return "\n".join(lines)
 
 
-async def generate_integrity_questions(
-    problem_text: str, extraction: dict[str, Any],
-) -> list[dict[str, str]]:
-    """Call Claude Sonnet to generate 2-3 targeted follow-up questions."""
-    user_msg = (
-        f"Problem: {problem_text}\n\n"
-        f"Student's work:\n{_format_extraction(extraction)}\n\n"
-        "Generate 2-3 follow-up questions."
-    )
+async def run_agent_turn(
+    system_prompt: str,
+    messages: list[dict[str, Any]],
+    *,
+    user_id: str | None = None,
+) -> list[Any]:
+    """One Claude round trip for the conversational integrity agent.
 
-    result = await call_claude_json(
-        _GENERATE_SYSTEM,
-        user_msg,
-        LLMMode.INTEGRITY_GENERATE,
-        tool_schema=INTEGRITY_GENERATE_SCHEMA,
+    Returns the raw response.content (list of content blocks). The
+    caller walks the blocks: for tool_use blocks it must validate,
+    apply side effects, and reply with tool_result messages; then
+    call this again until the model returns text without any
+    tool_use.
+    """
+    return await call_claude_conversation(
+        system_prompt,
+        messages,
+        LLMMode.INTEGRITY_AGENT,
+        tool_schemas=AGENT_TOOL_SCHEMAS,
+        user_id=user_id,
         model=MODEL_REASON,
-        max_tokens=1024,
+        max_tokens=AGENT_MAX_TOKENS_PER_TURN,
     )
-    questions: list[dict[str, str]] = result.get("questions", [])  # type: ignore[assignment]
-    # Defensive: cap at 3 even if the model over-generates.
-    return questions[:3]
-
-
-# ── Answer Scoring ──
-
-_SCORE_SYSTEM = """\
-You are a world-class professor evaluating whether a student's answer to a follow-up \
-question demonstrates genuine understanding of their own homework work.
-
-You will receive:
-- The question that was asked
-- What a good answer should look like (expected_shape)
-- Scoring guidance (rubric_hint)
-- The student's original work steps (for context)
-- The student's answer
-
-Evaluate fairly:
-- A short but correct answer is "good" — don't penalize brevity.
-- A vague answer that could apply to any problem is "weak."
-- An answer that contradicts their own work, is clearly made up, or shows no understanding is "bad."
-- If the student's answer directly contradicts what they wrote in their work, flag "contradicts_own_work."
-- If the answer is so generic it could be a textbook definition, flag "generic_textbook."
-- If the answer is just restating the question or saying "I don't know" with filler, flag "vague."
-
-Be fair and charitable. Students may express things imperfectly but still demonstrate understanding."""
-
-
-async def score_answer(
-    question: dict[str, Any],
-    answer: str,
-    extraction: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Call Claude Sonnet to score the student's answer."""
-    extraction_text = _format_extraction(extraction) if extraction else "No extraction available."
-
-    user_msg = (
-        f"Question: {question.get('question_text', '')}\n"
-        f"Expected answer shape: {question.get('expected_shape', '')}\n"
-        f"Rubric hint: {question.get('rubric_hint', '')}\n\n"
-        f"Student's original work:\n{extraction_text}\n\n"
-        f"Student's answer: {answer}"
-    )
-
-    result = await call_claude_json(
-        _SCORE_SYSTEM,
-        user_msg,
-        LLMMode.INTEGRITY_SCORE,
-        tool_schema=INTEGRITY_SCORE_SCHEMA,
-        model=MODEL_REASON,
-        max_tokens=256,
-    )
-    return result

@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { schoolStudent, type NextIntegrityQuestionResponse } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  schoolStudent,
+  type IntegrityStateResponse,
+  type IntegrityTurn,
+} from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface Props {
   submissionId: string;
@@ -10,77 +15,113 @@ interface Props {
   onDone: () => void;
 }
 
-const MIN_ANSWER_CHARS = 5;
+const MIN_MESSAGE_CHARS = 5;
 
 /**
- * The kid-facing chat screen for the post-submission understanding
- * check. Walks through the questions one at a time:
+ * Kid-facing conversational integrity chat.
  *
- *   1. Mounts → calls /next to get the first pending question
- *   2. Kid types an answer (gated at >= MIN_ANSWER_CHARS — same
- *      threshold the backend enforces)
- *   3. Tap Next → POST /answer → backend scores it, returns the
- *      next question in the same response (one round-trip)
- *   4. When /next or /answer returns {done: true} → render the done
- *      state and let the kid tap Back to homework
+ * On mount we hydrate the full transcript from the server (so a kid
+ * who closes the tab mid-conversation comes back right where they
+ * left off). On send, we append an optimistic student turn, POST to
+ * /turn, and replace local state with the server response — which
+ * includes both the student turn (canonical) and the agent's reply.
  *
- * Tone is friendly throughout. Never "verification" / "checking
- * for cheating" language. Quiet done screen — no score, no rating.
+ * No visible turn counter. A thin progress bar at the top reflects
+ * how many sampled problems have been verdicted.
  */
 export function IntegrityCheckChat({ submissionId, onDone }: Props) {
-  const [current, setCurrent] = useState<NextIntegrityQuestionResponse | null>(null);
-  const [answer, setAnswer] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [state, setState] = useState<IntegrityStateResponse | null>(null);
+  const [pendingStudentMessage, setPendingStudentMessage] =
+    useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [questionStartedAt, setQuestionStartedAt] = useState<number>(Date.now());
+  const [turnStartedAt, setTurnStartedAt] = useState<number>(Date.now());
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch the first question on mount.
+  // Hydrate the transcript on mount.
   useEffect(() => {
     let cancelled = false;
     schoolStudent
-      .getNextIntegrityQuestion(submissionId)
-      .then((q) => {
-        if (cancelled) return;
-        setCurrent(q);
-        setQuestionStartedAt(Date.now());
-        setLoading(false);
+      .getIntegrityState(submissionId)
+      .then((s) => {
+        if (!cancelled) {
+          setState(s);
+          setTurnStartedAt(Date.now());
+        }
       })
       .catch(() => {
-        if (cancelled) return;
-        setError("Couldn't load the check. Try again.");
-        setLoading(false);
+        if (!cancelled) setError("Couldn't load the check. Try again.");
       });
     return () => {
       cancelled = true;
     };
   }, [submissionId]);
 
-  async function handleNext() {
-    if (!current || current.done || submitting) return;
-    if (answer.trim().length < MIN_ANSWER_CHARS) return;
-    setSubmitting(true);
+  // Auto-scroll to the newest turn whenever the transcript grows.
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [state?.transcript.length, pendingStudentMessage]);
+
+  const problemsVerdicted = useMemo(() => {
+    if (!state) return 0;
+    return state.problems.filter(
+      (p) => p.status === "verdict_submitted" || p.status === "dismissed",
+    ).length;
+  }, [state]);
+
+  const totalProblems = state?.problems.length ?? 0;
+  const isComplete =
+    state?.overall_status === "complete" ||
+    state?.overall_status === "skipped_unreadable";
+
+  const visibleTranscript: IntegrityTurn[] = useMemo(() => {
+    const base = state?.transcript ?? [];
+    if (!pendingStudentMessage) return base;
+    // Optimistic student turn — gets replaced when the server response
+    // lands (server transcript includes the real row).
+    return [
+      ...base,
+      {
+        ordinal: base.length,
+        role: "student",
+        content: pendingStudentMessage,
+        created_at: new Date().toISOString(),
+      },
+    ];
+  }, [state, pendingStudentMessage]);
+
+  async function handleSend() {
+    const trimmed = message.trim();
+    if (trimmed.length < MIN_MESSAGE_CHARS || sending || isComplete) return;
+    setPendingStudentMessage(trimmed);
+    setMessage("");
+    setSending(true);
     setError(null);
     try {
-      const next = await schoolStudent.submitIntegrityAnswer(submissionId, {
-        question_id: current.question_id,
-        answer: answer.trim(),
-        seconds_on_question: Math.max(
-          0,
-          Math.round((Date.now() - questionStartedAt) / 1000),
-        ),
+      const seconds = Math.max(
+        0,
+        Math.round((Date.now() - turnStartedAt) / 1000),
+      );
+      const next = await schoolStudent.postIntegrityTurn(submissionId, {
+        message: trimmed,
+        seconds_on_turn: seconds,
       });
-      setCurrent(next);
-      setAnswer("");
-      setQuestionStartedAt(Date.now());
+      setState(next);
+      setPendingStudentMessage(null);
+      setTurnStartedAt(Date.now());
     } catch {
-      setError("Couldn't save your answer. Try again.");
+      setError("Couldn't send that — try again.");
+      setPendingStudentMessage(null);
+      setMessage(trimmed);
     } finally {
-      setSubmitting(false);
+      setSending(false);
     }
   }
 
-  if (loading) {
+  if (state === null && error === null) {
     return (
       <div className="mx-auto max-w-2xl py-12 text-center text-text-muted">
         Loading…
@@ -88,10 +129,10 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
     );
   }
 
-  if (current === null) {
+  if (state === null) {
     return (
       <div className="mx-auto max-w-2xl py-12 text-center">
-        <p className="text-error">{error || "Couldn't load the check."}</p>
+        <p className="text-error">{error}</p>
         <button
           onClick={onDone}
           className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm hover:border-primary"
@@ -102,67 +143,112 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
     );
   }
 
-  if (current.done) {
-    return (
-      <div className="mx-auto max-w-2xl py-12 text-center">
-        <div className="text-3xl">✓</div>
-        <h2 className="mt-3 text-2xl font-bold text-text-primary">All done</h2>
-        <p className="mt-2 text-sm text-text-secondary">
-          Thanks! Your work is with your teacher. You&apos;ll see your grade when they
-          release it.
-        </p>
-        <button
-          onClick={onDone}
-          className="mt-6 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
-        >
-          Back to homework
-        </button>
-      </div>
-    );
-  }
-
-  const canSubmit = answer.trim().length >= MIN_ANSWER_CHARS && !submitting;
+  const canSend =
+    !sending && !isComplete && message.trim().length >= MIN_MESSAGE_CHARS;
 
   return (
-    <div className="mx-auto max-w-2xl">
-      {/* Progress header — "Problem 1 of 5 · Question 1 of 2" */}
-      <div className="text-xs font-medium text-text-muted">
-        Problem {current.problem_position} of {current.total_problems}
-        {" · "}
-        Question {current.question_index + 1} of {current.questions_in_problem}
-      </div>
-
-      <div className="mt-6 rounded-[--radius-md] border border-border bg-surface p-6">
+    <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-2xl flex-col">
+      <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
         <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-          Quick question
+          Quick understanding check
         </div>
-        <div className="mt-2 text-base text-text-primary">{current.question_text}</div>
+        {totalProblems > 0 && (
+          <div className="text-xs font-medium text-text-muted">
+            {problemsVerdicted} of {totalProblems}
+          </div>
+        )}
+      </div>
+      {totalProblems > 0 && (
+        <div className="h-1 w-full bg-border-light">
+          <div
+            className="h-1 bg-primary transition-all"
+            style={{
+              width: `${
+                totalProblems === 0
+                  ? 0
+                  : (problemsVerdicted / totalProblems) * 100
+              }%`,
+            }}
+          />
+        </div>
+      )}
 
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder="Type your answer…"
-          rows={4}
-          disabled={submitting}
-          className="mt-4 w-full rounded-[--radius-sm] border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
-        />
-        {answer.length > 0 && answer.trim().length < MIN_ANSWER_CHARS && (
-          <p className="mt-1 text-xs text-text-muted">
-            Try a sentence or two ({MIN_ANSWER_CHARS}+ characters).
-          </p>
+      <div
+        ref={scrollRef}
+        className="flex-1 space-y-3 overflow-y-auto px-2 py-4"
+      >
+        {visibleTranscript.map((t) => (
+          <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
+        ))}
+        {sending && pendingStudentMessage === null && (
+          <div className="text-xs text-text-muted">Thinking…</div>
         )}
       </div>
 
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      {isComplete ? (
+        <div className="border-t border-border-light px-2 py-4 text-center">
+          <div className="text-sm text-text-secondary">
+            Thanks — your work is with your teacher.
+          </div>
+          <button
+            onClick={onDone}
+            className="mt-3 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
+          >
+            Back to homework
+          </button>
+        </div>
+      ) : (
+        <div className="border-t border-border-light px-2 py-3">
+          {error && <p className="mb-2 text-xs text-error">{error}</p>}
+          <div className="flex items-end gap-2">
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                // Cmd/Ctrl + Enter sends so phone typers don't hit it
+                // by accident. Plain Enter just adds a newline.
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void handleSend();
+                }
+              }}
+              placeholder="Type your answer…"
+              rows={2}
+              disabled={sending}
+              className="flex-1 resize-none rounded-[--radius-sm] border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
+            />
+            <button
+              onClick={() => void handleSend()}
+              disabled={!canSend}
+              className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+            >
+              {sending ? "…" : "Send"}
+            </button>
+          </div>
+          {message.length > 0 && message.trim().length < MIN_MESSAGE_CHARS && (
+            <p className="mt-1 text-xs text-text-muted">
+              Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <div className="mt-4 flex justify-end">
-        <button
-          onClick={handleNext}
-          disabled={!canSubmit}
-          className="rounded-[--radius-sm] bg-primary px-5 py-1.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-        >
-          {submitting ? "…" : "Next →"}
-        </button>
+function TurnBubble({ turn }: { turn: IntegrityTurn }) {
+  const isStudent = turn.role === "student";
+  return (
+    <div className={cn("flex", isStudent ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "max-w-[85%] whitespace-pre-wrap rounded-[--radius-md] px-3 py-2 text-sm",
+          isStudent
+            ? "bg-primary text-white"
+            : "border border-border bg-surface text-text-primary",
+        )}
+      >
+        {turn.content}
       </div>
     </div>
   );

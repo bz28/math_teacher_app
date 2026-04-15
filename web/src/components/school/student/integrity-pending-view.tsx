@@ -55,10 +55,10 @@ export function IntegrityPendingView({
       try {
         const state = await schoolStudent.getIntegrityState(submissionId);
         if (cancelled) return;
-        // Any non-pending state = done waiting. The parent decides
-        // what to do next based on the overall_status it will see
-        // when it re-fetches.
-        if (state.overall_status !== "pending") {
+        // Any non-extracting state = done waiting. The parent decides
+        // what to do next based on the overall_status it sees when
+        // it re-fetches.
+        if (state.overall_status !== "extracting") {
           onReadyRef.current();
           return;
         }

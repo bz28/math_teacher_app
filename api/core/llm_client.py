@@ -45,8 +45,7 @@ class LLMMode:
     REGENERATE_BANK_ITEM = "regenerate_bank_item"
     BANK_CHAT = "bank_chat"
     INTEGRITY_EXTRACT = "integrity_extract"
-    INTEGRITY_GENERATE = "integrity_generate"
-    INTEGRITY_SCORE = "integrity_score"
+    INTEGRITY_AGENT = "integrity_agent"
     BANK_EXTRACT = "bank_extract"
 
 _client: anthropic.AsyncAnthropic | None = None
@@ -418,6 +417,89 @@ def _normalize_arrays(
         if isinstance(parsed, list):
             result[key] = parsed
     return result
+
+
+async def call_claude_conversation(
+    system_prompt: str,
+    messages: list[dict[str, Any]],
+    mode: str,
+    *,
+    tool_schemas: list[ToolSchema],
+    session_id: str | None = None,
+    user_id: str | None = None,
+    model: str | None = None,
+    max_tokens: int = 400,
+) -> list[Any]:
+    """Run one conversational turn with multiple tools available and
+    `tool_choice="auto"` — the model picks between replying in text,
+    calling a tool, or both. Returns the raw `response.content` list
+    of content blocks so the caller can inspect text + tool_use and
+    decide how to proceed.
+
+    Unlike `call_claude_json`, this helper does NOT force any
+    particular tool. Callers handle tool_use blocks themselves and
+    loop back with tool_result messages as needed.
+
+    Single attempt. Used by the integrity conversational agent; the
+    caller handles retries when tool input validation fails.
+    """
+    if not _circuit.allow_request():
+        raise RuntimeError(
+            "Circuit breaker is open — Claude API temporarily unavailable",
+        )
+    await cost_tracker.check_limit()
+
+    use_model = model or MODEL_REASON
+    client = get_client()
+
+    tools: list[ToolParam] = [
+        {
+            "name": s["name"],
+            "input_schema": s["input_schema"],
+            "description": s.get("description", ""),
+        }
+        for s in tool_schemas
+    ]
+
+    start = time.monotonic()
+    try:
+        response = await client.messages.create(  # type: ignore[call-overload]
+            model=use_model,
+            max_tokens=max_tokens,
+            system=_system_with_cache(system_prompt),
+            messages=messages,
+            tools=tools,
+            tool_choice={"type": "auto"},
+            timeout=90.0,
+        )
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
+
+        # Build a compact text summary of the final assistant output
+        # (text + tool_use) for logging.
+        out_parts: list[str] = []
+        for block in response.content:
+            if getattr(block, "type", None) == "text":
+                out_parts.append(block.text)
+            elif getattr(block, "type", None) == "tool_use":
+                out_parts.append(f"[tool:{block.name}]")
+        await _log_and_persist(
+            use_model, mode,
+            response.usage.input_tokens, response.usage.output_tokens,
+            latency_ms, session_id, user_id,
+            success=True, retry_count=0,
+            input_text=None, output_text="\n".join(out_parts) or None,
+        )
+        _circuit.record_success()
+        return list(response.content)
+
+    except (anthropic.APITimeoutError, anthropic.APIError) as e:
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
+        _circuit.record_failure()
+        await _log_and_persist(
+            use_model, mode, 0, 0, latency_ms, session_id, user_id,
+            success=False,
+        )
+        raise RuntimeError(f"Claude conversation error: {e}") from e
 
 
 async def call_claude_vision(

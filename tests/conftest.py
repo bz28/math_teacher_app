@@ -74,18 +74,19 @@ def auth_headers(token: str) -> dict[str, str]:
 
 # ── Global integrity AI mocks ──
 #
-# The integrity pipeline now runs as a fire-and-forget asyncio task
+# The integrity pipeline runs as a fire-and-forget asyncio task
 # spawned from submit_homework. Any test that hits the submit
 # endpoint will therefore kick off a background task that calls
-# Claude Vision + Sonnet unless we mock the three AI helpers here.
+# Claude Vision + Sonnet unless we mock the AI helpers here.
 #
-# The mocks replicate the old stub behavior: a fixed extraction, a
-# fixed pair of questions, and length-based scoring. Tests that care
-# about specific AI output override these locally with their own
-# patches (pytest merges the innermost patch).
+# The conversational redesign has two AI surfaces to mock:
+# - extract_student_work: returns a fixed extraction.
+# - run_agent_turn: returns content blocks matching whatever script
+#   the current test wants. Tests that care about specific agent
+#   behavior override the default via `set_agent_script`.
 #
-# Scoped to every test in the repo via autouse so we never
-# accidentally make real API calls from CI.
+# Scoped to every test via autouse so we never accidentally make
+# real API calls from CI.
 
 _MOCK_EXTRACTION = {
     "steps": [
@@ -94,35 +95,72 @@ _MOCK_EXTRACTION = {
     "confidence": 0.9,
 }
 
-_MOCK_QUESTIONS = [
-    {
-        "question_text": "What was the first step you took to solve this?",
-        "expected_shape": "Brief description of an actual operation",
-        "rubric_hint": "Should reference a concrete operation",
-    },
-    {
-        "question_text": "Walk me through how you got the final answer.",
-        "expected_shape": "1-2 sentences connecting work to answer",
-        "rubric_hint": "Should mention the last step or transformation",
-    },
-]
+
+class _TextBlock:
+    """Mimics an Anthropic TextBlock (has .type + .text)."""
+
+    def __init__(self, text: str) -> None:
+        self.type = "text"
+        self.text = text
 
 
-def _mock_score(question: Any, answer: str, **kwargs: Any) -> dict[str, Any]:
-    """Length-based scoring matching the old stub behavior."""
-    n = len(answer.strip())
-    if n < 5:
-        verdict = "bad"
-    elif n < 30:
-        verdict = "weak"
-    else:
-        verdict = "good"
-    return {"verdict": verdict, "reasoning": f"Mock: length {n}", "flags": []}
+class _ToolUseBlock:
+    """Mimics an Anthropic ToolUseBlock."""
+
+    def __init__(self, name: str, tool_input: dict[str, Any], use_id: str) -> None:
+        self.type = "tool_use"
+        self.name = name
+        self.input = tool_input
+        self.id = use_id
+
+
+# Mutable script the tests can swap in at runtime. Each call to
+# run_agent_turn pops the next response from this list; when empty,
+# returns a plain text turn so the pipeline keeps moving.
+_AGENT_SCRIPT: list[list[Any]] = []
+_AGENT_CALL_LOG: list[list[dict[str, Any]]] = []
+
+
+def set_agent_script(script: list[list[Any]]) -> None:
+    """Queue up responses for run_agent_turn. Each entry is a list of
+    content blocks (_TextBlock / _ToolUseBlock) mirroring what a real
+    Claude call would return."""
+    _AGENT_SCRIPT.clear()
+    _AGENT_SCRIPT.extend(script)
+
+
+def get_agent_call_log() -> list[list[dict[str, Any]]]:
+    """Return the recorded messages passed to run_agent_turn for each
+    call. Tests can introspect this to assert on agent input."""
+    return list(_AGENT_CALL_LOG)
+
+
+def make_text(text: str) -> _TextBlock:
+    return _TextBlock(text)
+
+
+def make_tool_use(name: str, tool_input: dict[str, Any], use_id: str = "tool_001") -> _ToolUseBlock:
+    return _ToolUseBlock(name, tool_input, use_id)
+
+
+async def _mock_run_agent_turn(
+    system_prompt: str,
+    messages: list[dict[str, Any]],
+    **kwargs: Any,
+) -> list[Any]:
+    _ = system_prompt, kwargs
+    _AGENT_CALL_LOG.append(list(messages))
+    if _AGENT_SCRIPT:
+        return _AGENT_SCRIPT.pop(0)
+    # Default: a benign text reply so the pipeline doesn't stall.
+    return [_TextBlock("Got it — thanks!")]
 
 
 @pytest.fixture(autouse=True)
 def _mock_integrity_ai() -> Any:
     """Mock all integrity AI calls so tests don't hit Claude."""
+    _AGENT_SCRIPT.clear()
+    _AGENT_CALL_LOG.clear()
     with (
         patch(
             "api.core.integrity_pipeline.extract_student_work",
@@ -130,19 +168,8 @@ def _mock_integrity_ai() -> Any:
             return_value=_MOCK_EXTRACTION,
         ),
         patch(
-            "api.core.integrity_pipeline.generate_integrity_questions",
-            new_callable=AsyncMock,
-            return_value=_MOCK_QUESTIONS,
-        ),
-        patch(
-            "api.core.integrity_ai.score_answer",
-            new_callable=AsyncMock,
-            side_effect=_mock_score,
-        ),
-        patch(
-            "api.routes.integrity_check.score_answer",
-            new_callable=AsyncMock,
-            side_effect=_mock_score,
+            "api.core.integrity_pipeline.run_agent_turn",
+            side_effect=_mock_run_agent_turn,
         ),
     ):
         yield
