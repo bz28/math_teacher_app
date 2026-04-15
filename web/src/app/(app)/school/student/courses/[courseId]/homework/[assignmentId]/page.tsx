@@ -14,10 +14,9 @@ import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import {
   PracticeLoopSurface,
-  type LoopResult,
+  type LoopState,
 } from "@/components/school/student/practice-loop-surface";
 import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface";
-import { PracticeSummary } from "@/components/school/student/practice-summary";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
@@ -37,7 +36,6 @@ type Mode =
       problem: StudentHomeworkProblem;
       initial: { variation: VariationPayload; consumption_id: string; remaining: number };
     }
-  | { kind: "summary"; problem: StudentHomeworkProblem }
   | { kind: "integrity_pending" }
   | { kind: "integrity_pending_timeout" }
   | {
@@ -62,10 +60,6 @@ export default function HomeworkPage() {
   // naturally skips the confirm branch, so this flag only covers the
   // brief window before their first turn.
   const [confirmedThisSession, setConfirmedThisSession] = useState(false);
-  // Practice results live here (not in PracticeLoopSurface) so they
-  // survive a Practice → Learn → Practice lens swap, which re-mounts
-  // the practice surface and would otherwise wipe local state.
-  const [practiceResults, setPracticeResults] = useState<LoopResult[]>([]);
 
   // Load (or re-load) the homework + submission + integrity state.
   // Called on mount, after submit, and after the chat finishes so
@@ -130,14 +124,35 @@ export default function HomeworkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  function appendResult(r: LoopResult) {
-    setPracticeResults((rs) => [...rs, r]);
-  }
-
-  function updateResult(consumptionId: string, patch: Partial<LoopResult>) {
-    setPracticeResults((rs) =>
-      rs.map((r) => (r.consumption_id === consumptionId ? { ...r, ...patch } : r)),
-    );
+  async function pivotToLearnThis(
+    problem: StudentHomeworkProblem,
+    state: LoopState,
+  ) {
+    // Student just finished a Practice attempt and hit "Learn this
+    // problem". Mint a fresh BankConsumption with context='learn' for
+    // the SAME variation — lets history surface the Learn attempt as
+    // its own mode-attempt row, and avoids picking an unseen sibling.
+    if (!assignmentId) return;
+    setLoadingProblemId(problem.bank_item_id);
+    try {
+      const resp = await schoolStudent.learnThisProblem({
+        bank_item_id: state.variation.bank_item_id,
+        assignment_id: assignmentId,
+      });
+      setMode({
+        kind: "learn",
+        problem,
+        initial: {
+          variation: resp.variation,
+          consumption_id: resp.consumption_id,
+          remaining: resp.remaining,
+        },
+      });
+    } catch {
+      setError("Couldn't switch into Learn mode. Please try again.");
+    } finally {
+      setLoadingProblemId(null);
+    }
   }
 
   async function startLoop(problem: StudentHomeworkProblem, kind: "practice" | "learn") {
@@ -146,9 +161,6 @@ export default function HomeworkPage() {
     try {
       const resp = await schoolStudent.nextVariation(assignmentId, problem.bank_item_id, kind);
       if (resp.status === "served") {
-        // Fresh entry from the HW page = new loop session, so reset
-        // any prior practice results from a previous problem.
-        setPracticeResults([]);
         setMode({
           kind,
           problem,
@@ -195,16 +207,11 @@ export default function HomeworkPage() {
       <PracticeLoopSurface
         assignmentId={hw.assignment_id}
         anchorBankItemId={mode.problem.bank_item_id}
+        anchorQuestion={mode.problem.question}
         problemPosition={mode.problem.position}
         initial={mode.initial}
-        results={practiceResults}
-        onAppendResult={appendResult}
-        onUpdateResult={updateResult}
-        onDone={() => setMode({ kind: "summary", problem: mode.problem })}
-        onExit={() => setMode({ kind: "homework" })}
-        onSwitchToLearn={(state) =>
-          setMode({ kind: "learn", problem: mode.problem, initial: state })
-        }
+        onDone={() => setMode({ kind: "homework" })}
+        onLearnThis={(state) => pivotToLearnThis(mode.problem, state)}
       />
     );
   }
@@ -214,25 +221,11 @@ export default function HomeworkPage() {
       <LearnLoopSurface
         assignmentId={hw.assignment_id}
         anchorBankItemId={mode.problem.bank_item_id}
+        anchorQuestion={mode.problem.question}
         problemPosition={mode.problem.position}
         initial={mode.initial}
         onDone={() => setMode({ kind: "homework" })}
-        onExit={() => setMode({ kind: "homework" })}
-        onSwitchToPractice={(state) =>
-          setMode({ kind: "practice", problem: mode.problem, initial: state })
-        }
-      />
-    );
-  }
-
-  if (mode.kind === "summary") {
-    return (
-      <PracticeSummary
-        assignmentId={hw.assignment_id}
-        anchorBankItemId={mode.problem.bank_item_id}
-        problemPosition={mode.problem.position}
-        results={practiceResults}
-        onBackToHomework={() => setMode({ kind: "homework" })}
+        onPracticeSimilar={() => startLoop(mode.problem, "practice")}
       />
     );
   }
