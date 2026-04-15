@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { DifficultyPicker, type Difficulty } from "@/components/shared/difficulty-picker";
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
 import { CheckIcon, ChatBubbleIcon, FlagIcon } from "@/components/ui/icons";
@@ -16,7 +17,7 @@ interface LearnCompletedProps {
   onContinueAsking: () => void;
   onToggleFlag: (index: number) => void;
   onAdvanceQueue: () => Promise<void>;
-  onStartPractice: (problem: string, count: number, subject: Subject) => Promise<void>;
+  onStartPractice: (problem: string, subject: Subject, difficulty?: Difficulty) => Promise<void>;
   onReset: () => void;
 }
 
@@ -32,6 +33,7 @@ export function LearnCompleted({
 }: LearnCompletedProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [difficulty, setDifficulty] = useState<Difficulty>("same");
 
   return (
     <motion.div
@@ -84,13 +86,15 @@ export function LearnCompleted({
             </>
           ) : (
             <>
+              <DifficultyPicker value={difficulty} onChange={setDifficulty} />
               <Button
                 gradient
                 loading={loading}
                 onClick={async () => {
                   setLoading(true);
                   try {
-                    await onStartPractice(session.problem, 1, subject);
+                    // onStartPractice returns after Phase 1 (practice_preview set); Phase 2 runs in background
+                    await onStartPractice(session.problem, subject, difficulty);
                     router.push("/practice");
                   } catch (err) {
                     setLoading(false);

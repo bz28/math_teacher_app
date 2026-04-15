@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
-import { cn, formatDuration } from "@/lib/utils";
-import { EntitlementError } from "@/lib/api";
+import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
+import { cn } from "@/lib/utils";
 import type { PracticeBatch } from "@/stores/practice";
 
 interface PracticeSummaryProps {
@@ -24,150 +24,109 @@ export function PracticeSummary({
 }: PracticeSummaryProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const results = practiceBatch.results!;
-  const correct = results.filter((r) => r.isCorrect === true).length;
-  const answered = results.filter((r) => r.userAnswer !== null).length;
-  const unanswered = results.length - answered;
-  const score = answered > 0 ? Math.round((correct / results.length) * 100) : 0;
-  const timeTaken = practiceBatch.submittedAt && practiceBatch.startedAt
-    ? Math.floor((practiceBatch.submittedAt - practiceBatch.startedAt) / 1000)
-    : null;
-  const flaggedQuestions = results
-    .map((r, i) => ({ question: r.question, index: i }))
-    .filter((_, i) => practiceBatch.flags[i]);
-
-  const getMessage = () => {
-    if (score === 100) return "Perfect score!";
-    if (score >= 90) return "Excellent work!";
-    if (score >= 70) return "Good job!";
-    if (score >= 50) return "Keep practicing!";
-    return "Don't give up — review and try again!";
-  };
-
+  const { results, flags, workSubmissions } = practiceBatch;
+  const correct = results.filter((r) => r.isCorrect).length;
+  const flagged = flags.filter(Boolean).length;
+  const percentage = Math.round((correct / results.length) * 100);
+  const encouragement =
+    percentage === 100
+      ? "Perfect score!"
+      : percentage >= 80
+        ? "Great job!"
+        : percentage >= 50
+          ? "Good effort, keep practicing!"
+          : "Keep going, you'll get there!";
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      {/* Score card */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <Card variant="elevated" className="text-center space-y-3">
-          <p className="text-sm font-semibold text-text-muted">Practice Results</p>
-          <p className="text-4xl font-extrabold text-primary"><AnimatedCounter to={correct} />/{results.length}</p>
-
-          <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-              style={{ width: `${score}%` }}
-            />
-          </div>
-          <p className="text-lg font-bold text-text-primary"><AnimatedCounter to={score} />%</p>
-          <p className="text-sm text-text-secondary">{getMessage()}</p>
-
-          {timeTaken != null && (
-            <p className="text-xs text-text-muted">
-              Completed in {formatDuration(timeTaken)}
-            </p>
-          )}
-
-          <div className="flex justify-center gap-4 pt-2">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-success" />
-              <span className="text-xs text-text-secondary"><AnimatedCounter to={correct} /> correct</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-error" />
-              <span className="text-xs text-text-secondary"><AnimatedCounter to={answered - correct} /> wrong</span>
-            </div>
-            {unanswered > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-text-muted" />
-                <span className="text-xs text-text-secondary"><AnimatedCounter to={unanswered} /> skipped</span>
-              </div>
-            )}
-          </div>
-        </Card>
+        <h1 className="text-2xl font-extrabold text-text-primary">Results</h1>
       </motion.div>
 
-      {/* Question breakdown */}
-      <h2 className="text-sm font-semibold text-text-muted">Question Breakdown</h2>
+      {/* Score card */}
+      <Card variant="elevated" className="text-center space-y-3">
+        <p className="text-4xl font-extrabold text-primary">
+          <AnimatedCounter to={correct} />/{results.length}
+        </p>
+        <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <p className="text-sm font-medium text-text-secondary">
+          {encouragement}
+        </p>
+      </Card>
+
+      {/* Per-result breakdown */}
       <div className="space-y-2">
-        {results.map((r, i) => (
-          <Card key={i} variant="flat" className="space-y-2">
-            <div className="flex items-center gap-2">
+        {results.map((result, i) => {
+          const wasCorrect = result.isCorrect;
+          return (
+            <div
+              key={i}
+              className={cn(
+                "flex items-start gap-3 rounded-[--radius-md] border px-4 py-3",
+                wasCorrect ? "border-success-border bg-success-light" : "border-error-border bg-error-light",
+              )}
+            >
               <span
                 className={cn(
-                  "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-                  r.isCorrect === true ? "bg-success" : r.isCorrect === false ? "bg-error" : "bg-text-muted",
+                  "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+                  wasCorrect ? "bg-success" : "bg-error",
                 )}
               >
-                {r.isCorrect === true ? "\u2713" : r.isCorrect === false ? "\u2717" : "\u2013"}
+                {wasCorrect ? "\u2713" : "\u2717"}
               </span>
-              <span className="text-xs font-bold text-text-muted">Q{i + 1}</span>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <div className="text-sm font-medium text-text-primary"><MathText text={result.problem} /></div>
+                <div className="text-xs text-text-secondary">
+                  {result.userAnswer === "(skipped)" ? "Skipped" : <span>Your answer: <MathText text={result.userAnswer} /></span>}
+                </div>
+                <DiagnosisTeaser diagnosis={workSubmissions[i]} />
+              </div>
               <button
                 onClick={() => onToggleFlag(i)}
                 className={cn(
-                  "ml-auto rounded-[--radius-pill] border px-3 py-0.5 text-xs font-semibold transition-colors",
-                  practiceBatch.flags[i]
+                  "rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors flex-shrink-0",
+                  flags[i]
                     ? "border-warning-dark/30 bg-warning-bg text-warning-dark"
                     : "border-border text-text-muted hover:border-warning-dark/30 hover:text-warning-dark",
                 )}
               >
-                {practiceBatch.flags[i] ? "Flagged" : "Flag"}
+                {flags[i] ? "Flagged" : "Flag"}
               </button>
             </div>
-            <div className="text-sm font-medium text-text-primary"><MathText text={r.question} /></div>
-            {r.isCorrect === true && (
-              <div>
-                <div className="text-xs text-text-secondary">Your answer: <MathText text={r.userAnswer ?? ""} /></div>
-                <p className="text-xs font-medium text-success">Correct!</p>
-              </div>
-            )}
-            {r.isCorrect === false && (
-              <div>
-                <div className="text-xs text-error">Your answer: <MathText text={r.userAnswer ?? ""} /></div>
-                <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
-              </div>
-            )}
-            {r.isCorrect == null && (
-              <div>
-                <p className="text-xs text-text-muted">Unanswered</p>
-                <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
-              </div>
-            )}
-          </Card>
-        ))}
+          );
+        })}
       </div>
-
-      {/* Flagged questions */}
-      {flaggedQuestions.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-text-muted">
-            Flagged Questions ({flaggedQuestions.length})
-          </h2>
-          <Button
-            gradient
-            loading={loading}
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const problems = flaggedQuestions.map((q) => q.question);
-                await onStartLearnQueue(problems);
-                router.push("/learn/session");
-              } catch (err) {
-                setLoading(false);
-                if (err instanceof EntitlementError) {
-                  router.push("/pricing");
-                }
-              }
-            }}
-            className="w-full"
-          >
-            Learn These
-          </Button>
-        </div>
-      )}
 
       {/* Action buttons */}
       <div className="flex flex-col gap-2">
+        {flagged > 0 && (
+          <>
+            <Button
+              gradient
+              loading={loading}
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const flaggedProblems = results
+                    .filter((_, i) => flags[i])
+                    .map((r) => r.problem);
+                  await onStartLearnQueue(flaggedProblems);
+                  router.push("/learn/session");
+                } catch {
+                  setLoading(false);
+                }
+              }}
+              className="w-full"
+            >
+              Learn {flagged} Flagged Problem{flagged > 1 ? "s" : ""}
+            </Button>
+          </>
+        )}
         <Button variant="secondary" onClick={() => { onReset(); router.push("/learn"); }} className="w-full">
           New Problem
         </Button>

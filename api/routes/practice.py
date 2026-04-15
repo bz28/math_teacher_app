@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
-from api.core.practice import check_answer, generate_practice_problems
+from api.core.practice import check_answer, generate_similar_questions, solve_problem
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
 from api.middleware.rate_limit import limiter
@@ -32,30 +32,47 @@ async def generate(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> PracticeGenerateResponse:
-    """Generate similar practice problems for a given problem."""
+    """Generate similar practice problems or solve a single problem.
+
+    - Send `problems` (list) to batch-generate similar question texts (no answers).
+    - Send `problem` with `count=0` to solve a single problem (returns answer + distractors).
+    """
     await check_entitlement(db, user, Entitlement.CREATE_SESSION)
+
     try:
-        problems = await generate_practice_problems(
-            body.problem, body.count,
-            user_id=str(user.id), subject=body.subject,
+        # Batch generate similar question texts — solving is done separately by the frontend
+        if body.problems:
+            question_texts = await generate_similar_questions(
+                body.problems,
+                user_id=str(user.id),
+                subject=body.subject,
+                difficulty=body.difficulty,
+            )
+            return PracticeGenerateResponse(
+                problems=[PracticeProblem(question=q, answer="", distractors=[]) for q in question_texts]
+            )
+
+        # Solve a single problem — decompose + distractors
+        problem = body.problem or ""
+        result = await solve_problem(
+            problem,
+            user_id=str(user.id),
+            subject=body.subject,
             image_base64=body.image_base64,
         )
+        return PracticeGenerateResponse(
+            problems=[PracticeProblem(
+                question=result["question"],
+                answer=result["answer"],
+                distractors=result.get("distractors", []),
+            )]
+        )
+
     except RuntimeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate practice problems",
         )
-
-    return PracticeGenerateResponse(
-        problems=[
-            PracticeProblem(
-                question=p["question"],
-                answer=p["answer"],
-                distractors=p.get("distractors", []),
-            )
-            for p in problems
-        ],
-    )
 
 
 @router.post("/check", response_model=PracticeCheckResponse)

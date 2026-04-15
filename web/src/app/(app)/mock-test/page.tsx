@@ -14,6 +14,7 @@ import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
+import { MockTestPreview } from "./_components/mock-test-preview";
 import { cn, shuffleChoices, formatElapsed } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 
@@ -24,6 +25,7 @@ export default function MockTestPage() {
     mockTest,
     phase,
     error,
+    beginMockTest,
     saveMockTestAnswer,
     toggleMockTestFlag,
     setMockTestIndex,
@@ -40,9 +42,10 @@ export default function MockTestPage() {
 
   // Timer
   useEffect(() => {
-    if (!mockTest?.timeLimitSeconds || phase !== "mock_test_active") return;
+    if (!mockTest?.timeLimitSeconds || !mockTest.startedAt || phase !== "mock_test_active") return;
+    const startedAt = mockTest.startedAt;
     const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - mockTest.startedAt) / 1000);
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
       const remaining = mockTest.timeLimitSeconds! - elapsed;
       setTimeLeft(Math.max(0, remaining));
       if (remaining <= 0) {
@@ -89,7 +92,26 @@ export default function MockTestPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [phase, mockTest, setMockTestIndex, submitMockTest, subject]);
 
-  if (phase === "loading" || !mockTest) {
+  if (phase === "loading") {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <SkeletonStep />
+      </div>
+    );
+  }
+
+  if (phase === "mock_test_preview" && mockTest) {
+    return (
+      <MockTestPreview
+        mockTest={mockTest}
+        isTimed={mockTest.timeLimitSeconds !== null}
+        onBegin={beginMockTest}
+        onCancel={() => { reset(); router.push("/learn"); }}
+      />
+    );
+  }
+
+  if (!mockTest) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <SkeletonStep />

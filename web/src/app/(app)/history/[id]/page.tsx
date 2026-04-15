@@ -3,11 +3,12 @@
 import { useState, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { session as sessionApi, type SessionResponse } from "@/lib/api";
+import { session as sessionApi, EntitlementError, type SessionResponse } from "@/lib/api";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { Card, Badge, Button } from "@/components/ui";
+import { DifficultyPicker, type Difficulty } from "@/components/shared/difficulty-picker";
 import { UpgradePrompt } from "@/components/shared/upgrade-prompt";
 import { FREE_DAILY_SESSION_LIMIT } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
@@ -288,32 +289,40 @@ function SessionChat({ sessionId }: { sessionId: string }) {
 function PracticeSimilarButton({ problem, subject }: { problem: string; subject: string }) {
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [difficulty, setDifficulty] = useState<Difficulty>("same");
   const router = useRouter();
   const { isPro, dailySessionsUsed, dailySessionsLimit } = useEntitlementStore();
   const remaining = isPro ? Infinity : Math.max(0, dailySessionsLimit - dailySessionsUsed);
 
   return (
     <>
-      <Button
-        variant="secondary"
-        loading={loading}
-        onClick={async () => {
-          if (!isPro && remaining <= 0) {
-            setShowUpgrade(true);
-            return;
-          }
-          setLoading(true);
-          try {
-            useSessionStore.getState().setSubject(subject as "math" | "chemistry");
-            await usePracticeStore.getState().startPracticeBatch(problem, 1, subject as "math" | "chemistry");
-            router.push("/practice");
-          } finally {
-            setLoading(false);
-          }
-        }}
-      >
-        Practice Similar Problem
-      </Button>
+      <div className="flex flex-col gap-2">
+        <DifficultyPicker value={difficulty} onChange={setDifficulty} />
+        <Button
+          variant="secondary"
+          loading={loading}
+          onClick={async () => {
+            if (!isPro && remaining <= 0) {
+              setShowUpgrade(true);
+              return;
+            }
+            setLoading(true);
+            try {
+              useSessionStore.getState().setSubject(subject as "math" | "chemistry");
+              await usePracticeStore.getState().startPracticeBatch(problem, subject as "math" | "chemistry", difficulty);
+              router.push("/practice");
+            } catch (err) {
+              if (err instanceof EntitlementError) {
+                router.push("/pricing");
+              }
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          Practice Similar Problem
+        </Button>
+      </div>
       <UpgradePrompt
         open={showUpgrade}
         onClose={() => setShowUpgrade(false)}

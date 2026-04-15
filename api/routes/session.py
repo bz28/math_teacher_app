@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
-from api.core.practice import generate_practice_problems
+from api.core.practice import generate_similar_questions
 from api.core.session import (
     SessionError,
     create_session,
@@ -310,12 +310,12 @@ async def similar(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session not completed yet")
 
     try:
-        problems = await generate_practice_problems(
-            session.problem, 1,
+        questions = await generate_similar_questions(
+            [session.problem],
             user_id=str(current_user.user_id),
             subject=getattr(session, "subject", "math"),
         )
-        similar = str(problems[0]["question"]) if problems else session.problem
+        similar = questions[0] if questions else session.problem
     except RuntimeError:
         logger.exception("Failed to generate similar problem")
         raise HTTPException(

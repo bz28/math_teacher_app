@@ -10,6 +10,7 @@ import {
   type DiagnosisResult,
 } from "@/lib/api";
 import type { Subject } from "@/stores/learn";
+import type { Difficulty } from "@/components/shared/difficulty-picker";
 import type { QuizResult } from "@/lib/utils";
 
 // ── Types ──
@@ -17,6 +18,7 @@ import type { QuizResult } from "@/lib/utils";
 export type MockTestPhase =
   | "idle"
   | "loading"
+  | "mock_test_preview"
   | "mock_test_active"
   | "mock_test_summary"
   | "error";
@@ -27,7 +29,7 @@ export interface MockTest {
   flags: boolean[];
   currentIndex: number;
   timeLimitSeconds: number | null;
-  startedAt: number;
+  startedAt: number | null;
   submittedAt: number | null;
   results: QuizResult[] | null;
   sessionId: string | null;
@@ -51,7 +53,7 @@ function createMockTest(
     flags: new Array(len).fill(false),
     currentIndex: 0,
     timeLimitSeconds: timeLimitMinutes ? timeLimitMinutes * 60 : null,
-    startedAt: Date.now(),
+    startedAt: null,
     submittedAt: null,
     results: null,
     sessionId,
@@ -75,7 +77,9 @@ interface MockTestState {
     subject: Subject,
     problemQueue: { text: string; image?: string }[],
     multipleChoice?: boolean,
+    difficulty?: Difficulty,
   ) => Promise<void>;
+  beginMockTest: () => void;
   saveMockTestAnswer: (index: number, answer: string) => void;
   attachMockTestWork: (index: number, imageBase64: string) => void;
   toggleMockTestFlag: (index: number) => void;
@@ -93,23 +97,49 @@ const initialState = {
 export const useMockTestStore = create<MockTestState>((set, get, store) => ({
   ...initialState,
 
-  async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true) {
+  async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true, difficulty: Difficulty = "same") {
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
     set({ phase: "loading", error: null });
     try {
       if (generateCount > 0) {
-        const image = imageMap.get(problems[0]);
-        const { problems: generated } = await practiceApi.generate({
-          problem: problems[0],
-          count: generateCount,
-          subject,
-          ...(image && { image_base64: image }),
-        });
-        const allQuestionTexts = generated.map((g) => g.question);
-        const { id } = await sessionApi.createMockTest(problems[0], allQuestionTexts);
-        set({
-          mockTest: createMockTest(generated, id, timeLimitMinutes, multipleChoice),
-          phase: "mock_test_active",
+        // Phase 1: batch generate similar question texts (1 Claude call)
+        const res = await practiceApi.generate({ problems, subject, difficulty });
+        const questionTexts = res.problems.map((p) => p.question);
+
+        // Phase 2: show exam immediately with placeholders, solve in parallel
+        const placeholders: PracticeProblem[] = questionTexts.map((q) => ({
+          question: q,
+          answer: "",
+        }));
+        const { id } = await sessionApi.createMockTest(problems[0], questionTexts);
+        const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
+        set({ mockTest: mt });
+
+        // Show preview screen immediately (questions visible, no answers yet)
+        set({ phase: "mock_test_preview" });
+
+        // Fire solve calls for all generated questions in parallel
+        const batchSessionId = id;
+        const solvePromises = questionTexts.map((q, i) =>
+          practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
+            if (res.problems.length > 0) {
+              const { mockTest: current } = get();
+              if (!current || current.sessionId !== batchSessionId) return;
+              const updated = [...current.questions];
+              updated[i] = res.problems[0];
+              set({ mockTest: { ...current, questions: updated } });
+            }
+          }),
+        );
+
+        // Solve in background — transition to error if all fail
+        Promise.allSettled(solvePromises).then((results) => {
+          const { mockTest: current } = get();
+          if (!current || current.sessionId !== batchSessionId) return;
+          const allFailed = current.questions.every((q) => q.answer === "");
+          if (allFailed) {
+            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          }
         });
       } else {
         const placeholders: PracticeProblem[] = problems.map((p) => ({
@@ -120,9 +150,10 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
 
         // Set mockTest with placeholders first so .then() handlers can find it
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
-        set({ mockTest: mt });
+        set({ mockTest: mt, phase: "mock_test_preview" });
 
         // Fire all API calls in parallel, update each question as it resolves
+        const batchSessionId2 = id;
         const promises = problems.map((p, i) => {
           const image = imageMap.get(p);
           return practiceApi.generate({
@@ -131,7 +162,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }).then((res) => {
             if (res.problems.length > 0) {
               const { mockTest: current } = get();
-              if (!current) return;
+              if (!current || current.sessionId !== batchSessionId2) return;
               const updated = [...current.questions];
               updated[i] = res.problems[0];
               set({ mockTest: { ...current, questions: updated } });
@@ -139,17 +170,28 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           });
         });
 
-        // Wait for the first question before showing the exam
-        try { await promises[0]; } catch { /* first question failed, continue */ }
-        set({ phase: "mock_test_active" });
-
-        // Remaining questions continue resolving in background
-        Promise.allSettled(promises.slice(1));
+        // Solve in background — transition to error if all fail
+        Promise.allSettled(promises).then((results) => {
+          const { mockTest: current } = get();
+          if (!current || current.sessionId !== batchSessionId2) return;
+          const allFailed = current.questions.every((q) => q.answer === "");
+          if (allFailed) {
+            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          }
+        });
       }
     } catch (err) {
       if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  beginMockTest() {
+    const { mockTest } = get();
+    set({
+      phase: "mock_test_active",
+      mockTest: mockTest ? { ...mockTest, startedAt: Date.now() } : null,
+    });
   },
 
   saveMockTestAnswer(index, answer) {
