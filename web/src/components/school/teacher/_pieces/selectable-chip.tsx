@@ -24,7 +24,6 @@ export function SelectableChip({
   variant = "solid",
   hint,
   className,
-  type = "button",
 }: {
   label: string;
   selected: boolean;
@@ -33,7 +32,6 @@ export function SelectableChip({
   variant?: "solid" | "dashed";
   hint?: string;
   className?: string;
-  type?: "button" | "submit";
 }) {
   const base =
     "inline-flex items-center gap-1 rounded-[--radius-pill] px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50";
@@ -49,9 +47,20 @@ export function SelectableChip({
       : "border border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle";
   }
 
+  // Hint badge tone has to match its background so the tiny label
+  // stays readable. Solid+selected sits on a primary fill (white
+  // label on a translucent-white badge); dashed+selected sits on a
+  // muted fill (primary-colored badge on surface) — same logic as
+  // the unselected case for dashed since the background doesn't
+  // darken as much.
+  const hintTone =
+    variant === "solid" && selected
+      ? "bg-white/20 text-white"
+      : "bg-primary-bg text-primary";
+
   return (
     <button
-      type={type}
+      type="button"
       onClick={onToggle}
       disabled={disabled}
       aria-pressed={selected}
@@ -63,9 +72,7 @@ export function SelectableChip({
         <span
           className={cn(
             "ml-0.5 rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
-            selected
-              ? "bg-white/20 text-white"
-              : "bg-primary-bg text-primary",
+            hintTone,
           )}
         >
           {hint}

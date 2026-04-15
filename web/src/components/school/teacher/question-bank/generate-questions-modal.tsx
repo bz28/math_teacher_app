@@ -231,7 +231,10 @@ export function GenerateQuestionsModal({
                         {group.docs.length === 1 ? "document" : "documents"}
                       </span>
                     </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {/* Narrow phones → single column so filenames
+                        get enough width to read. Tablets → two. Desktop
+                        → three. */}
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {group.docs.map((d) => (
                         <DocCard
                           key={d.id}
@@ -286,7 +289,12 @@ export function GenerateQuestionsModal({
                 <QuantityChip
                   label="Custom"
                   selected={false}
-                  onClick={() => setCount(3)}
+                  // Seed the custom input with a value outside the
+                  // preset list so isCustomCount flips true on the
+                  // next render and the input actually appears. Any
+                  // non-preset integer works; 7 reads naturally as
+                  // "a bit more than 5, less than 10".
+                  onClick={() => setCount(7)}
                   dashed
                 />
               )}
