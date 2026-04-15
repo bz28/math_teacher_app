@@ -11,12 +11,10 @@ import { STATUS_FILTERS } from "./question-bank/constants";
 import { SimpleUnitList } from "./question-bank/unit-groups";
 import { ApprovedTable } from "./question-bank/approved-table";
 import { ReviewBanner } from "./question-bank/review-banner";
-import { ReviewQueue } from "./question-bank/review-queue";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UploadWorksheetModal } from "./question-bank/upload-worksheet-modal";
 import { PendingTray } from "./question-bank/pending-tray";
-import { ReviewModal } from "./question-bank/review-modal";
 
 export function QuestionBankTab({
   courseId,
@@ -53,13 +51,12 @@ export function QuestionBankTab({
   const [showGenerate, setShowGenerate] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
-  const [editFromReviewItem, setEditFromReviewItem] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
   const [primaryReviewQueue, setPrimaryReviewQueue] = useState<BankItem[] | null>(null);
   const [variationReviewQueue, setVariationReviewQueue] = useState<BankItem[] | null>(null);
   const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
 
-  // Inline review queue state — replaces main content with ReviewQueue
+  // Inline review queue state — opens WorkshopModal in queue mode
   const [inlineReviewQueue, setInlineReviewQueue] = useState<BankItem[] | null>(null);
 
   // Pending counts for ReviewBanner (computed from pending items cache
@@ -140,7 +137,7 @@ export function QuestionBankTab({
   };
 
   // Start inline review queue from the ReviewBanner (approved tab).
-  // Fetches fresh pending items and opens the inline ReviewQueue.
+  // Fetches fresh pending items and opens WorkshopModal in queue mode.
   const startInlineReview = async () => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
@@ -180,37 +177,6 @@ export function QuestionBankTab({
     if (error) setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, activeJob?.id]);
-
-  // When inline review queue is active, replace the main content
-  if (inlineReviewQueue) {
-    return (
-      <CourseSubjectContext.Provider value={courseSubject}>
-        <div>
-          <ReviewQueue
-            courseId={courseId}
-            queue={inlineReviewQueue}
-            units={units}
-            onBack={() => {
-              setInlineReviewQueue(null);
-              reload();
-            }}
-            onChanged={reload}
-            onEditItem={(item) => setEditFromReviewItem(item)}
-          />
-          {editFromReviewItem && (
-            <WorkshopModal
-              item={editFromReviewItem}
-              editOnly
-              onClose={() => setEditFromReviewItem(null)}
-              onChanged={reload}
-              onJobStarted={setActiveJob}
-              activeJob={activeJob}
-            />
-          )}
-        </div>
-      </CourseSubjectContext.Provider>
-    );
-  }
 
   return (
     <CourseSubjectContext.Provider value={courseSubject}>
@@ -392,33 +358,47 @@ export function QuestionBankTab({
         />
       )}
 
+      {/* Unified review surface — WorkshopModal handles single-item
+          editing AND queue walking. The queue prop flips it into
+          scan-and-decide mode with sticky-homework destination, Prev/
+          Skip, and auto-advance on Approve/Reject. */}
+      {inlineReviewQueue && (
+        <WorkshopModal
+          queue={inlineReviewQueue}
+          onClose={() => {
+            setInlineReviewQueue(null);
+            reload();
+          }}
+          onChanged={reload}
+          onJobStarted={setActiveJob}
+          activeJob={activeJob}
+        />
+      )}
+
       {primaryReviewQueue && (
-        <ReviewModal
-          courseId={courseId}
+        <WorkshopModal
           queue={primaryReviewQueue}
-          active={editFromReviewItem === null}
           onClose={() => {
             setPrimaryReviewQueue(null);
             reload();
           }}
           onChanged={reload}
-          onEditItem={(item) => setEditFromReviewItem(item)}
+          onJobStarted={setActiveJob}
+          activeJob={activeJob}
         />
       )}
 
       {variationReviewQueue && reviewQueueParent && (
-        <ReviewModal
-          courseId={courseId}
+        <WorkshopModal
           queue={variationReviewQueue}
-          parent={reviewQueueParent}
-          active={editFromReviewItem === null}
           onClose={() => {
             setVariationReviewQueue(null);
             setOpenItem(reviewQueueParent);
             reload();
           }}
           onChanged={reload}
-          onEditItem={(item) => setEditFromReviewItem(item)}
+          onJobStarted={setActiveJob}
+          activeJob={activeJob}
         />
       )}
 
@@ -433,17 +413,6 @@ export function QuestionBankTab({
           onJobStarted={setActiveJob}
           activeJob={activeJob}
           onReviewVariations={openVariationReview}
-        />
-      )}
-
-      {editFromReviewItem && (
-        <WorkshopModal
-          item={editFromReviewItem}
-          editOnly
-          onClose={() => setEditFromReviewItem(null)}
-          onChanged={reload}
-          onJobStarted={setActiveJob}
-          activeJob={activeJob}
         />
       )}
 

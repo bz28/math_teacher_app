@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
-import { auth, clearTokens, type InviteData } from "@/lib/api";
+import { auth, clearTokens, type InviteData, type SectionInviteData } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
@@ -30,6 +30,7 @@ function RegisterPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
+  const [joinCode, setJoinCode] = useState("");
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
   const { register, loading, error, clearError } = useAuthStore();
@@ -37,10 +38,12 @@ function RegisterPageContent() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
-  // Invite flow
+  // Invite flow (teacher invite OR section invite — not both)
   const inviteToken = searchParams.get("invite");
+  const sectionInviteToken = searchParams.get("section_invite");
   const [invite, setInvite] = useState<InviteData | null>(null);
-  const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
+  const [sectionInvite, setSectionInvite] = useState<SectionInviteData | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(!!inviteToken || !!sectionInviteToken);
   const [inviteError, setInviteError] = useState("");
 
   // Clear stale tokens so loadUser() doesn't fire "Session expired"
@@ -48,24 +51,33 @@ function RegisterPageContent() {
     clearTokens();
   }, []);
 
-  // Validate invite token on mount
+  // Validate invite token on mount (teacher or section — mutually exclusive)
   useEffect(() => {
-    if (!inviteToken) return;
-    setInviteLoading(true);
-    auth
-      .validateInvite(inviteToken)
-      .then((data) => {
-        setInvite(data);
-        setEmail(data.email);
-      })
-      .catch(() => {
-        setInviteError("This invite link is invalid or has expired.");
-      })
-      .finally(() => setInviteLoading(false));
-  }, [inviteToken]);
+    if (inviteToken) {
+      setInviteLoading(true);
+      auth
+        .validateInvite(inviteToken)
+        .then((data) => {
+          setInvite(data);
+          setEmail(data.email);
+        })
+        .catch(() => setInviteError("This invite link is invalid or has expired."))
+        .finally(() => setInviteLoading(false));
+    } else if (sectionInviteToken) {
+      setInviteLoading(true);
+      auth
+        .validateSectionInvite(sectionInviteToken)
+        .then((data) => {
+          setSectionInvite(data);
+          setEmail(data.email);
+        })
+        .catch(() => setInviteError("This invite link is invalid or has expired."))
+        .finally(() => setInviteLoading(false));
+    }
+  }, [inviteToken, sectionInviteToken]);
 
   async function checkEmail() {
-    if (!email || invite) return;
+    if (!email || invite || sectionInvite) return;
     setCheckingEmail(true);
     try {
       const res = await auth.checkEmail(email);
@@ -85,6 +97,7 @@ function RegisterPageContent() {
     e.preventDefault();
     if (emailError) return;
 
+    const trimmedCode = joinCode.trim().toUpperCase();
     try {
       await register({
         email,
@@ -92,8 +105,16 @@ function RegisterPageContent() {
         name,
         grade_level: gradeLevel,
         ...(inviteToken ? { invite_token: inviteToken } : {}),
+        ...(sectionInviteToken ? { section_invite_token: sectionInviteToken } : {}),
+        ...(trimmedCode ? { join_code: trimmedCode } : {}),
       });
-      router.replace(invite ? "/school/teacher" : "/home");
+      router.replace(
+        invite
+          ? "/school/teacher"
+          : sectionInvite || trimmedCode
+            ? "/school/student"
+            : "/home",
+      );
     } catch {
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);
@@ -101,7 +122,7 @@ function RegisterPageContent() {
   }
 
   // Invite loading state
-  if (inviteToken && inviteLoading) {
+  if ((inviteToken || sectionInviteToken) && inviteLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
@@ -113,7 +134,7 @@ function RegisterPageContent() {
   }
 
   // Invite error state
-  if (inviteToken && inviteError) {
+  if ((inviteToken || sectionInviteToken) && inviteError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6">
         <motion.div
@@ -140,6 +161,8 @@ function RegisterPageContent() {
   }
 
   const isInviteFlow = !!invite;
+  const isSectionInviteFlow = !!sectionInvite;
+  const lockEmail = isInviteFlow || isSectionInviteFlow;
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
@@ -186,6 +209,16 @@ function RegisterPageContent() {
               </span>
             </div>
           </>
+        ) : isSectionInviteFlow ? (
+          <>
+            <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+              Join {sectionInvite.course_name}
+            </h1>
+            <p className="mt-1 text-sm text-text-secondary">
+              {sectionInvite.section_name}
+              {sectionInvite.school_name ? ` · ${sectionInvite.school_name}` : ""}
+            </p>
+          </>
         ) : (
           <>
             <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
@@ -214,7 +247,7 @@ function RegisterPageContent() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => {
-                if (isInviteFlow) return; // Email locked for invite flow
+                if (lockEmail) return; // Email locked for invite flows
                 setEmail(e.target.value);
                 setEmailError("");
                 if (error) clearError();
@@ -223,8 +256,8 @@ function RegisterPageContent() {
               error={emailError}
               required
               autoComplete="email"
-              disabled={isInviteFlow}
-              className={isInviteFlow ? "opacity-60" : ""}
+              disabled={lockEmail}
+              className={lockEmail ? "opacity-60" : ""}
             />
             {checkingEmail && (
               <p className="mt-1 text-xs text-text-muted">Checking availability...</p>
@@ -244,7 +277,7 @@ function RegisterPageContent() {
             autoComplete="new-password"
           />
 
-          {/* Grade picker — only for students */}
+          {/* Grade picker — students only (hidden for teacher invite) */}
           {!isInviteFlow && (
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
@@ -269,6 +302,25 @@ function RegisterPageContent() {
             </div>
           )}
 
+          {/* Join code — students self-signing up; hidden for invite flows */}
+          {!lockEmail && (
+            <div>
+              <Input
+                label="Join code (optional)"
+                placeholder="e.g. 3FH7KP"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                maxLength={10}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                Got one from your teacher? We&apos;ll add you to the class.
+              </p>
+            </div>
+          )}
+
           <Button
             type="submit"
             loading={loading}
@@ -276,7 +328,11 @@ function RegisterPageContent() {
             className="w-full"
             disabled={!!emailError}
           >
-            {isInviteFlow ? "Set Up Your Account" : "Create Account"}
+            {isInviteFlow
+              ? "Set Up Your Account"
+              : isSectionInviteFlow
+                ? "Accept Invite"
+                : "Create Account"}
           </Button>
 
           <p className="mt-4 text-center text-xs text-text-muted">

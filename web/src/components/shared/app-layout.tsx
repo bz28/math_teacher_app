@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { teacher, enterPreviewMode } from "@/lib/api";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
 
@@ -38,6 +37,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  // School-linked students only start sessions from class-scoped flows;
+  // the Learn tab would drop them into the personal free-form path.
+  const showLearnTab = !user?.school_id;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -82,7 +84,6 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <span className="hidden text-sm font-medium text-text-secondary sm:block">
               {user?.name}
             </span>
@@ -119,16 +120,18 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-          <Link
-            href="/learn"
-            className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
-              pathname.startsWith("/learn") ? "text-primary" : "text-text-muted",
-            )}
-          >
-            <LearnIcon active={pathname.startsWith("/learn")} />
-            <span className="text-[10px] font-semibold">Learn</span>
-          </Link>
+          {showLearnTab && (
+            <Link
+              href="/learn"
+              className={cn(
+                "flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
+                pathname.startsWith("/learn") ? "text-primary" : "text-text-muted",
+              )}
+            >
+              <LearnIcon active={pathname.startsWith("/learn")} />
+              <span className="text-[10px] font-semibold">Learn</span>
+            </Link>
+          )}
         </div>
       </nav>
     </div>
@@ -222,16 +225,13 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             <span className="truncate text-xs font-medium text-text-muted">
               {user?.name}
             </span>
-            <div className="flex items-center gap-1">
-              <ThemeToggle />
-              <button
-                onClick={logout}
-                className="rounded-[--radius-sm] p-1.5 text-text-muted transition-colors hover:bg-error-light hover:text-error"
-                title="Sign out"
-              >
-                <LogoutIcon />
-              </button>
-            </div>
+            <button
+              onClick={logout}
+              className="rounded-[--radius-sm] p-1.5 text-text-muted transition-colors hover:bg-error-light hover:text-error"
+              title="Sign out"
+            >
+              <LogoutIcon />
+            </button>
           </div>
         </div>
       </aside>
@@ -245,15 +245,12 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
               {user?.school_name || "Teacher"}
             </span>
           </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <button
-              onClick={logout}
-              className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-error"
-            >
-              Sign Out
-            </button>
-          </div>
+          <button
+            onClick={logout}
+            className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-error"
+          >
+            Sign Out
+          </button>
         </header>
 
         <main id="main-content" className="flex-1 px-6 py-8">

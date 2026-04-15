@@ -58,7 +58,8 @@ Rules for proposals:
 - Set proposal=null when the teacher is just asking ("why did you...", "is this
   too hard...", "what topic does this cover").
 - When proposing changes, ONLY set fields that should change. Set unchanged
-  fields to null. The teacher will see only the changed parts highlighted.
+  top-level fields (question / solution_steps / final_answer) to null. The
+  teacher will see only the changed parts highlighted.
 - When you change the question, you may also need to change the solution and/or
   final answer if they would no longer match. Use your judgment.
 - When you change just the solution, keep the question and final answer null
@@ -66,6 +67,16 @@ Rules for proposals:
 - Use LaTeX with $ delimiters for math. Use single backslashes for LaTeX
   commands (e.g. \\frac, \\sqrt, \\begin{{pmatrix}}). Do not double-escape.
 - Each solution step has a short title (2-5 words) and a full description.
+
+CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
+- If you set solution_steps, you MUST return the complete list of all steps
+  in the correct order. Unchanged steps must be included verbatim.
+- Returning only the step(s) you modified will delete every step you omit.
+- Only reduce the number of steps when the teacher explicitly asks you to
+  remove, merge, or delete steps.
+- If the teacher asks for a tweak to one step (e.g. "make step 3 more
+  concise"), return all N original steps with only step 3 rewritten; keep
+  the other N-1 steps exactly as they were.
 
 Reply text:
 - 1-3 sentences. Acknowledge the change, explain what you did, or answer the
@@ -226,10 +237,24 @@ async def chat_with_bank_item(
     proposal: dict[str, Any] | None = None
     if isinstance(proposal_raw, dict):
         steps_raw = proposal_raw.get("solution_steps")
+        # Filter to well-formed steps only: {title: str, description: str}.
+        # Claude almost always honors the schema, but if a malformed step
+        # slips through it would be stored in chat_messages and applied
+        # to item.solution_steps on accept, crashing the frontend render.
+        cleaned_steps: list[dict[str, Any]] | None = None
+        if isinstance(steps_raw, list):
+            cleaned_steps = [
+                {"title": s["title"], "description": s["description"]}
+                for s in steps_raw
+                if isinstance(s, dict)
+                and isinstance(s.get("title"), str)
+                and isinstance(s.get("description"), str)
+            ]
+            if not cleaned_steps:
+                cleaned_steps = None
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
-            # Treat empty list as null — an empty solution is never a valid edit
-            "solution_steps": steps_raw if isinstance(steps_raw, list) and len(steps_raw) > 0 else None,
+            "solution_steps": cleaned_steps,
             "final_answer": proposal_raw.get("final_answer")
             if proposal_raw.get("final_answer")
             else None,

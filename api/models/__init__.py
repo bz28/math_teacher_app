@@ -10,6 +10,7 @@ from api.models import (  # noqa: F401
     school,
     section,
     section_enrollment,
+    section_invite,
     session,
     teacher_invite,
     unit,

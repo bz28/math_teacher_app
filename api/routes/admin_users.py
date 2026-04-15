@@ -46,8 +46,10 @@ async def users(
 ) -> dict[str, Any]:
     since = time_range(hours)
 
-    # Total users
-    total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
+    # Total users (excludes preview/shadow accounts created by "View as Student")
+    total_users = (await db.execute(
+        select(func.count()).select_from(User).where(User.is_preview.is_(False))
+    )).scalar() or 0
 
     # Active users (7d)
     active_7d = (await db.execute(
@@ -149,16 +151,14 @@ async def users(
         "name": User.name.asc(),
     }
 
-    # Search filter
-    search_filters = []
+    # Filters — also hide preview/shadow accounts from the admin user list.
+    search_filters: list[Any] = [User.is_preview.is_(False)]
     if search:
         term = f"%{search}%"
         search_filters.append(User.name.ilike(term) | User.email.ilike(term))
 
     # Count of users matching search (for pagination)
-    count_query = select(func.count()).select_from(User)
-    if search_filters:
-        count_query = count_query.where(*search_filters)
+    count_query = select(func.count()).select_from(User).where(*search_filters)
     filtered_count = (await db.execute(count_query)).scalar() or 0
 
     # All users with cost + session data (paginated)
@@ -185,9 +185,8 @@ async def users(
         .outerjoin(daily_sessions, daily_sessions.c.user_id == User.id)
         .outerjoin(daily_chats, daily_chats.c.user_id == User.id)
         .outerjoin(daily_scans, daily_scans.c.user_id == User.id)
+        .where(*search_filters)
     )
-    if search_filters:
-        users_query = users_query.where(*search_filters)
     users_query = (
         users_query
         .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]))

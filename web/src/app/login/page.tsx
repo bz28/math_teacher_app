@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { clearTokens, auth as authApi } from "@/lib/api";
@@ -10,6 +10,28 @@ import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+// Accept only same-origin redirects. URL parsing handles every weird
+// case (protocol-relative //host, backslashes Chrome normalizes to /,
+// encoded slashes, authority injection) without regex whack-a-mole.
+function sameOriginRedirect(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw, window.location.origin);
+    if (u.origin !== window.location.origin) return null;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return null;
+  }
+}
+
+function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showForgot, setShowForgot] = useState(false);
@@ -18,6 +40,8 @@ export default function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const { login, loading, error, clearError } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect");
   const toast = useToast();
 
   async function handleForgotPassword(e: FormEvent) {
@@ -44,11 +68,12 @@ export default function LoginPage() {
       await login(email, password);
       const user = useAuthStore.getState().user;
       const dest =
-        user?.role === "teacher"
+        sameOriginRedirect(redirect) ??
+        (user?.role === "teacher"
           ? "/school/teacher"
           : user?.role === "student" && user.school_id
             ? "/school/student"
-            : "/home";
+            : "/home");
       router.replace(dest);
     } catch {
       const msg = useAuthStore.getState().error;

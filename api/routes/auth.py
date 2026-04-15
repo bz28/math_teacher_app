@@ -44,6 +44,7 @@ from api.models.promo import PromoRedemption
 from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
+from api.models.section_invite import SectionInvite
 from api.models.session import Session
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import RefreshToken, User
@@ -97,6 +98,20 @@ async def validate_invite(token: str, db: AsyncSession = Depends(get_db)) -> dic
     }
 
 
+@router.get("/invite/section/{token}")
+async def validate_section_invite(token: str, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Validate a section invite token and return pre-fill data for the registration form."""
+    invite, section, course, school = await _load_section_invite(db, token)
+    return {
+        "email": invite.email,
+        "section_id": str(section.id),
+        "section_name": section.name,
+        "course_id": str(course.id),
+        "course_name": course.name,
+        "school_name": school.name if school else "",
+    }
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
 async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
@@ -107,6 +122,11 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     # Handle teacher invite flow
     school_id = None
     role = body.role
+    if body.invite_token and body.section_invite_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot use a teacher invite and a section invite together",
+        )
     if body.invite_token:
         invite = (await db.execute(
             select(TeacherInvite).where(TeacherInvite.token == body.invite_token, TeacherInvite.status == "pending")
@@ -128,12 +148,55 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         role = "teacher"
         invite.status = "accepted"
 
-    elif role == "teacher":
-        # Teachers can only register via invite
+    # Section invite (student): claim after user is created so we can enroll.
+    section_invite: SectionInvite | None = None
+    section_course: Course | None = None
+    if body.section_invite_token:
+        section_invite, _, section_course, _ = await _load_section_invite(
+            db, body.section_invite_token,
+        )
+        if section_invite.email.lower() != body.email.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email does not match invite",
+            )
+        role = "student"
+        if section_course and section_course.school_id is not None:
+            school_id = section_course.school_id
+
+    # A bare "role=teacher" (no invite) is always rejected. Done AFTER the
+    # invite blocks so a section invite with role=teacher gets the clearer
+    # "section invite forces student role" outcome — the invite wins and
+    # the role is overridden to student above.
+    if role == "teacher" and not body.invite_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Teacher registration requires a school invite",
         )
+
+    # Join code (student): validate up-front so we don't create a user if
+    # the code is bad. Mutually exclusive with invite flows (either invite
+    # already picked the section/school, or the student is self-signing up).
+    join_section_obj: Section | None = None
+    if body.join_code:
+        if body.invite_token or body.section_invite_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot use a join code together with an invite",
+            )
+        code = body.join_code.strip().upper()
+        join_section_obj = (await db.execute(
+            select(Section).where(Section.join_code == code)
+        )).scalar_one_or_none()
+        if not join_section_obj:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid join code")
+        if join_section_obj.join_code_expires_at and join_section_obj.join_code_expires_at < datetime.now(UTC):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Join code expired")
+        join_course = (await db.execute(
+            select(Course).where(Course.id == join_section_obj.course_id)
+        )).scalar_one_or_none()
+        if join_course and join_course.school_id is not None:
+            school_id = join_course.school_id
 
     user = User(
         email=body.email,
@@ -144,12 +207,100 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         school_id=school_id,
     )
     db.add(user)
+    await db.flush()
+
+    if section_invite is not None:
+        db.add(SectionEnrollment(section_id=section_invite.section_id, student_id=user.id))
+        section_invite.status = "accepted"
+    if join_section_obj is not None:
+        db.add(SectionEnrollment(section_id=join_section_obj.id, student_id=user.id))
+
     await db.commit()
     await db.refresh(user)
 
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+class ClaimSectionInviteRequest(BaseModel):
+    token: str
+
+
+@router.post("/invite/section/claim")
+async def claim_section_invite(
+    body: ClaimSectionInviteRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Claim a section invite as an already-logged-in user.
+
+    Used when a student already has an account, clicks the email link, and
+    we need to enroll them without going through signup again.
+    """
+    invite, _, course, _ = await _load_section_invite(db, body.token)
+    if invite.email.lower() != user.email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invite was sent to a different email. Sign out and sign in with that account.",
+        )
+    already_enrolled = (await db.execute(
+        select(SectionEnrollment).where(
+            SectionEnrollment.section_id == invite.section_id,
+            SectionEnrollment.student_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if not already_enrolled:
+        db.add(SectionEnrollment(section_id=invite.section_id, student_id=user.id))
+    if user.school_id is None and course is not None and course.school_id is not None:
+        user.school_id = course.school_id
+    invite.status = "accepted"
+    await db.commit()
+    return {"status": "ok", "section_id": str(invite.section_id)}
+
+
+async def _load_section_invite(
+    db: AsyncSession, token: str,
+) -> tuple[SectionInvite, Section, Course, School | None]:
+    """Validate and load a section invite. Marks expired invites on the way."""
+    invite = (await db.execute(
+        select(SectionInvite).where(SectionInvite.token == token)
+    )).scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if invite.status == "revoked":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="This invite was revoked by the teacher. Ask them to send a new one.",
+        )
+    if invite.status == "accepted":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="This invite has already been used.",
+        )
+    if invite.status == "expired" or invite.expires_at < datetime.now(UTC):
+        if invite.status != "expired":
+            invite.status = "expired"
+            await db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="This invite has expired")
+    section = (await db.execute(
+        select(Section).where(Section.id == invite.section_id)
+    )).scalar_one_or_none()
+    if not section:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Section no longer exists")
+    course = (await db.execute(
+        select(Course).where(Course.id == section.course_id)
+    )).scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Course no longer exists")
+    school: School | None = None
+    if course.school_id is not None:
+        school = (await db.execute(
+            select(School).where(School.id == course.school_id)
+        )).scalar_one_or_none()
+        if school is not None and not school.is_active:
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="School is no longer active")
+    return invite, section, course, school
 
 
 @router.post("/login", response_model=TokenResponse)

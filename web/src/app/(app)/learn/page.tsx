@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { useAuthStore } from "@/stores/auth";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
@@ -26,8 +27,18 @@ export default function LearnPage() {
 function LearnPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const subject = (searchParams.get("subject") ?? "math") as Subject;
   const sectionId = searchParams.get("section");
+
+  // School-linked students should stay inside class-scoped flows. Belt-
+  // and-suspenders with the nav-layer hide in app-layout: blocks direct
+  // URL access too.
+  useEffect(() => {
+    if (user?.role === "student" && user.school_id) {
+      router.replace("/school/student");
+    }
+  }, [user, router]);
 
   const {
     setSubject,

@@ -33,7 +33,7 @@ export function DestinationPicker({
   busy?: boolean;
   /** Horizontal anchor relative to the trigger. "start" anchors the
    *  popover's left edge to the trigger (default — works for left-aligned
-   *  triggers like ReviewModal). "end" anchors the right edge — needed
+   *  triggers). "end" anchors the right edge — needed
    *  when the trigger sits on the right of its container (e.g. workshop's
    *  ml-auto Add-to-Homework button) so the popover doesn't overflow off
    *  the right edge of the modal. */

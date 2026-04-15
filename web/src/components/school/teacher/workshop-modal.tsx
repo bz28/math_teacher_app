@@ -50,7 +50,6 @@ const STATUS_BADGE: Record<string, string> = {
 export function WorkshopModal({
   item: initialItem,
   queue,
-  editOnly = false,
   onClose,
   onChanged,
   onJobStarted,
@@ -59,12 +58,6 @@ export function WorkshopModal({
 }: {
   item?: BankItem;
   queue?: BankItem[];
-  // When true, hide Approve/Reject buttons regardless of status. Used
-  // when the modal is opened from inside the new ReviewModal so the
-  // teacher uses the review surface for status changes (avoids the
-  // two-surfaces-fighting bug where workshop's approve doesn't sync
-  // with review's queue advance).
-  editOnly?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onJobStarted?: (job: BankJob) => void;
@@ -94,14 +87,25 @@ export function WorkshopModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
-  // Chat starts open in single mode, collapsed in queue mode (the teacher
-  // wanted scan-and-decide focus). Persists across queue items in the same
-  // session.
-  const [chatOpen, setChatOpen] = useState(!isQueueMode);
+  // Chat is open by default in both modes — the panel is almost always
+  // needed during review and should be discoverable. Toggleable via the
+  // 💬 AI button or C key.
+  const [chatOpen, setChatOpen] = useState(true);
   // "Add to Homework" picker for single-mode pending items. Replaces
-  // the legacy bare Approve button so the workshop's approval path
-  // matches the ReviewModal contract: approval requires a destination.
+  // the legacy bare Approve button so approval always commits to a
+  // destination.
   const [showAddToHomeworkPicker, setShowAddToHomeworkPicker] = useState(false);
+
+  // Queue mode: sticky homework destination. The first Approve in a
+  // primary queue opens the picker; the chosen homework sticks for the
+  // rest of the session. Subsequent Approves auto-attach without
+  // reopening the picker. Teacher can change it via the header pill.
+  // Variation queues (every item has a parent_question_id) don't use
+  // this — variations aren't HW-attached the same way.
+  const isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
+  const [stickyHomework, setStickyHomework] = useState<TeacherAssignment | null>(null);
+  const [showStickyPicker, setShowStickyPicker] = useState(false);
+
   const { busy, error, setError, run } = useAsyncAction();
 
   // ── Item sync ────────────────────────────────────────────────────
@@ -330,18 +334,81 @@ export function WorkshopModal({
       setShowUndo(false);
     });
 
-  const approve = () =>
+  // Queue-mode primary Approve: if no homework is sticky yet, open the
+  // picker and wait for a choice. Once set, this approve() fast-paths
+  // straight through — subsequent clicks attach to the sticky homework.
+  const approve = () => {
+    if (isQueueMode && !isVariationQueue && !stickyHomework) {
+      setShowAddToHomeworkPicker(true);
+      return;
+    }
     run(async () => {
       if (!liveItem || blockIfPending()) return;
-      await teacher.approveBankItem(liveItem.id);
-      // Use replaceLiveItem so queueState stays consistent with liveItem.
-      // Even though the stale entry isn't displayed today, keeping the two
-      // stores in sync removes a footgun for any future reader of queueState.
+      const opts =
+        isQueueMode && !isVariationQueue && stickyHomework
+          ? { assignmentId: stickyHomework.id }
+          : undefined;
+      await teacher.approveBankItem(liveItem.id, opts);
       replaceLiveItem({ ...liveItem, status: "approved" });
       if (isQueueMode) {
         setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
         advanceQueue();
       }
+    });
+  };
+
+  // Queue-mode first approval goes through the picker below. When the
+  // teacher picks a homework, attach + mark sticky + advance. Stays
+  // sticky for the rest of the session.
+  const approveToStickyExisting = (assignment: TeacherAssignment) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      await teacher.approveBankItem(liveItem.id, { assignmentId: assignment.id });
+      setStickyHomework(assignment);
+      setShowAddToHomeworkPicker(false);
+      replaceLiveItem({ ...liveItem, status: "approved" });
+      setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
+      advanceQueue();
+    });
+
+  const approveToStickyNew = (title: string, unitIds: string[]) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      // Approve first, then create the HW with the now-approved item
+      // already attached. Matches the single-mode createHomeworkAndAdd
+      // pattern. Order matters: if step 2 fails, we're left with an
+      // approved-but-unassigned question (recoverable from the approved
+      // list) rather than an empty homework the teacher never wanted.
+      await teacher.approveBankItem(liveItem.id);
+      const created = await teacher.createAssignment(liveItem.course_id, {
+        title,
+        type: "homework",
+        unit_ids: unitIds,
+        bank_item_ids: [liveItem.id],
+      });
+      setStickyHomework({
+        id: created.id,
+        course_id: liveItem.course_id,
+        unit_ids: unitIds,
+        title,
+        type: "homework",
+        source_type: "manual",
+        due_at: null,
+        late_policy: "block",
+        status: created.status,
+        section_ids: [],
+        section_names: [],
+        problem_count: 1,
+        total_students: 0,
+        submitted: 0,
+        graded: 0,
+        avg_score: null,
+        created_at: new Date().toISOString(),
+      });
+      setShowAddToHomeworkPicker(false);
+      replaceLiveItem({ ...liveItem, status: "approved" });
+      setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
+      advanceQueue();
     });
 
   // Variation single-mode flow: approve + refresh parent + close.
@@ -359,8 +426,8 @@ export function WorkshopModal({
 
   // Single-mode pending: clicking "→ Add to Homework" opens the picker;
   // picking a HW fires the atomic approve+attach call, then closes the
-  // workshop. Same contract as ReviewModal Flow A so the workshop entry
-  // path can't bypass the "approval requires a destination" rule.
+  // workshop. The workshop entry path can't bypass the "approval
+  // requires a destination" rule.
   const addToExistingHomework = (assignment: TeacherAssignment) =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
@@ -458,7 +525,7 @@ export function WorkshopModal({
       // Most action shortcuts are gated when a proposal is pending
       if (isProposalPending) return;
 
-      if (!editOnly && (e.key === "Enter" || e.key === "a" || e.key === "A")) {
+      if (e.key === "Enter" || e.key === "a" || e.key === "A") {
         e.preventDefault();
         // Single-mode pending: route Enter/A to the destination picker
         // instead of bare approve. Same contract as the click handler.
@@ -467,10 +534,10 @@ export function WorkshopModal({
         } else {
           handlersRef.current.approve();
         }
-      } else if (!editOnly && (e.key === "x" || e.key === "X")) {
+      } else if (e.key === "x" || e.key === "X") {
         e.preventDefault();
         handlersRef.current.reject();
-      } else if (!editOnly && (e.key === "s" || e.key === "S")) {
+      } else if (e.key === "s" || e.key === "S") {
         if (isQueueMode) {
           e.preventDefault();
           handlersRef.current.skip();
@@ -485,12 +552,9 @@ export function WorkshopModal({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [allResolved, busy, isProposalPending, isQueueMode, editOnly, liveItem?.status, onClose]);
+  }, [allResolved, busy, isProposalPending, isQueueMode, liveItem?.status, onClose]);
 
-  // ── Render: empty queue or completion ────────────────────────────
-  if (isQueueMode && total === 0) {
-    return <EmptyQueueModal onClose={onClose} />;
-  }
+  // ── Render: completion ──────────────────────────────────────────
   if (allResolved) {
     return <CompletionModal counts={counts} total={total} onClose={onClose} />;
   }
@@ -503,6 +567,19 @@ export function WorkshopModal({
   const questionChanged = pendingProposal?.question != null;
   const stepsChanged = pendingProposal?.solution_steps != null;
   const answerChanged = pendingProposal?.final_answer != null;
+  // When solution_steps is proposed, highlight only the individual steps
+  // that actually differ from the current version. Index-by-index
+  // compare on title+description: if a step is new (no prev at that
+  // index) or its text doesn't match, it's changed. This lets Claude
+  // return the full steps list (per prompt) without lighting up every
+  // card blue when only one was edited.
+  const stepChanged = (idx: number): boolean => {
+    if (!stepsChanged) return false;
+    const prev = liveItem.solution_steps?.[idx];
+    const next = previewSteps?.[idx];
+    if (!prev || !next) return true;
+    return prev.title !== next.title || prev.description !== next.description;
+  };
 
   const resolvedCount = Object.keys(resolved).length;
   const progressPct = isQueueMode ? (resolvedCount / total) * 100 : 0;
@@ -530,6 +607,47 @@ export function WorkshopModal({
               <span className="shrink-0 text-xs font-semibold text-text-muted">
                 {resolvedCount + 1} / {total}
               </span>
+            )}
+            {isQueueMode && !isVariationQueue && stickyHomework && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowStickyPicker((v) => !v)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/40 bg-primary-bg/40 px-2 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
+                  title="Change the homework these approvals attach to"
+                >
+                  → {stickyHomework.title}
+                  <span className="text-[9px] opacity-60">change</span>
+                </button>
+                {showStickyPicker && (
+                  <DestinationPicker
+                    courseId={liveItem.course_id}
+                    busy={busy}
+                    align="start"
+                    onClose={() => setShowStickyPicker(false)}
+                    onPickExisting={(a) => {
+                      setStickyHomework(a);
+                      setShowStickyPicker(false);
+                    }}
+                    onCreateNew={async (title, unitIds) => {
+                      const created = await teacher.createAssignment(liveItem.course_id, {
+                        title,
+                        type: "homework",
+                        unit_ids: unitIds,
+                      });
+                      setStickyHomework({
+                        ...stickyHomework,
+                        id: created.id,
+                        title,
+                        unit_ids: unitIds,
+                        status: created.status,
+                      });
+                      setShowStickyPicker(false);
+                    }}
+                  />
+                )}
+              </div>
             )}
             <span
               className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
@@ -560,6 +678,17 @@ export function WorkshopModal({
                 ])}
               </select>
             </label>
+            {liveItem.source_doc_ids && liveItem.source_doc_ids.length > 0 && (
+              <span
+                className="text-[11px] font-semibold text-text-muted"
+                title={`Generated from ${liveItem.source_doc_ids.length} source document${
+                  liveItem.source_doc_ids.length === 1 ? "" : "s"
+                }`}
+              >
+                · {liveItem.source_doc_ids.length} source
+                {liveItem.source_doc_ids.length === 1 ? "" : "s"}
+              </span>
+            )}
             {showUndo && (
               <button
                 onClick={undo}
@@ -664,6 +793,11 @@ export function WorkshopModal({
                   <span className="text-blue-700 dark:text-blue-300">Preview</span>
                 )}
               </div>
+              {questionChanged && (
+                <BeforeBlock>
+                  <MathText text={liveItem.question} />
+                </BeforeBlock>
+              )}
               <div className="mt-3 text-base leading-relaxed text-text-primary">
                 {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />
@@ -698,49 +832,67 @@ export function WorkshopModal({
               {solutionOpen && (
                 <div className="mt-3 space-y-3">
                   {previewSteps && previewSteps.length > 0 ? (
-                    previewSteps.map((s, i) => (
-                      <div
-                        key={i}
-                        className={`rounded-[--radius-lg] border p-4 ${
-                          stepsChanged
-                            ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
-                            : "border-border-light bg-surface"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
-                            {i + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-semibold text-text-primary">
-                              {stepsChanged || isProposalPending ? (
-                                <MathText text={s.title} />
-                              ) : (
-                                <ClickToEditText
-                                  value={s.title}
-                                  inline
-                                  onSave={(next) => saveStep(i, "title", next)}
-                                  busy={busy}
-                                />
-                              )}
+                    // Historical data can contain null entries from an
+                    // early version of the accept path. Skip them rather
+                    // than crashing on s.title.
+                    previewSteps.filter((s) => s != null).map((s, i) => {
+                      const changed = stepChanged(i);
+                      const prev = liveItem.solution_steps?.[i];
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded-[--radius-lg] border p-4 ${
+                            changed
+                              ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                              : "border-border-light bg-surface"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
+                              {i + 1}
                             </div>
-                            <div className="mt-2 h-px bg-border-light" />
-                            <div className="mt-2 text-xs leading-relaxed text-text-secondary">
-                              {stepsChanged || isProposalPending ? (
-                                <MathText text={s.description} />
-                              ) : (
-                                <ClickToEditText
-                                  value={s.description}
-                                  multiline
-                                  onSave={(next) => saveStep(i, "description", next)}
-                                  busy={busy}
-                                />
+                            <div className="min-w-0 flex-1">
+                              {changed && prev && (
+                                <BeforeBlock>
+                                  <div className="text-sm font-semibold text-text-secondary">
+                                    <MathText text={prev.title ?? ""} />
+                                  </div>
+                                  <div className="mt-2 h-px bg-border-light/70" />
+                                  <div className="mt-2 text-xs leading-relaxed text-text-muted">
+                                    <MathText text={prev.description ?? ""} />
+                                  </div>
+                                </BeforeBlock>
                               )}
+                              <div className="text-sm font-semibold text-text-primary">
+                                {isProposalPending ? (
+                                  <MathText text={s.title ?? ""} />
+                                ) : (
+                                  <ClickToEditText
+                                    value={s.title ?? ""}
+                                    inline
+                                    onSave={(next) => saveStep(i, "title", next)}
+                                    busy={busy}
+                                  />
+                                )}
+                              </div>
+                              <div className="mt-2 h-px bg-border-light" />
+                              <div className="mt-2 text-xs leading-relaxed text-text-secondary">
+                                {isProposalPending ? (
+                                  <MathText text={s.description ?? ""} />
+                                ) : (
+                                  <ClickToEditText
+                                    value={s.description ?? ""}
+                                    multiline
+                                    onSave={(next) => saveStep(i, "description", next)}
+                                    busy={busy}
+                                  />
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="rounded-[--radius-md] bg-bg-subtle p-4 text-xs italic text-text-muted">
                       No solution steps recorded.
@@ -765,6 +917,13 @@ export function WorkshopModal({
                     <span className="text-blue-700 dark:text-blue-300">Preview</span>
                   )}
                 </div>
+                {answerChanged && liveItem.final_answer && (
+                  <BeforeBlock>
+                    <div className="text-base font-bold text-text-muted">
+                      <MathText text={liveItem.final_answer} />
+                    </div>
+                  </BeforeBlock>
+                )}
                 <div className="mt-2 text-lg font-bold text-text-primary">
                   {answerChanged || isProposalPending ? (
                     <MathText text={previewAnswer ?? ""} />
@@ -779,22 +938,17 @@ export function WorkshopModal({
               </div>
             )}
 
-            {/* Source + constraint footer */}
-            <div className="mt-5 space-y-1 border-t border-border-light pt-3 text-[11px] text-text-muted">
-              {liveItem.source_doc_ids && liveItem.source_doc_ids.length > 0 && (
-                <div>
-                  <span className="font-bold uppercase tracking-wider">Source:</span>{" "}
-                  {liveItem.source_doc_ids.length} document
-                  {liveItem.source_doc_ids.length === 1 ? "" : "s"}
-                </div>
-              )}
-              {liveItem.generation_prompt && (
+            {/* Constraint footer — kept in the body because it's long
+                and narrative. The short "Source: N docs" chip lives in
+                the header now, next to the unit picker. */}
+            {liveItem.generation_prompt && (
+              <div className="mt-5 space-y-1 border-t border-border-light pt-3 text-[11px] text-text-muted">
                 <div>
                   <span className="font-bold uppercase tracking-wider">Constraint:</span>{" "}
                   &ldquo;{liveItem.generation_prompt}&rdquo;
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
           </div>
@@ -825,18 +979,26 @@ export function WorkshopModal({
           chatOpen={chatOpen}
           busy={busy}
           status={liveItem.status}
-          editOnly={editOnly}
           courseId={liveItem.course_id}
           isVariation={!!liveItem.parent_question_id}
           showAddToHomeworkPicker={showAddToHomeworkPicker}
           onOpenAddToHomework={() => setShowAddToHomeworkPicker(true)}
           onCloseAddToHomework={() => setShowAddToHomeworkPicker(false)}
-          onPickExistingHomework={addToExistingHomework}
-          onCreateNewHomework={createHomeworkAndAdd}
+          onPickExistingHomework={
+            isQueueMode && !isVariationQueue ? approveToStickyExisting : addToExistingHomework
+          }
+          onCreateNewHomework={
+            isQueueMode && !isVariationQueue ? approveToStickyNew : createHomeworkAndAdd
+          }
           onApprove={approve}
           onApproveAsVariation={approveAsVariation}
           onReject={reject}
           onSkip={skip}
+          approveLabel={
+            isQueueMode && !isVariationQueue && stickyHomework
+              ? `Approve & add to "${truncate(stickyHomework.title, 24)}"`
+              : undefined
+          }
           onToggleChat={() => setChatOpen((v) => !v)}
           onAcceptProposal={acceptProposal}
           onDiscardProposal={discardProposal}
@@ -870,6 +1032,10 @@ export function WorkshopModal({
 // Vim's status line: tells the teacher what they're doing right now.
 // ─────────────────────────────────────────────────────────────────────
 
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
 function ModeLineFooter({
   isQueueMode,
   isProposalPending,
@@ -877,7 +1043,6 @@ function ModeLineFooter({
   chatOpen,
   busy,
   status,
-  editOnly,
   courseId,
   isVariation,
   showAddToHomeworkPicker,
@@ -889,6 +1054,7 @@ function ModeLineFooter({
   onApproveAsVariation,
   onReject,
   onSkip,
+  approveLabel,
   onToggleChat,
   onAcceptProposal,
   onDiscardProposal,
@@ -902,7 +1068,6 @@ function ModeLineFooter({
   chatOpen: boolean;
   busy: boolean;
   status: string;
-  editOnly: boolean;
   courseId: string;
   isVariation: boolean;
   showAddToHomeworkPicker: boolean;
@@ -914,6 +1079,9 @@ function ModeLineFooter({
   onApproveAsVariation: () => void;
   onReject: () => void;
   onSkip: () => void;
+  /** Override the Approve label text — used in queue mode to show the
+   *  sticky homework destination ("Approve & add to HW X"). */
+  approveLabel?: string;
   onToggleChat: () => void;
   onAcceptProposal: () => void;
   onDiscardProposal: () => void;
@@ -985,9 +1153,8 @@ function ModeLineFooter({
 
   // Default: reading mode. Show approve/reject/skip/chat/delete.
   // In single mode, hide Approve/Reject if the question isn't pending
-  // (since they've already been resolved). editOnly forces them off
-  // regardless — used when opened from inside ReviewModal.
-  const showApproveReject = !editOnly && (isQueueMode || status === "pending");
+  // (since they've already been resolved).
+  const showApproveReject = isQueueMode || status === "pending";
   // Single-mode pending replaces bare Approve with "→ Add to Homework"
   // for PRIMARY problems (no parent_question_id). Variations follow
   // a different rule: they're practice scaffolding, not HW problems,
@@ -996,32 +1163,48 @@ function ModeLineFooter({
   // as a HW primary regardless, but hiding the button removes the
   // footgun at the source.
   const showAddToHomework =
-    !editOnly && !isQueueMode && status === "pending" && !isVariation;
+    !isQueueMode && status === "pending" && !isVariation;
   const showApproveAsVariation =
-    !editOnly && !isQueueMode && status === "pending" && isVariation;
+    !isQueueMode && status === "pending" && isVariation;
 
   return (
     <div className="border-t border-border-light px-6 py-3">
       <div className="flex flex-wrap items-center gap-2">
+        {/* LEFT — destructive cluster: Reject + Delete. Grouped so the
+            teacher's muscle memory for "this question is bad" stays
+            in one place. */}
         {showApproveReject && (
-          <>
-            <FooterButton
-              onClick={onReject}
-              disabled={busy}
-              variant="reject"
-              shortcut="X"
-              label="Reject"
-            />
-            {isQueueMode && (
-              <FooterButton
-                onClick={onSkip}
-                disabled={busy}
-                variant="neutral"
-                shortcut="S"
-                label="Skip"
-              />
-            )}
-          </>
+          <FooterButton
+            onClick={onReject}
+            disabled={busy}
+            variant="reject"
+            shortcut="X"
+            label="Reject"
+          />
+        )}
+        <button
+          onClick={onStartDelete}
+          disabled={busy}
+          title="Delete question"
+          aria-label="Delete question"
+          className="rounded-[--radius-md] border border-red-300 px-2.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+        >
+          🗑
+        </button>
+
+        {/* MIDDLE — neutral navigation/chat. Queue-mode gets Skip so the
+            teacher can defer a question they're not sure about. Chat
+            toggle is always present. Forward navigation is implicit via
+            Approve/Reject/Skip; backward nav is intentionally omitted so
+            teachers can't land on already-resolved items and re-approve. */}
+        {showApproveReject && isQueueMode && (
+          <FooterButton
+            onClick={onSkip}
+            disabled={busy}
+            variant="neutral"
+            shortcut="S"
+            label="Skip"
+          />
         )}
         <FooterButton
           onClick={onToggleChat}
@@ -1030,18 +1213,33 @@ function ModeLineFooter({
           shortcut="C"
           label={chatOpen ? "💬 Hide" : "💬 AI"}
         />
-        {/* Queue-mode kept the legacy bare Approve (it's already
-            destination-aware via its parent flow). Single-mode pending
-            uses the destination picker. */}
+
+        {/* RIGHT — primary cluster: the "keep this question" actions.
+            Queue mode uses Approve (attaches to sticky homework on first
+            click, fast-paths thereafter). Single-mode pending uses the
+            "Add to Homework" picker, or "Approve as practice" for
+            variations. ml-auto pushes the whole cluster to the right. */}
         {showApproveReject && isQueueMode && (
-          <FooterButton
-            onClick={onApprove}
-            disabled={busy}
-            variant="approve"
-            shortcut="↵"
-            label="Approve"
-            isLast
-          />
+          <div className="relative ml-auto">
+            <FooterButton
+              onClick={onApprove}
+              disabled={busy}
+              variant="approve"
+              shortcut="↵"
+              label={approveLabel ?? "Approve"}
+              isLast
+            />
+            {showAddToHomeworkPicker && (
+              <DestinationPicker
+                courseId={courseId}
+                busy={busy}
+                align="end"
+                onClose={onCloseAddToHomework}
+                onPickExisting={onPickExistingHomework}
+                onCreateNew={onCreateNewHomework}
+              />
+            )}
+          </div>
         )}
         {showAddToHomework && (
           <div className="relative ml-auto">
@@ -1078,15 +1276,6 @@ function ModeLineFooter({
             </button>
           </div>
         )}
-        <button
-          onClick={onStartDelete}
-          disabled={busy}
-          title="Delete question"
-          aria-label="Delete question"
-          className="ml-2 rounded-[--radius-md] border border-red-300 px-2.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-        >
-          🗑
-        </button>
       </div>
       <p className="mt-2 hidden text-[10px] text-text-muted md:block">
         ↵ approve · X reject {isQueueMode && "· S skip"} · C chat · ↑↓ toggle solution · Esc close
@@ -1164,21 +1353,45 @@ function ChatPanel({
   onCancelClear: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  // Optimistic teacher message shown the instant Send is clicked.
+  // Without this the teacher watches their message disappear into the
+  // input and see "AI is thinking…" with no visible proof the message
+  // was received. Cleared after onSend resolves — the server's
+  // authoritative chat_messages list replaces it in the next render.
+  const [optimistic, setOptimistic] = useState<{ text: string; ts: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const messages = item.chat_messages;
-  const teacherMessageCount = messages.filter((m) => m.role === "teacher").length;
+  const serverMessages = item.chat_messages;
+  // Merge the optimistic message in for rendering only if it's not
+  // already reflected in the server list (belt + suspenders against a
+  // fast round-trip where server data arrives before optimistic clears).
+  const messages = optimistic
+    ? [
+        ...serverMessages,
+        { role: "teacher" as const, text: optimistic.text, ts: optimistic.ts },
+      ]
+    : serverMessages;
+  const teacherMessageCount = serverMessages.filter((m) => m.role === "teacher").length;
   const atSoftCap = teacherMessageCount >= item.chat_soft_cap;
+
+  const sendingChat = optimistic !== null;
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, busy]);
+  }, [messages.length, sendingChat]);
 
   const submit = async () => {
     const text = draft.trim();
     if (!text || busy) return;
+    setOptimistic({ text, ts: new Date().toISOString() });
+    setDraft("");
     const ok = await onSend(text);
-    if (ok) setDraft("");
+    setOptimistic(null);
+    if (!ok) {
+      // Failure: restore the draft so the teacher can retry without
+      // retyping. The error toast is surfaced by useAsyncAction.
+      setDraft(text);
+    }
   };
 
   return (
@@ -1227,7 +1440,12 @@ function ChatPanel({
             onDiscard={onDiscard}
           />
         ))}
-        {busy && (
+        {/* Only show the thinking indicator while we're actually
+            waiting on a chat round-trip. `busy` flips true for any
+            async action in the modal (save, approve, reject), so
+            gating on it would flash "AI is thinking…" every time the
+            teacher clicks out of a manual edit. */}
+        {sendingChat && (
           <div className="flex items-center gap-1.5 rounded-[--radius-md] bg-surface p-3 text-xs italic text-text-muted shadow-sm">
             <span className="inline-flex gap-1">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
@@ -1309,6 +1527,23 @@ function ChatPanel({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Nested "Before" card shown above a changed field inside the preview
+ * overlay. Demotes the prior value visually (muted fill, smaller label,
+ * softer typography) so the teacher's eye lands on the proposed value
+ * below without strikethrough tricks that would mangle rendered math.
+ */
+function BeforeBlock({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-3 rounded-[--radius-md] border border-border-light/60 bg-bg-subtle/60 p-3">
+      <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-text-muted">
+        Before
+      </div>
+      <div className="mt-1.5 opacity-70">{children}</div>
     </div>
   );
 }
@@ -1426,29 +1661,8 @@ function ChatMessageBubble({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Empty + completion screens (queue mode only)
+// Completion screen (queue mode only)
 // ─────────────────────────────────────────────────────────────────────
-
-function EmptyQueueModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-sm text-text-muted">
-          Nothing to review — generate questions or approve from the list.
-        </p>
-        <button
-          onClick={onClose}
-          className="mt-4 rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
-        >
-          Done
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function CompletionModal({
   counts,

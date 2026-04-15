@@ -16,27 +16,26 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Veradic AI — Your AI Math & Science Tutor",
+    default: "Veradic AI: AI Tutor for Schools, Teachers, and Students",
     template: "%s | Veradic AI",
   },
   description:
-    "Snap a photo or type any problem. Veradic AI breaks it into guided steps you actually understand, then generates unlimited practice until you master it.",
+    "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step, without ever giving the answer away. Teacher-controlled content, integrity checks, and safe classroom deployment.",
   metadataBase: new URL("https://veradicai.com"),
   keywords: [
-    "AI tutor",
-    "math tutor",
-    "science tutor",
-    "step-by-step learning",
-    "AI homework help",
-    "math solver",
-    "physics tutor",
-    "chemistry tutor",
-    "practice problems",
-    "exam prep",
-    "AI education",
-    "Veradic AI",
-    "Veradic",
-    "veradicai",
+    "ai tutor for schools",
+    "ai math tutor for schools",
+    "ai physics tutor for schools",
+    "ai chemistry tutor for schools",
+    "classroom ai tutor",
+    "ai homework help for classrooms",
+    "chatgpt alternative for schools",
+    "ai tutor that doesn't give answers",
+    "integrity checker ai homework",
+    "ai tutor for teachers",
+    "step by step ai tutor",
+    "veradic ai",
+    "veradic",
   ],
   authors: [{ name: "Veradic AI" }],
   creator: "Veradic AI",
@@ -44,9 +43,9 @@ export const metadata: Metadata = {
   applicationName: "Veradic AI",
   category: "Education",
   openGraph: {
-    title: "Veradic AI — Snap. Learn. Master.",
+    title: "Veradic AI: The AI tutor that teaches, instead of telling",
     description:
-      "Your AI tutor that breaks any math or science problem into steps you actually understand.",
+      "Built for schools. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
     url: "https://veradicai.com",
     siteName: "Veradic AI",
     locale: "en_US",
@@ -54,9 +53,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Veradic AI — Snap. Learn. Master.",
+    title: "Veradic AI: The AI tutor that teaches, instead of telling",
     description:
-      "Your AI tutor that breaks any math or science problem into steps you actually understand.",
+      "Built for schools. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
     creator: "@veradicai",
     site: "@veradicai",
   },
@@ -96,7 +95,11 @@ export default function RootLayout({
               operatingSystem: "Web, iOS, Android",
               url: "https://veradicai.com",
               description:
-                "Veradic AI is an AI-powered tutoring platform that breaks any math or science problem into guided steps you actually understand.",
+                "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
+              audience: {
+                "@type": "EducationalAudience",
+                educationalRole: ["teacher", "student", "school administrator"],
+              },
               offers: {
                 "@type": "Offer",
                 price: "0",
@@ -136,11 +139,6 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(faqJsonLd()),
-          }}
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("veradic-theme")||"system";var d=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;if(d==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}})()`,
           }}
         />
       </head>

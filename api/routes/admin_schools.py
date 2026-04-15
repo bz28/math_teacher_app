@@ -1,6 +1,7 @@
 """Admin school management endpoints."""
 
 import asyncio
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.config import settings
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
@@ -281,19 +283,21 @@ async def invite_teacher(
     db.add(invite)
     await db.commit()
 
-    invite_url = f"https://veradicai.com/register?invite={token}"
+    invite_url = f"{settings.frontend_url}/register?invite={token}"
     logger.info(
         "AUDIT: admin=%s invited teacher email=%s to school=%s (%s), invite_id=%s",
         current_user.user_id, body.email, school_id, school.name, invite.id,
     )
 
-    # Fire-and-forget invite email to teacher
+    # Fire-and-forget invite email to teacher. Escape the school name,
+    # which is admin-entered free text, before dropping it into HTML.
+    safe_school = html.escape(school.name, quote=True)
     asyncio.create_task(send_email(
         to=[body.email.lower()],
         subject=f"You've been invited to join {school.name} on Veradic AI",
         html=(
             f"<h2>You're invited!</h2>"
-            f"<p><strong>{school.name}</strong> has invited you to join Veradic AI as a teacher.</p>"
+            f"<p><strong>{safe_school}</strong> has invited you to join Veradic AI as a teacher.</p>"
             f"<p>Click the link below to create your account:</p>"
             f'<p><a href="{invite_url}" style="display:inline-block;padding:12px 24px;'
             f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
