@@ -1,83 +1,88 @@
-"""Integrity-check endpoints — student-facing chat flow + teacher
+"""Integrity-check endpoints — conversational student chat + teacher
 detail/dismiss view.
 
-Mounted at /v1 (the role-based prefixes live on the routes
-themselves). PR 1 ships the entire HTTP surface so PR 2 (student
-chat UI) and PR 3 (teacher badges + expand view) can wire against
-real endpoints with no further backend work.
-
-Zero LLM calls in this module — scoring goes through the stub.
+Mounted at /v1 (role-based prefixes live on the routes themselves).
+The conversational redesign collapses the previous /next + /answer
+into a single /turn endpoint: student sends a message, server
+appends the turn, runs the agent loop, and returns the updated
+transcript + per-problem + overall state.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.integrity_ai import score_answer
 from api.core.integrity_pipeline import (
+    BADGE_LIKELY,
+    BADGE_UNCERTAIN,
+    BADGE_UNLIKELY,
+    MAX_STUDENT_TURNS,
+    PROBLEM_STATUS_DISMISSED,
+    PROBLEM_STATUS_SKIPPED_UNREADABLE,
     STATUS_COMPLETE,
-    STATUS_DISMISSED,
     STATUS_SKIPPED_UNREADABLE,
-    TERMINAL_STATUSES,
-    VERDICT_SKIPPED,
-    compute_badge,
+    count_student_turns,
+    process_student_turn,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.models.assignment import Assignment, Submission
-from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckResponse
+from api.models.integrity_check import (
+    IntegrityCheckProblem,
+    IntegrityCheckSubmission,
+    IntegrityConversationTurn,
+)
+from api.models.question_bank import QuestionBankItem
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 
 router = APIRouter(tags=["integrity"])
 
-# Per the parent plan §2.2: minimum 5 chars to prevent empty-spam.
-MIN_ANSWER_CHARS = 5
+# Min chars in a student message. Same 5-char floor we enforced on
+# answers in the quiz-style flow — prevents empty/"x"-spam.
+MIN_MESSAGE_CHARS = 5
 
 
-# ── Response shapes ──
+# ── Response shapes ─────────────────────────────────────────────────
 
-class IntegrityProblemSummary(BaseModel):
+class ProblemSummary(BaseModel):
+    """Student-facing per-problem status (no extraction, no reasoning)."""
     problem_id: str
     sample_position: int
     status: str
-    question_count: int
-    answered_count: int
+    badge: str | None
+
+
+class TurnOut(BaseModel):
+    """Student-facing transcript turn. Tool calls are collapsed into
+    synthetic agent text so the student chat stays simple."""
+    ordinal: int
+    role: str  # "agent" | "student"
+    content: str
+    created_at: datetime
 
 
 class IntegrityStateResponse(BaseModel):
     submission_id: str
-    overall_status: str  # "in_progress" | "complete" | "no_check"
-    problems: list[IntegrityProblemSummary]
+    overall_status: str
+    overall_badge: str | None
+    problems: list[ProblemSummary]
+    transcript: list[TurnOut]
 
 
-class NextQuestionDone(BaseModel):
-    done: bool = True
-
-
-class NextQuestionServed(BaseModel):
-    done: bool = False
-    problem_id: str
-    problem_position: int  # 1-based for UI ("Problem 1 of 5")
-    total_problems: int
-    question_id: str
-    question_index: int  # 0-based; UI shows index+1
-    questions_in_problem: int
-    question_text: str
-    rephrase_used: bool
-
-
-class AnswerRequest(BaseModel):
-    question_id: uuid.UUID
-    answer: str
-    seconds_on_question: int | None = None
-    tab_switch_count: int = 0
+class TurnRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    # Clamped to a sane wall-clock range. Negative or absurdly large
+    # values from a tampered client would otherwise land in the DB and
+    # leak into the teacher transcript.
+    seconds_on_turn: int | None = Field(default=None, ge=0, le=3600)
 
 
 class DismissRequest(BaseModel):
@@ -85,14 +90,12 @@ class DismissRequest(BaseModel):
     reason: str = Field(default="", max_length=500)
 
 
-# ── Helpers ──
+# ── Helpers ─────────────────────────────────────────────────────────
 
 async def _load_my_submission(
     db: AsyncSession, submission_id: uuid.UUID, student_id: uuid.UUID,
 ) -> Submission:
-    """Load a submission and enforce that it belongs to the calling
-    student. 404 on either not found or not yours — never leak
-    existence."""
+    """Load a submission; 404 if not found or not yours."""
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -101,43 +104,72 @@ async def _load_my_submission(
     return sub
 
 
-async def _load_problems_with_responses(
+async def _load_check_for_submission(
     db: AsyncSession, submission_id: uuid.UUID,
-) -> list[tuple[IntegrityCheckProblem, list[IntegrityCheckResponse]]]:
-    """Two queries (problems + responses) joined in Python. Avoids
-    the JSON-equality DISTINCT issue and keeps the row mapping
-    explicit."""
-    problems = (await db.execute(
+) -> IntegrityCheckSubmission | None:
+    return (await db.execute(
+        select(IntegrityCheckSubmission).where(
+            IntegrityCheckSubmission.submission_id == submission_id,
+        )
+    )).scalar_one_or_none()
+
+
+async def _load_problems(
+    db: AsyncSession, check_id: uuid.UUID,
+) -> list[IntegrityCheckProblem]:
+    return list((await db.execute(
         select(IntegrityCheckProblem)
-        .where(IntegrityCheckProblem.submission_id == submission_id)
+        .where(IntegrityCheckProblem.integrity_check_submission_id == check_id)
         .order_by(IntegrityCheckProblem.sample_position.asc())
-    )).scalars().all()
-    if not problems:
-        return []
-    responses = (await db.execute(
-        select(IntegrityCheckResponse)
-        .where(IntegrityCheckResponse.integrity_check_problem_id.in_(
-            [p.id for p in problems],
+    )).scalars().all())
+
+
+async def _load_transcript(
+    db: AsyncSession, check_id: uuid.UUID,
+) -> list[IntegrityConversationTurn]:
+    return list((await db.execute(
+        select(IntegrityConversationTurn)
+        .where(IntegrityConversationTurn.integrity_check_submission_id == check_id)
+        .order_by(IntegrityConversationTurn.ordinal.asc())
+    )).scalars().all())
+
+
+def _student_facing_transcript(
+    turns: list[IntegrityConversationTurn],
+) -> list[TurnOut]:
+    """Filter the transcript to only agent + student text turns.
+
+    Tool-call / tool-result rows are dropped — the student never
+    needs to see them, and they would just be confusing in the chat.
+    """
+    out: list[TurnOut] = []
+    for t in turns:
+        if t.role not in ("agent", "student"):
+            continue
+        out.append(TurnOut(
+            ordinal=t.ordinal,
+            role=t.role,
+            content=t.content,
+            created_at=t.created_at,
         ))
-        .order_by(IntegrityCheckResponse.question_index.asc())
-    )).scalars().all()
-    by_problem: dict[uuid.UUID, list[IntegrityCheckResponse]] = {p.id: [] for p in problems}
-    for r in responses:
-        by_problem[r.integrity_check_problem_id].append(r)
-    return [(p, by_problem[p.id]) for p in problems]
+    return out
 
 
-def _derive_overall_status(
-    problems: list[tuple[IntegrityCheckProblem, list[IntegrityCheckResponse]]],
-) -> str:
-    if not problems:
-        return "no_check"
-    if all(p.status in TERMINAL_STATUSES for p, _ in problems):
-        return STATUS_COMPLETE
-    return "in_progress"
+def _problem_summaries(
+    problems: list[IntegrityCheckProblem],
+) -> list[ProblemSummary]:
+    return [
+        ProblemSummary(
+            problem_id=str(p.id),
+            sample_position=p.sample_position,
+            status=p.status,
+            badge=p.badge,
+        )
+        for p in problems
+    ]
 
 
-# ── Student endpoints ──
+# ── Student endpoints ───────────────────────────────────────────────
 
 @router.get("/school/student/integrity/submissions/{submission_id}")
 async def get_my_integrity_state(
@@ -145,194 +177,136 @@ async def get_my_integrity_state(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> IntegrityStateResponse:
-    """Resume / progress endpoint. Returns the per-problem status
-    summary so the chat UI knows what's done and what's pending.
+    """Resume endpoint for the chat UI. Returns per-problem status +
+    the student-facing transcript. Status semantics:
 
-    Overall status:
-    - "complete": all problems in a terminal state
-    - "in_progress": problem rows exist but not all terminal
-    - "pending": no problem rows yet AND the HW has integrity
-      checks enabled (pipeline is running in the background)
-    - "no_check": no problem rows AND the HW has integrity checks
-      disabled (nothing to do — pipeline will never run)
+      - "no_check"           : HW has integrity checks disabled
+      - "extracting"         : pipeline still running in background
+      - "awaiting_student"   : opening agent turn ready, student not
+                                yet engaged
+      - "in_progress"        : student has sent >= 1 message, check
+                                not yet complete
+      - "complete"           : agent emitted finish_check (or was
+                                force-finalized)
+      - "skipped_unreadable" : handwriting was unreadable
     """
     submission = await _load_my_submission(db, submission_id, user.id)
-    grouped = await _load_problems_with_responses(db, submission_id)
+    check = await _load_check_for_submission(db, submission_id)
 
-    summaries: list[IntegrityProblemSummary] = []
-    for p, responses in grouped:
-        answered = sum(1 for r in responses if r.student_answer is not None)
-        summaries.append(IntegrityProblemSummary(
-            problem_id=str(p.id),
-            sample_position=p.sample_position,
-            status=p.status,
-            question_count=len(responses),
-            answered_count=answered,
-        ))
-
-    # When there are no problem rows, we have to disambiguate between
-    # "the pipeline is still running in the background" and "this HW
-    # doesn't have integrity checks enabled." One extra query only on
-    # the empty path.
-    if not grouped:
+    if check is None:
         enabled = (await db.execute(
             select(Assignment.integrity_check_enabled)
             .where(Assignment.id == submission.assignment_id)
         )).scalar_one_or_none()
-        overall_status = "pending" if enabled else "no_check"
-    else:
-        overall_status = _derive_overall_status(grouped)
+        overall_status = "extracting" if enabled else "no_check"
+        return IntegrityStateResponse(
+            submission_id=str(submission_id),
+            overall_status=overall_status,
+            overall_badge=None,
+            problems=[],
+            transcript=[],
+        )
+
+    problems = await _load_problems(db, check.id)
+    turns = await _load_transcript(db, check.id)
 
     return IntegrityStateResponse(
         submission_id=str(submission_id),
-        overall_status=overall_status,
-        problems=summaries,
+        overall_status=check.status,
+        overall_badge=check.overall_badge,
+        problems=_problem_summaries(problems),
+        transcript=_student_facing_transcript(turns),
     )
 
 
-@router.get("/school/student/integrity/submissions/{submission_id}/next")
-async def get_next_question(
+@router.post("/school/student/integrity/submissions/{submission_id}/turn")
+async def post_student_turn(
     submission_id: uuid.UUID,
+    body: TurnRequest,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
-) -> NextQuestionServed | NextQuestionDone:
-    """Return the next pending question (lowest sample_position →
-    lowest question_index) or {done: true}. Pure read — no state
-    changes."""
+) -> IntegrityStateResponse:
+    """Append a student turn, run the agent loop, return fresh state."""
     await _load_my_submission(db, submission_id, user.id)
-    grouped = await _load_problems_with_responses(db, submission_id)
-    if not grouped:
-        return NextQuestionDone()
-
-    total_problems = len(grouped)
-    for p, responses in grouped:
-        if p.status in (STATUS_DISMISSED, STATUS_SKIPPED_UNREADABLE):
-            continue
-        for r in responses:
-            if r.student_answer is None:
-                return NextQuestionServed(
-                    problem_id=str(p.id),
-                    problem_position=p.sample_position + 1,
-                    total_problems=total_problems,
-                    question_id=str(r.id),
-                    question_index=r.question_index,
-                    questions_in_problem=len(responses),
-                    question_text=r.question_text,
-                    rephrase_used=r.rephrase_used,
-                )
-    return NextQuestionDone()
-
-
-@router.post("/school/student/integrity/submissions/{submission_id}/answer")
-async def submit_answer(
-    submission_id: uuid.UUID,
-    body: AnswerRequest,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> NextQuestionServed | NextQuestionDone:
-    """Score the kid's answer (via stub), advance state, return next.
-
-    Idempotent on (question_id): re-posting the same question_id
-    overwrites the previous answer. Per the parent plan §2.2 the
-    minimum answer length is 5 chars to prevent empty-spam.
-    """
-    await _load_my_submission(db, submission_id, user.id)
-
-    response = (await db.execute(
-        select(IntegrityCheckResponse).where(IntegrityCheckResponse.id == body.question_id)
-    )).scalar_one_or_none()
-    if response is None:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Ownership: the response's parent problem must belong to this submission.
-    problem = (await db.execute(
-        select(IntegrityCheckProblem).where(
-            IntegrityCheckProblem.id == response.integrity_check_problem_id,
+    check = await _load_check_for_submission(db, submission_id)
+    if check is None:
+        raise HTTPException(
+            status_code=404, detail="No integrity check for this submission",
         )
-    )).scalar_one_or_none()
-    if problem is None or problem.submission_id != submission_id:
-        raise HTTPException(status_code=404, detail="Question not found")
 
-    if len(body.answer.strip()) < MIN_ANSWER_CHARS:
+    if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
+        raise HTTPException(
+            status_code=409, detail="Integrity check already complete",
+        )
+    if check.status == "extracting":
+        raise HTTPException(
+            status_code=409, detail="Integrity check is still preparing",
+        )
+
+    message = body.message.strip()
+    if len(message) < MIN_MESSAGE_CHARS:
         raise HTTPException(
             status_code=400,
-            detail=f"Answer must be at least {MIN_ANSWER_CHARS} characters",
+            detail=f"Message must be at least {MIN_MESSAGE_CHARS} characters",
         )
 
-    # Pass the student's work extraction so the scorer can check
-    # answers against what the student actually wrote.
-    extraction = problem.student_work_extraction or {}
-    score = await score_answer(
-        {
-            "question_text": response.question_text,
-            "expected_shape": response.expected_shape,
-            "rubric_hint": response.rubric_hint,
-        },
-        body.answer,
-        extraction=extraction,
-    )
-    now = datetime.now(UTC)
-    response.student_answer = body.answer
-    response.answer_verdict = score["verdict"]
-    response.seconds_on_question = body.seconds_on_question
-    response.tab_switch_count = body.tab_switch_count
-    response.answered_at = now
-    response.scored_at = now
+    # Enforce the hard turn cap at the endpoint too, in case the agent
+    # loop in a prior turn somehow missed finalization. One count
+    # query beats loading the whole transcript.
+    if await count_student_turns(check.id, db) >= MAX_STUDENT_TURNS:
+        raise HTTPException(
+            status_code=409, detail="Integrity check already complete",
+        )
 
-    # If all questions for this problem are now answered, compute
-    # the badge and mark the problem complete.
-    siblings = (await db.execute(
-        select(IntegrityCheckResponse)
-        .where(IntegrityCheckResponse.integrity_check_problem_id == problem.id)
-    )).scalars().all()
-    all_answered = all(r.student_answer is not None for r in siblings)
-    if all_answered:
-        verdicts = [r.answer_verdict or VERDICT_SKIPPED for r in siblings]
-        flags = score.get("flags", [])
-        badge, raw = compute_badge(verdicts, flags)
-        problem.status = STATUS_COMPLETE
-        problem.badge = badge
-        problem.raw_score = raw
-        problem.ai_reasoning = score.get("reasoning", "")
-
+    await process_student_turn(check, message, body.seconds_on_turn, db)
     await db.commit()
 
-    # Return the next question (or done) so the client only does
-    # one round trip per answer.
-    return await get_next_question(submission_id, user, db)
+    # Re-read from the DB to build the response with the freshest state.
+    await db.refresh(check)
+    problems = await _load_problems(db, check.id)
+    turns = await _load_transcript(db, check.id)
+    return IntegrityStateResponse(
+        submission_id=str(submission_id),
+        overall_status=check.status,
+        overall_badge=check.overall_badge,
+        problems=_problem_summaries(problems),
+        transcript=_student_facing_transcript(turns),
+    )
 
 
+# ── Teacher endpoints ───────────────────────────────────────────────
 
-# ── Teacher endpoints ──
-
-class TeacherIntegrityResponseRow(BaseModel):
-    response_id: str
-    question_index: int
-    question_text: str
-    student_answer: str | None
-    answer_verdict: str | None
-    seconds_on_question: int | None
-    tab_switch_count: int
-    rephrase_used: bool
+class TeacherTranscriptTurn(BaseModel):
+    ordinal: int
+    role: str  # "agent" | "student" | "tool_call" | "tool_result"
+    content: str
+    tool_name: str | None = None
+    seconds_on_turn: int | None = None
+    created_at: datetime
 
 
 class TeacherIntegrityProblemRow(BaseModel):
     problem_id: str
     bank_item_id: str
+    question: str
     sample_position: int
     status: str
     badge: str | None
-    raw_score: float | None
+    confidence: float | None
     ai_reasoning: str | None
     teacher_dismissed: bool
     teacher_dismissal_reason: str | None
-    responses: list[TeacherIntegrityResponseRow]
+    student_work_extraction: dict[str, Any] | None
 
 
 class TeacherIntegrityDetail(BaseModel):
     submission_id: str
     overall_status: str
+    overall_badge: str | None
+    overall_confidence: float | None
+    overall_summary: str | None
     problems: list[TeacherIntegrityProblemRow]
+    transcript: list[TeacherTranscriptTurn]
 
 
 @router.get("/teacher/integrity/submissions/{submission_id}")
@@ -341,62 +315,119 @@ async def teacher_get_integrity_detail(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> TeacherIntegrityDetail:
-    """Full Q&A + reasoning payload for the teacher's per-submission
-    panel. Ownership: teacher must own the assignment."""
+    """Full transcript + per-problem verdicts + extraction snapshot
+    for the teacher's per-submission panel. Ownership: teacher must
+    own the assignment."""
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
     if sub is None:
         raise HTTPException(status_code=404, detail="Submission not found")
-    # Ownership via the assignment
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
-    grouped = await _load_problems_with_responses(db, submission_id)
+    check = await _load_check_for_submission(db, submission_id)
+    if check is None:
+        return TeacherIntegrityDetail(
+            submission_id=str(submission_id),
+            overall_status="no_check",
+            overall_badge=None,
+            overall_confidence=None,
+            overall_summary=None,
+            problems=[],
+            transcript=[],
+        )
 
-    out_problems: list[TeacherIntegrityProblemRow] = []
-    for p, responses in grouped:
-        out_problems.append(TeacherIntegrityProblemRow(
+    problems = await _load_problems(db, check.id)
+
+    # One hydration query for the bank items so we can surface the
+    # question text alongside the extraction.
+    items_by_id: dict[uuid.UUID, QuestionBankItem] = {}
+    if problems:
+        item_rows = (await db.execute(
+            select(QuestionBankItem)
+            .where(QuestionBankItem.id.in_([p.bank_item_id for p in problems]))
+        )).scalars().all()
+        for it in item_rows:
+            items_by_id[it.id] = it
+
+    problem_rows: list[TeacherIntegrityProblemRow] = []
+    for p in problems:
+        item = items_by_id.get(p.bank_item_id)
+        problem_rows.append(TeacherIntegrityProblemRow(
             problem_id=str(p.id),
             bank_item_id=str(p.bank_item_id),
+            question=item.question if item else "(problem text unavailable)",
             sample_position=p.sample_position,
             status=p.status,
             badge=p.badge,
-            raw_score=p.raw_score,
+            confidence=p.confidence,
             ai_reasoning=p.ai_reasoning,
             teacher_dismissed=p.teacher_dismissed,
             teacher_dismissal_reason=p.teacher_dismissal_reason,
-            responses=[
-                TeacherIntegrityResponseRow(
-                    response_id=str(r.id),
-                    question_index=r.question_index,
-                    question_text=r.question_text,
-                    student_answer=r.student_answer,
-                    answer_verdict=r.answer_verdict,
-                    seconds_on_question=r.seconds_on_question,
-                    tab_switch_count=r.tab_switch_count,
-                    rephrase_used=r.rephrase_used,
-                )
-                for r in responses
-            ],
+            student_work_extraction=p.student_work_extraction,
         ))
+
+    turns = await _load_transcript(db, check.id)
+    transcript_rows = [
+        TeacherTranscriptTurn(
+            ordinal=t.ordinal,
+            role=t.role,
+            content=t.content,
+            tool_name=t.tool_name,
+            seconds_on_turn=t.seconds_on_turn,
+            created_at=t.created_at,
+        )
+        for t in turns
+    ]
 
     return TeacherIntegrityDetail(
         submission_id=str(submission_id),
-        overall_status=_derive_overall_status(grouped),
-        problems=out_problems,
+        overall_status=check.status,
+        overall_badge=check.overall_badge,
+        overall_confidence=check.overall_confidence,
+        overall_summary=check.overall_summary,
+        problems=problem_rows,
+        transcript=transcript_rows,
     )
 
 
-@router.post("/teacher/integrity/submissions/{submission_id}/dismiss", status_code=204)
+_BADGE_SEVERITY: dict[str, int] = {
+    BADGE_LIKELY: 0,
+    BADGE_UNCERTAIN: 1,
+    BADGE_UNLIKELY: 2,
+}
+
+
+def _recompute_overall_badge(
+    problems: list[IntegrityCheckProblem],
+) -> str | None:
+    """Worst-of across problems the teacher has neither dismissed nor
+    marked unreadable. None when no relevant problems remain."""
+    remaining = [
+        p for p in problems
+        if not p.teacher_dismissed
+        and p.status != PROBLEM_STATUS_SKIPPED_UNREADABLE
+        and p.badge in _BADGE_SEVERITY
+    ]
+    if not remaining:
+        return None
+    worst = max(remaining, key=lambda p: _BADGE_SEVERITY[p.badge or ""])
+    return worst.badge
+
+
+@router.post(
+    "/teacher/integrity/submissions/{submission_id}/dismiss", status_code=204,
+)
 async def teacher_dismiss_problem(
     submission_id: uuid.UUID,
     body: DismissRequest,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Mark a problem's check as dismissed (teacher's call). The row
-    is preserved for audit / future model improvement. Idempotent —
-    re-dismissing is a no-op."""
+    """Mark a per-problem verdict as dismissed and refresh the overall
+    badge so the teacher's summary reflects only the verdicts they
+    still stand behind. Idempotent; re-dismissing with a new reason
+    updates the reason."""
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -404,17 +435,30 @@ async def teacher_dismiss_problem(
         raise HTTPException(status_code=404, detail="Submission not found")
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
-    problem = (await db.execute(
-        select(IntegrityCheckProblem).where(IntegrityCheckProblem.id == body.problem_id)
-    )).scalar_one_or_none()
-    if problem is None or problem.submission_id != submission_id:
+    check = await _load_check_for_submission(db, submission_id)
+    if check is None:
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    # Always apply: a teacher who re-dismisses with a different
-    # reason should be able to update it (the previous behavior
-    # silently dropped the new reason). The status flip is
-    # idempotent — re-setting to dismissed is a no-op write.
+    problem = (await db.execute(
+        select(IntegrityCheckProblem).where(
+            IntegrityCheckProblem.id == body.problem_id,
+            IntegrityCheckProblem.integrity_check_submission_id == check.id,
+        )
+    )).scalar_one_or_none()
+    if problem is None:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
     problem.teacher_dismissed = True
     problem.teacher_dismissal_reason = body.reason or None
-    problem.status = STATUS_DISMISSED
+    # Flip to dismissed unless the problem was already terminal in a
+    # different terminal state (unreadable) — preserve that signal.
+    if problem.status != PROBLEM_STATUS_SKIPPED_UNREADABLE:
+        problem.status = PROBLEM_STATUS_DISMISSED
+
+    # Recompute overall_badge from the surviving problems so the
+    # submission header doesn't keep flagging the student on a verdict
+    # the teacher has overruled.
+    all_problems = await _load_problems(db, check.id)
+    check.overall_badge = _recompute_overall_badge(all_problems)
+
     await db.commit()
