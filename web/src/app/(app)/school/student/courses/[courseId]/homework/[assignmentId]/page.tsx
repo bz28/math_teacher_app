@@ -67,12 +67,16 @@ export default function HomeworkPage() {
         if (sub) setSubmission(sub);
         if (integrity) {
           // Auto-route based on integrity state:
-          //   "pending"     → show the preparing screen + poll
-          //   "in_progress" → open the chat
-          //   "complete" / "no_check" → stay on homework view
-          if (integrity.overall_status === "pending") {
+          //   "extracting"       → show the preparing screen + poll
+          //   "awaiting_student" / "in_progress" → open the chat
+          //   "complete" / "skipped_unreadable" / "no_check"
+          //                      → stay on homework view
+          if (integrity.overall_status === "extracting") {
             setMode({ kind: "integrity_pending" });
-          } else if (integrity.overall_status === "in_progress") {
+          } else if (
+            integrity.overall_status === "awaiting_student" ||
+            integrity.overall_status === "in_progress"
+          ) {
             setMode({ kind: "integrity_chat" });
           }
         }
