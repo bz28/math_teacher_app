@@ -49,32 +49,32 @@ export function ApprovedByHomework({
   // Tree: parent items + their child variations.
   const tree = useMemo(() => buildTree(items), [items]);
 
-  // Group root items by the first homework they're attached to. A
-  // single question CAN appear in multiple homeworks; for grouping we
-  // pick the first to keep the layout simple. (Future: render the
-  // question once per homework if teachers want that.)
+  // Group root items by every homework they're attached to. A question
+  // in multiple homeworks renders once per group — same data, different
+  // context — so the teacher sees it accurately under each homework.
   const groups = useMemo<Group[]>(() => {
     const byHw = new Map<string, Group>();
     const unassigned: BankItem[] = [];
 
     for (const node of tree) {
       const item = node.item;
-      const firstHw = item.used_in[0];
-      if (!firstHw) {
+      if (item.used_in.length === 0) {
         unassigned.push(item);
         continue;
       }
-      const existing = byHw.get(firstHw.id);
-      if (existing) {
-        existing.items.push(item);
-      } else {
-        byHw.set(firstHw.id, {
-          id: firstHw.id,
-          title: firstHw.title,
-          typeLabel: firstHw.type,
-          status: firstHw.status,
-          items: [item],
-        });
+      for (const hw of item.used_in) {
+        const existing = byHw.get(hw.id);
+        if (existing) {
+          existing.items.push(item);
+        } else {
+          byHw.set(hw.id, {
+            id: hw.id,
+            title: hw.title,
+            typeLabel: hw.type,
+            status: hw.status,
+            items: [item],
+          });
+        }
       }
     }
 
