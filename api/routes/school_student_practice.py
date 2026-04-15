@@ -31,12 +31,13 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_pipeline import start_integrity_check
+from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection, Submission
@@ -616,12 +617,6 @@ async def next_variation(
     5. Empty pool → "empty". Empty unseen → "exhausted".
     6. Pick oldest by created_at, insert consumption row, return.
     """
-    # The mode param is currently informational — the served payload
-    # contains everything both Practice and Learn need. We accept and
-    # validate it now so the client/server contract is locked in for
-    # later analytics splits.
-    _ = mode
-
     assignment = await _load_assignment_for_student(db, assignment_id, user.id)
 
     if not _bank_item_id_belongs_to_assignment(assignment, bank_item_id):
@@ -694,7 +689,7 @@ async def next_variation(
         bank_item_id=chosen.id,
         anchor_bank_item_id=bank_item_id,
         assignment_id=assignment_id,
-        context="homework_loop",
+        context=mode,
     )
     db.add(consumption)
     await db.commit()
@@ -812,3 +807,228 @@ async def flagged_consumptions(
             served_at=r.served_at,
         ))
     return out
+
+
+# ── Learn-mode chat endpoints ──
+#
+# Presentational Learn UX on the school student side now supports two
+# LLM chat affordances: ask about a specific step, and ask about the
+# problem after the last step. Both are stateless — the frontend owns
+# the message history and passes it in on each turn. Auth gate: the
+# student must own any BankConsumption row for the bank_item_id (any
+# context, any state), which is what proves they've been "admitted" to
+# this variation via the homework practice/learn loop.
+
+# Payload caps — guard the chat endpoints against cost-abuse via
+# oversized strings or massive prior_messages arrays. The tutor helpers
+# truncate history to ~6 exchanges internally, but per-message content
+# is forwarded verbatim to Claude, so we cap both dimensions.
+_MAX_QUESTION_LEN = 2_000
+_MAX_MESSAGE_CONTENT_LEN = 4_000
+_MAX_PRIOR_MESSAGES = 20
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=_MAX_MESSAGE_CONTENT_LEN)
+
+
+class StepChatRequest(BaseModel):
+    step_index: int
+    question: str = Field(max_length=_MAX_QUESTION_LEN)
+    prior_messages: list[ChatMessage] = Field(
+        default_factory=list, max_length=_MAX_PRIOR_MESSAGES,
+    )
+
+
+class ProblemChatRequest(BaseModel):
+    question: str = Field(max_length=_MAX_QUESTION_LEN)
+    prior_messages: list[ChatMessage] = Field(
+        default_factory=list, max_length=_MAX_PRIOR_MESSAGES,
+    )
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
+async def _load_variation_for_chat(
+    db: AsyncSession,
+    bank_item_id: uuid.UUID,
+    student_id: uuid.UUID,
+) -> tuple[QuestionBankItem, str]:
+    """Authorize and load a variation the student has been served for
+    chat. Returns the bank item plus the course subject for prompt
+    tone. 404 for outsider students."""
+    owns = (await db.execute(
+        select(BankConsumption.id)
+        .where(
+            BankConsumption.student_id == student_id,
+            BankConsumption.bank_item_id == bank_item_id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if owns is None:
+        raise HTTPException(status_code=404, detail="Variation not available")
+
+    item = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id == bank_item_id)
+    )).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Variation not available")
+
+    course = (await db.execute(
+        select(Course).where(Course.id == item.course_id)
+    )).scalar_one_or_none()
+    subject = course.subject if course is not None else "math"
+    return item, subject
+
+
+def _steps_for_prompt(raw: list[Any] | None) -> list[dict[str, str]]:
+    """Flatten solution_steps JSON into the { description } shape the
+    tutor helpers expect. Title is folded in so the LLM has context."""
+    out: list[dict[str, str]] = []
+    for s in raw or []:
+        if not isinstance(s, dict):
+            continue
+        title = str(s.get("title") or "").strip()
+        desc = str(s.get("description") or "").strip()
+        merged = f"{title}: {desc}" if title else desc
+        out.append({"description": merged})
+    return out
+
+
+@router.post("/bank-item/{bank_item_id}/step-chat")
+async def bank_item_step_chat(
+    bank_item_id: uuid.UUID,
+    body: StepChatRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> ChatResponse:
+    """Ask a question about a specific step of a variation's solution.
+    Stateless — caller passes prior messages."""
+    item, subject = await _load_variation_for_chat(db, bank_item_id, user.id)
+
+    steps = _steps_for_prompt(item.solution_steps)
+    if body.step_index < 0 or body.step_index >= len(steps):
+        raise HTTPException(status_code=400, detail="Invalid step_index")
+
+    exchanges = [{"role": m.role, "content": m.content} for m in body.prior_messages]
+    result = await step_chat(
+        problem=item.question,
+        step=steps[body.step_index],
+        exchanges=exchanges,
+        student_input=body.question,
+        user_id=str(user.id),
+        subject=subject,
+    )
+    return ChatResponse(reply=result.feedback)
+
+
+@router.post("/bank-item/{bank_item_id}/problem-chat")
+async def bank_item_problem_chat(
+    bank_item_id: uuid.UUID,
+    body: ProblemChatRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> ChatResponse:
+    """Ask a question about the whole problem (post-walkthrough). The
+    LLM may freely reference any step or the final answer."""
+    item, subject = await _load_variation_for_chat(db, bank_item_id, user.id)
+
+    exchanges = [{"role": m.role, "content": m.content} for m in body.prior_messages]
+    result = await completed_chat(
+        problem=item.question,
+        steps=_steps_for_prompt(item.solution_steps),
+        exchanges=exchanges,
+        student_input=body.question,
+        user_id=str(user.id),
+        subject=subject,
+    )
+    return ChatResponse(reply=result.feedback)
+
+
+# ── Practice → Learn pivot ──
+
+class LearnThisRequest(BaseModel):
+    bank_item_id: str
+    assignment_id: str
+
+
+@router.post("/bank-consumption/learn-this")
+async def learn_this_problem(
+    body: LearnThisRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> NextVariationServed:
+    """Mint a Learn-context consumption for a specific variation the
+    student just practiced. Differs from /next-variation because it
+    targets the SAME bank_item_id rather than picking an unseen sibling.
+
+    Auth: the student must own at least one consumption row for this
+    bank_item_id (proves they've been admitted to it via the loop).
+    The anchor is the variation's parent_question_id (a HW primary)
+    since Learn-loop rows must be anchored to a primary — not to a
+    sibling — to keep the "homework problem" vs "practice around it"
+    split consistent with the rest of the loop machinery.
+    """
+    try:
+        bank_item_uuid = uuid.UUID(body.bank_item_id)
+        assignment_uuid = uuid.UUID(body.assignment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid id") from exc
+
+    item = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id == bank_item_uuid)
+    )).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Variation not found")
+
+    anchor_id = item.parent_question_id or item.id
+
+    # Auth: has the student ever been served this variation?
+    owns = (await db.execute(
+        select(BankConsumption.id)
+        .where(
+            BankConsumption.student_id == user.id,
+            BankConsumption.bank_item_id == bank_item_uuid,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if owns is None:
+        raise HTTPException(status_code=404, detail="Variation not available")
+
+    # Validate the assignment is one the student can access and the
+    # anchor is actually on it — prevents crafted payloads that anchor
+    # a Learn row to an unrelated assignment.
+    assignment = await _load_assignment_for_student(db, assignment_uuid, user.id)
+    if not _bank_item_id_belongs_to_assignment(assignment, anchor_id):
+        raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
+
+    # Create a fresh Learn-context consumption row. Multiple consumption
+    # rows for the same (student, bank_item) pair are allowed — the
+    # schema has no unique constraint — and intentional here: each
+    # mode-attempt is its own row so the history tab can enumerate them.
+    consumption = BankConsumption(
+        student_id=user.id,
+        bank_item_id=bank_item_uuid,
+        anchor_bank_item_id=anchor_id,
+        assignment_id=assignment_uuid,
+        context="learn",
+    )
+    db.add(consumption)
+    await db.commit()
+    await db.refresh(consumption)
+
+    # Remaining = unseen approved siblings of the anchor. Matches
+    # next-variation's contract so callers can reuse the same shape.
+    seen_count = await _seen_count(db, user.id, anchor_id)
+    approved_count = await _approved_sibling_count(db, anchor_id)
+    remaining = max(0, approved_count - seen_count)
+
+    return NextVariationServed(
+        variation=_serialize(item),
+        consumption_id=str(consumption.id),
+        anchor_bank_item_id=str(anchor_id),
+        remaining=remaining,
+    )
