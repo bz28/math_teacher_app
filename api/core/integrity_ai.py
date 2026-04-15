@@ -80,10 +80,18 @@ Rules:
 
 
 async def extract_student_work(
-    submission_id: uuid.UUID, db: AsyncSession,
+    submission_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """Call Claude Vision to extract the student's work steps from
-    their uploaded homework photo."""
+    their uploaded homework photo.
+
+    `user_id` is forwarded to the cost-tracking logger so the admin
+    dashboard can attribute Vision calls to the student instead of
+    showing "Deleted User".
+    """
     image_data: str | None = (await db.execute(
         select(Submission.image_data).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -120,6 +128,7 @@ async def extract_student_work(
         tool_schema=INTEGRITY_EXTRACT_SCHEMA,
         model=MODEL_REASON,
         max_tokens=1024,
+        user_id=user_id,
     )
     return result
 

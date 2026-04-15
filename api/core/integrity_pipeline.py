@@ -182,7 +182,12 @@ async def start_integrity_check(
     db.add(check)
     await db.flush()
 
-    extraction = await extract_student_work(submission_id, db)
+    # Attribute LLM calls to the student so the admin dashboard doesn't
+    # show "Deleted User" against every integrity extraction + agent
+    # turn. Stringified because llm_calls.user_id is stored as string.
+    user_id = str(submission.student_id)
+
+    extraction = await extract_student_work(submission_id, db, user_id=user_id)
     confidence = extraction.get("confidence", 0.0)
     if confidence < UNREADABLE_THRESHOLD:
         logger.info(
@@ -256,6 +261,7 @@ async def start_integrity_check(
         content_blocks = await run_agent_turn(
             AGENT_SYSTEM_PROMPT,
             [{"role": "user", "content": kickoff_user_message}],
+            user_id=user_id,
         )
         opening_text = _first_text_block(content_blocks)
     except Exception:
@@ -287,10 +293,15 @@ async def process_student_turn(
     student_message: str,
     seconds_on_turn: int | None,
     db: AsyncSession,
+    *,
+    user_id: str | None = None,
 ) -> None:
     """Append a student turn, run the agent loop, and update in-place.
 
-    Mutates `check` + writes new rows. Caller commits.
+    Mutates `check` + writes new rows. Caller commits. `user_id` is
+    forwarded to every agent LLM call so cost tracking / the admin
+    dashboard attribute the spend to the actual student instead of
+    "Deleted User".
 
     The agent loop:
       1. Call Claude with the current transcript.
@@ -333,7 +344,7 @@ async def process_student_turn(
 
         try:
             content_blocks = await run_agent_turn(
-                AGENT_SYSTEM_PROMPT, messages,
+                AGENT_SYSTEM_PROMPT, messages, user_id=user_id,
             )
         except Exception:
             logger.exception(
