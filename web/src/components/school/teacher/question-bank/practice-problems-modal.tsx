@@ -34,17 +34,14 @@ export function PracticeProblemsModal({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      teacher.bank(parent.course_id, { status: "approved" }),
-      teacher.bank(parent.course_id, { status: "pending" }),
-    ])
-      .then(([approved, pending]) => {
-        if (cancelled) return;
-        const children = [
-          ...approved.items.filter((i) => i.parent_question_id === parent.id),
-          ...pending.items.filter((i) => i.parent_question_id === parent.id),
-        ];
-        setItems(children);
+    // Server-side filter on parent_question_id — single small fetch
+    // instead of pulling the whole approved + pending bank to filter
+    // client-side. Returns every status so we surface pending children
+    // alongside approved ones in the same list.
+    teacher
+      .bank(parent.course_id, { parent_question_id: parent.id })
+      .then((res) => {
+        if (!cancelled) setItems(res.items);
       })
       .catch((e) => {
         if (!cancelled) {
