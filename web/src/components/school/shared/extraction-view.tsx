@@ -8,12 +8,16 @@ import { cn } from "@/lib/utils";
  * Renders what Vision read from a student's handwritten work.
  *
  * Shared between:
- *   - the student's post-extraction confirm screen (before chat opens)
- *   - the teacher's "What the agent saw" collapsible on the submission
- *     detail panel
+ *   - the student's post-extraction confirm screen (variant="full") —
+ *     shows only the literal LaTeX transcription, since the student is
+ *     verifying what we *read*, not the agent's description of what
+ *     they *did*.
+ *   - the teacher's "What the agent saw" collapsible (variant="compact")
+ *     — shows both plain-English description and LaTeX, since the
+ *     interpretation is useful context for grading.
  *
- * Same data (`student_work_extraction` JSON), same rendering. Keep
- * this presentational — no data fetching, no actions.
+ * Same source data (`student_work_extraction` JSON). Keep this
+ * presentational — no data fetching, no actions.
  */
 export function ExtractionView({
   extraction,
@@ -61,21 +65,36 @@ export function ExtractionView({
         >
           {extraction.steps.map((s, i) => (
             <li key={`${s.step_num}-${i}`}>
-              <span className="font-medium text-text-primary">
-                {s.plain_english}
-              </span>
-              {s.latex && (
-                <div
-                  className={cn(
-                    "mt-1 text-text-muted",
-                    isFull ? "text-sm" : "text-xs",
+              {isFull ? (
+                // Student confirm view: show only the literal LaTeX
+                // transcription so the question is purely "did we
+                // read your page right?" — not "do you agree with
+                // the AI's description of what you did?". Fall back
+                // to plain_english only when there's no LaTeX
+                // (e.g. a written sentence like "let x = apples").
+                s.latex ? (
+                  <div className="text-text-primary">
+                    {/* Wrap in $$…$$ (display math) so matrices and
+                        fractions render as proper blocks rather than
+                        squished inline expressions. */}
+                    <MathText text={`$$${s.latex}$$`} />
+                  </div>
+                ) : (
+                  <span className="font-medium text-text-primary">
+                    {s.plain_english}
+                  </span>
+                )
+              ) : (
+                <>
+                  <span className="font-medium text-text-primary">
+                    {s.plain_english}
+                  </span>
+                  {s.latex && (
+                    <div className="mt-1 text-xs text-text-muted">
+                      <MathText text={`$$${s.latex}$$`} />
+                    </div>
                   )}
-                >
-                  {/* Wrap in $$…$$ (display math) so matrices and
-                      fractions render as proper blocks rather than
-                      squished inline expressions. */}
-                  <MathText text={`$$${s.latex}$$`} />
-                </div>
+                </>
               )}
             </li>
           ))}
