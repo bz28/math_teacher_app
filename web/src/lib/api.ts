@@ -1302,7 +1302,37 @@ export const schoolStudent = {
       { method: "POST" },
     );
   },
+  // ── Learn-mode chat + Practice→Learn pivot ──
+  stepChat(
+    bankItemId: string,
+    body: { step_index: number; question: string; prior_messages: SchoolChatMessage[] },
+  ) {
+    return apiFetch<{ reply: string }>(
+      `/school/student/bank-item/${bankItemId}/step-chat`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  problemChat(
+    bankItemId: string,
+    body: { question: string; prior_messages: SchoolChatMessage[] },
+  ) {
+    return apiFetch<{ reply: string }>(
+      `/school/student/bank-item/${bankItemId}/problem-chat`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  learnThisProblem(body: { bank_item_id: string; assignment_id: string }) {
+    return apiFetch<Extract<NextVariationResponse, { status: "served" }>>(
+      `/school/student/bank-consumption/learn-this`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
 };
+
+export interface SchoolChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 // ── Integrity check types (mirror api/routes/integrity_check.py) ──
 
