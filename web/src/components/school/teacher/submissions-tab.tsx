@@ -26,6 +26,11 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
   const [sort, setSort] = useState<SortKey>("urgency");
   const [scope, setScope] = useState<ScopeKey>("all");
   const [search, setSearch] = useState("");
+  // Freeze `now` at mount so the "Due this week" filter is stable
+  // during render. Re-reading Date.now() inside useMemo is flagged
+  // by react-hooks/purity; lazy-init side-steps that and any drift
+  // across a long session is immaterial for a 7-day filter window.
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +51,6 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
 
   const filtered = useMemo(() => {
     if (!rows) return [];
-    const now = Date.now();
     const q = search.trim().toLowerCase();
     let out = rows;
     if (q) {
@@ -72,7 +76,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
       sort === "urgency" ? urgencyScore(b) - urgencyScore(a) : dueKey(a) - dueKey(b),
     );
     return sorted;
-  }, [rows, scope, search, sort]);
+  }, [rows, scope, search, sort, now]);
 
   if (error) {
     return <p className="mt-6 text-sm text-red-600">{error}</p>;
