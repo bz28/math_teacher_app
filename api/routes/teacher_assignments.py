@@ -1171,6 +1171,10 @@ class TeacherSubmissionDetail(BaseModel):
     # until `grade_published_at` is set, at which point the student
     # sees them.
     breakdown: list[dict[str, Any]] | None
+    # Raw AI grader output with per-problem reasoning. None if AI
+    # grading hasn't run or is disabled. The frontend uses this to
+    # show "AI" badges and reasoning tooltips on pre-filled grades.
+    ai_breakdown: list[dict[str, Any]] | None
     final_score: float | None
     teacher_notes: str | None
     grade_published_at: datetime | None
@@ -1213,23 +1217,48 @@ async def get_submission_detail(
         )).scalars().all()
         items_by_id = {str(it.id): it for it in items}
 
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+
+    # Build a lookup of AI-extracted student answers by problem_id.
+    # The AI grading step writes `student_answer` into each breakdown
+    # entry — this is what the LLM extracted from the handwriting.
+    ai_answers: dict[str, str] = {}
+    if grade and grade.breakdown:
+        for entry in grade.breakdown:
+            pid = entry.get("problem_id")
+            sa = entry.get("student_answer")
+            if pid and sa:
+                ai_answers[pid] = sa
+
     answers_map = sub.final_answers or {}
     problems: list[TeacherSubmissionDetailProblem] = []
     for pos, pid in enumerate(primary_ids, start=1):
         item = items_by_id.get(str(pid))
         if not item:
             continue
+        # Prefer the AI-extracted answer (from handwriting) over the
+        # student's optional typed answer — the extraction is the
+        # source of truth for "what the student actually wrote."
+        student_answer = (
+            ai_answers.get(str(pid))
+            or answers_map.get(str(pid))
+            or None
+        )
         problems.append(TeacherSubmissionDetailProblem(
             bank_item_id=str(item.id),
             position=pos,
             question=item.question,
             final_answer=item.final_answer,
-            student_answer=answers_map.get(str(pid)),
+            student_answer=student_answer,
         ))
 
-    grade = (await db.execute(
-        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
-    )).scalar_one_or_none()
+    # Surface ai_breakdown's grades array for the frontend to show
+    # "AI" badges and per-problem reasoning tooltips.
+    ai_breakdown_grades = None
+    if grade and grade.ai_breakdown:
+        ai_breakdown_grades = grade.ai_breakdown.get("grades")
 
     return TeacherSubmissionDetail(
         submission_id=str(sub.id),
@@ -1243,6 +1272,7 @@ async def get_submission_detail(
         image_data=sub.image_data,
         problems=problems,
         breakdown=grade.breakdown if grade else None,
+        ai_breakdown=ai_breakdown_grades,
         final_score=grade.final_score if grade else None,
         teacher_notes=grade.teacher_notes if grade else None,
         grade_published_at=grade.grade_published_at if grade else None,
