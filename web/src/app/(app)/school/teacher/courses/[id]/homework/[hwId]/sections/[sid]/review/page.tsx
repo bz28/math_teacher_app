@@ -6,6 +6,7 @@ import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
   teacher,
+  type AiGradeEntry,
   type GradeBreakdownEntry,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
@@ -731,6 +732,13 @@ function SubmissionDetailPanel({
     for (const b of detail.breakdown ?? []) map.set(b.problem_id, b);
     return map;
   }, [detail.breakdown]);
+  // AI grades keyed by position → problem. Used to show "AI" badges
+  // and reasoning tooltips on grades the AI pre-filled.
+  const aiByPosition = useMemo(() => {
+    const map = new Map<number, AiGradeEntry>();
+    for (const a of detail.ai_breakdown ?? []) map.set(a.problem_position, a);
+    return map;
+  }, [detail.ai_breakdown]);
   const gradedCount = breakdownByProblem.size;
   const totalProblems = detail.problems.length;
   const avgPercent =
@@ -828,6 +836,7 @@ function SubmissionDetailPanel({
               key={p.bank_item_id}
               problem={p}
               entry={breakdownByProblem.get(p.bank_item_id) ?? null}
+              aiGrade={aiByPosition.get(p.position) ?? null}
               onChange={(status, partialPercent) =>
                 onGradeProblem(p.bank_item_id, status, partialPercent)
               }
@@ -848,13 +857,21 @@ function SubmissionDetailPanel({
 function ProblemGradeRow({
   problem,
   entry,
+  aiGrade,
   onChange,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
+  aiGrade: AiGradeEntry | null;
   onChange: (status: GradeStatus, partialPercent?: number) => void;
 }) {
   const current = entry?.score_status ?? null;
+  // Show "AI" badge when the active grade matches the AI suggestion
+  // (i.e. teacher hasn't overridden it yet).
+  const isAiMatch =
+    aiGrade !== null &&
+    current === aiGrade.score_status &&
+    (current !== "partial" || Math.round(entry?.percent ?? 0) === Math.round(aiGrade.percent));
   // Local edit buffer for the inline partial input. `null` means
   // "show the current server-side value"; a string means "user is
   // typing". On commit we parse + fire onChange, then null the
@@ -914,7 +931,7 @@ function ProblemGradeRow({
             {problem.student_answer ? (
               <MathText text={problem.student_answer} />
             ) : (
-              <span className="italic text-text-muted">Not typed</span>
+              <span className="italic text-text-muted">No answer extracted</span>
             )}
           </div>
         </div>
@@ -968,7 +985,18 @@ function ProblemGradeRow({
         <GradeBtn active={current === "zero"} tone="red" onClick={() => onChange("zero")}>
           Zero
         </GradeBtn>
+        {isAiMatch && (
+          <span className="rounded-[--radius-pill] bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+            AI
+          </span>
+        )}
       </div>
+      {aiGrade?.reasoning && (
+        <p className="mt-2 text-[11px] italic text-text-muted">
+          <span className="font-semibold not-italic text-primary">AI:</span>{" "}
+          {aiGrade.reasoning}
+        </p>
+      )}
     </div>
   );
 }

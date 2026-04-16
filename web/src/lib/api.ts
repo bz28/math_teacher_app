@@ -1155,9 +1155,18 @@ export interface TeacherSubmissionDetail {
   image_data: string | null;
   problems: TeacherSubmissionDetailProblem[];
   breakdown: GradeBreakdownEntry[] | null;
+  ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;
   teacher_notes: string | null;
   grade_published_at: string | null;
+}
+
+export interface AiGradeEntry {
+  problem_position: number;
+  student_answer: string;
+  score_status: "full" | "partial" | "zero";
+  percent: number;
+  reasoning: string;
 }
 
 export interface BankChatProposal {
