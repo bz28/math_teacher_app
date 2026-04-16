@@ -454,7 +454,10 @@ AI_GRADING_SCHEMA: ToolSchema = {
                         },
                         "student_answer": {
                             "type": "string",
-                            "description": "The student's final answer (LaTeX) as you understood it from the extraction.",
+                            "description": (
+                                "The student's final answer (LaTeX) as you "
+                                "understood it from the extraction."
+                            ),
                         },
                         "score_status": {
                             "type": "string",

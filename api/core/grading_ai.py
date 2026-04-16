@@ -33,9 +33,6 @@ from api.services.bank import problem_ids_in_content
 
 logger = logging.getLogger(__name__)
 
-# Registered on LLMMode for cost-tracking / admin dashboard.
-LLMMode.AI_GRADING = "ai_grading"  # type: ignore[attr-defined]
-
 _GRADING_SYSTEM = """\
 You are a world-class math professor grading a student's homework submission. \
 You have the student's extracted work (what they wrote on paper, already converted \
