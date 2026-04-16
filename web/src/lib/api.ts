@@ -740,6 +740,63 @@ export interface SubmissionsInboxRow {
   published: number;
 }
 
+/** One row per (student × section enrollment) in the Grades tab roster.
+ *  Counts are scoped to assigned+past-due HWs; avg excludes missing. */
+export interface GradesRosterRow {
+  student_id: string;
+  name: string;
+  section_id: string;
+  section_name: string;
+  assigned_count: number;
+  graded_count: number;
+  missing_count: number;
+  /** Mean of published final_scores across assigned HWs. Null if
+   *  the student has no published grades yet. */
+  avg_percent: number | null;
+}
+
+/** Response from the Grades tab roster endpoint. `sections` drives
+ *  the filter dropdown (always the full set for the course). */
+export interface GradesRosterResponse {
+  sections: { id: string; name: string }[];
+  students: GradesRosterRow[];
+}
+
+/** One published HW row on the student detail page. */
+export interface StudentGradePublishedHw {
+  assignment_id: string;
+  title: string;
+  due_at: string | null;
+  graded_at: string | null;
+  final_score: number;
+  teacher_notes: string | null;
+  /** Included so the detail page can link into the review page. */
+  section_id: string;
+}
+
+/** One missing HW row (past due, no submission from this student). */
+export interface StudentGradeMissingHw {
+  assignment_id: string;
+  title: string;
+  due_at: string | null;
+}
+
+/** Full published-grade record for one student in one section. */
+export interface StudentGradesResponse {
+  student: {
+    id: string;
+    name: string;
+    section_id: string;
+    section_name: string;
+  };
+  overall_avg: number | null;
+  class_avg: number | null;
+  graded_count: number;
+  missing_count: number;
+  published_hws: StudentGradePublishedHw[];
+  missing_hws: StudentGradeMissingHw[];
+}
+
 export const teacher = {
   courses() {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
@@ -908,6 +965,20 @@ export const teacher = {
   submissionsInbox(courseId: string) {
     return apiFetch<{ rows: SubmissionsInboxRow[] }>(
       `/teacher/courses/${courseId}/submissions-inbox`,
+    );
+  },
+  /** Grades tab roster — one row per (student × section). Only
+   *  counts HWs that are published, assigned, and past due. */
+  gradesRoster(courseId: string, sectionId?: string) {
+    const qs = sectionId ? `?section_id=${sectionId}` : "";
+    return apiFetch<GradesRosterResponse>(
+      `/teacher/courses/${courseId}/grades${qs}`,
+    );
+  },
+  /** Full published-grade record for one student in one section. */
+  studentGrades(courseId: string, sectionId: string, studentId: string) {
+    return apiFetch<StudentGradesResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}/grades`,
     );
   },
   /** Replace the per-problem breakdown (and/or teacher notes) for a
