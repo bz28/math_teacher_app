@@ -44,6 +44,20 @@ class Assignment(Base):
     integrity_check_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true",
     )
+    # Teacher-authored grading rubric. Structured JSON so the AI grader
+    # has typed signals and the review UI can render a clean sidebar.
+    # Shape (all optional; UI decides which fields to collect):
+    #   {
+    #     grading_mode: "answer_only" | "answer_and_work"
+    #                 | "method_focused" | "custom",
+    #     full_credit: str,      # what earns 100%
+    #     partial_credit: str,   # when students get partial
+    #     common_mistakes: str,  # optional — help AI catch known errors
+    #     notes: str,            # optional — free text fallback
+    #   }
+    # v1: reference panel for the teacher during manual grading.
+    # Future AI PR: fed directly to the grader as typed fields.
+    rubric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -100,11 +114,27 @@ class SubmissionGrade(Base):
         UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, unique=True, index=True,
     )
     ai_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Raw AI grader output — reference only. Holds the model's
+    # per-problem reasoning and confidence before the teacher reviews.
+    # The authoritative final grades live on `breakdown` (which the AI
+    # seeds and the teacher can then edit). Populated by the future AI
+    # grading PR; untouched in v1.
     ai_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     teacher_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     teacher_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Authoritative final per-problem grades. Shape: [{problem_id,
+    # score_status: "full"|"partial"|"zero", percent, feedback}]. v1:
+    # teacher writes directly. Future AI PR: AI seeds this from
+    # `ai_breakdown`, teacher edits in place. Whoever wrote it last
+    # wins — this is what drives `final_score` and what the student
+    # sees once `grade_published_at` is set.
+    breakdown: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Null while the teacher is still drafting grades; set when the
+    # teacher clicks "Publish grades" on the HW. Drives student
+    # visibility of the final_score + breakdown.
+    grade_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
