@@ -6,10 +6,16 @@ import { useRouter } from "next/navigation";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
+  type BankItem,
+  type BankJob,
   type GradingMode,
   type TeacherAssignment,
   type TeacherRubric,
 } from "@/lib/api";
+import {
+  BANK_JOB_POLL_INTERVAL_MS,
+  BANK_JOB_POLL_LIMIT_MS,
+} from "@/lib/constants";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { BankPicker } from "@/components/school/teacher/_pieces/bank-picker";
 import { UnitMultiSelect } from "@/components/school/teacher/_pieces/unit-multi-select";
@@ -19,6 +25,8 @@ import {
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { SubmissionsPanel } from "@/components/school/teacher/_pieces/submissions-panel";
+import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -103,6 +111,17 @@ export default function HomeworkDetailPage({
   const dueDateInputRef = useRef<HTMLInputElement>(null);
   const { busy, error, setError, run } = useAsyncAction();
 
+  // Resume-queue state: pending bank items whose unit overlaps this
+  // HW's unit_ids. Used to power the "N pending problems" banner and
+  // open the review workshop as a queue. We filter client-side by
+  // hw.unit_ids so multi-unit HWs get their full pool in one call.
+  const [pending, setPending] = useState<BankItem[]>([]);
+  const [showReviewQueue, setShowReviewQueue] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
+  // Polls bank jobs kicked off from the "Generate more" modal so the
+  // pending-banner count updates live when generation completes.
+  const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+
   // Per-field save state for the inline-edited config block.
   const [saveStates, setSaveStates] = useState<Record<ConfigField, SaveState>>({
     units: "idle",
@@ -136,6 +155,54 @@ export default function HomeworkDetailPage({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  // Fetch pending bank items for this HW's units and keep in sync. We
+  // over-fetch (all pending in the course) and filter locally so a
+  // multi-unit HW gets its full pool in one call.
+  const reloadPending = async () => {
+    if (!hw) return;
+    try {
+      const res = await teacher.bank(courseId, { status: "pending" });
+      const allowed = new Set(hw.unit_ids);
+      setPending(
+        res.items.filter((it) => it.unit_id && allowed.has(it.unit_id)),
+      );
+    } catch {
+      // Non-fatal — the banner just won't appear if this fails.
+    }
+  };
+
+  useEffect(() => {
+    if (!hw) return;
+    reloadPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hw?.id, hw?.unit_ids.join(",")]);
+
+  // Poll any in-flight generation job so the banner updates when it
+  // completes. Stops polling on done/failed or after a ceiling; same
+  // pattern as the course workspace page's active-job polling.
+  useEffect(() => {
+    if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
+    const startedAt = Date.now();
+    const jobId = activeJob.id;
+    const interval = setInterval(async () => {
+      if (Date.now() - startedAt > BANK_JOB_POLL_LIMIT_MS) {
+        setActiveJob((j) => (j ? { ...j, status: "failed" } : j));
+        return;
+      }
+      try {
+        const updated = await teacher.bankJob(courseId, jobId);
+        setActiveJob(updated);
+        if (updated.status === "done") {
+          await reloadPending();
+        }
+      } catch {
+        // keep polling, transient errors are fine
+      }
+    }, BANK_JOB_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob, courseId]);
 
   const problems: AssignmentProblem[] =
     hw?.content && typeof hw.content === "object" && "problems" in hw.content
@@ -348,6 +415,30 @@ export default function HomeworkDetailPage({
         onClose={() => setShowingSubmissions(false)}
       />
     )}
+    {showReviewQueue && pending.length > 0 && (
+      <WorkshopModal
+        queue={pending}
+        onClose={() => {
+          setShowReviewQueue(false);
+          // Some items may have been approved or rejected — refresh.
+          void reloadPending();
+          void reload();
+        }}
+        onChanged={() => void reloadPending()}
+        onJobStarted={(job) => setActiveJob(job)}
+        activeJob={activeJob}
+      />
+    )}
+    {showGenerate && (
+      <GenerateQuestionsModal
+        courseId={courseId}
+        onClose={() => setShowGenerate(false)}
+        onStarted={(job) => {
+          setActiveJob(job);
+          setShowGenerate(false);
+        }}
+      />
+    )}
     <div className="mx-auto max-w-4xl px-4 pb-10">
       <div className="pt-2">
         <Link
@@ -466,21 +557,63 @@ export default function HomeworkDetailPage({
                 />
               </div>
 
+              {/* Resume-queue banner — only when there are pending
+                  items in one of this HW's units. Approved items flow
+                  into the bank picker under Edit problems. */}
+              {pending.length > 0 && (
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-md] border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <div className="text-xs text-amber-900 dark:text-amber-200">
+                    <span className="font-bold">🔔 {pending.length}</span>{" "}
+                    {pending.length === 1 ? "problem" : "problems"} pending review
+                    <span className="ml-1 text-amber-800/70 dark:text-amber-300/70">
+                      · approve or reject to add them to this homework
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewQueue(true)}
+                    className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700"
+                  >
+                    Resume queue ▸
+                  </button>
+                </div>
+              )}
+
+              {/* Active generation toast — simple inline status so the
+                  teacher knows their "Generate more" click is working. */}
+              {activeJob && activeJob.status !== "done" && activeJob.status !== "failed" && (
+                <div className="mt-4 rounded-[--radius-md] border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                  Generating problems in the background — new ones will appear in
+                  the banner above when they&apos;re ready.
+                </div>
+              )}
+
               {/* Problems block */}
               <div className="mt-6">
                 <div className="flex items-baseline justify-between border-b border-border-light pb-2">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                     Problems · {problems.length}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setEditingProblems(true)}
-                    disabled={isPublished}
-                    title={isPublished ? "Unpublish to edit" : ""}
-                    className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
-                  >
-                    ✏ Edit problems
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowGenerate(true)}
+                      disabled={isPublished}
+                      title={isPublished ? "Unpublish to generate more" : "Generate more problems with AI"}
+                      className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
+                    >
+                      ✨ Generate more
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProblems(true)}
+                      disabled={isPublished}
+                      title={isPublished ? "Unpublish to edit" : ""}
+                      className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
+                    >
+                      ✏ Edit problems
+                    </button>
+                  </div>
                 </div>
 
                 {problems.length === 0 ? (
