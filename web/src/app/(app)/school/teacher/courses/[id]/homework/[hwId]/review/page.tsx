@@ -46,10 +46,16 @@ export default function HomeworkReviewPage({
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [hwTitle, setHwTitle] = useState<string>("");
-  // Ref so the polling effect can see the freshest phase without
-  // re-subscribing when phase changes mid-poll.
+  // Ref so the polling effect's async callbacks can check the freshest
+  // phase without re-subscribing when phase changes mid-poll. Sync the
+  // ref from an effect — writing to refs during render is disallowed
+  // by react-hooks/refs. A one-commit delay is fine here because the
+  // readers (async .then callbacks) only fire after the render that
+  // triggered a phase change has flushed and run its effects.
   const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const fetchPending = useCallback(async (): Promise<BankItem[]> => {
     const res = await teacher.bank(courseId, {
