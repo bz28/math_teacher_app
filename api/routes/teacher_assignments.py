@@ -551,15 +551,46 @@ async def publish_assignment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot publish a homework with no units",
         )
+    # Smart default: publishing a HW with no explicit section list
+    # fans it out to every section in the course. The assumption is
+    # "publish means everyone in this course, unless I said otherwise."
+    # Teachers who want to exclude sections use the picker; everyone
+    # else gets a one-click publish.
     section_count = (await db.execute(
         select(func.count())
         .select_from(AssignmentSection)
         .where(AssignmentSection.assignment_id == a.id)
     )).scalar_one()
     if section_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot publish a homework with no sections assigned",
+        course_section_ids = (await db.execute(
+            select(Section.id).where(Section.course_id == a.course_id)
+        )).scalars().all()
+        if not course_section_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This course has no sections yet — create one before publishing",
+            )
+        now = datetime.now(UTC)
+        # Race-safe fan-out: two concurrent publishes (cross-tab or
+        # double-click past the frontend's busy guard) would otherwise
+        # both insert the same (assignment_id, section_id) pair and
+        # one would 500 on the unique constraint. ON CONFLICT DO
+        # NOTHING makes the whole batch atomic — the first tx wins,
+        # the second no-ops per row.
+        await db.execute(
+            pg_insert(AssignmentSection)
+            .values([
+                {
+                    "id": uuid.uuid4(),
+                    "assignment_id": a.id,
+                    "section_id": sid,
+                    "published_at": now,
+                }
+                for sid in course_section_ids
+            ])
+            .on_conflict_do_nothing(
+                index_elements=["assignment_id", "section_id"],
+            )
         )
     a.status = "published"
     await db.flush()

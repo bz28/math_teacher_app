@@ -329,11 +329,14 @@ export function HomeworkDetailModal({
   };
 
   // Publish gating — list of missing requirements with concrete fixes.
+  // Sections are NOT required: the backend fans out to every section
+  // in the course when the teacher publishes with an empty list. The
+  // picker is for exclusions ("Period 5 doesn't get this yet"), not
+  // the happy path.
   const missingForPublish: string[] = [];
   if (hw) {
     if (problems.length === 0) missingForPublish.push("at least one problem");
     if (hw.unit_ids.length === 0) missingForPublish.push("a unit");
-    if (hw.section_ids.length === 0) missingForPublish.push("a section");
   }
   const canPublish = !isPublished && missingForPublish.length === 0;
 
@@ -719,7 +722,7 @@ function ConfigBlock({
         label="Sections"
         hint={
           hw.section_ids.length === 0
-            ? "No sections assigned — required to publish"
+            ? "Leave empty to publish to every section in this course"
             : undefined
         }
         saveState={saveStates.sections}
