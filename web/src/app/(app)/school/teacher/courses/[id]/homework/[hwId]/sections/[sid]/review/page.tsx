@@ -1011,13 +1011,14 @@ function ProblemGradeRow({
           no AI grade is present (pipeline failed / disabled), this
           block simply doesn't render. */}
       {aiGrade && aiGradeLabel && (
-        <div className="mt-3 rounded-[--radius-md] border border-indigo-200 bg-indigo-50 px-3 py-2 dark:border-indigo-900/40 dark:bg-indigo-900/20">
-          <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
-            <span className="mr-1" aria-hidden>🤖</span>
-            AI&apos;s call: {aiGradeLabel}
+        <div className="mt-3 rounded-[--radius-md] border border-primary/25 bg-primary-bg px-3 py-2">
+          <p className="text-xs font-bold text-text-primary">
+            <span className="mr-1 text-primary" aria-hidden>🤖</span>
+            <span className="text-primary">AI&apos;s call:</span>{" "}
+            {aiGradeLabel}
           </p>
           {aiGrade.reasoning && (
-            <p className="mt-1 text-[11px] leading-relaxed text-indigo-900/90 dark:text-indigo-200/90">
+            <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
               {aiGrade.reasoning}
             </p>
           )}
@@ -1085,7 +1086,7 @@ function ProblemGradeRow({
                 : undefined,
             )
           }
-          className="mt-2 inline-flex items-center gap-1 rounded-[--radius-pill] border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-800 hover:border-indigo-400 hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-200"
+          className="mt-2 inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-2.5 py-1 text-[11px] font-semibold text-primary hover:border-primary/60 hover:bg-primary/10"
           title="Revert to the AI's suggested grade"
         >
           <span aria-hidden>⟲</span>
@@ -1108,8 +1109,8 @@ function GradeBtn({
   onClick: () => void;
   children: React.ReactNode;
   /** Mark this button as the AI's suggestion. When not the active
-   *  choice, a subtle indigo ring signals "the AI recommended this".
-   *  When active AND AI's pick, shows an inline "· AI" suffix. */
+   *  choice, a subtle primary-tinted outline signals "the AI
+   *  recommended this". Always pairs with an inline "AI" pill. */
   aiPick?: boolean;
 }) {
   const activeCls = {
@@ -1118,7 +1119,7 @@ function GradeBtn({
     red: "border-red-500 bg-red-500 text-white",
   }[tone];
   const inactiveCls = aiPick
-    ? "border-indigo-300 bg-indigo-50 text-indigo-800 hover:border-indigo-400 dark:border-indigo-800/60 dark:bg-indigo-900/20 dark:text-indigo-200"
+    ? "border-primary/40 bg-primary-bg text-text-primary hover:border-primary/60"
     : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary";
   return (
     <button
@@ -1133,7 +1134,7 @@ function GradeBtn({
       {aiPick && (
         <span
           className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold leading-none ${
-            active ? "bg-white/25 text-white" : "bg-indigo-200/70 text-indigo-900"
+            active ? "bg-white/30 text-white" : "bg-primary/15 text-primary"
           }`}
           aria-label="AI's suggestion"
         >
@@ -1366,7 +1367,7 @@ function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
       <div
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
           isAgent
-            ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+            ? "bg-primary text-white"
             : "bg-bg-subtle text-text-secondary"
         }`}
         aria-hidden
@@ -1376,7 +1377,7 @@ function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
       <div
         className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
           isAgent
-            ? "bg-indigo-50 text-text-primary dark:bg-indigo-900/20"
+            ? "bg-primary-bg text-text-primary"
             : "bg-bg-subtle text-text-primary"
         }`}
       >
