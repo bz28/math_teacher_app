@@ -270,8 +270,13 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           courseId={courseId}
           defaultUnitIds={filters.unit ? [filters.unit] : []}
           onClose={() => setShowNew(false)}
-          onCreated={() => {
+          onCreated={(newId) => {
+            // Land directly on the new HW's detail view so the teacher
+            // can see their generated problems appear (or start adding
+            // them manually). Reload in the background so the HW list
+            // is fresh when they close the detail.
             setShowNew(false);
+            setOpenId(newId);
             reload();
           }}
         />
