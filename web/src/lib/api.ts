@@ -926,6 +926,16 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
+  /** Publish every graded submission on this HW to students at once.
+   *  Idempotent — already-published grades are skipped, and ungraded
+   *  submissions are ignored (teacher can grade + publish more later).
+   *  Returns the count actually published. */
+  publishGrades(assignmentId: string) {
+    return apiFetch<{ status: string; published_count: number }>(
+      `/teacher/assignments/${assignmentId}/publish-grades`,
+      { method: "POST" },
+    );
+  },
   // Visibility
   getVisibility(courseId: string) {
     return apiFetch<{ hidden_units: Record<string, string[]>; hidden_docs: Record<string, string[]> }>(

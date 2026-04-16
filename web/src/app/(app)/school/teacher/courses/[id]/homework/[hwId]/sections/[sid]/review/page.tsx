@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MathText } from "@/components/shared/math-text";
+import { Modal } from "@/components/ui/modal";
 import {
   teacher,
   type GradeBreakdownEntry,
@@ -29,8 +30,10 @@ type GradeStatus = GradeBreakdownEntry["score_status"];
  * The overall percent is the backend's average of the per-problem
  * percents; we show it live in the detail pane's summary card. A
  * "Next student →" button jumps to the next submitter that still
- * needs a published grade. Publishing grades to students is a
- * separate action (coming in 8c).
+ * needs a published grade. Publishing is a one-click, HW-wide action
+ * gated by a confirmation dialog (the backend publishes every graded
+ * submission on the HW at once — the dialog discloses cross-section
+ * scope when applicable).
  */
 type RosterEntry = {
   student_id: string;
@@ -66,6 +69,17 @@ export default function HomeworkSectionReviewPage({
   const [saveError, setSaveError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
+  // Counters for grades in *other* sections of this HW. Snapshotted
+  // from the initial fetch — the publish endpoint is HW-wide, so the
+  // dialog must disclose cross-section scope, and the header pill needs
+  // to distinguish "nothing to publish (nothing graded)" from "nothing
+  // to publish (everything already published)". Per-section counts are
+  // derived from roster and stay live as the teacher grades.
+  const [pendingOtherSections, setPendingOtherSections] = useState(0);
+  const [gradedOtherSections, setGradedOtherSections] = useState(0);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   // Load HW + section roster + submissions and merge into one list:
   // every enrolled student in this section, with their submission if
@@ -87,10 +101,19 @@ export default function HomeworkSectionReviewPage({
         // account email after submitting — the submission still
         // carries the old email and would vanish from the view.
         const submissionByStudent = new Map<string, TeacherSubmissionRow>();
+        let otherPending = 0;
+        let otherGraded = 0;
         for (const r of subs.submissions) {
-          if (r.section_id !== sectionId || r.is_preview) continue;
-          submissionByStudent.set(r.student_id, r);
+          if (r.is_preview) continue;
+          if (r.section_id === sectionId) {
+            submissionByStudent.set(r.student_id, r);
+          } else if (r.final_score !== null) {
+            otherGraded += 1;
+            if (r.grade_published_at === null) otherPending += 1;
+          }
         }
+        setPendingOtherSections(otherPending);
+        setGradedOtherSections(otherGraded);
         const merged: RosterEntry[] = s.students
           .map((st) => ({
             student_id: st.id,
@@ -260,6 +283,59 @@ export default function HomeworkSectionReviewPage({
     [detail, persistBreakdown],
   );
 
+  // Derived counts for the publish button state machine. `pending*`
+  // are submissions graded but not yet published; `graded*` include
+  // already-published ones. In-section counts are live via roster;
+  // other-section counts are snapshotted at fetch time.
+  const { pendingInSection, gradedInSection } = useMemo(() => {
+    let pending = 0;
+    let graded = 0;
+    for (const e of roster ?? []) {
+      if (!e.submission || e.submission.final_score === null) continue;
+      graded += 1;
+      if (e.submission.grade_published_at === null) pending += 1;
+    }
+    return { pendingInSection: pending, gradedInSection: graded };
+  }, [roster]);
+  const pendingTotal = pendingInSection + pendingOtherSections;
+  const gradedTotal = gradedInSection + gradedOtherSections;
+
+  // Publish every graded submission on the HW. Backend is idempotent
+  // and returns the count actually published. On success we mirror
+  // the publish timestamp onto every local roster entry that was
+  // ready, and zero out the cross-section counter. Other sections
+  // only refresh on next open — acceptable for a one-shot action.
+  const handlePublish = useCallback(async () => {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      await teacher.publishGrades(assignmentId);
+      const nowIso = new Date().toISOString();
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission &&
+              e.submission.final_score !== null &&
+              e.submission.grade_published_at === null
+                ? {
+                    ...e,
+                    submission: { ...e.submission, grade_published_at: nowIso },
+                  }
+                : e,
+            )
+          : prev,
+      );
+      setPendingOtherSections(0);
+      setPublishConfirmOpen(false);
+    } catch (e) {
+      setPublishError(
+        e instanceof Error ? e.message : "Failed to publish grades",
+      );
+    } finally {
+      setPublishing(false);
+    }
+  }, [assignmentId]);
+
   // Next submitter who still needs a published grade. Wraps to the
   // start so a teacher grading out-of-order still gets auto-advance.
   // Returns null if every submitter is published (or the section
@@ -289,9 +365,18 @@ export default function HomeworkSectionReviewPage({
         </Link>
       </div>
 
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary">
-        {pageTitle}
-      </h1>
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+          {pageTitle}
+        </h1>
+        {roster !== null && (
+          <PublishButton
+            pendingTotal={pendingTotal}
+            gradedTotal={gradedTotal}
+            onOpen={() => setPublishConfirmOpen(true)}
+          />
+        )}
+      </div>
 
       {error && (
         <p className="mt-4 text-sm text-red-600">{error}</p>
@@ -362,7 +447,134 @@ export default function HomeworkSectionReviewPage({
           </section>
         </div>
       )}
+
+      <PublishConfirmDialog
+        open={publishConfirmOpen}
+        onClose={() => {
+          if (!publishing) {
+            setPublishConfirmOpen(false);
+            setPublishError(null);
+          }
+        }}
+        pendingInSection={pendingInSection}
+        pendingOtherSections={pendingOtherSections}
+        publishing={publishing}
+        error={publishError}
+        onConfirm={handlePublish}
+      />
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Publish button (page header) — three states, HW-wide counts:
+//   • pendingTotal > 0                → primary CTA opens confirmation
+//   • gradedTotal > 0, no pending     → green "All grades published" pill
+//   • nothing graded yet              → muted "No grades to publish" pill
+// The last two are distinct: "all published" is a done state; "no
+// grades" means the teacher hasn't started grading. Conflating them
+// misleads on a freshly-published HW where no one has been graded.
+// ────────────────────────────────────────────────────────────────────
+
+function PublishButton({
+  pendingTotal,
+  gradedTotal,
+  onOpen,
+}: {
+  pendingTotal: number;
+  gradedTotal: number;
+  onOpen: () => void;
+}) {
+  if (pendingTotal === 0) {
+    if (gradedTotal === 0) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
+          No grades to publish
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
+        <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+        All grades published
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+    >
+      Publish {pendingTotal} {pendingTotal === 1 ? "grade" : "grades"} →
+    </button>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Confirmation dialog before publishing. Makes the HW-wide scope
+// explicit when there are grades in other sections — the button was
+// clicked from one section's view but the action affects all of them.
+// ────────────────────────────────────────────────────────────────────
+
+function PublishConfirmDialog({
+  open,
+  onClose,
+  pendingInSection,
+  pendingOtherSections,
+  publishing,
+  error,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  pendingInSection: number;
+  pendingOtherSections: number;
+  publishing: boolean;
+  error: string | null;
+  onConfirm: () => void;
+}) {
+  const total = pendingInSection + pendingOtherSections;
+  return (
+    <Modal open={open} onClose={onClose} dismissible={!publishing}>
+      <h2 className="text-lg font-bold text-text-primary">
+        Publish {total} {total === 1 ? "grade" : "grades"}?
+      </h2>
+      <p className="mt-2 text-sm text-text-secondary">
+        Students will see their scores immediately. Ungraded submissions
+        aren&apos;t affected.
+      </p>
+      {pendingOtherSections > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
+          This includes <span className="font-semibold">{pendingOtherSections}</span>{" "}
+          {pendingOtherSections === 1 ? "grade" : "grades"} from other sections
+          of this homework.
+        </p>
+      )}
+      {error && (
+        <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={publishing}
+          className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={publishing}
+          className="rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {publishing ? "Publishing…" : "Publish grades"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
