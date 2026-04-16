@@ -59,6 +59,10 @@ class CreateAssignmentRequest(BaseModel):
     # text/solution/answer at create time so future bank edits don't
     # change a homework that's already out in the world.
     bank_item_ids: list[uuid.UUID] | None = None
+    # Structured grading rubric. See Assignment.rubric for shape. The
+    # backend accepts any dict — the frontend shapes it and the AI
+    # grader reads typed fields. None = no rubric authored yet.
+    rubric: dict[str, Any] | None = None
 
     @field_validator("title")
     @classmethod
@@ -108,6 +112,12 @@ class UpdateAssignmentRequest(BaseModel):
     # When provided, re-snapshot the picked bank items into content.
     # Useful for the "edit problems" flow on a draft homework.
     bank_item_ids: list[uuid.UUID] | None = None
+    # Structured grading rubric. None = leave unchanged. Pass `{}` (or
+    # any dict) to overwrite; the frontend controls the shape. To clear
+    # a previously-authored rubric, set `clear_rubric=true` instead of
+    # passing an empty dict (mirrors the due_at pattern).
+    rubric: dict[str, Any] | None = None
+    clear_rubric: bool = False
 
     @field_validator("unit_ids")
     @classmethod
@@ -351,6 +361,7 @@ async def create_assignment(
         due_at=due_at, late_policy=body.late_policy,
         content=content, answer_key=body.answer_key,
         unit_ids=body.unit_ids, document_ids=doc_id_strings,
+        rubric=body.rubric,
     )
     db.add(assignment)
     await db.commit()
@@ -418,6 +429,7 @@ async def get_assignment(
     result = assignment_to_dict(a, sections, stats)
     result["content"] = await hydrate_assignment_content(db, a)
     result["answer_key"] = a.answer_key
+    result["rubric"] = a.rubric
     return result
 
 
@@ -446,6 +458,11 @@ async def update_assignment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unpublish before editing configuration",
         )
+    # Rubric edits are intentionally allowed on published HWs: teachers
+    # often refine partial-credit rules mid-grading when they spot
+    # patterns. The rubric is a teacher + AI-grader reference, not a
+    # student-visible contract, so changes here don't invalidate
+    # already-returned work.
 
     if body.title is not None:
         title = body.title.strip()
@@ -480,6 +497,10 @@ async def update_assignment(
             a.content = body.content
     if body.answer_key is not None:
         a.answer_key = body.answer_key
+    if body.clear_rubric:
+        a.rubric = None
+    elif body.rubric is not None:
+        a.rubric = body.rubric
 
     await db.commit()
     return {"status": "ok"}
