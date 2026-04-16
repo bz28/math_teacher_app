@@ -8,6 +8,9 @@ import {
   teacher,
   type AiGradeEntry,
   type GradeBreakdownEntry,
+  type IntegrityBadge,
+  type TeacherIntegrityDetail,
+  type TeacherIntegrityTranscriptTurn,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionRow,
@@ -69,6 +72,11 @@ export default function HomeworkSectionReviewPage({
   // A. Fetch/save errors are scoped to a submissionId so a failure on
   // one student's grade doesn't render on another student's card.
   const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
+  // Full integrity detail (overall verdict + reasoning + transcript)
+  // is a separate endpoint from submission detail. Single-slot cache
+  // keyed off submission_id, same staleness-by-derivation pattern as
+  // `detail`. Null on: HW has integrity disabled, or no check ran.
+  const [integrity, setIntegrity] = useState<TeacherIntegrityDetail | null>(null);
   const [fetchError, setFetchError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
@@ -204,6 +212,32 @@ export default function HomeworkSectionReviewPage({
       cancelled = true;
     };
   }, [selectedSubmissionId, detail?.submission_id]);
+
+  // Fetch the full integrity detail in parallel. Independent of
+  // submissionDetail so a missing/404 integrity record (HW had the
+  // check disabled, or the pipeline never ran) doesn't block the
+  // grading UI — the banner just hides.
+  useEffect(() => {
+    if (!selectedSubmissionId) return;
+    if (integrity?.submission_id === selectedSubmissionId) return;
+    let cancelled = false;
+    const id = selectedSubmissionId;
+    teacher
+      .integrityDetail(id)
+      .then((d) => {
+        if (cancelled) return;
+        setIntegrity(d);
+      })
+      .catch(() => {
+        // 404 / disabled — clear any stale integrity for the prior
+        // selection so we don't show another student's verdict.
+        if (cancelled) return;
+        setIntegrity((prev) => (prev?.submission_id === id ? prev : null));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSubmissionId, integrity?.submission_id]);
 
   const pageTitle = useMemo(() => {
     if (!hwTitle && !sectionName) return "Reviewing…";
@@ -442,6 +476,11 @@ export default function HomeworkSectionReviewPage({
             {detailIsCurrent && detail && selectedEntry?.submission && (
               <SubmissionDetailPanel
                 detail={detail}
+                integrity={
+                  integrity?.submission_id === selectedSubmissionId
+                    ? integrity
+                    : null
+                }
                 row={selectedEntry.submission}
                 saveError={currentSaveError}
                 nextStudent={nextStudent}
@@ -720,6 +759,7 @@ function rowStatusLabel(entry: RosterEntry): {
 
 function SubmissionDetailPanel({
   detail,
+  integrity,
   row,
   saveError,
   nextStudent,
@@ -727,6 +767,7 @@ function SubmissionDetailPanel({
   onGradeProblem,
 }: {
   detail: TeacherSubmissionDetail;
+  integrity: TeacherIntegrityDetail | null;
   row: TeacherSubmissionRow | null;
   saveError: string | null;
   nextStudent: RosterEntry | null;
@@ -779,10 +820,16 @@ function SubmissionDetailPanel({
             )}
           </p>
         </div>
-        {row?.integrity_overview && (
-          <IntegritySummary overview={row.integrity_overview} />
-        )}
       </div>
+
+      {/* Integrity verdict — prefer the full detail; fall back to the
+          roster-row overview when the detail fetch hasn't landed yet
+          (status spinner / low-signal cases). Hides entirely when both
+          are null — HW had integrity disabled, or no check exists. */}
+      <IntegrityBanner
+        integrity={integrity}
+        overviewFallback={row?.integrity_overview ?? null}
+      />
 
       {/* Grade summary — live overall score + Next student jump */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[--radius-xl] border border-border-light bg-surface p-4 shadow-sm">
@@ -1029,41 +1076,283 @@ function GradeBtn({
   );
 }
 
-function IntegritySummary({
-  overview,
+// Visual treatment for each integrity verdict. Paired with both an
+// icon and explicit copy so color-only signal is never the whole
+// story (colorblind-safe by design).
+const INTEGRITY_STYLE: Record<
+  IntegrityBadge | "in_progress" | "none",
+  { bg: string; border: string; text: string; icon: string; label: string }
+> = {
+  likely: {
+    bg: "bg-green-50 dark:bg-green-900/20",
+    border: "border-green-200 dark:border-green-900/40",
+    text: "text-green-800 dark:text-green-300",
+    icon: "✓",
+    label: "Looks like the student's own work",
+  },
+  uncertain: {
+    bg: "bg-amber-50 dark:bg-amber-900/20",
+    border: "border-amber-200 dark:border-amber-900/40",
+    text: "text-amber-800 dark:text-amber-300",
+    icon: "⚠",
+    label: "Some concerns — the AI couldn't verify everything",
+  },
+  unlikely: {
+    bg: "bg-red-50 dark:bg-red-900/20",
+    border: "border-red-200 dark:border-red-900/40",
+    text: "text-red-800 dark:text-red-300",
+    icon: "🚩",
+    label: "Likely not the student's own work",
+  },
+  unreadable: {
+    bg: "bg-bg-subtle",
+    border: "border-border-light",
+    text: "text-text-muted",
+    icon: "◌",
+    label: "Handwriting unreadable — couldn't run the check",
+  },
+  in_progress: {
+    bg: "bg-bg-subtle",
+    border: "border-border-light",
+    text: "text-text-muted",
+    icon: "…",
+    label: "Integrity check running",
+  },
+  none: {
+    bg: "bg-bg-subtle",
+    border: "border-border-light",
+    text: "text-text-muted",
+    icon: "·",
+    label: "Couldn't determine",
+  },
+};
+
+/**
+ * Top-of-pane integrity verdict. Shows the overall badge + AI summary
+ * inline, and exposes the full agent↔student conversation behind a
+ * "View conversation" button. When the full `TeacherIntegrityDetail`
+ * hasn't loaded yet, falls back to the overview on the submission row
+ * so the teacher still sees the verdict/in-progress state during the
+ * brief fetch gap. Hides entirely when there's no integrity signal.
+ */
+function IntegrityBanner({
+  integrity,
+  overviewFallback,
 }: {
-  overview: NonNullable<TeacherSubmissionRow["integrity_overview"]>;
+  integrity: TeacherIntegrityDetail | null;
+  overviewFallback: TeacherSubmissionRow["integrity_overview"] | null;
 }) {
-  const { overall_badge: badge, overall_status: status, problem_count, complete_count } =
-    overview;
-  if (status === "in_progress") {
+  const [open, setOpen] = useState(false);
+
+  // Prefer full detail. If it's missing (fetch pending / 404), use
+  // the overview so the "in progress" and overall-badge signals still
+  // surface without waiting for a second round-trip.
+  const badge = integrity?.overall_badge ?? overviewFallback?.overall_badge ?? null;
+  const inProgress =
+    !integrity && overviewFallback?.overall_status === "in_progress";
+  const summary = integrity?.overall_summary ?? null;
+
+  // Nothing to show: no integrity data and not in progress. Bail so
+  // the layout doesn't reserve a phantom row.
+  if (!badge && !inProgress && !integrity) return null;
+
+  const key: IntegrityBadge | "in_progress" | "none" = inProgress
+    ? "in_progress"
+    : (badge ?? "none");
+  const style = INTEGRITY_STYLE[key];
+  const hasTranscript = !!integrity && integrity.transcript.length > 0;
+
+  return (
+    <>
+      <div
+        className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-bold ${style.text}`}>
+              <span className="mr-1.5" aria-hidden>{style.icon}</span>
+              {style.label}
+            </p>
+            {summary && (
+              <p className="mt-1.5 text-xs leading-relaxed text-text-primary/90">
+                {summary}
+              </p>
+            )}
+            {inProgress && overviewFallback && (
+              <p className="mt-1.5 text-xs text-text-muted">
+                {overviewFallback.complete_count} of{" "}
+                {overviewFallback.problem_count} sampled problems graded.
+              </p>
+            )}
+          </div>
+          {hasTranscript && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+            >
+              View conversation →
+            </button>
+          )}
+        </div>
+      </div>
+      {integrity && (
+        <ConversationModal
+          open={open}
+          onClose={() => setOpen(false)}
+          integrity={integrity}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Full agent↔student transcript + per-problem verdicts. This is the
+ * "drill in" surface for a teacher who doesn't trust the banner's
+ * one-line verdict. Turn-by-turn so the teacher can judge for
+ * themselves whether the student's explanations actually matched
+ * their written work.
+ */
+function ConversationModal({
+  open,
+  onClose,
+  integrity,
+}: {
+  open: boolean;
+  onClose: () => void;
+  integrity: TeacherIntegrityDetail;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0">
+      <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
+        <div>
+          <h3 className="text-sm font-bold text-text-primary">
+            AI ↔ student conversation
+          </h3>
+          <p className="text-[11px] text-text-muted">
+            {integrity.transcript.length} turns
+            {integrity.problems.length > 0 && (
+              <> · {integrity.problems.length} problems verified</>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+          aria-label="Close"
+        >
+          Close ✕
+        </button>
+      </div>
+      <div className="max-h-[70vh] space-y-3 overflow-y-auto px-5 py-4">
+        {integrity.transcript.map((t) => (
+          <TranscriptTurn key={t.ordinal} turn={t} />
+        ))}
+        {integrity.problems.length > 0 && (
+          <div className="mt-4 border-t border-border-light pt-4">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Per-problem verdicts
+            </p>
+            <div className="space-y-2">
+              {integrity.problems.map((p) => (
+                <PerProblemVerdict key={p.problem_id} problem={p} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
+  // Tool turns are AI internals; kept collapsed by default so teachers
+  // see the human-readable conversation first. An expander reveals them
+  // when the teacher wants to audit exactly what the agent did.
+  const isTool = turn.role === "tool_call" || turn.role === "tool_result";
+  const [expanded, setExpanded] = useState(false);
+  if (isTool) {
     return (
-      <p className="mt-3 text-[11px] text-text-muted">
-        Integrity check in progress — {complete_count} of {problem_count} sampled
-        problems graded.
-      </p>
+      <details
+        open={expanded}
+        onToggle={(e) => setExpanded((e.target as HTMLDetailsElement).open)}
+        className="rounded-[--radius-sm] border border-dashed border-border-light bg-bg-subtle px-3 py-1.5 text-[11px] text-text-muted"
+      >
+        <summary className="cursor-pointer font-semibold">
+          {turn.role === "tool_call" ? "↳ tool call" : "↲ tool result"}
+          {turn.tool_name && <span className="ml-1 opacity-70">· {turn.tool_name}</span>}
+        </summary>
+        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px]">
+          {turn.content}
+        </pre>
+      </details>
     );
   }
-  if (!badge || badge === "likely") {
-    return (
-      <p className="mt-3 text-[11px] text-green-700 dark:text-green-400">
-        ✓ Integrity check: student likely did the work themselves.
+  const isAgent = turn.role === "agent";
+  return (
+    <div className={`flex gap-2 ${isAgent ? "" : "flex-row-reverse"}`}>
+      <div
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+          isAgent
+            ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+            : "bg-bg-subtle text-text-secondary"
+        }`}
+        aria-hidden
+      >
+        {isAgent ? "AI" : "S"}
+      </div>
+      <div
+        className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
+          isAgent
+            ? "bg-indigo-50 text-text-primary dark:bg-indigo-900/20"
+            : "bg-bg-subtle text-text-primary"
+        }`}
+      >
+        <MathText text={turn.content} />
+        {turn.seconds_on_turn != null && !isAgent && (
+          <span className="mt-1 block text-[10px] text-text-muted">
+            · {Math.round(turn.seconds_on_turn)}s to reply
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PerProblemVerdict({
+  problem,
+}: {
+  problem: TeacherIntegrityDetail["problems"][number];
+}) {
+  const style = INTEGRITY_STYLE[problem.badge ?? "none"];
+  return (
+    <div
+      className={`rounded-[--radius-md] border ${style.border} ${style.bg} px-3 py-2`}
+    >
+      <p className="flex items-center gap-1.5 text-xs font-semibold">
+        <span className={style.text}>
+          {style.icon} {style.label}
+        </span>
+        {problem.confidence != null && (
+          <span className="text-text-muted">
+            · {Math.round(problem.confidence * 100)}% conf
+          </span>
+        )}
       </p>
-    );
-  }
-  const cls =
-    badge === "unlikely"
-      ? "text-red-700 dark:text-red-400"
-      : badge === "unreadable"
-        ? "text-text-muted"
-        : "text-amber-700 dark:text-amber-400";
-  const label =
-    badge === "unlikely"
-      ? "⚠ Unlikely the student did this work themselves."
-      : badge === "unreadable"
-        ? "⚠ Handwriting unreadable — student flagged the extraction."
-        : "⚠ Uncertain whether the student did this themselves.";
-  return <p className={`mt-3 text-[11px] font-semibold ${cls}`}>{label}</p>;
+      <p className="mt-1 text-xs text-text-primary">
+        <MathText text={problem.question} />
+      </p>
+      {problem.ai_reasoning && (
+        <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+          {problem.ai_reasoning}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**
