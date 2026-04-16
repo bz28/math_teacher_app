@@ -15,6 +15,12 @@ import {
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
 
+function imageDataUrl(raw: string): string {
+  if (raw.startsWith("data:")) return raw;
+  const mime = raw.startsWith("iVBOR") ? "image/png" : "image/jpeg";
+  return `data:${mime};base64,${raw}`;
+}
+
 /**
  * Grading review workspace: one HW × one section.
  *
@@ -818,7 +824,7 @@ function SubmissionDetailPanel({
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`data:image/jpeg;base64,${detail.image_data}`}
+            src={imageDataUrl(detail.image_data)}
             alt="Student handwritten submission"
             className="w-full rounded-[--radius-md] border border-border-light"
           />
