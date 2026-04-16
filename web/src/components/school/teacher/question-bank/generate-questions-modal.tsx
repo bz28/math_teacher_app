@@ -14,10 +14,14 @@ import { QUANTITY_CHIPS } from "./constants";
 
 export function GenerateQuestionsModal({
   courseId,
+  assignmentId,
   onClose,
   onStarted,
 }: {
   courseId: string;
+  /** The HW the teacher is on — generation is always per-HW; this
+   *  stamps each produced item with its originating homework. */
+  assignmentId: string;
   onClose: () => void;
   onStarted: (job: BankJob) => void;
 }) {
@@ -114,6 +118,7 @@ export function GenerateQuestionsModal({
     try {
       const job = await teacher.generateBank(courseId, {
         count,
+        assignment_id: assignmentId,
         unit_id: unitId,
         document_ids: Array.from(selectedDocs),
         constraint: constraint.trim() || null,

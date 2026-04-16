@@ -31,6 +31,16 @@ class QuestionBankItem(Base):
     unit_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True, index=True,
     )
+    # Every bank item belongs to a homework — the one the teacher was
+    # on when they kicked off generation. Cascade-on-delete so deleting
+    # a HW cleans up its problems (no orphan bank items). Required
+    # since there's no longer a standalone question-bank flow.
+    originating_assignment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assignments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     # Short concept label shown as the primary scan unit in the bank
     # list. AI-generated alongside the question; teacher-editable.
@@ -107,6 +117,14 @@ class QuestionBankGenerationJob(Base):
     )
     unit_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True,
+    )
+    # The HW that triggered this generation job. Copied onto each
+    # produced item so the item remembers its origin even if teachers
+    # reassign units later. Required — there's no bank-global flow.
+    originating_assignment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assignments.id", ondelete="CASCADE"),
+        nullable=False,
     )
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,

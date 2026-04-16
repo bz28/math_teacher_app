@@ -156,27 +156,25 @@ export default function HomeworkDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  // Fetch pending bank items for this HW's units and keep in sync. We
-  // over-fetch (all pending in the course) and filter locally so a
-  // multi-unit HW gets its full pool in one call.
+  // Fetch pending bank items for THIS HW specifically. The backend
+  // filter on originating_assignment_id keeps the pool scoped so two
+  // HWs in the same unit don't share their pending items.
   const reloadPending = async () => {
-    if (!hw) return;
     try {
-      const res = await teacher.bank(courseId, { status: "pending" });
-      const allowed = new Set(hw.unit_ids);
-      setPending(
-        res.items.filter((it) => it.unit_id && allowed.has(it.unit_id)),
-      );
+      const res = await teacher.bank(courseId, {
+        status: "pending",
+        assignment_id: assignmentId,
+      });
+      setPending(res.items);
     } catch {
       // Non-fatal — the banner just won't appear if this fails.
     }
   };
 
   useEffect(() => {
-    if (!hw) return;
     reloadPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hw?.id, hw?.unit_ids.join(",")]);
+  }, [assignmentId]);
 
   // Poll any in-flight generation job so the banner updates when it
   // completes. Stops polling on done/failed or after a ceiling; same
@@ -432,6 +430,7 @@ export default function HomeworkDetailPage({
     {showGenerate && (
       <GenerateQuestionsModal
         courseId={courseId}
+        assignmentId={assignmentId}
         onClose={() => setShowGenerate(false)}
         onStarted={(job) => {
           setActiveJob(job);
@@ -516,6 +515,7 @@ export default function HomeworkDetailPage({
           ) : editingProblems ? (
             <EditProblemsView
               courseId={courseId}
+              assignmentId={assignmentId}
               currentBankIds={problems.map((p) => p.bank_item_id)}
               onCancel={() => setEditingProblems(false)}
               onSave={saveProblems}
@@ -1163,12 +1163,14 @@ function RubricField({
 
 function EditProblemsView({
   courseId,
+  assignmentId,
   currentBankIds,
   onCancel,
   onSave,
   busy,
 }: {
   courseId: string;
+  assignmentId: string;
   currentBankIds: string[];
   onCancel: () => void;
   onSave: (next: string[]) => void;
@@ -1201,7 +1203,12 @@ function EditProblemsView({
           </button>
         </div>
       </div>
-      <BankPicker courseId={courseId} picked={picked} onChange={setPicked} />
+      <BankPicker
+        courseId={courseId}
+        assignmentId={assignmentId}
+        picked={picked}
+        onChange={setPicked}
+      />
     </div>
   );
 }

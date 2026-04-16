@@ -299,6 +299,10 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
+            # Stamp every produced item with the job's originating HW.
+            # This is how the HW detail banner filters pending items
+            # and how approved items know which HW to auto-attach to.
+            originating_assignment_id=job.originating_assignment_id,
             title=q.get("title") or None,
             question=q["text"],
             solution_steps=s.get("steps") or None,

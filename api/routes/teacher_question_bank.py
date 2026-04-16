@@ -44,6 +44,10 @@ _VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 
 class GenerateRequest(BaseModel):
     count: int
+    # The homework the teacher kicked this off from. Required — there's
+    # no longer a standalone question-bank flow; every item belongs to
+    # a HW.
+    assignment_id: uuid.UUID
     unit_id: uuid.UUID | None = None
     document_ids: list[uuid.UUID] = []
     constraint: str | None = None  # natural-language extra instructions
@@ -61,6 +65,7 @@ class GenerateRequest(BaseModel):
 
 class UploadWorksheetRequest(BaseModel):
     images: list[str]  # base64-encoded JPEG/PNG
+    assignment_id: uuid.UUID
     unit_id: uuid.UUID | None = None
 
     @field_validator("images")
@@ -203,6 +208,7 @@ async def list_bank_items(
     course_id: uuid.UUID,
     status_filter: str | None = None,
     unit_id: uuid.UUID | None = None,
+    assignment_id: uuid.UUID | None = None,
     difficulty: str | None = None,
     parent_question_id: uuid.UUID | None = None,
     current_user: CurrentUser = Depends(require_teacher),
@@ -226,6 +232,10 @@ async def list_bank_items(
         query = query.where(QuestionBankItem.status == status_filter)
     if unit_id:
         query = query.where(QuestionBankItem.unit_id == unit_id)
+    # Per-HW scoping: HW detail pages filter to their own problems so
+    # two HWs in the same unit don't share a pending pool.
+    if assignment_id:
+        query = query.where(QuestionBankItem.originating_assignment_id == assignment_id)
     if difficulty:
         query = query.where(QuestionBankItem.difficulty == difficulty)
     if parent_question_id:
@@ -265,6 +275,16 @@ async def generate_bank_questions(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
 
+    # Validate the assignment belongs to this teacher + this course.
+    # get_teacher_assignment enforces ownership; the course_id check
+    # here prevents cross-course attachment.
+    assignment = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
+    if assignment.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignment does not belong to this course",
+        )
+
     # Defense in depth: bank questions only live at the top-unit level.
     # Frontend gates this in the generate-questions-modal but a stale UI
     # or direct API call could bypass and save into a subfolder, leaving
@@ -288,6 +308,7 @@ async def generate_bank_questions(
     job = QuestionBankGenerationJob(
         course_id=course_id,
         unit_id=body.unit_id,
+        originating_assignment_id=body.assignment_id,
         created_by_id=current_user.user_id,
         status="queued",
         requested_count=body.count,
@@ -348,9 +369,18 @@ async def upload_worksheet(
             ) from e
         validated_images.append({"data": img_b64, "media_type": media_type})
 
+    # Validate the assignment belongs to this teacher + this course.
+    assignment = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
+    if assignment.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignment does not belong to this course",
+        )
+
     job = QuestionBankGenerationJob(
         course_id=course_id,
         unit_id=body.unit_id,
+        originating_assignment_id=body.assignment_id,
         created_by_id=current_user.user_id,
         mode="upload",
         status="queued",
@@ -569,6 +599,9 @@ async def generate_similar_bank_questions(
     job = QuestionBankGenerationJob(
         course_id=parent.course_id,
         unit_id=parent.unit_id,
+        # Children inherit the parent's originating HW — a variation
+        # lives and dies with the HW its primary belongs to.
+        originating_assignment_id=parent.originating_assignment_id,
         created_by_id=current_user.user_id,
         status="queued",
         requested_count=body.count,
