@@ -129,13 +129,19 @@ export function NewHomeworkModal({
       // client. The resume-queue banner on the HW detail page surfaces
       // pending questions back to the teacher.
       try {
-        await teacher.generateBank(courseId, {
+        const job = await teacher.generateBank(courseId, {
           count,
           assignment_id: id,
           unit_id: unitIds[0],
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
+        // One-shot handoff so the HW detail page can pick up the job
+        // and poll it. Without this, the detail page has no idea
+        // generation is in flight and can't auto-open the review
+        // queue when it completes. Keyed by HW id so two concurrent
+        // creates don't clobber each other.
+        sessionStorage.setItem(`hw-gen-${id}`, job.id);
       } catch {
         // Swallow — the HW itself was created; a failed gen kickoff
         // shouldn't block the teacher from landing on the detail page.
