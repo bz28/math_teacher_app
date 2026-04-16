@@ -92,14 +92,6 @@ class RegenerateRequest(BaseModel):
     instructions: str | None = None
 
 
-class ApproveRequest(BaseModel):
-    """Optional payload for the approve endpoint. When `assignment_id`
-    is provided, the item is approved AND attached to that draft
-    homework in a single round-trip — the act of "approve into a
-    homework" the new review flow expects."""
-    assignment_id: uuid.UUID | None = None
-
-
 class GenerateSimilarRequest(BaseModel):
     count: int
     constraint: str | None = None
@@ -490,35 +482,35 @@ async def revert_bank_item(
 
 @router.post("/question-bank/{item_id}/approve")
 async def approve_bank_item(
-    body: ApproveRequest | None = None,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Approve a bank item. If `assignment_id` is provided in the body,
-    also attach the freshly-approved item to that draft homework in
-    one transaction. The new review flow uses this so "approve" and
-    "add to homework" land as a single user-visible action."""
+    """Approve a bank item AND auto-attach it to its originating HW.
+
+    Every item has `originating_assignment_id` (Feature 6d contract),
+    so approval always means "add this problem to that HW's content."
+    No picker, no cross-HW sharing — the plan's per-HW model.
+
+    If the originating HW is already published, the approve still
+    lands but the attach is skipped (published HWs are locked). The
+    teacher can unpublish and re-approve to force attach, or leave
+    the item approved for reference.
+    """
     _ensure_unlocked(item)
     item.status = "approved"
 
-    if body and body.assignment_id is not None:
-        a = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
-        if a.course_id != item.course_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Assignment belongs to a different course",
-            )
-        if a.type != "homework":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Can only attach to homework assignments",
-            )
-        if a.status == "published":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unpublish before adding problems",
-            )
+    # get_teacher_assignment enforces teacher ownership of the
+    # originating HW. Should always succeed since the item's FK is
+    # guaranteed valid — belt-and-suspenders for the rare case of a
+    # stale item row being approved after its HW was deleted.
+    a = await get_teacher_assignment(db, item.originating_assignment_id, current_user.user_id)
+
+    # Auto-attach only applies to HW primaries. Variations (children
+    # of a primary via parent_question_id) are practice scaffolding
+    # served through the student loop — they never belong in HW
+    # content. snapshot_bank_items would reject them anyway.
+    if a.status != "published" and item.parent_question_id is None:
         existing_ids: list[uuid.UUID] = []
         content = a.content if isinstance(a.content, dict) else {}
         for raw in content.get("problem_ids") or []:
@@ -528,12 +520,11 @@ async def approve_bank_item(
                 continue
         if item.id not in existing_ids:
             existing_ids.append(item.id)
-        # snapshot_bank_items re-validates that every id in the list
-        # belongs to the course and is approved — including the one we
-        # just flipped above (which is fine since we haven't committed
-        # yet but the in-memory state is "approved").
-        await db.flush()
-        a.content = await snapshot_bank_items(db, a.course_id, existing_ids)
+            # snapshot_bank_items re-validates that every id in the list
+            # belongs to the course and is approved — including the one
+            # we just flipped above (in-memory state is "approved").
+            await db.flush()
+            a.content = await snapshot_bank_items(db, a.course_id, existing_ids)
 
     await db.commit()
     return {"status": "ok"}
