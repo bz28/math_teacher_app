@@ -135,13 +135,18 @@ export function NewHomeworkModal({
       // as they land.
       let startedGeneration = true;
       try {
-        await teacher.generateBank(courseId, {
+        const job = await teacher.generateBank(courseId, {
           count,
           assignment_id: id,
           unit_id: unitIds[0],
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
+        // Stash the job id so the HW detail page can show a "still
+        // generating" indicator if the teacher navigates there from
+        // /review while the job's in flight. Keyed by HW id so
+        // concurrent creates don't clobber.
+        sessionStorage.setItem(`hw-gen-${id}`, job.id);
       } catch {
         // If the kickoff failed, route the teacher to the HW detail
         // page where they can retry via "Generate more" — otherwise

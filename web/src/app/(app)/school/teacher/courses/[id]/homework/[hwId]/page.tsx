@@ -178,6 +178,33 @@ export default function HomeworkDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
+  // Pick up any gen job the wizard kicked off for this HW. The wizard
+  // stashes the job id in sessionStorage on "Create & generate"; if
+  // the teacher navigates here from /review ("I'll wait on the
+  // homework page"), we restore it so the existing polling effect
+  // shows a generating indicator and refreshes pending on done.
+  useEffect(() => {
+    const key = `hw-gen-${assignmentId}`;
+    const jobId = sessionStorage.getItem(key);
+    if (!jobId) return;
+    teacher
+      .bankJob(courseId, jobId)
+      .then((job) => {
+        setActiveJob(job);
+        // Done jobs: clear the key so a refresh after completion
+        // doesn't re-trigger the lookup. In-flight jobs keep the
+        // key around in case the teacher navigates away and back.
+        if (job.status === "done" || job.status === "failed") {
+          sessionStorage.removeItem(key);
+        }
+      })
+      .catch(() => {
+        // Stale key or deleted job — drop it and fall back to the
+        // manual-banner UX.
+        sessionStorage.removeItem(key);
+      });
+  }, [assignmentId, courseId]);
+
   // Fetch pending bank items for THIS HW specifically. The backend
   // filter on originating_assignment_id keeps the pool scoped so two
   // HWs in the same unit don't share their pending items.
