@@ -24,7 +24,6 @@ import {
   InlineSavedHint,
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
-import { SubmissionsPanel } from "@/components/school/teacher/_pieces/submissions-panel";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
 
 interface AssignmentProblem {
@@ -102,7 +101,6 @@ export default function HomeworkDetailPage({
   const [titleDraft, setTitleDraft] = useState("");
   const [editingProblems, setEditingProblems] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [showingSubmissions, setShowingSubmissions] = useState(false);
   // Confirm dialog for "publish without due date" — common mistake we
   // catch with a soft confirm rather than blocking, because no-due-date
   // HWs are a real legitimate use case (in-class, untimed practice).
@@ -406,12 +404,6 @@ export default function HomeworkDetailPage({
 
   return (
     <>
-    {showingSubmissions && (
-      <SubmissionsPanel
-        assignmentId={assignmentId}
-        onClose={() => setShowingSubmissions(false)}
-      />
-    )}
     {showGenerate && (
       <GenerateQuestionsModal
         courseId={courseId}
@@ -683,13 +675,6 @@ export default function HomeworkDetailPage({
                     Publish ▸
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowingSubmissions(true)}
-                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-primary hover:text-primary"
-                >
-                  ⚙ Submissions
-                </button>
               </div>
             )}
             {/* Right side hidden while the no-due-date confirm is up
