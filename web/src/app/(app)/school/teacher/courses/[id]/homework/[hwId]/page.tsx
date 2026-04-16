@@ -707,11 +707,17 @@ export default function HomeworkDetailPage({
                 <button
                   type="button"
                   onClick={() => setEditingProblems(true)}
-                  disabled={isPublished}
-                  title={isPublished ? "Unpublish to edit" : "Edit problem list"}
-                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-primary/40 hover:text-primary disabled:opacity-50"
+                  disabled={isPublished || problems.length === 0}
+                  title={
+                    isPublished
+                      ? "Unpublish to remove problems"
+                      : problems.length === 0
+                        ? "Nothing to remove"
+                        : "Remove problems from this homework in bulk"
+                  }
+                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-red-300 hover:text-red-600 disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
                 >
-                  ✏ Edit
+                  Remove problems
                 </button>
               </div>
             </div>
@@ -1414,7 +1420,12 @@ function RubricField({
   );
 }
 
-// ── Edit problems sub-view ──
+// ── Remove problems sub-view ──
+//
+// Bulk-select UI for taking problems off a HW without going into each
+// one individually. Uncheck the cards you want to drop, save. Editing
+// the content of a single problem (question text, solution, chat with
+// AI) happens by clicking the problem card itself — not here.
 
 function EditProblemsView({
   courseId,
@@ -1436,8 +1447,13 @@ function EditProblemsView({
   return (
     <div>
       <div className="flex items-center justify-between">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-          Edit problems
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Remove problems
+          </div>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            Uncheck problems to remove them from this homework.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
