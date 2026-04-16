@@ -246,8 +246,24 @@ async def world() -> dict[str, Any]:
 
         s.add(SectionEnrollment(section_id=section.id, student_id=student.id))
 
+        # Assignment is created first so bank items can back-reference it
+        # via originating_assignment_id (NOT NULL since aq1000034). The
+        # content snapshot is filled in below once the primary has an id.
+        assignment = Assignment(
+            course_id=course.id,
+            unit_ids=[],
+            teacher_id=teacher.id,
+            title="HW 1",
+            type="homework",
+            status="published",
+            content={"problems": []},
+        )
+        s.add(assignment)
+        await s.flush()
+
         primary = QuestionBankItem(
             course_id=course.id,
+            originating_assignment_id=assignment.id,
             title="Quadratics 1",
             question="Solve x^2 - 5x + 6 = 0",
             solution_steps=[{"title": "Factor", "description": "(x-2)(x-3)"}],
@@ -267,6 +283,7 @@ async def world() -> dict[str, Any]:
         ]):
             sib = QuestionBankItem(
                 course_id=course.id,
+                originating_assignment_id=assignment.id,
                 title=q[0],
                 question=q[1],
                 solution_steps=[{"title": "Factor", "description": "..."}],
@@ -281,6 +298,7 @@ async def world() -> dict[str, Any]:
 
         pending_sib = QuestionBankItem(
             course_id=course.id,
+            originating_assignment_id=assignment.id,
             title="Sib pending",
             question="Solve x^2 - 13x + 42 = 0",
             solution_steps=[],
@@ -293,24 +311,15 @@ async def world() -> dict[str, Any]:
         s.add(pending_sib)
         await s.flush()
 
-        assignment = Assignment(
-            course_id=course.id,
-            unit_ids=[],
-            teacher_id=teacher.id,
-            title="HW 1",
-            type="homework",
-            status="published",
-            content={"problems": [
-                {
-                    "bank_item_id": str(primary.id), "position": 1,
-                    "question": primary.question,
-                    "solution_steps": primary.solution_steps,
-                    "final_answer": primary.final_answer,
-                    "difficulty": primary.difficulty,
-                },
-            ]},
-        )
-        s.add(assignment)
+        assignment.content = {"problems": [
+            {
+                "bank_item_id": str(primary.id), "position": 1,
+                "question": primary.question,
+                "solution_steps": primary.solution_steps,
+                "final_answer": primary.final_answer,
+                "difficulty": primary.difficulty,
+            },
+        ]}
         await s.flush()
         s.add(AssignmentSection(
             assignment_id=assignment.id,
