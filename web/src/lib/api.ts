@@ -710,20 +710,14 @@ export interface TeacherRubric {
   notes?: string;
 }
 
-export interface TeacherSubmission {
-  id: string;
-  student_name: string;
-  student_email: string;
-  is_preview: boolean;
-  status: string;
-  submitted_at: string | null;
-  is_late: boolean;
-  ai_score: number | null;
-  ai_breakdown: { problem: string; score: number; max_score: number; note: string; flagged: boolean }[] | null;
-  teacher_score: number | null;
-  teacher_notes: string | null;
-  final_score: number | null;
-  reviewed_at: string | null;
+/** Per-problem grade row. Shape matches the SubmissionGrade.breakdown
+ *  JSON persisted by the grade endpoint — `score_status` drives the
+ *  Full/Partial/Zero pill; `percent` is the committed numeric value. */
+export interface GradeBreakdownEntry {
+  problem_id: string;
+  score_status: "full" | "partial" | "zero";
+  percent: number;
+  feedback: string | null;
 }
 
 /** One row per (published HW × section) pair in the Submissions tab
@@ -906,7 +900,7 @@ export const teacher = {
     });
   },
   submissions(assignmentId: string) {
-    return apiFetch<{ submissions: TeacherSubmission[] }>(`/teacher/assignments/${assignmentId}/submissions`);
+    return apiFetch<{ submissions: TeacherSubmissionRow[] }>(`/teacher/assignments/${assignmentId}/submissions`);
   },
   /** Inbox feed for the Submissions tab — one row per (published
    *  HW × section) pair with aggregate counts. See backend comment
@@ -1073,11 +1067,6 @@ export const teacher = {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/clear`, { method: "POST" });
   },
   // ── Submissions ──
-  listAssignmentSubmissions(assignmentId: string) {
-    return apiFetch<{ submissions: TeacherSubmissionRow[] }>(
-      `/teacher/assignments/${assignmentId}/submissions`,
-    );
-  },
   submissionDetail(submissionId: string) {
     return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
   },
@@ -1105,18 +1094,23 @@ export interface IntegrityOverview {
 
 export interface TeacherSubmissionRow {
   id: string;
+  section_id: string;
+  student_id: string;
   student_name: string;
   student_email: string;
   is_preview: boolean;
   status: string;
   submitted_at: string | null;
   is_late: boolean;
-  // Grading fields included by the existing endpoint; unused in this PR.
   ai_score: number | null;
   ai_breakdown: unknown;
   teacher_score: number | null;
   teacher_notes: string | null;
   final_score: number | null;
+  /** Per-problem grade breakdown; null until the teacher has saved
+   *  grades. Future AI PR pre-fills this too. */
+  breakdown: GradeBreakdownEntry[] | null;
+  grade_published_at: string | null;
   reviewed_at: string | null;
   integrity_overview: IntegrityOverview | null;
 }
@@ -1140,6 +1134,10 @@ export interface TeacherSubmissionDetail {
   is_late: boolean;
   image_data: string | null;
   problems: TeacherSubmissionDetailProblem[];
+  breakdown: GradeBreakdownEntry[] | null;
+  final_score: number | null;
+  teacher_notes: string | null;
+  grade_published_at: string | null;
 }
 
 export interface BankChatProposal {

@@ -919,6 +919,8 @@ async def list_submissions(
 
         submissions.append({
             "id": str(sub.id),
+            "section_id": str(sub.section_id),
+            "student_id": str(sub.student_id),
             "student_name": student_name or "",
             "student_email": student_email,
             "is_preview": bool(is_preview),
