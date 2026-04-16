@@ -83,19 +83,44 @@ async def drain_integrity_background_tasks() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _run_integrity_pipeline_background(submission_id: uuid.UUID) -> None:
-    """Run the integrity pipeline for a submission in the background.
+async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
+    """Run extraction → integrity + AI grading for a submission.
 
-    Opens its own DB session from the session factory — the request
-    session from Depends(get_db) is already closed by the time this
-    runs. Commits on success, logs + rolls back on any exception.
-    Never re-raises: there is no caller to catch exceptions from a
-    fire-and-forget task.
+    Extraction (Vision call) runs once. Its result feeds both the
+    integrity check and the AI grading call sequentially. Each phase
+    commits independently so a grading failure doesn't lose integrity
+    results.
+
+    Opens its own DB session — the request session is already closed
+    by the time this runs. Never re-raises: fire-and-forget.
     """
+    from api.core.grading_ai import run_ai_grading_for_submission
+    from api.core.integrity_ai import extract_student_work
+
     try:
         async with get_session_factory()() as db:
+            # ── Shared extraction (1 Vision call) ────────────────
+            sub = (await db.execute(
+                select(Submission).where(Submission.id == submission_id)
+            )).scalar_one_or_none()
+            if not sub:
+                return
+            user_id = str(sub.student_id)
             try:
-                await start_integrity_check(submission_id, db)
+                extraction = await extract_student_work(
+                    submission_id, db, user_id=user_id,
+                )
+            except Exception:
+                logger.exception(
+                    "extraction failed for submission %s", submission_id,
+                )
+                return
+
+            # ── Integrity check (uses shared extraction) ─────────
+            try:
+                await start_integrity_check(
+                    submission_id, db, extraction=extraction,
+                )
                 await db.commit()
             except Exception:
                 logger.exception(
@@ -104,11 +129,23 @@ async def _run_integrity_pipeline_background(submission_id: uuid.UUID) -> None:
                     submission_id,
                 )
                 await db.rollback()
+
+            # ── AI grading (uses same extraction) ────────────────
+            try:
+                await run_ai_grading_for_submission(
+                    submission_id, extraction, db, user_id=user_id,
+                )
+                await db.commit()
+            except Exception:
+                logger.exception(
+                    "ai grading failed for submission %s; "
+                    "teacher can grade manually",
+                    submission_id,
+                )
+                await db.rollback()
     except Exception:
-        # Session open / teardown failures — log and swallow. Nothing
-        # upstream can react to a background task failure.
         logger.exception(
-            "integrity background task crashed for submission %s",
+            "submission pipeline crashed for submission %s",
             submission_id,
         )
 
@@ -557,7 +594,7 @@ async def submit_homework(
     # "pending" → "in_progress" transition while this runs.
     if assignment.integrity_check_enabled:
         task = asyncio.create_task(
-            _run_integrity_pipeline_background(submission_id_for_task),
+            _run_submission_pipeline_background(submission_id_for_task),
         )
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
