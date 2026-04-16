@@ -17,7 +17,6 @@ import {
   BANK_JOB_POLL_LIMIT_MS,
 } from "@/lib/constants";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { BankPicker } from "@/components/school/teacher/_pieces/bank-picker";
 import { UnitMultiSelect } from "@/components/school/teacher/_pieces/unit-multi-select";
 import { SectionMultiSelect } from "@/components/school/teacher/_pieces/section-multi-select";
 import {
@@ -640,10 +639,8 @@ export default function HomeworkDetailPage({
         </div>
       ) : editingProblems ? (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
-          <EditProblemsView
-            courseId={courseId}
-            assignmentId={assignmentId}
-            currentBankIds={problems.map((p) => p.bank_item_id)}
+          <RemoveProblemsView
+            problems={problems}
             onCancel={() => setEditingProblems(false)}
             onSave={saveProblems}
             busy={busy}
@@ -1427,59 +1424,174 @@ function RubricField({
 // the content of a single problem (question text, solution, chat with
 // AI) happens by clicking the problem card itself — not here.
 
-function EditProblemsView({
-  courseId,
-  assignmentId,
-  currentBankIds,
+function RemoveProblemsView({
+  problems,
   onCancel,
   onSave,
   busy,
 }: {
-  courseId: string;
-  assignmentId: string;
-  currentBankIds: string[];
+  problems: AssignmentProblem[];
   onCancel: () => void;
+  /** Called with the bank_item_ids the teacher wants to KEEP after
+   *  the bulk remove. Parent's `saveProblems` writes that list as
+   *  the new HW content. */
   onSave: (next: string[]) => void;
   busy: boolean;
 }) {
-  const [picked, setPicked] = useState<string[]>(currentBankIds);
+  // Set of bank_item_ids currently marked for removal. Click × on a
+  // row to add/remove from this set — nothing is committed until
+  // Save. Cancel discards the marks and keeps the HW as-is.
+  const [marked, setMarked] = useState<Set<string>>(new Set());
+
+  const toggle = (id: string) => {
+    setMarked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const kept = problems.filter((p) => !marked.has(p.bank_item_id));
+  const wouldLeaveEmpty = kept.length === 0;
+  const markCount = marked.size;
+
+  const save = () => {
+    if (markCount === 0) return;
+    if (wouldLeaveEmpty) return;
+    onSave(kept.map((p) => p.bank_item_id));
+  };
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Remove problems
           </div>
           <p className="mt-0.5 text-xs text-text-secondary">
-            Uncheck problems to remove them from this homework.
+            Click × on a problem to mark it for removal. Nothing is removed
+            until you Save.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => onSave(picked)}
-            disabled={busy}
-            className="rounded-[--radius-sm] bg-primary px-2.5 py-1 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+            onClick={save}
+            disabled={busy || markCount === 0 || wouldLeaveEmpty}
+            title={
+              wouldLeaveEmpty
+                ? "Keep at least one problem — or delete the homework instead"
+                : markCount === 0
+                  ? "Click × on a problem to mark it for removal"
+                  : `Remove ${markCount} problem${markCount === 1 ? "" : "s"}`
+            }
+            className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed dark:disabled:bg-gray-600"
           >
-            {busy ? "Saving…" : "Save"}
+            {busy
+              ? "Saving…"
+              : markCount === 0
+                ? "Remove"
+                : `Remove ${markCount}`}
           </button>
         </div>
       </div>
-      <BankPicker
-        courseId={courseId}
-        assignmentId={assignmentId}
-        picked={picked}
-        onChange={setPicked}
-      />
+
+      {wouldLeaveEmpty && markCount > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-text-primary dark:border-amber-500/30 dark:bg-amber-500/10">
+          You&apos;ve marked every problem. Keep at least one, or{" "}
+          <span className="font-semibold">delete the homework</span> instead if
+          you want to start over.
+        </p>
+      )}
+
+      <div className="mt-5 space-y-2">
+        {problems.map((p) => {
+          const isMarked = marked.has(p.bank_item_id);
+          return (
+            <RemovableProblemRow
+              key={`${p.bank_item_id}-${p.position}`}
+              problem={p}
+              marked={isMarked}
+              disabled={busy}
+              onToggle={() => toggle(p.bank_item_id)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RemovableProblemRow({
+  problem,
+  marked,
+  disabled,
+  onToggle,
+}: {
+  problem: AssignmentProblem;
+  marked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-3 rounded-[--radius-md] border px-4 py-3 transition-all ${
+        marked
+          ? "border-red-200 bg-red-50/60 opacity-60 dark:border-red-500/30 dark:bg-red-500/10"
+          : "border-border-light bg-surface"
+      }`}
+    >
+      <div
+        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
+          marked
+            ? "bg-gray-400 dark:bg-gray-600"
+            : "bg-gradient-to-br from-primary to-primary-dark"
+        }`}
+      >
+        {problem.position}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className={`line-clamp-2 text-[15px] leading-snug text-text-primary ${
+            marked ? "line-through" : ""
+          }`}
+        >
+          <MathText text={problem.question} />
+        </div>
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            {problem.difficulty}
+          </span>
+          {marked && (
+            <span className="text-[10px] font-semibold text-red-700 dark:text-red-400">
+              · marked for removal
+            </span>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        aria-label={marked ? "Undo remove" : "Mark for removal"}
+        className={`shrink-0 rounded-full p-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
+          marked
+            ? "bg-surface text-primary hover:text-primary-dark"
+            : "text-text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+        }`}
+        title={marked ? "Undo" : "Mark for removal"}
+      >
+        {marked ? "Undo" : "✕"}
+      </button>
     </div>
   );
 }
