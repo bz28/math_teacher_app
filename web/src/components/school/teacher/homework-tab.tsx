@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { topUnits } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { HomeworkDetailModal } from "./_pieces/homework-detail-modal";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
 import {
   HomeworkTimeline,
   type BucketedHomeworks,
 } from "./_pieces/homework-timeline";
-
-// Re-export the detail modal so existing import sites in
-// question-bank-tab keep working without churning their import paths.
-export { HomeworkDetailModal };
 
 // ── Filter types ──
 
@@ -33,14 +29,17 @@ const EMPTY_FILTERS: HwFilters = { status: "all", section: null, unit: null };
  * inline dropdown filters for Status, Section, and Unit.
  */
 export function HomeworkTab({ courseId }: { courseId: string }) {
+  const router = useRouter();
   const [homeworks, setHomeworks] = useState<TeacherAssignment[]>([]);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<HwFilters>(EMPTY_FILTERS);
+
+  const openDetail = (hwId: string) =>
+    router.push(`/school/teacher/courses/${courseId}/homework/${hwId}`);
 
   const reload = async () => {
     setLoading(true);
@@ -260,7 +259,7 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           <HomeworkTimeline
             buckets={buckets}
             units={units}
-            onOpen={setOpenId}
+            onOpen={openDetail}
           />
         )}
       </div>
@@ -271,23 +270,12 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           defaultUnitIds={filters.unit ? [filters.unit] : []}
           onClose={() => setShowNew(false)}
           onCreated={(newId) => {
-            // Land directly on the new HW's detail view so the teacher
+            // Land directly on the new HW's detail page so the teacher
             // can see their generated problems appear (or start adding
-            // them manually). Reload in the background so the HW list
-            // is fresh when they close the detail.
+            // them manually).
             setShowNew(false);
-            setOpenId(newId);
-            reload();
+            openDetail(newId);
           }}
-        />
-      )}
-
-      {openId && (
-        <HomeworkDetailModal
-          courseId={courseId}
-          assignmentId={openId}
-          onClose={() => setOpenId(null)}
-          onChanged={reload}
         />
       )}
     </div>

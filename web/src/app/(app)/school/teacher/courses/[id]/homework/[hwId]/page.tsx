@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
@@ -9,11 +11,14 @@ import {
   type TeacherRubric,
 } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { BankPicker } from "./bank-picker";
-import { UnitMultiSelect } from "./unit-multi-select";
-import { SectionMultiSelect } from "./section-multi-select";
-import { InlineSavedHint, type SaveState } from "./inline-saved-hint";
-import { SubmissionsPanel } from "./submissions-panel";
+import { BankPicker } from "@/components/school/teacher/_pieces/bank-picker";
+import { UnitMultiSelect } from "@/components/school/teacher/_pieces/unit-multi-select";
+import { SectionMultiSelect } from "@/components/school/teacher/_pieces/section-multi-select";
+import {
+  InlineSavedHint,
+  type SaveState,
+} from "@/components/school/teacher/_pieces/inline-saved-hint";
+import { SubmissionsPanel } from "@/components/school/teacher/_pieces/submissions-panel";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -61,26 +66,27 @@ function isRubricEmpty(r: TeacherRubric | null | undefined): boolean {
 }
 
 /**
- * Detail modal for an existing homework. v2: full lifecycle config
- * (units, due date, late policy, sections) inline-editable, fat
- * problem cards matching the question bank visual, publish gating
- * tooltip listing what's missing, Submissions placeholder for the
- * future grading view.
+ * Full-page detail for a single homework. Handles all lifecycle
+ * config (units, due date, late policy, sections, rubric) inline
+ * with optimistic save, plus the problems list, publish/unpublish,
+ * and Submissions drawer.
  *
- * Reused from question-bank-tab so the Used-in pills can open
- * homework directly without navigation.
+ * Route: /school/teacher/courses/[id]/homework/[hwId]
+ *
+ * Navigating away (back link, delete) returns to the course HW tab.
+ * The list over there self-refreshes on mount via its useEffect, so
+ * edits made here are reflected when the teacher returns.
  */
-export function HomeworkDetailModal({
-  courseId,
-  assignmentId,
-  onClose,
-  onChanged,
+export default function HomeworkDetailPage({
+  params,
 }: {
-  courseId: string;
-  assignmentId: string;
-  onClose: () => void;
-  onChanged: () => void;
+  params: Promise<{ id: string; hwId: string }>;
 }) {
+  const { id: courseId, hwId: assignmentId } = use(params);
+  const router = useRouter();
+  const backHref = `/school/teacher/courses/${courseId}?tab=homework`;
+  const goBack = () => router.push(backHref);
+
   const [hw, setHw] = useState<
     (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
   >(null);
@@ -152,7 +158,6 @@ export function HomeworkDetailModal({
       await teacher.updateAssignment(assignmentId, { title: t });
       setEditingTitle(false);
       await reload();
-      onChanged();
     });
 
   const saveProblems = (newPicked: string[]) =>
@@ -164,14 +169,12 @@ export function HomeworkDetailModal({
       await teacher.updateAssignment(assignmentId, { bank_item_ids: newPicked });
       setEditingProblems(false);
       await reload();
-      onChanged();
     });
 
   const remove = () =>
     run(async () => {
       await teacher.deleteAssignment(assignmentId);
-      onClose();
-      onChanged();
+      goBack();
     });
 
   const publish = () =>
@@ -179,7 +182,6 @@ export function HomeworkDetailModal({
       await teacher.publishAssignment(assignmentId);
       setConfirmingNoDueDate(false);
       await reload();
-      onChanged();
     });
 
   // Click handler for the Publish button. If the HW has no due date,
@@ -198,7 +200,6 @@ export function HomeworkDetailModal({
     run(async () => {
       await teacher.unpublishAssignment(assignmentId);
       await reload();
-      onChanged();
     });
 
   // Inline auto-save runner. Optimistic — applies the change to the
@@ -231,7 +232,6 @@ export function HomeworkDetailModal({
       // If a newer call for this field superseded us, drop silently.
       if (lastCallRef.current[field] !== callId) return;
       setSaveStates((s) => ({ ...s, [field]: "saved" }));
-      onChanged();
     } catch (e) {
       if (lastCallRef.current[field] !== callId) return;
       applyRevert();
@@ -348,14 +348,16 @@ export function HomeworkDetailModal({
         onClose={() => setShowingSubmissions(false)}
       />
     )}
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="mx-auto max-w-4xl px-4 pb-10">
+      <div className="pt-2">
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
+        >
+          ← Back to homework
+        </Link>
+      </div>
+      <div className="mt-3 rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
           {hw && (
@@ -414,17 +416,10 @@ export function HomeworkDetailModal({
               {hw?.title ?? "Loading…"}
             </button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
-          >
-            ✕
-          </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="px-6 py-5">
           {loading || !hw ? (
             <p className="text-sm text-text-muted">Loading…</p>
           ) : editingProblems ? (
