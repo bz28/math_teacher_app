@@ -158,10 +158,25 @@ async def _mock_run_agent_turn(
 
 @pytest.fixture(autouse=True)
 def _mock_integrity_ai() -> Any:
-    """Mock all integrity AI calls so tests don't hit Claude."""
+    """Mock every LLM call the submit pipeline fans out to.
+
+    The submit endpoint spawns a background task that runs extraction
+    (Vision) then integrity (agent) and AI grading (JSON tool). All
+    three must be mocked or tests trip the real Claude client.
+
+    `extract_student_work` is patched at its source module
+    (`api.core.integrity_ai`) because school_student_practice and
+    integrity_pipeline both import it by name — patching at the
+    source catches both call sites in one place.
+    """
     _AGENT_SCRIPT.clear()
     _AGENT_CALL_LOG.clear()
     with (
+        patch(
+            "api.core.integrity_ai.extract_student_work",
+            new_callable=AsyncMock,
+            return_value=_MOCK_EXTRACTION,
+        ),
         patch(
             "api.core.integrity_pipeline.extract_student_work",
             new_callable=AsyncMock,
@@ -170,6 +185,11 @@ def _mock_integrity_ai() -> Any:
         patch(
             "api.core.integrity_pipeline.run_agent_turn",
             side_effect=_mock_run_agent_turn,
+        ),
+        patch(
+            "api.core.grading_ai.run_ai_grading_for_submission",
+            new_callable=AsyncMock,
+            return_value=None,
         ),
     ):
         yield
