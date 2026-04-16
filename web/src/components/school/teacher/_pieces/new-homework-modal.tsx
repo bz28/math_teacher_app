@@ -126,11 +126,12 @@ export function NewHomeworkModal({
     run(async () => {
       const id = await createDraft();
       // Fire-and-forget: the job runs server-side regardless of the
-      // client. Feature 6 adds the resume-queue banner on the HW
-      // detail page to surface pending questions back to the teacher.
+      // client. The resume-queue banner on the HW detail page surfaces
+      // pending questions back to the teacher.
       try {
         await teacher.generateBank(courseId, {
           count,
+          assignment_id: id,
           unit_id: unitIds[0],
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
@@ -138,7 +139,7 @@ export function NewHomeworkModal({
       } catch {
         // Swallow — the HW itself was created; a failed gen kickoff
         // shouldn't block the teacher from landing on the detail page.
-        // They can retry from the HW page once Feature 6 ships.
+        // They can retry from the HW page via "Generate more".
       }
       onCreated(id);
     });

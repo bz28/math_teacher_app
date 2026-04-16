@@ -932,6 +932,10 @@ export const teacher = {
     filters?: {
       status?: string;
       unit_id?: string;
+      /** Scope to questions generated from a specific homework. Used
+       *  by the HW detail banner so two HWs in the same unit don't
+       *  share their pending pool. */
+      assignment_id?: string;
       difficulty?: string;
       parent_question_id?: string;
     },
@@ -939,6 +943,7 @@ export const teacher = {
     const params = new URLSearchParams();
     if (filters?.status) params.set("status_filter", filters.status);
     if (filters?.unit_id) params.set("unit_id", filters.unit_id);
+    if (filters?.assignment_id) params.set("assignment_id", filters.assignment_id);
     if (filters?.difficulty) params.set("difficulty", filters.difficulty);
     if (filters?.parent_question_id)
       params.set("parent_question_id", filters.parent_question_id);
@@ -949,6 +954,9 @@ export const teacher = {
   },
   generateBank(courseId: string, data: {
     count: number;
+    /** The HW the teacher is on — every item produced gets stamped
+     *  with this so it knows which homework it belongs to. */
+    assignment_id: string;
     unit_id?: string | null;
     document_ids?: string[];
     constraint?: string | null;
@@ -960,6 +968,7 @@ export const teacher = {
   },
   uploadWorksheet(courseId: string, data: {
     images: string[];
+    assignment_id: string;
     unit_id?: string | null;
   }) {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/upload`, {

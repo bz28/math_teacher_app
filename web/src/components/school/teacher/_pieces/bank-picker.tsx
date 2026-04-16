@@ -16,10 +16,18 @@ import { cn } from "@/lib/utils";
  */
 export function BankPicker({
   courseId,
+  assignmentId,
   picked,
   onChange,
 }: {
   courseId: string;
+  /** Scope to approved problems that originated from this homework.
+   *  Post-Feature-6d, every bank item knows which HW spawned it, so
+   *  the picker shows only this HW's own approved problems — no
+   *  cross-HW sharing. Feature 7's auto-attach-on-approve will
+   *  eventually make this whole picker redundant for the common
+   *  case. */
+  assignmentId: string;
   picked: string[];
   onChange: (next: string[]) => void;
 }) {
@@ -34,7 +42,7 @@ export function BankPicker({
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      teacher.bank(courseId, { status: "approved" }),
+      teacher.bank(courseId, { status: "approved", assignment_id: assignmentId }),
       teacher.units(courseId),
     ])
       .then(([b, u]) => {
@@ -48,7 +56,7 @@ export function BankPicker({
       })
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load bank");
+        setError(e instanceof Error ? e.message : "Failed to load problems");
       })
       .finally(() => {
         if (cancelled) return;
@@ -57,7 +65,7 @@ export function BankPicker({
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, assignmentId]);
 
   // Keyboard: `/` focuses search (unless the user is already typing
   // in another field); `Esc` clears search when focused.
@@ -369,11 +377,11 @@ function EmptyBankState() {
   return (
     <div className="py-10 text-center">
       <p className="text-sm font-medium text-text-primary">
-        No approved questions in this course yet.
+        No approved problems yet for this homework.
       </p>
       <p className="mt-1 text-xs text-text-muted">
-        Approve some in the Question Bank tab first — only approved primary
-        questions can be added to a homework.
+        Close this dialog, click <span className="font-semibold">✨ Generate more</span>{" "}
+        to create problems, then approve them from the review queue.
       </p>
     </div>
   );
