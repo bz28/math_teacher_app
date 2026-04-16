@@ -113,7 +113,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       // Phase 1: batch generate similar question texts for all flagged problems
       const [{ problems: generated }, { id: sessionId }] = await Promise.all([
         practiceApi.generate({ problems: flaggedProblems, subject, difficulty }),
-        sessionApi.createPracticeBatch(flaggedProblems[0]),
+        sessionApi.createPracticeBatch(flaggedProblems[0], subject),
       ]);
       const similarQuestions = generated.map((p) => p.question);
 
@@ -159,7 +159,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
       // Show intermission screen immediately with placeholder
       const placeholder: PracticeProblem = { question: similarQuestion, answer: "" };
-      const { id: sessionId } = await sessionApi.createPracticeBatch(problem);
+      const { id: sessionId } = await sessionApi.createPracticeBatch(problem, subject);
       set({
         practiceBatch: createPracticeBatch([placeholder], sessionId, { totalCount: 1 }),
         phase: "practice_preview",
@@ -199,7 +199,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       question: p,
       answer: "",
     }));
-    const sessionId = await sessionApi.createPracticeBatch(problems[0])
+    const sessionId = await sessionApi.createPracticeBatch(problems[0], subject)
       .then((r) => r.id)
       .catch(() => null);
 

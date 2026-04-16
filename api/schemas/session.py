@@ -24,6 +24,14 @@ class CreateSessionRequest(BaseModel):
 class CreateMockTestRequest(BaseModel):
     problem: str = Field(..., min_length=1, max_length=5000)
     all_problems: list[str] = Field(default_factory=list)
+    subject: str = Field("math")
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, v: str) -> str:
+        if v not in VALID_SUBJECTS:
+            raise ValueError(f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}")
+        return v
 
 
 class CompleteMockTestRequest(BaseModel):
@@ -76,6 +84,8 @@ class SessionHistoryItem(BaseModel):
     current_step: int
     total_steps: int
     created_at: datetime
+    mode: str = "learn"
+    all_problems: list[str] = []
 
 
 class SessionHistoryResponse(BaseModel):

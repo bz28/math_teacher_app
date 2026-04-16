@@ -127,6 +127,8 @@ export interface SessionHistoryItem {
   current_step: number;
   total_steps: number;
   created_at: string;
+  mode: string;
+  all_problems: string[];
 }
 
 export interface SessionHistoryResponse {
@@ -493,10 +495,10 @@ export const session = {
     });
   },
 
-  createMockTest(problem: string, allProblems?: string[]) {
+  createMockTest(problem: string, allProblems?: string[], subject = "math") {
     return apiFetch<{ id: string }>("/session/mock-test", {
       method: "POST",
-      body: JSON.stringify({ problem, all_problems: allProblems ?? [] }),
+      body: JSON.stringify({ problem, all_problems: allProblems ?? [], subject }),
     });
   },
 
@@ -513,10 +515,10 @@ export const session = {
     );
   },
 
-  createPracticeBatch(problem: string) {
+  createPracticeBatch(problem: string, subject = "math") {
     return apiFetch<{ id: string }>("/session/practice-batch", {
       method: "POST",
-      body: JSON.stringify({ problem }),
+      body: JSON.stringify({ problem, subject }),
     });
   },
 

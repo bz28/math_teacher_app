@@ -15,6 +15,7 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { cn } from "@/lib/utils";
 import { FREE_DAILY_SESSION_LIMIT, FREE_DAILY_SCAN_LIMIT, SUBJECT_CONFIG } from "@/lib/constants";
 import { DifficultyPicker, type Difficulty } from "@/components/shared/difficulty-picker";
+import { RecentActivity } from "@/components/shared/recent-activity";
 
 export default function LearnPage() {
   return (
@@ -153,7 +154,9 @@ function LearnPageContent() {
   const canStart = problemQueue.length > 0 || input.trim().length > 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto flex max-w-5xl gap-8">
+      {/* ── Left column: main content ── */}
+      <div className="min-w-0 flex-1 max-w-3xl space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -490,6 +493,18 @@ function LearnPageContent() {
         </p>
       )}
       {UpgradeModal}
+      </div>
+
+      {/* ── Right column: recent activity sidebar ── */}
+      <div className="hidden w-72 shrink-0 lg:block sticky top-24 self-start">
+        <RecentActivity
+          subject={subject}
+          activeTab={mode}
+          onUseProblems={(problems) => problems.forEach((p) => addToQueue(p))}
+          maxQueueSize={maxQueueSize}
+          currentQueueLength={problemQueue.length}
+        />
+      </div>
     </div>
   );
 }

@@ -111,7 +111,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           question: q,
           answer: "",
         }));
-        const { id } = await sessionApi.createMockTest(problems[0], questionTexts);
+        const { id } = await sessionApi.createMockTest(problems[0], questionTexts, subject);
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
         set({ mockTest: mt });
 
@@ -146,7 +146,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           question: p,
           answer: "",
         }));
-        const { id } = await sessionApi.createMockTest(problems[0], problems);
+        const { id } = await sessionApi.createMockTest(problems[0], problems, subject);
 
         // Set mockTest with placeholders first so .then() handlers can find it
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);

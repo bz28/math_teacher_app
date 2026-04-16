@@ -1,123 +1,127 @@
-# Recent Activity Panel (Quick Overview on /learn)
+# Recent Activity Sidebar
 
-## Problem
+## Layout
 
-Users take mock exams or learn problems but have no way to quickly repeat similar work the next day without manually re-uploading everything. We need an inline panel on the `/learn` page that surfaces recent sessions so users can re-use those problems in one tap.
-
-## What exists today
-
-- `SessionHistoryItem` has no `mode` field. The backend `Session` model stores `mode` (learn/practice/mock_test) but the history API doesn't expose it and filters out mock_test sessions entirely.
-- The `/learn` page has no awareness of past sessions.
-- No student sidebar exists. Students have a top bar + mobile bottom tabs.
-
----
-
-## Design
-
-### Where it lives
-
-On the `/learn` page, as an inline collapsible section below the mode selector, above the image upload card. Not a sidebar — the page is already narrow (`max-w-3xl`) and an inline section works identically on desktop and mobile.
-
-### What the user sees
+The `/learn` page changes from `max-w-3xl` centered to a two-column grid on `lg:` screens:
 
 ```
-+-------------------------------------------+
-| Recent Activity                     More ->|
-+-------------------------------------------+
-| * Solve sin(x)dx           Learn . 2h ago  [Use]
-| * Mock Test              4/12/2026          [Use]
-| * Find dy/dx of x^2        Learn . 1d ago  [Use]
-| * Mock Test              4/11/2026          [Use]
-+-------------------------------------------+
+Desktop (≥lg):
++------ flex-1, max-w-3xl ------+--- flex sidebar ---+
+|                                |  Recent Activity   |
+|   Subject pills                |                    |
+|   Learn / Mock Test toggle     |  * Solve sin(x)dx  |
+|   [Mock test config]           |    Learn · 2h ago   |
+|   Snap a problem               |                [+] |
+|   Type a problem               |  * Mock Test        |
+|   Queued problems              |    4/12/2026        |
+|   [Start]                      |                [+] |
+|                                |  * Find dy/dx       |
+|                                |    Learn · 1d ago   |
+|                                |                [+] |
+|                                |                    |
+|                                |     More ->        |
++--------------------------------+--------------------+
+
+Mobile (<lg): sidebar hidden (not in scope)
 ```
 
-- Shows up to 5 most recent sessions for the currently selected subject
-- **Learn sessions:** show truncated problem text, "Learn" badge, relative timestamp
-- **Mock test sessions:** show as a single grouped row labeled "Mock Test" with the date taken (not individual questions). One row per mock test, not one row per question.
-- Each row has a "Use" button
-- **"Use" on a learn session:** adds the problem to the queue, keeps mode as "Learn"
-- **"Use" on a mock test session:** retrieves all questions from that mock test and adds them all to the queue, switches mode to "Mock Test", defaults to "Generate similar"
-- **"More ->"** link navigates to `/history` (Plan 2 will add selection mode and filters to history)
-- Section is hidden entirely if no recent sessions exist
-- Collapsible via local state
+- Outer wrapper: `flex gap-8` with `max-w-5xl mx-auto`
+- Left column: `flex-1 max-w-3xl` (existing content, unchanged)
+- Right column: `w-72 shrink-0 sticky top-24 self-start hidden lg:block`
+- Sidebar flexes with the viewport — at very wide screens the gap grows, but the sidebar content stays `w-72`
 
-### Data flow
+## What the sidebar shows
 
-- On `/learn` mount, fetch `session.history(subject, 5, 0)` (reuses existing endpoint after backend updates)
-- Re-fetch when subject changes
-- "Use" on a learn session: populate `problemQueue` with `[item.problem]`
-- "Use" on a mock test: populate `problemQueue` with `item.all_problems` (the full question list from that test)
+5 most recent sessions for the current subject, filtered by the active tab:
 
----
+**Learn tab active:**
+- All recent mock test sessions (no time restriction)
+- Learn sessions **excluding the past hour** (assumption: you just learned it, come back later)
+- Result: a mix of learn + mock test, ordered by most recent, capped at 5
 
-## Backend Changes
+**Mock Test tab active:**
+- All recent sessions regardless of mode or time (learn + mock test)
+- Result: everything recent, ordered by most recent, capped at 5
 
-### 1. Add `mode` to `SessionHistoryItem`
+## Row display
 
-File: `api/schemas/session.py`
+- **Learn session row:** Truncated problem text (1 line), "Learn" badge, relative time (e.g. "2h ago"), `[+]` button
+- **Mock test row:** "Mock Test" label, date (e.g. "4/12/2026"), `[+]` button
+- **"More ->"** link at the bottom navigates to `/history`
 
-Add `mode: str` to `SessionHistoryItem`. The Session model already stores this.
+## [+] button behavior
 
-### 2. Include mock_test sessions in history
+Adds to the existing queue (does not replace):
+- Learn session → adds `item.problem` to `problemQueue`
+- Mock test → adds all `item.all_problems` to `problemQueue`
 
-File: `api/routes/session.py`
+## Data flow
 
-The history endpoint currently filters to `mode.in_([LEARN, PRACTICE])` at line 180. Remove that filter so mock_test sessions also appear. Mock tests appear as single entries (one Session row per mock test).
+- Fetch `session.history(subject, 10, 0)` on mount and when subject changes (fetch 10 to have room after client-side filtering)
+- Client-side filter based on active tab (learn vs mock-test) and the 1-hour rule
+- Slice to 5 after filtering
+- No new backend endpoint needed for filtering
 
-### 3. Add `all_problems` to `SessionHistoryItem`
+## Backend changes
 
-For mock test sessions, we need to return the full list of question texts so the frontend can populate the queue when the user taps "Use". The `createMockTest` endpoint receives `all_problems` — we need to verify these are persisted on the session row and expose them in the history item.
+### `api/schemas/session.py`
 
-Add `all_problems: list[str]` to `SessionHistoryItem`. For learn/practice sessions this is `[problem]`. For mock tests it's the full question list.
+Add to `SessionHistoryItem`:
+- `mode: str` (already on Session model, just not exposed)
+- `all_problems: list[str]` (for mock tests: full question list; for learn: `[problem]`)
 
-### 4. Update frontend API types
+### `api/routes/session.py`
 
-File: `web/src/lib/api.ts`
+History endpoint:
+- Remove `mode.in_([LEARN, PRACTICE])` filter so mock test sessions appear
+- Populate `all_problems` from the session's `exchanges[0].problems` for mock tests, or `[session.problem]` for learn/practice
+- Populate `mode` from `session.mode`
 
-Update `SessionHistoryItem`:
-```
-- Add mode: string
-- Add all_problems: string[]
-```
+### `web/src/lib/api.ts`
 
----
+Update `SessionHistoryItem` type:
+- Add `mode: string`
+- Add `all_problems: string[]`
 
-## Frontend Changes
+## Frontend changes
 
-### New file: `web/src/components/shared/recent-activity.tsx`
+### New: `web/src/components/shared/recent-activity.tsx`
 
-The inline panel component. Props: `subject`, `onUseProblems(problems: string[], mode: "learn" | "mock-test")`.
+Props:
+- `subject: string`
+- `activeTab: "learn" | "mock-test"`
+- `onUseProblems: (problems: string[]) => void`
 
-- Fetches recent history on mount and when subject changes
-- Renders learn sessions with problem text + "Learn" badge + relative time
-- Renders mock test sessions as "Mock Test" + date (e.g. "4/12/2026") — one row per test
+Behavior:
+- Fetches history on mount / subject change
+- Filters client-side based on `activeTab` and 1-hour rule
+- Renders up to 5 rows with [+] buttons
+- Returns `null` if no sessions match (hides entirely)
 - "More ->" links to `/history`
-- Returns null if no sessions found (hides the section)
 
 ### Modified: `web/src/app/(app)/learn/page.tsx`
 
-- Import and render `<RecentActivity>` between the mode selector and the image upload card
-- Wire `onUseProblems` to populate `problemQueue` and set `mode`
+- Change outer `div` from `max-w-3xl mx-auto` to a two-column flex layout
+- Import and render `<RecentActivity>` in the right column
+- Pass `mode` as `activeTab` and wire `onUseProblems` to `addToQueue`
+- Sidebar hidden below `lg:` breakpoint
 
-### Modified: `web/src/stores/learn.ts`
+## Edge cases
 
-- Add `preloadQueue(problems: { text: string }[])` action that sets `problemQueue` directly (so the panel can inject problems without going through `addToQueue` one at a time)
+- **No history for subject** → sidebar hidden entirely
+- **All 10 fetched sessions filtered out** (e.g. all learn sessions from past hour on Learn tab) → sidebar hidden
+- **Subject change** → re-fetch, reset sidebar
+- **Tab change** (learn ↔ mock-test) → re-filter existing data, no re-fetch
+- **API error** → silently hide sidebar
+- **Queue already at max** → [+] button disabled or hidden
+- **User adds same problem twice** → allowed (queue doesn't deduplicate today)
 
----
+## Files touched
 
-## Mobile UX
-
-- Same inline section, works in the existing narrow layout
-- No layout changes needed — it's just another card in the vertical flow
-- "Use" buttons are full tap targets
-
----
-
-## Edge Cases
-
-- **User switches subject on `/learn`** -> re-fetch recent activity for new subject
-- **No history for a subject** -> section hidden entirely
-- **Mock test with many problems** -> shows as single "Mock Test" row with date, all questions loaded on "Use"
-- **Abandoned sessions** -> still shown (user may want to retry those problems)
-- **User taps "Use" when queue already has items** -> replace the queue (simpler and less confusing)
-- **API error fetching recent activity** -> silently hide the section (non-critical feature)
+| File | Change |
+|---|---|
+| `api/schemas/session.py` | Add `mode` and `all_problems` to `SessionHistoryItem` |
+| `api/routes/session.py` | Include mock_test in history, populate new fields |
+| `web/src/lib/api.ts` | Update `SessionHistoryItem` type |
+| `web/src/components/shared/recent-activity.tsx` | New sidebar component |
+| `web/src/app/(app)/learn/page.tsx` | Two-column layout, render sidebar |

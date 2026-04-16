@@ -11,13 +11,6 @@ class PracticeGenerateRequest(BaseModel):
     image_base64: str | None = Field(None, max_length=7_000_000)
     difficulty: str = Field("same")
 
-    @field_validator("difficulty")
-    @classmethod
-    def validate_difficulty(cls, v: str) -> str:
-        if v not in ("easier", "same", "harder"):
-            raise ValueError("difficulty must be one of: easier, same, harder")
-        return v
-
     @field_validator("subject")
     @classmethod
     def validate_subject(cls, v: str) -> str:

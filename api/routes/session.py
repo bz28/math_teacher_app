@@ -186,8 +186,7 @@ async def history(
 
     filters = [
         SessionModel.user_id == user.id,
-        SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]),
-        SessionModel.total_steps > 0,  # Exclude analytics-only records
+        SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE, SessionMode.MOCK_TEST]),
     ]
     if subject:
         filters.append(SessionModel.subject == subject)
@@ -205,17 +204,31 @@ async def history(
     rows = result.scalars().all()
 
     has_more = len(rows) > limit
-    items = [
-        SessionHistoryItem(
+    items = []
+    for s in rows[:limit]:
+        # For mock tests, pull the full question list from exchanges
+        if s.mode == SessionMode.MOCK_TEST:
+            all_problems = []
+            if s.exchanges and isinstance(s.exchanges, list):
+                for entry in s.exchanges:
+                    if isinstance(entry, dict):
+                        all_problems = entry.get("problems", [])
+                        break
+            if not all_problems:
+                all_problems = [s.problem]
+        else:
+            all_problems = [s.problem]
+
+        items.append(SessionHistoryItem(
             id=s.id,
             problem=s.problem,
             status=s.status,
             current_step=s.current_step,
             total_steps=s.total_steps,
             created_at=s.created_at,
-        )
-        for s in rows[:limit]
-    ]
+            mode=s.mode,
+            all_problems=all_problems,
+        ))
     return SessionHistoryResponse(items=items, has_more=has_more)
 
 
@@ -342,6 +355,7 @@ async def create_mock_test(
         total_steps=0,
         current_step=0,
         steps=[],
+        subject=body.subject,
         # Store all problem texts so they can be matched for quota exemption
         exchanges=[{"problems": body.all_problems}] if body.all_problems else [],
     )
@@ -393,6 +407,7 @@ async def create_practice_batch(
         total_steps=0,
         current_step=0,
         steps=[],
+        subject=body.subject,
         exchanges=[],
     )
     db.add(session)
