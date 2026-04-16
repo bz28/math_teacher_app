@@ -726,6 +726,26 @@ export interface TeacherSubmission {
   reviewed_at: string | null;
 }
 
+/** One row per (published HW × section) pair in the Submissions tab
+ *  inbox feed. Aggregates computed server-side so the tab renders
+ *  with a single GET. */
+export interface SubmissionsInboxRow {
+  assignment_id: string;
+  assignment_title: string;
+  section_id: string;
+  section_name: string;
+  due_at: string | null;
+  total_students: number;
+  submitted: number;
+  /** Submissions whose integrity check flagged them
+   *  (uncertain / unlikely / unreadable). */
+  flagged: number;
+  /** Graded but not yet published to students. */
+  to_grade: number;
+  /** Published — students can see these grades. */
+  published: number;
+}
+
 export const teacher = {
   courses() {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
@@ -887,6 +907,14 @@ export const teacher = {
   },
   submissions(assignmentId: string) {
     return apiFetch<{ submissions: TeacherSubmission[] }>(`/teacher/assignments/${assignmentId}/submissions`);
+  },
+  /** Inbox feed for the Submissions tab — one row per (published
+   *  HW × section) pair with aggregate counts. See backend comment
+   *  for the shape. */
+  submissionsInbox(courseId: string) {
+    return apiFetch<{ rows: SubmissionsInboxRow[] }>(
+      `/teacher/courses/${courseId}/submissions-inbox`,
+    );
   },
   gradeSubmission(submissionId: string, data: { action: string; teacher_score?: number; teacher_notes?: string }) {
     return apiFetch<{ status: string }>(`/teacher/submissions/${submissionId}/grade`, {
