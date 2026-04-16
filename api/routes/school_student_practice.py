@@ -149,11 +149,11 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                     await db.commit()
                 except Exception:
                     logger.exception(
-                    "ai grading failed for submission %s; "
-                    "teacher can grade manually",
-                    submission_id,
-                )
-                await db.rollback()
+                        "ai grading failed for submission %s; "
+                        "teacher can grade manually",
+                        submission_id,
+                    )
+                    await db.rollback()
     except Exception:
         logger.exception(
             "submission pipeline crashed for submission %s",
