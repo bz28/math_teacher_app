@@ -433,66 +433,80 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
     },
 }
 
-INTEGRITY_GENERATE_SCHEMA: ToolSchema = {
-    "name": "return_questions",
-    "description": "Return 2-3 short follow-up questions to check student understanding.",
+# Agent tool: submit a verdict for a single sampled problem. The
+# agent calls this as it moves through problems in the conversation.
+# Rejected by the server if zero student turns have been recorded
+# yet (the agent must probe at least once before verdicting).
+INTEGRITY_SUBMIT_VERDICT_SCHEMA: ToolSchema = {
+    "name": "submit_problem_verdict",
+    "description": (
+        "Record your verdict for ONE of the sampled problems. Call "
+        "this when you have reached strong confidence (positive or "
+        "negative) on whether the student understands their own "
+        "work on this problem. You must have had at least one "
+        "back-and-forth with the student first."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "questions": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "question_text": {"type": "string", "description": "The question to ask the student."},
-                        "expected_shape": {
-                            "type": "string",
-                            "description": "What a good answer looks like (1-2 sentences).",
-                        },
-                        "rubric_hint": {
-                            "type": "string",
-                            "description": "Scoring guidance: what to look for in the answer.",
-                        },
-                    },
-                    "required": ["question_text", "expected_shape", "rubric_hint"],
-                    "additionalProperties": False,
-                },
-                "description": "2-3 questions that test whether the student understands their own work.",
+            "problem_id": {
+                "type": "string",
+                "description": (
+                    "UUID of the problem you're verdicting on (from the "
+                    "problem list provided at the start)."
+                ),
+            },
+            "badge": {
+                "type": "string",
+                "enum": ["likely", "uncertain", "unlikely"],
+                "description": (
+                    "likely = the student likely did the work and understands it; "
+                    "uncertain = not enough signal either way; "
+                    "unlikely = the student likely did NOT do the work / doesn't understand it."
+                ),
+            },
+            "confidence": {
+                "type": "number",
+                "description": "Your confidence in this verdict, 0.0 to 1.0.",
+            },
+            "reasoning": {
+                "type": "string",
+                "description": "One sentence, teacher-facing — what swung you to this verdict.",
             },
         },
-        "required": ["questions"],
+        "required": ["problem_id", "badge", "confidence", "reasoning"],
         "additionalProperties": False,
     },
 }
 
-INTEGRITY_SCORE_SCHEMA: ToolSchema = {
-    "name": "return_score",
-    "description": "Return a verdict on whether the student's answer demonstrates understanding.",
+# Agent tool: finish the whole check. Call only after every sampled
+# problem has a verdict. The server validates coverage and otherwise
+# rejects the call.
+INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
+    "name": "finish_check",
+    "description": (
+        "Finish the integrity check. Call this only after every "
+        "sampled problem has received a submit_problem_verdict call. "
+        "The overall badge is the worst of the per-problem badges."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "verdict": {
+            "overall_badge": {
                 "type": "string",
-                "enum": ["good", "weak", "bad"],
-                "description": (
-                    "good = clearly understands, weak = partially understands "
-                    "or vague, bad = does not understand or contradicts their work."
-                ),
+                "enum": ["likely", "uncertain", "unlikely"],
+                "description": "Overall verdict for the submission, normally the worst per-problem badge.",
             },
-            "reasoning": {
+            "overall_confidence": {
+                "type": "number",
+                "description": "Your overall confidence, 0.0 to 1.0.",
+            },
+            "summary": {
                 "type": "string",
-                "description": "One-line explanation of why this verdict was chosen.",
-            },
-            "flags": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": (
-                    "Optional flags: 'vague', 'contradicts_own_work', "
-                    "'generic_textbook', 'acknowledges_cheating'. Empty list if none."
-                ),
+                "description": "One sentence, teacher-facing, summarising the whole check.",
             },
         },
-        "required": ["verdict", "reasoning", "flags"],
+        "required": ["overall_badge", "overall_confidence", "summary"],
         "additionalProperties": False,
     },
 }

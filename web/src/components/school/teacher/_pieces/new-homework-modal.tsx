@@ -115,9 +115,8 @@ export function NewHomeworkModal({
               <span className="font-normal text-text-muted">· optional</span>
             </label>
             <p className="mt-1 text-[11px] text-text-muted">
-              Only approved questions show up here. You can also create the homework
-              empty now and add problems later — you&rsquo;ll need at least one before
-              you can publish.
+              Skip now if you&rsquo;d rather fill this in later — you just
+              need at least one problem before you can publish.
             </p>
             <BankPicker
               courseId={courseId}

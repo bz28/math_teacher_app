@@ -14,14 +14,15 @@ import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import {
   PracticeLoopSurface,
-  type LoopResult,
+  type LoopState,
 } from "@/components/school/student/practice-loop-surface";
 import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface";
-import { PracticeSummary } from "@/components/school/student/practice-summary";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
+import { IntegrityConfirmView } from "@/components/school/student/integrity-confirm-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
+import type { IntegrityExtraction } from "@/lib/api";
 
 type Mode =
   | { kind: "homework" }
@@ -35,9 +36,13 @@ type Mode =
       problem: StudentHomeworkProblem;
       initial: { variation: VariationPayload; consumption_id: string; remaining: number };
     }
-  | { kind: "summary"; problem: StudentHomeworkProblem }
   | { kind: "integrity_pending" }
   | { kind: "integrity_pending_timeout" }
+  | {
+      kind: "integrity_confirm";
+      extraction: IntegrityExtraction;
+      imageDataUrl: string;
+    }
   | { kind: "integrity_chat" };
 
 export default function HomeworkPage() {
@@ -47,10 +52,14 @@ export default function HomeworkPage() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
-  // Practice results live here (not in PracticeLoopSurface) so they
-  // survive a Practice → Learn → Practice lens swap, which re-mounts
-  // the practice surface and would otherwise wipe local state.
-  const [practiceResults, setPracticeResults] = useState<LoopResult[]>([]);
+  // Client-side flag: the student clicked through the post-extraction
+  // confirm screen in this session, so we should not keep shoving it
+  // in their face if they come back before sending their first turn.
+  // Backend has no explicit "confirmed_at" on the submission — once
+  // they send a message the status flips to `in_progress` and routing
+  // naturally skips the confirm branch, so this flag only covers the
+  // brief window before their first turn.
+  const [confirmedThisSession, setConfirmedThisSession] = useState(false);
 
   // Load (or re-load) the homework + submission + integrity state.
   // Called on mount, after submit, and after the chat finishes so
@@ -67,11 +76,34 @@ export default function HomeworkPage() {
         if (sub) setSubmission(sub);
         if (integrity) {
           // Auto-route based on integrity state:
-          //   "pending"     → show the preparing screen + poll
-          //   "in_progress" → open the chat
-          //   "complete" / "no_check" → stay on homework view
-          if (integrity.overall_status === "pending") {
+          //   "extracting"       → show the preparing screen + poll
+          //   "awaiting_student" → one-time confirm screen (unless the
+          //                         student has already clicked through
+          //                         this session), then chat
+          //   "in_progress"      → open the chat
+          //   "complete" / "skipped_unreadable" / "no_check"
+          //                      → stay on homework view
+          if (integrity.overall_status === "extracting") {
             setMode({ kind: "integrity_pending" });
+          } else if (integrity.overall_status === "awaiting_student") {
+            // Show the confirm screen only when we have everything
+            // needed to make it meaningful: the extraction steps AND
+            // the photo to compare them against. Without the photo
+            // the student would be asked to confirm a reading they
+            // can't verify — skip straight to chat instead.
+            const canConfirm =
+              !confirmedThisSession &&
+              integrity.extraction !== null &&
+              sub?.image_data != null;
+            if (canConfirm) {
+              setMode({
+                kind: "integrity_confirm",
+                extraction: integrity.extraction!,
+                imageDataUrl: sub!.image_data!,
+              });
+            } else {
+              setMode({ kind: "integrity_chat" });
+            }
           } else if (integrity.overall_status === "in_progress") {
             setMode({ kind: "integrity_chat" });
           }
@@ -85,16 +117,42 @@ export default function HomeworkPage() {
   useEffect(() => {
     if (!assignmentId) return;
     loadAll(assignmentId);
+    // loadAll intentionally reads component state via closure (mode,
+    // confirmedThisSession, etc.) — adding it to deps would re-fetch
+    // on every unrelated state change. Route only re-runs on route
+    // change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  function appendResult(r: LoopResult) {
-    setPracticeResults((rs) => [...rs, r]);
-  }
-
-  function updateResult(consumptionId: string, patch: Partial<LoopResult>) {
-    setPracticeResults((rs) =>
-      rs.map((r) => (r.consumption_id === consumptionId ? { ...r, ...patch } : r)),
-    );
+  async function pivotToLearnThis(
+    problem: StudentHomeworkProblem,
+    state: LoopState,
+  ) {
+    // Student just finished a Practice attempt and hit "Learn this
+    // problem". Mint a fresh BankConsumption with context='learn' for
+    // the SAME variation — lets history surface the Learn attempt as
+    // its own mode-attempt row, and avoids picking an unseen sibling.
+    if (!assignmentId) return;
+    setLoadingProblemId(problem.bank_item_id);
+    try {
+      const resp = await schoolStudent.learnThisProblem({
+        bank_item_id: state.variation.bank_item_id,
+        assignment_id: assignmentId,
+      });
+      setMode({
+        kind: "learn",
+        problem,
+        initial: {
+          variation: resp.variation,
+          consumption_id: resp.consumption_id,
+          remaining: resp.remaining,
+        },
+      });
+    } catch {
+      setError("Couldn't switch into Learn mode. Please try again.");
+    } finally {
+      setLoadingProblemId(null);
+    }
   }
 
   async function startLoop(problem: StudentHomeworkProblem, kind: "practice" | "learn") {
@@ -103,9 +161,6 @@ export default function HomeworkPage() {
     try {
       const resp = await schoolStudent.nextVariation(assignmentId, problem.bank_item_id, kind);
       if (resp.status === "served") {
-        // Fresh entry from the HW page = new loop session, so reset
-        // any prior practice results from a previous problem.
-        setPracticeResults([]);
         setMode({
           kind,
           problem,
@@ -152,16 +207,11 @@ export default function HomeworkPage() {
       <PracticeLoopSurface
         assignmentId={hw.assignment_id}
         anchorBankItemId={mode.problem.bank_item_id}
+        anchorQuestion={mode.problem.question}
         problemPosition={mode.problem.position}
         initial={mode.initial}
-        results={practiceResults}
-        onAppendResult={appendResult}
-        onUpdateResult={updateResult}
-        onDone={() => setMode({ kind: "summary", problem: mode.problem })}
-        onExit={() => setMode({ kind: "homework" })}
-        onSwitchToLearn={(state) =>
-          setMode({ kind: "learn", problem: mode.problem, initial: state })
-        }
+        onDone={() => setMode({ kind: "homework" })}
+        onLearnThis={(state) => pivotToLearnThis(mode.problem, state)}
       />
     );
   }
@@ -171,25 +221,11 @@ export default function HomeworkPage() {
       <LearnLoopSurface
         assignmentId={hw.assignment_id}
         anchorBankItemId={mode.problem.bank_item_id}
+        anchorQuestion={mode.problem.question}
         problemPosition={mode.problem.position}
         initial={mode.initial}
         onDone={() => setMode({ kind: "homework" })}
-        onExit={() => setMode({ kind: "homework" })}
-        onSwitchToPractice={(state) =>
-          setMode({ kind: "practice", problem: mode.problem, initial: state })
-        }
-      />
-    );
-  }
-
-  if (mode.kind === "summary") {
-    return (
-      <PracticeSummary
-        assignmentId={hw.assignment_id}
-        anchorBankItemId={mode.problem.bank_item_id}
-        problemPosition={mode.problem.position}
-        results={practiceResults}
-        onBackToHomework={() => setMode({ kind: "homework" })}
+        onPracticeSimilar={() => startLoop(mode.problem, "practice")}
       />
     );
   }
@@ -230,6 +266,25 @@ export default function HomeworkPage() {
           Refresh
         </button>
       </div>
+    );
+  }
+
+  if (mode.kind === "integrity_confirm" && hw.submission_id) {
+    const submissionId = hw.submission_id;
+    return (
+      <IntegrityConfirmView
+        submissionId={submissionId}
+        submittedImageDataUrl={mode.imageDataUrl}
+        extraction={mode.extraction}
+        onContinue={() => {
+          setConfirmedThisSession(true);
+          setMode({ kind: "integrity_chat" });
+        }}
+        onFlagged={() => {
+          setConfirmedThisSession(true);
+          setMode({ kind: "integrity_chat" });
+        }}
+      />
     );
   }
 

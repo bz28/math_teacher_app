@@ -8,6 +8,8 @@ import {
   type TeacherUnit,
 } from "@/lib/api";
 import { subfoldersOf, topUnitIdOf, topUnits } from "@/lib/units";
+import { SelectableChip } from "../_pieces/selectable-chip";
+import { cn } from "@/lib/utils";
 import { QUANTITY_CHIPS } from "./constants";
 
 export function GenerateQuestionsModal({
@@ -32,7 +34,7 @@ export function GenerateQuestionsModal({
   // dump questions into Uncategorized just because they didn't notice
   // the picker.
   const [overrideUnitId, setOverrideUnitId] = useState<string | null | undefined>(undefined);
-  const [count, setCount] = useState<number>(20);
+  const [count, setCount] = useState<number>(10);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [constraint, setConstraint] = useState("");
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export function GenerateQuestionsModal({
   })();
   const unitId = overrideUnitId === undefined ? autoUnitId : overrideUnitId;
   // True only when the smart default fired AND the teacher hasn't
-  // manually picked anything since. Drives the "auto-picked" hint.
+  // manually picked anything since. Drives the "auto" hint badge.
   const autoApplied = overrideUnitId === undefined && autoUnitId !== null;
   // True iff the teacher has made (or inherited) a real choice — either
   // a unit, an explicit Uncategorized, or an auto-default. Drives the
@@ -147,8 +149,15 @@ export function GenerateQuestionsModal({
     return groups;
   })();
 
+  const isCustomCount = !(
+    QUANTITY_CHIPS as readonly number[]
+  ).includes(count);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
       <form
         className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -170,50 +179,62 @@ export function GenerateQuestionsModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {/* Constraint — the hero */}
-          <label className="block text-sm font-bold text-text-primary">
-            What kind of questions do you want?
+        {/* Body — each zone gets the same bordered card treatment so
+            the form reads as distinct blocks, not one long column. */}
+        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {/* Prompt / constraint */}
+          <label className="block">
+            <span className="text-sm font-bold text-text-primary">
+              What kind of questions do you want?
+            </span>
+            <textarea
+              value={constraint}
+              onChange={(e) => setConstraint(e.target.value)}
+              rows={4}
+              maxLength={500}
+              autoFocus
+              placeholder='e.g. "Only word problems with friendly numbers, match the textbook style, mostly medium difficulty"'
+              className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            />
           </label>
-          <textarea
-            value={constraint}
-            onChange={(e) => setConstraint(e.target.value)}
-            rows={4}
-            maxLength={500}
-            autoFocus
-            placeholder='e.g. "Only word problems with friendly numbers, match the textbook style, mostly medium difficulty"'
-            className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-          />
 
-          {/* Source materials — visual grid */}
-          <div className="mt-6">
-            <div className="flex items-baseline justify-between">
-              <label className="text-sm font-bold text-text-primary">Source materials</label>
+          {/* Source materials */}
+          <section className="rounded-[--radius-lg] border border-border-light bg-bg-base/40 p-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <label className="text-sm font-bold text-text-primary">
+                Source materials
+              </label>
               <span className="text-[11px] text-text-muted">
                 optional but recommended
               </span>
             </div>
             <p className="mt-1 text-[11px] text-text-muted">
-              Pick the materials Veradic should read. Without sources, generation falls back
-              to the topic name only. PDFs aren&rsquo;t readable yet.
+              Pick the materials Veradic should read. Without sources, generation falls
+              back to the topic name only. PDFs aren&rsquo;t readable yet.
             </p>
 
             {loading ? (
               <p className="mt-4 text-sm text-text-muted">Loading materials…</p>
             ) : docGroups.length === 0 ? (
               <div className="mt-3 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-6 text-center text-xs text-text-muted">
-                No materials uploaded yet. Add some in the Materials tab, or just leave this
-                blank and use instructions only.
+                No materials uploaded yet. Add some in the Materials tab, or just leave
+                this blank and use instructions only.
               </div>
             ) : (
               <div className="mt-3 space-y-4">
                 {docGroups.map((group) => (
                   <div key={group.id}>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-text-primary">
                       {group.label}
+                      <span className="ml-1 font-normal text-text-muted">
+                        · {group.docs.length}{" "}
+                        {group.docs.length === 1 ? "document" : "documents"}
+                      </span>
                     </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {/* Narrow phones → single column so filenames
+                        get enough width to read. Tablets → two. Desktop
+                        → three. */}
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {group.docs.map((d) => (
                         <DocCard
                           key={d.id}
@@ -227,142 +248,115 @@ export function GenerateQuestionsModal({
                 ))}
               </div>
             )}
-          </div>
 
-          {/* Quantity row (just quantity now — Save-to gets its own
-              prominent block below). */}
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border-light pt-4">
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                How many?
-              </label>
-              <div className="flex gap-1">
-                {QUANTITY_CHIPS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setCount(n)}
-                    className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
-                      count === n
-                        ? "bg-primary text-white"
-                        : "border border-border-light text-text-secondary hover:bg-bg-subtle"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-                {/* Custom input — only shown when the user has picked a
-                    non-preset number, so the active chip isn't mirrored
-                    back in an adjacent input (which looks like a dupe). */}
-                {!QUANTITY_CHIPS.includes(count as (typeof QUANTITY_CHIPS)[number]) && (
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={count}
-                    onChange={(e) => {
-                      const n = Number.parseInt(e.target.value, 10);
-                      if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
-                    }}
-                    aria-label="Custom quantity"
-                    className="w-14 rounded-[--radius-pill] border border-primary bg-primary-bg/30 px-2 py-1 text-center text-xs font-bold text-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => setCount(3)}
-                  className={`rounded-[--radius-pill] px-3 py-1 text-xs font-bold transition-colors ${
-                    !QUANTITY_CHIPS.includes(count as (typeof QUANTITY_CHIPS)[number])
-                      ? "border border-primary bg-primary-bg text-primary"
-                      : "border border-dashed border-border-light text-text-muted hover:bg-bg-subtle"
-                  }`}
-                  aria-label="Set a custom quantity"
-                >
-                  Custom
-                </button>
-              </div>
-            </div>
-          </div>
+            {onlyPdfsSelected && (
+              <p className="mt-3 text-[11px] text-amber-600">
+                Heads up: every selected doc is a PDF, which isn&rsquo;t readable yet.
+                Pick at least one image or unselect everything.
+              </p>
+            )}
+          </section>
 
-          {/* Save-to: its own prominent block, right above Generate.
-              Chip group instead of a hidden dropdown so the choice
-              never silently falls through to Uncategorized. */}
-          <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-bg-base/40 p-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <label className="text-sm font-bold text-text-primary">
-                Save to <span className="text-red-500">*</span>
-              </label>
-              {autoApplied && (
-                <span className="text-[11px] font-semibold text-text-muted">
-                  Auto-picked from your selected docs
-                </span>
+          {/* Quantity */}
+          <section className="rounded-[--radius-lg] border border-border-light bg-bg-base/40 p-4">
+            <label className="text-sm font-bold text-text-primary">How many?</label>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Pick a preset or type a custom number (up to 50).
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {QUANTITY_CHIPS.map((n) => (
+                <QuantityChip
+                  key={n}
+                  label={String(n)}
+                  selected={count === n}
+                  onClick={() => setCount(n)}
+                />
+              ))}
+              {isCustomCount ? (
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={count}
+                  onChange={(e) => {
+                    const n = Number.parseInt(e.target.value, 10);
+                    if (Number.isFinite(n)) setCount(Math.max(1, Math.min(50, n)));
+                  }}
+                  aria-label="Custom quantity"
+                  className="w-16 rounded-[--radius-pill] border border-primary bg-primary-bg/30 px-2 py-1.5 text-center text-xs font-bold text-primary focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+              ) : (
+                <QuantityChip
+                  label="Custom"
+                  selected={false}
+                  // Seed the custom input with a value outside the
+                  // preset list so isCustomCount flips true on the
+                  // next render and the input actually appears. Any
+                  // non-preset integer works; 7 reads naturally as
+                  // "a bit more than 5, less than 10".
+                  onClick={() => setCount(7)}
+                  dashed
+                />
               )}
             </div>
+          </section>
+
+          {/* Save to */}
+          <section className="rounded-[--radius-lg] border border-border-light bg-bg-base/40 p-4">
+            <label className="text-sm font-bold text-text-primary">
+              Save to <span className="text-red-500">*</span>
+            </label>
             <p className="mt-1 text-[11px] text-text-muted">
-              Pick the unit these questions belong to. They&rsquo;ll be organized under it
-              in the question bank and available when you build a homework for that unit.
+              Pick the unit these questions belong to. They&rsquo;ll be organized
+              under it in the question bank and available when you build a homework
+              for that unit.
             </p>
 
             {topUnits(units).length === 0 ? (
               <div className="mt-3 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-3 text-center text-xs italic text-text-muted">
-                No units yet. Create one in the Materials tab first, then come back to
-                generate questions.
+                No units yet. Create one in the Materials tab first, then come back
+                to generate questions.
               </div>
             ) : (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {topUnits(units).map((u) => {
-                  const active = unitId === u.id;
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => setOverrideUnitId(u.id)}
-                      className={`rounded-[--radius-pill] border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        active
-                          ? "border-primary bg-primary text-white"
-                          : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
-                      }`}
-                    >
-                      {active && <span className="mr-1">✓</span>}
-                      {u.name}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => setOverrideUnitId(null)}
-                  className={`rounded-[--radius-pill] border border-dashed px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    explicitUncategorized
-                      ? "border-text-muted bg-bg-subtle text-text-primary"
-                      : "border-text-muted/40 bg-transparent text-text-muted hover:bg-bg-subtle"
-                  }`}
-                >
-                  {explicitUncategorized && <span className="mr-1">✓</span>}
-                  Uncategorized
-                </button>
-              </div>
-            )}
+              <>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {topUnits(units).map((u) => {
+                    const isActive = unitId === u.id;
+                    return (
+                      <SelectableChip
+                        key={u.id}
+                        label={u.name}
+                        selected={isActive}
+                        onToggle={() => setOverrideUnitId(u.id)}
+                        hint={autoApplied && isActive ? "auto" : undefined}
+                      />
+                    );
+                  })}
+                  <SelectableChip
+                    label="Uncategorized"
+                    selected={explicitUncategorized}
+                    onToggle={() => setOverrideUnitId(null)}
+                    variant="dashed"
+                  />
+                </div>
 
-            {!hasChosenSaveTo && topUnits(units).length > 0 && (
-              <p className="mt-2 text-[11px] italic text-text-muted">
-                Pick a unit (or Uncategorized) to enable Generate.
-              </p>
+                {!hasChosenSaveTo && (
+                  <p className="mt-2 text-[11px] italic text-text-muted">
+                    Pick a unit (or Uncategorized) to enable Generate.
+                  </p>
+                )}
+                {explicitUncategorized && (
+                  <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                    Heads up: these questions won&rsquo;t be organized under any unit
+                    and won&rsquo;t show up when filtering by unit. You can move them
+                    later.
+                  </p>
+                )}
+              </>
             )}
-            {explicitUncategorized && (
-              <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
-                Heads up: these questions won&rsquo;t be organized under any unit and
-                won&rsquo;t show up when filtering by unit. You can move them later.
-              </p>
-            )}
-          </div>
+          </section>
 
-          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-          {onlyPdfsSelected && (
-            <p className="mt-3 text-[11px] text-amber-600">
-              Heads up: every selected doc is a PDF, which isn&rsquo;t readable yet. Pick at
-              least one image or unselect everything.
-            </p>
-          )}
+          {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
 
         {/* Footer — single primary action */}
@@ -389,6 +383,45 @@ export function GenerateQuestionsModal({
   );
 }
 
+// Quantity picker uses its own chip rather than SelectableChip because
+// it's single-select-with-clear (picking another replaces the current
+// pick, no ✓ needed) and "Custom" uses a dashed treatment. Keeping
+// this local lets SelectableChip stay the right shape for unit
+// pickers where the ✓ matters.
+function QuantityChip({
+  label,
+  selected,
+  onClick,
+  dashed = false,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+  dashed?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn(
+        "rounded-[--radius-pill] px-3 py-1.5 text-xs font-bold transition-colors",
+        dashed
+          ? "border border-dashed border-text-muted/50 text-text-muted hover:bg-bg-subtle"
+          : selected
+            ? "border border-primary bg-primary text-white"
+            : "border border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+// Readable docs render with the image icon + clickable state; PDFs
+// render grayed out with a "SKIP" badge since they aren't OCR-able
+// yet. Both keep the same layout — left icon, filename + meta, right
+// check circle — so the grid reads evenly.
 function DocCard({
   doc,
   selected,
@@ -399,34 +432,139 @@ function DocCard({
   onToggle: () => void;
 }) {
   const isPdf = doc.file_type === "application/pdf";
+  const extension = extensionOf(doc.filename, doc.file_type);
+  const sizeLabel = formatFileSize(doc.file_size);
+
   return (
     <button
       type="button"
       onClick={onToggle}
       disabled={isPdf}
       title={isPdf ? "PDFs are not yet AI-readable" : doc.filename}
-      className={`relative flex items-center gap-2 rounded-[--radius-md] border p-3 text-left text-xs transition-colors ${
+      aria-pressed={!isPdf && selected}
+      className={cn(
+        "group relative flex items-start gap-3 rounded-[--radius-md] border p-3 text-left transition-colors",
         isPdf
-          ? "cursor-not-allowed border-border-light bg-bg-subtle opacity-50"
+          ? "cursor-not-allowed border-border-light bg-bg-subtle/60"
           : selected
-            ? "border-primary bg-primary-bg/40 text-primary"
-            : "border-border-light bg-surface hover:border-primary/40 hover:bg-primary-bg/10"
-      }`}
-    >
-      <span className="text-base">📄</span>
-      <span className="min-w-0 flex-1 truncate font-semibold text-text-primary">
-        {doc.filename}
-      </span>
-      {selected && !isPdf && (
-        <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
-          ✓
-        </span>
+            ? "border-primary bg-primary-bg/40"
+            : "border-border-light bg-surface hover:border-primary/40 hover:bg-primary-bg/10",
       )}
-      {isPdf && (
-        <span className="absolute right-1.5 top-1.5 rounded-[--radius-pill] bg-text-muted/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+    >
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-[--radius-sm]",
+          isPdf
+            ? "bg-bg-subtle text-text-muted"
+            : "bg-primary-bg/60 text-primary",
+        )}
+        aria-hidden
+      >
+        {isPdf ? <PdfIcon /> : <ImageIcon />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className={cn(
+            "truncate text-xs font-semibold",
+            isPdf ? "text-text-muted" : "text-text-primary",
+          )}
+        >
+          {doc.filename}
+        </div>
+        <div className="mt-0.5 text-[10px] text-text-muted">
+          {extension}
+          {sizeLabel && <span> · {sizeLabel}</span>}
+        </div>
+      </div>
+      {isPdf ? (
+        <span className="rounded-[--radius-pill] bg-text-muted/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
           skip
         </span>
+      ) : (
+        <CheckCircle selected={selected} />
       )}
     </button>
   );
+}
+
+function CheckCircle({ selected }: { selected: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+        selected
+          ? "border-primary bg-primary text-white"
+          : "border-border bg-surface text-transparent group-hover:border-primary/60",
+      )}
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="h-3 w-3"
+      >
+        <path
+          fillRule="evenodd"
+          d="M16.704 5.29a1 1 0 010 1.42l-7.5 7.5a1 1 0 01-1.41 0l-3.5-3.5a1 1 0 011.41-1.42l2.795 2.793 6.796-6.793a1 1 0 011.41 0z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </span>
+  );
+}
+
+function ImageIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  );
+}
+
+function PdfIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+// --- helpers ---------------------------------------------------------
+
+function extensionOf(filename: string, fileType: string): string {
+  const dot = filename.lastIndexOf(".");
+  if (dot > 0 && dot < filename.length - 1) {
+    return filename.slice(dot + 1).toLowerCase();
+  }
+  // Fall back to the MIME type's subtype.
+  const slash = fileType.indexOf("/");
+  return slash >= 0 ? fileType.slice(slash + 1).toLowerCase() : fileType;
+}
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
 }

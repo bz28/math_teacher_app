@@ -8,13 +8,14 @@ import { WorkshopModal } from "./workshop-modal";
 import { HomeworkDetailModal } from "./homework-tab";
 import { CourseSubjectContext } from "./question-bank/course-subject-context";
 import { STATUS_FILTERS } from "./question-bank/constants";
-import { SimpleUnitList } from "./question-bank/unit-groups";
-import { ApprovedTable } from "./question-bank/approved-table";
-import { ReviewBanner } from "./question-bank/review-banner";
 import { BankSkeleton } from "./question-bank/skeleton";
 import { GenerateQuestionsModal } from "./question-bank/generate-questions-modal";
 import { UploadWorksheetModal } from "./question-bank/upload-worksheet-modal";
-import { PendingTray } from "./question-bank/pending-tray";
+import { PendingSections } from "./question-bank/pending-sections";
+import { ApprovedByHomework } from "./question-bank/approved-by-homework";
+import { QuestionRow } from "./question-bank/question-row";
+import { PracticeProblemsModal } from "./question-bank/practice-problems-modal";
+import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 
 export function QuestionBankTab({
   courseId,
@@ -33,8 +34,8 @@ export function QuestionBankTab({
     courseId, statusFilter,
   );
 
-  // Client-side search filter (unit filtering moved into ApprovedTable
-  // for the approved view; pending/rejected still use this).
+  // Client-side search filter — applied across all status sub-tabs.
+  // Unit filtering happens server-side via the bank() params already.
   const filteredItems = useMemo(() => {
     let out = items;
     const q = searchQuery.trim().toLowerCase();
@@ -51,32 +52,57 @@ export function QuestionBankTab({
   const [showGenerate, setShowGenerate] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [openItem, setOpenItem] = useState<BankItem | null>(null);
+  // Lift-up state for the practice-problems detail modal + generate-
+  // similar dialog so they can be opened from any row in the approved
+  // tab without going through the workshop modal first.
+  const [practiceFor, setPracticeFor] = useState<BankItem | null>(null);
+  const [generateMoreFor, setGenerateMoreFor] = useState<BankItem | null>(null);
+  // When the teacher dives from the practice-problems modal into either
+  // the workshop or the generate dialog, we stash the parent here so
+  // closing the child surface restores the practice modal — keeping
+  // their navigation context instead of dumping them back at the bank.
+  const [returnToPracticeFor, setReturnToPracticeFor] = useState<BankItem | null>(null);
   const [openHomeworkId, setOpenHomeworkId] = useState<string | null>(null);
-  const [primaryReviewQueue, setPrimaryReviewQueue] = useState<BankItem[] | null>(null);
   const [variationReviewQueue, setVariationReviewQueue] = useState<BankItem[] | null>(null);
   const [reviewQueueParent, setReviewQueueParent] = useState<BankItem | null>(null);
 
   // Inline review queue state — opens WorkshopModal in queue mode
   const [inlineReviewQueue, setInlineReviewQueue] = useState<BankItem[] | null>(null);
 
-  // Pending counts for ReviewBanner (computed from pending items cache
-  // only when on the approved tab — avoids an extra fetch).
-  const [pendingItems, setPendingItems] = useState<BankItem[]>([]);
+  // Approved items cache used to look up parent titles for the
+  // Pending tab's practice-problem groups (so they can show
+  // "Practice for: X" + a snippet instead of an opaque ID), and to
+  // restore the parent item when a variation review queue closes.
+  //
+  // Only the Pending tab consumes this cache. Skip the fetch on
+  // Approved/Rejected — refetching every time counts.approved bumped
+  // was wasteful when the data wasn't being read. counts.approved
+  // stays in the deps so a new approval lands in the cache before
+  // its variations show up in Pending.
+  //
+  // approvedCacheLoaded distinguishes "still fetching" from "fetched
+  // and parent really isn't there" — drives the spinner / removed-
+  // copy split in VariationGroupRow.
+  const [approvedCache, setApprovedCache] = useState<BankItem[]>([]);
+  const [approvedCacheLoaded, setApprovedCacheLoaded] = useState(false);
   useEffect(() => {
-    if (statusFilter !== "approved") return;
+    if (statusFilter !== "pending") return;
     let cancelled = false;
-    teacher.bank(courseId, { status: "pending" }).then((res) => {
-      if (!cancelled) setPendingItems(res.items);
-    }).catch(() => {});
+    teacher.bank(courseId, { status: "approved" }).then((res) => {
+      if (!cancelled) {
+        setApprovedCache(res.items);
+        setApprovedCacheLoaded(true);
+      }
+    }).catch(() => {
+      if (!cancelled) setApprovedCacheLoaded(true);
+    });
     return () => { cancelled = true; };
-  }, [courseId, statusFilter, counts.pending]);
+  }, [courseId, statusFilter, counts.approved]);
 
-  const newQuestionCount = pendingItems.filter(
-    (i) => (i.source === "generated" || i.source === "imported") && !i.parent_question_id,
-  ).length;
-  const variationPendingCount = pendingItems.filter(
-    (i) => i.source === "practice",
-  ).length;
+  const parentLookup = useMemo(
+    () => new Map(approvedCache.map((i) => [i.id, i])),
+    [approvedCache],
+  );
 
   const openVariationReview = async (parent: BankItem) => {
     try {
@@ -97,52 +123,16 @@ export function QuestionBankTab({
     }
   };
 
-  const startReview = async () => {
+  // "Review all" on the Pending → New Questions section. Opens the
+  // WorkshopModal in queue mode with only primary (non-variation)
+  // questions. Variations are reviewed via openVariationReview from
+  // the Practice Problems section, which scopes to one parent.
+  const startNewQuestionsReview = async () => {
     try {
       const res = await teacher.bank(courseId, { status: "pending" });
       const primaries = res.items.filter((i) => !i.parent_question_id);
-      if (primaries.length > 0) {
-        setPrimaryReviewQueue(primaries);
-        return;
-      }
-      const variations = res.items.filter((i) => i.parent_question_id);
-      if (variations.length === 0) return;
-      const byParent = new Map<string, BankItem[]>();
-      for (const v of variations) {
-        const pid = v.parent_question_id;
-        if (!pid) continue;
-        const arr = byParent.get(pid) ?? [];
-        arr.push(v);
-        byParent.set(pid, arr);
-      }
-      const sorted = Array.from(byParent.entries()).sort(
-        (a, b) => b[1].length - a[1].length,
-      );
-      if (sorted.length === 0) return;
-      const [parentId, children] = sorted[0];
-      let parentItem = items.find((i) => i.id === parentId);
-      if (!parentItem) {
-        const approvedRes = await teacher.bank(courseId, { status: "approved" });
-        parentItem = approvedRes.items.find((i) => i.id === parentId);
-      }
-      if (!parentItem) {
-        setError("Couldn't find the parent question for these pending variations.");
-        return;
-      }
-      setReviewQueueParent(parentItem);
-      setVariationReviewQueue(children);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load pending");
-    }
-  };
-
-  // Start inline review queue from the ReviewBanner (approved tab).
-  // Fetches fresh pending items and opens WorkshopModal in queue mode.
-  const startInlineReview = async () => {
-    try {
-      const res = await teacher.bank(courseId, { status: "pending" });
-      if (res.items.length === 0) return;
-      setInlineReviewQueue(res.items);
+      if (primaries.length === 0) return;
+      setInlineReviewQueue(primaries);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load pending");
     }
@@ -228,21 +218,6 @@ export function QuestionBankTab({
         </div>
       </div>
 
-      {/* Review banner — only on approved tab when pending items exist */}
-      {statusFilter === "approved" && (newQuestionCount > 0 || variationPendingCount > 0) && (
-        <div className="mt-4">
-          <ReviewBanner
-            newQuestionCount={newQuestionCount}
-            variationCount={variationPendingCount}
-            onReview={startInlineReview}
-          />
-        </div>
-      )}
-
-      {/* Pending tray — shown on non-approved tabs */}
-      {statusFilter !== "approved" && (
-        <PendingTray pendingCount={counts.pending} onReview={startReview} />
-      )}
 
       {/* Active job banner */}
       {activeJob && !activeJob.parent_question_id && (
@@ -316,22 +291,40 @@ export function QuestionBankTab({
               text={emptyStateFor(statusFilter, counts)}
             />
           )
-        ) : statusFilter === "pending" || statusFilter === "rejected" ? (
-          <div className="space-y-5">
-            <SimpleUnitList
-              items={filteredItems}
-              units={units}
-              onOpenItem={setOpenItem}
-              onOpenHomework={setOpenHomeworkId}
-              onChanged={reload}
-            />
-          </div>
-        ) : (
-          <ApprovedTable
+        ) : statusFilter === "pending" ? (
+          <PendingSections
             items={filteredItems}
             units={units}
             onOpenItem={setOpenItem}
-            onOpenHomework={setOpenHomeworkId}
+            onReviewAllNew={startNewQuestionsReview}
+            onReviewVariationsForParent={(parentId) => {
+              const parent = parentLookup.get(parentId)
+                ?? items.find((i) => i.id === parentId);
+              if (parent) openVariationReview(parent);
+            }}
+            parentLookup={parentLookup}
+            parentLookupLoaded={approvedCacheLoaded}
+          />
+        ) : statusFilter === "rejected" ? (
+          <div className="space-y-2">
+            {filteredItems.map((item) => (
+              <QuestionRow
+                key={item.id}
+                item={item}
+                units={units}
+                emphasis="rejected"
+                onClick={setOpenItem}
+              />
+            ))}
+          </div>
+        ) : (
+          <ApprovedByHomework
+            items={filteredItems}
+            units={units}
+            onOpenItem={setOpenItem}
+            onReviewVariations={openVariationReview}
+            onGenerateMore={setGenerateMoreFor}
+            onViewPractice={setPracticeFor}
           />
         )}
       </div>
@@ -375,19 +368,6 @@ export function QuestionBankTab({
         />
       )}
 
-      {primaryReviewQueue && (
-        <WorkshopModal
-          queue={primaryReviewQueue}
-          onClose={() => {
-            setPrimaryReviewQueue(null);
-            reload();
-          }}
-          onChanged={reload}
-          onJobStarted={setActiveJob}
-          activeJob={activeJob}
-        />
-      )}
-
       {variationReviewQueue && reviewQueueParent && (
         <WorkshopModal
           queue={variationReviewQueue}
@@ -408,11 +388,31 @@ export function QuestionBankTab({
           onClose={() => {
             setOpenItem(null);
             setReviewQueueParent(null);
+            // Restore the practice-problems modal if we got here from
+            // there. If not, returnToPracticeFor is null and this is
+            // a no-op.
+            if (returnToPracticeFor) {
+              setPracticeFor(returnToPracticeFor);
+              setReturnToPracticeFor(null);
+            }
           }}
           onChanged={reload}
           onJobStarted={setActiveJob}
           activeJob={activeJob}
           onReviewVariations={openVariationReview}
+          parentTitle={
+            openItem.parent_question_id
+              ? parentLookup.get(openItem.parent_question_id)?.title
+              : undefined
+          }
+          onJumpToParent={
+            openItem.parent_question_id
+              ? () => {
+                  const p = parentLookup.get(openItem.parent_question_id!);
+                  if (p) setOpenItem(p);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -422,6 +422,46 @@ export function QuestionBankTab({
           assignmentId={openHomeworkId}
           onClose={() => setOpenHomeworkId(null)}
           onChanged={reload}
+        />
+      )}
+
+      {practiceFor && (
+        <PracticeProblemsModal
+          parent={practiceFor}
+          units={units}
+          onClose={() => setPracticeFor(null)}
+          onOpenItem={(item) => {
+            setReturnToPracticeFor(practiceFor);
+            setPracticeFor(null);
+            setOpenItem(item);
+          }}
+          onGenerateMore={() => {
+            const target = practiceFor;
+            setReturnToPracticeFor(target);
+            setPracticeFor(null);
+            setGenerateMoreFor(target);
+          }}
+        />
+      )}
+
+      {generateMoreFor && (
+        <GenerateSimilarDialog
+          itemId={generateMoreFor.id}
+          onClose={() => {
+            setGenerateMoreFor(null);
+            if (returnToPracticeFor) {
+              setPracticeFor(returnToPracticeFor);
+              setReturnToPracticeFor(null);
+            }
+          }}
+          onStarted={(job) => {
+            setGenerateMoreFor(null);
+            setActiveJob(job);
+            if (returnToPracticeFor) {
+              setPracticeFor(returnToPracticeFor);
+              setReturnToPracticeFor(null);
+            }
+          }}
         />
       )}
     </div>

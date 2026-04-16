@@ -1,87 +1,119 @@
-"""Unit tests for the integrity-checker score-to-badge logic and the
-stub AI helpers. Pipeline-with-DB tests live in
-test_integrity_check.py since they need the seeded fixtures.
+"""Unit tests for the integrity-checker agent-loop helpers.
+
+Pipeline-with-DB tests live in test_integrity_check.py since they
+need the seeded world fixture. This file exercises the pure helpers
+— problem briefing, transcript-to-messages folding, tool-input
+validation — so regressions in the prompt shape are caught fast.
 """
 
 from __future__ import annotations
 
-from api.core.integrity_pipeline import compute_badge
+import json
+import uuid
 
-# ── compute_badge ──
-
-class TestComputeBadge:
-    def test_all_good_is_likely(self) -> None:
-        badge, score = compute_badge(["good", "good", "good"], [])
-        assert badge == "likely"
-        assert score == 1.0
-
-    def test_all_bad_is_unlikely(self) -> None:
-        badge, score = compute_badge(["bad", "bad"], [])
-        assert badge == "unlikely"
-        assert score == 0.0
-
-    def test_all_weak_lands_in_uncertain(self) -> None:
-        # 0.5 average → between 0.40 and 0.75 → uncertain
-        badge, score = compute_badge(["weak", "weak"], [])
-        assert badge == "uncertain"
-        assert score == 0.5
-
-    def test_mixed_above_threshold_is_likely(self) -> None:
-        # good + good + weak → (1 + 1 + 0.5) / 3 = 0.833 → likely
-        badge, _ = compute_badge(["good", "good", "weak"], [])
-        assert badge == "likely"
-
-    def test_just_below_likely_threshold(self) -> None:
-        # good + weak → (1 + 0.5) / 2 = 0.75 exactly → likely
-        # (>= 0.75 maps to likely per the doc)
-        badge, _ = compute_badge(["good", "weak"], [])
-        assert badge == "likely"
-
-    def test_just_below_uncertain_threshold(self) -> None:
-        # bad + weak → (0 + 0.5) / 2 = 0.25 → unlikely
-        badge, _ = compute_badge(["bad", "weak"], [])
-        assert badge == "unlikely"
-
-    def test_empty_verdicts_defensive(self) -> None:
-        badge, score = compute_badge([], [])
-        assert badge == "uncertain"
-        assert score == 0.0
-
-    def test_hard_flag_forces_unlikely_even_with_high_score(self) -> None:
-        # Three goods would otherwise be 1.0 → likely. Hard flag
-        # downgrades to unlikely.
-        badge, score = compute_badge(["good", "good", "good"], ["contradicts_own_work"])
-        assert badge == "unlikely"
-        assert score == 1.0  # raw score still reflects answer quality
-
-    def test_acknowledges_cheating_is_a_hard_flag(self) -> None:
-        badge, _ = compute_badge(["good"], ["acknowledges_cheating"])
-        assert badge == "unlikely"
-
-    def test_soft_flag_does_not_escalate(self) -> None:
-        # Currently the only hard flags are the two above; everything
-        # else (vague, generic_textbook, etc.) leaves badge alone.
-        badge, _ = compute_badge(["good", "good"], ["vague"])
-        assert badge == "likely"
-
-    def test_skipped_counts_as_zero(self) -> None:
-        # good + skipped = 0.5 → uncertain
-        badge, score = compute_badge(["good", "skipped"], [])
-        assert badge == "uncertain"
-        assert score == 0.5
-
-    def test_rephrased_then_good_partial_credit(self) -> None:
-        # rephrased weight = 0.8 per the parent plan §6
-        badge, score = compute_badge(["rephrased"], [])
-        assert badge == "likely"  # 0.8 >= 0.75
-        assert score == 0.8
-
-    def test_unknown_verdict_treated_as_zero(self) -> None:
-        # Defensive: an unexpected verdict string should not crash,
-        # just contribute zero to the average.
-        badge, score = compute_badge(["good", "wat"], [])
-        # (1.0 + 0.0) / 2 = 0.5 → uncertain
-        assert badge == "uncertain"
-        assert score == 0.5
+from api.core.integrity_ai import build_problems_briefing
+from api.core.integrity_pipeline import _build_agent_messages
+from api.models.integrity_check import IntegrityConversationTurn
 
 
+def _turn(ordinal: int, role: str, content: str, **kw: str) -> IntegrityConversationTurn:
+    return IntegrityConversationTurn(
+        integrity_check_submission_id=uuid.uuid4(),
+        ordinal=ordinal,
+        role=role,
+        content=content,
+        tool_name=kw.get("tool_name"),
+        tool_use_id=kw.get("tool_use_id"),
+    )
+
+
+class TestBuildBriefing:
+    def test_includes_problem_id_and_extracted_steps(self) -> None:
+        briefing = build_problems_briefing([
+            {
+                "problem_id": "prob-1",
+                "sample_position": 0,
+                "question": "Solve x^2 - 5x + 6 = 0",
+                "extraction": {
+                    "steps": [
+                        {"step_num": 1, "latex": "(x-2)(x-3)", "plain_english": "factored"},
+                    ],
+                    "confidence": 0.9,
+                },
+                "verdict_status": "pending",
+            },
+        ])
+        assert "prob-1" in briefing
+        assert "Solve x^2 - 5x + 6 = 0" in briefing
+        assert "factored" in briefing
+        assert "Current verdict: pending" in briefing
+
+    def test_handles_no_extracted_steps(self) -> None:
+        briefing = build_problems_briefing([
+            {
+                "problem_id": "prob-1",
+                "sample_position": 0,
+                "question": "Q",
+                "extraction": {"steps": [], "confidence": 0.1},
+                "verdict_status": "pending",
+            },
+        ])
+        assert "(no legible steps)" in briefing
+
+
+class TestBuildAgentMessages:
+    def test_folds_student_and_agent_turns(self) -> None:
+        turns = [
+            _turn(0, "agent", "Hi! Walk me through step one on problem 1."),
+            _turn(1, "student", "I multiplied the two numbers."),
+            _turn(2, "agent", "Which two?"),
+        ]
+        messages = _build_agent_messages("BRIEFING", turns)
+        # First user message = briefing kickoff
+        assert messages[0]["role"] == "user"
+        assert "BRIEFING" in messages[0]["content"]
+        # Then: assistant text, user text, assistant text
+        assert messages[1] == {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Hi! Walk me through step one on problem 1."}],
+        }
+        assert messages[2] == {"role": "user", "content": "I multiplied the two numbers."}
+        assert messages[3]["role"] == "assistant"
+
+    def test_groups_tool_call_after_agent_text(self) -> None:
+        tool_input = {"problem_id": "p1", "badge": "likely", "confidence": 0.9, "reasoning": "x"}
+        turns = [
+            _turn(0, "agent", "Hello"),
+            _turn(
+                1, "tool_call", json.dumps(tool_input),
+                tool_name="submit_problem_verdict", tool_use_id="u1",
+            ),
+            _turn(2, "tool_result", "accepted", tool_use_id="u1"),
+        ]
+        messages = _build_agent_messages("B", turns)
+        # Briefing + assistant (text + tool_use) + user (tool_result)
+        assert len(messages) == 3
+        assistant = messages[1]
+        assert assistant["role"] == "assistant"
+        assert len(assistant["content"]) == 2
+        assert assistant["content"][0] == {"type": "text", "text": "Hello"}
+        tool_use_block = assistant["content"][1]
+        assert tool_use_block["type"] == "tool_use"
+        assert tool_use_block["name"] == "submit_problem_verdict"
+        assert tool_use_block["id"] == "u1"
+        assert tool_use_block["input"] == tool_input
+        tool_result = messages[2]
+        assert tool_result["role"] == "user"
+        assert tool_result["content"][0]["type"] == "tool_result"
+        assert tool_result["content"][0]["tool_use_id"] == "u1"
+
+    def test_standalone_tool_call_without_preceding_text(self) -> None:
+        turns = [
+            _turn(
+                0, "tool_call", json.dumps({"a": 1}),
+                tool_name="finish_check", tool_use_id="u9",
+            ),
+        ]
+        messages = _build_agent_messages("B", turns)
+        assert messages[1]["role"] == "assistant"
+        assert messages[1]["content"][0]["type"] == "tool_use"

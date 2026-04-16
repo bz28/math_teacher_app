@@ -1,11 +1,18 @@
-"""Integrity-checker models — per-submission understanding-check
-state. After a student submits a homework, an AI pipeline samples up
-to 5 primary problems, asks 2-3 short questions about each, scores
-the answers, and produces a confidence badge for the teacher.
+"""Integrity-checker models — conversational understanding-check
+state. After a student submits a homework, an extraction runs over
+the uploaded image, up to 3 primary problems are sampled, and a
+single teacher-agent conversation runs for the whole submission.
+The agent probes the student's work, submits per-problem verdicts
+via tool calls, and emits an overall finish with a badge + summary.
 
-Two tables: one row per (submission × picked problem) for the
-problem-level state + badge, and one row per (problem × question
-slot) for the actual Q&A.
+Three tables:
+- integrity_check_submissions — one row per checked submission,
+  carries submission-level status + overall verdict.
+- integrity_check_problems — one row per sampled problem, carries
+  per-problem badge/confidence/reasoning + extraction snapshot.
+- integrity_conversation_turns — one row per conversation turn,
+  including tool calls + tool results so the whole agent loop is
+  auditable.
 """
 
 from __future__ import annotations
@@ -31,28 +38,75 @@ from sqlalchemy.orm import Mapped, mapped_column
 from api.database import Base
 
 
-class IntegrityCheckProblem(Base):
-    """One row per (submission, sampled problem). Tracks the
-    problem's status through the AI pipeline (pending → generating →
-    awaiting_student → scoring → complete) and the eventual badge.
+class IntegrityCheckSubmission(Base):
+    """One row per submission that has an integrity check. Tracks the
+    submission-level lifecycle and the overall verdict the agent
+    emits via `finish_check`.
+    """
 
-    `sample_position` records the order this problem was picked at
-    submit time, so a student resuming the chat gets the same set in
-    the same order regardless of how the sampling logic evolves later.
+    __tablename__ = "integrity_check_submissions"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+    )
+    submission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("submissions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # unique=True already creates a btree index in PG
+    )
+
+    # status: extracting / awaiting_student / in_progress / complete /
+    # skipped_unreadable. The agent's finish_check flips the row to
+    # `complete` and populates overall_* fields.
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    # Filled in by finish_check (or by the server-side force-finalize
+    # when the turn cap is hit).
+    overall_badge: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    overall_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    overall_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Student-facing flag raised from the post-extraction confirm
+    # screen when Vision misread their handwritten work. Surfaced to
+    # the teacher so they can weigh the verdict accordingly.
+    student_flagged_extraction: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class IntegrityCheckProblem(Base):
+    """One row per (submission, sampled problem). Carries the
+    extraction snapshot and the per-problem verdict the agent emits
+    via `submit_problem_verdict`.
     """
 
     __tablename__ = "integrity_check_problems"
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         UniqueConstraint(
-            "submission_id", "bank_item_id", name="uq_icp_submission_bank_item",
+            "integrity_check_submission_id", "bank_item_id",
+            name="uq_icp_check_submission_bank_item",
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    submission_id: Mapped[uuid.UUID] = mapped_column(
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
+    )
+    integrity_check_submission_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("submissions.id", ondelete="CASCADE"),
+        ForeignKey("integrity_check_submissions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -63,17 +117,15 @@ class IntegrityCheckProblem(Base):
     )
     sample_position: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # status: pending / generating / awaiting_student / scoring /
-    # complete / skipped_unreadable / dismissed. The dismissed status
-    # is set by the teacher action; everything else is owned by the
-    # pipeline.
+    # status: pending / verdict_submitted / dismissed / skipped_unreadable
     status: Mapped[str] = mapped_column(String(32), nullable=False)
-    student_work_extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    student_work_extraction: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True,
+    )
 
-    # badge: likely / uncertain / unlikely / unreadable. Computed when
-    # all the response rows for this problem are scored.
+    # Filled in by submit_problem_verdict.
     badge: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    raw_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     teacher_dismissed: Mapped[bool] = mapped_column(
@@ -92,47 +144,48 @@ class IntegrityCheckProblem(Base):
     )
 
 
-class IntegrityCheckResponse(Base):
-    """One row per (problem, question slot). The slot is created when
-    the pipeline generates the question and the student-answer fields
-    are filled in when the kid submits an answer via the chat UI
-    (PR 2). Verdict comes from the scorer (stub in PR 1, real Sonnet
-    in PR 4).
+class IntegrityConversationTurn(Base):
+    """One row per conversation turn. Includes agent/student text
+    turns AND tool_call/tool_result turns so the whole agent loop is
+    reconstructible. Ordinal is a monotonic integer within a
+    conversation; ties are impossible because we hold the connection
+    session when writing a new turn.
+
+    Content semantics by role:
+    - agent: `content` is the assistant's text reply.
+    - student: `content` is the student's message.
+    - tool_call: `content` is JSON-encoded tool input, `tool_name` +
+      `tool_use_id` identify the call.
+    - tool_result: `content` is the server's textual reply to the
+      call (e.g. "accepted" or "rejected: need at least one student
+      turn on this problem first"), `tool_use_id` links back.
     """
 
-    __tablename__ = "integrity_check_responses"
+    __tablename__ = "integrity_conversation_turns"
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         UniqueConstraint(
-            "integrity_check_problem_id", "question_index",
-            name="uq_icr_problem_question",
+            "integrity_check_submission_id", "ordinal",
+            name="uq_ict_submission_ordinal",
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    integrity_check_problem_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("integrity_check_problems.id", ondelete="CASCADE"),
-        nullable=False,
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
-    question_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    question_text: Mapped[str] = mapped_column(Text, nullable=False)
-    expected_shape: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rubric_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    student_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # answer_verdict: good / weak / bad / skipped / rephrased
-    answer_verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    seconds_on_question: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    tab_switch_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    rephrase_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    integrity_check_submission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("integrity_check_submissions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tool_use_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    seconds_on_turn: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
-    )
-    answered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
-    )
-    scored_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
     )

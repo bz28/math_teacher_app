@@ -908,11 +908,21 @@ export const teacher = {
     );
   },
   // ── Question bank ──
-  bank(courseId: string, filters?: { status?: string; unit_id?: string; difficulty?: string }) {
+  bank(
+    courseId: string,
+    filters?: {
+      status?: string;
+      unit_id?: string;
+      difficulty?: string;
+      parent_question_id?: string;
+    },
+  ) {
     const params = new URLSearchParams();
     if (filters?.status) params.set("status_filter", filters.status);
     if (filters?.unit_id) params.set("unit_id", filters.unit_id);
     if (filters?.difficulty) params.set("difficulty", filters.difficulty);
+    if (filters?.parent_question_id)
+      params.set("parent_question_id", filters.parent_question_id);
     const qs = params.toString();
     return apiFetch<{ items: BankItem[]; counts: BankCounts }>(
       `/teacher/courses/${courseId}/question-bank${qs ? `?${qs}` : ""}`,
@@ -1032,7 +1042,7 @@ export const teacher = {
 
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
-  overall_badge: "likely" | "uncertain" | "unlikely" | null;
+  overall_badge: IntegrityBadge | null;
   problem_count: number;
   complete_count: number;
 }
@@ -1272,98 +1282,157 @@ export const schoolStudent = {
     return apiFetch<StudentSubmission>(`/school/student/homework/${assignmentId}/submission`);
   },
   // ── Integrity check ──
-  // The understanding-check chat that fires after a homework
-  // submission. PR 1 shipped the backend with stubbed AI; this is
-  // the client surface PR 2 wires up.
+  // The conversational understanding-check. A single /turn endpoint
+  // replaces the old /next + /answer pair.
   getIntegrityState(submissionId: string) {
     return apiFetch<IntegrityStateResponse>(
       `/school/student/integrity/submissions/${submissionId}`,
     );
   },
-  getNextIntegrityQuestion(submissionId: string) {
-    return apiFetch<NextIntegrityQuestionResponse>(
-      `/school/student/integrity/submissions/${submissionId}/next`,
+  postIntegrityTurn(
+    submissionId: string,
+    body: { message: string; seconds_on_turn?: number },
+  ) {
+    return apiFetch<IntegrityStateResponse>(
+      `/school/student/integrity/submissions/${submissionId}/turn`,
+      { method: "POST", body: JSON.stringify(body) },
     );
   },
-  submitIntegrityAnswer(
-    submissionId: string,
-    body: { question_id: string; answer: string; seconds_on_question?: number; tab_switch_count?: number },
+  flagIntegrityExtraction(submissionId: string) {
+    return apiFetch<IntegrityStateResponse>(
+      `/school/student/integrity/submissions/${submissionId}/flag-extraction`,
+      { method: "POST" },
+    );
+  },
+  // ── Learn-mode chat + Practice→Learn pivot ──
+  stepChat(
+    bankItemId: string,
+    body: { step_index: number; question: string; prior_messages: SchoolChatMessage[] },
   ) {
-    return apiFetch<NextIntegrityQuestionResponse>(
-      `/school/student/integrity/submissions/${submissionId}/answer`,
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      },
+    return apiFetch<{ reply: string }>(
+      `/school/student/bank-item/${bankItemId}/step-chat`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  problemChat(
+    bankItemId: string,
+    body: { question: string; prior_messages: SchoolChatMessage[] },
+  ) {
+    return apiFetch<{ reply: string }>(
+      `/school/student/bank-item/${bankItemId}/problem-chat`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  learnThisProblem(body: { bank_item_id: string; assignment_id: string }) {
+    return apiFetch<Extract<NextVariationResponse, { status: "served" }>>(
+      `/school/student/bank-consumption/learn-this`,
+      { method: "POST", body: JSON.stringify(body) },
     );
   },
 };
 
+export interface SchoolChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 // ── Integrity check types (mirror api/routes/integrity_check.py) ──
+
+export type IntegrityBadge = "likely" | "uncertain" | "unlikely" | "unreadable";
+
+export type IntegrityOverallStatus =
+  | "no_check"           // HW has integrity checks disabled
+  | "extracting"         // pipeline is still running Vision extraction
+  | "awaiting_student"   // opening agent turn written, student hasn't engaged yet
+  | "in_progress"        // student has sent >=1 message, check not yet complete
+  | "complete"           // agent finished (or was force-finalized)
+  | "skipped_unreadable"; // extraction confidence too low, no chat
+
+export type IntegrityProblemStatus =
+  | "pending"
+  | "verdict_submitted"
+  | "dismissed"
+  | "skipped_unreadable";
 
 export interface IntegrityProblemSummary {
   problem_id: string;
   sample_position: number;
-  status: string;
-  question_count: number;
-  answered_count: number;
+  status: IntegrityProblemStatus;
+  badge: IntegrityBadge | null;
 }
 
-export type IntegrityOverallStatus =
-  | "pending"      // pipeline still running in the background
-  | "in_progress"  // rows exist, not all terminal
-  | "complete"     // all problems terminal
-  | "no_check";    // HW has integrity checks disabled
+export type IntegrityTurnRole = "agent" | "student";
+
+export interface IntegrityTurn {
+  ordinal: number;
+  role: IntegrityTurnRole;
+  content: string;
+  created_at: string;
+}
 
 export interface IntegrityStateResponse {
   submission_id: string;
   overall_status: IntegrityOverallStatus;
+  overall_badge: IntegrityBadge | null;
+  student_flagged_extraction: boolean;
+  /** Vision extraction of the student's own work. Null when no check
+   *  has started yet (pipeline still extracting or integrity disabled). */
+  extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
+  transcript: IntegrityTurn[];
 }
-
-export type NextIntegrityQuestionResponse =
-  | { done: true }
-  | {
-      done: false;
-      problem_id: string;
-      problem_position: number;  // 1-based for UI
-      total_problems: number;
-      question_id: string;
-      question_index: number;  // 0-based; UI shows index+1
-      questions_in_problem: number;
-      question_text: string;
-    };
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──
 
-export interface TeacherIntegrityResponseRow {
-  response_id: string;
-  question_index: number;
-  question_text: string;
-  student_answer: string | null;
-  answer_verdict: "good" | "weak" | "bad" | "skipped" | "rephrased" | null;
-  seconds_on_question: number | null;
-  tab_switch_count: number;
-  rephrase_used: boolean;
+export type TeacherIntegrityTurnRole =
+  | "agent"
+  | "student"
+  | "tool_call"
+  | "tool_result";
+
+export interface TeacherIntegrityTranscriptTurn {
+  ordinal: number;
+  role: TeacherIntegrityTurnRole;
+  content: string;
+  tool_name: string | null;
+  seconds_on_turn: number | null;
+  created_at: string;
+}
+
+export interface IntegrityExtractionStep {
+  step_num: number;
+  latex: string;
+  plain_english: string;
+}
+
+export interface IntegrityExtraction {
+  steps: IntegrityExtractionStep[];
+  confidence: number;
 }
 
 export interface TeacherIntegrityProblemRow {
   problem_id: string;
   bank_item_id: string;
+  question: string;
   sample_position: number;
-  status: string;
-  badge: "likely" | "uncertain" | "unlikely" | "unreadable" | null;
-  raw_score: number | null;
+  status: IntegrityProblemStatus;
+  badge: IntegrityBadge | null;
+  confidence: number | null;
   ai_reasoning: string | null;
   teacher_dismissed: boolean;
   teacher_dismissal_reason: string | null;
-  responses: TeacherIntegrityResponseRow[];
+  student_work_extraction: IntegrityExtraction | null;
 }
 
 export interface TeacherIntegrityDetail {
   submission_id: string;
   overall_status: string;
+  overall_badge: IntegrityBadge | null;
+  overall_confidence: number | null;
+  overall_summary: string | null;
+  student_flagged_extraction: boolean;
   problems: TeacherIntegrityProblemRow[];
+  transcript: TeacherIntegrityTranscriptTurn[];
 }
 
 // ── Contact endpoints ──

@@ -5,6 +5,11 @@ import {
   schoolStudent,
   type SubmitHomeworkResponse,
 } from "@/lib/api";
+import {
+  blobToDataUrl,
+  ImageResizeError,
+  resizeImageForUpload,
+} from "@/lib/image-resize";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -14,8 +19,6 @@ interface Props {
    *  the submitted read-only view. */
   onSubmitted: (resp: SubmitHomeworkResponse) => void;
 }
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * The "Submit Homework" section that appears at the bottom of the
@@ -32,33 +35,38 @@ export function SubmissionPanel({
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageFilename, setImageFilename] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
   const canSubmit = imageBase64 !== null;
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     setError(null);
     if (!file.type.startsWith("image/")) {
       setError("File must be an image (PNG or JPEG).");
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError("Image must be smaller than 5 MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Keep the full `data:image/...;base64,...` URL intact so the
-      // MIME type round-trips end-to-end. The renderer can then use
-      // it as-is without guessing PNG vs JPEG. Backend accepts both
-      // raw and data-URL forms.
-      setImageBase64(reader.result as string);
+    // Resize on the client before base64 encoding so a 10 MP phone
+    // photo lands well under the 5 MB server cap. The preview shown
+    // below is the resized output — what the teacher + integrity
+    // check will actually see.
+    setPreparing(true);
+    try {
+      const resized = await resizeImageForUpload(file);
+      const dataUrl = await blobToDataUrl(resized);
+      setImageBase64(dataUrl);
       setImageFilename(file.name);
-    };
-    reader.onerror = () => setError("Couldn't read that file. Try another.");
-    reader.readAsDataURL(file);
+    } catch (e) {
+      const msg =
+        e instanceof ImageResizeError
+          ? e.message
+          : "Couldn't prepare that image — try a different photo.";
+      setError(msg);
+    } finally {
+      setPreparing(false);
+    }
   }
 
   async function doSubmit() {
@@ -95,8 +103,12 @@ export function SubmissionPanel({
       <div className="mt-6">
         <div className="text-sm font-semibold text-text-primary">Upload your work</div>
         <p className="text-xs text-text-muted">
-          One picture of your full completed homework. PNG or JPEG, under 5 MB.
+          One picture of your full completed homework. PNG or JPEG — large
+          photos are shrunk automatically.
         </p>
+        {preparing && (
+          <p className="mt-2 text-xs text-text-muted">Preparing your image…</p>
+        )}
         {imageBase64 ? (
           // Visual preview so the kid can verify the right file
           // before committing — the image is the only thing they're
@@ -127,8 +139,12 @@ export function SubmissionPanel({
           <input
             type="file"
             accept="image/png,image/jpeg"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-[--radius-sm] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-white hover:file:bg-primary/90"
+            disabled={preparing}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleFile(f);
+            }}
+            className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-[--radius-sm] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-white hover:file:bg-primary/90 disabled:opacity-50"
           />
         )}
       </div>
