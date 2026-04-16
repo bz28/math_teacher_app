@@ -25,6 +25,7 @@ import {
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
+import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -116,8 +117,32 @@ export default function HomeworkDetailPage({
   // Polls bank jobs kicked off from the "Generate more" modal so the
   // pending-banner count updates live when generation completes.
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+  // Click-to-edit on an approved problem opens the workshop (single
+  // mode) so the teacher can edit the question / chat with AI /
+  // regenerate / make similar variations — all the affordances the
+  // old Question Bank tab provided. Null = workshop closed.
+  const [workshopItem, setWorkshopItem] = useState<BankItem | null>(null);
+  const [workshopError, setWorkshopError] = useState<string | null>(null);
 
   const reviewHref = `/school/teacher/courses/${courseId}/homework/${assignmentId}/review`;
+
+  const openWorkshopForProblem = async (bankItemId: string) => {
+    setWorkshopError(null);
+    try {
+      // Pull the full BankItem from the per-HW pool so the workshop
+      // has the chat thread, variations, etc. — the HW's content
+      // snapshot only carries the visible fields.
+      const res = await teacher.bank(courseId, { assignment_id: assignmentId });
+      const item = res.items.find((i) => i.id === bankItemId);
+      if (!item) {
+        setWorkshopError("Couldn't load the problem. Try again.");
+        return;
+      }
+      setWorkshopItem(item);
+    } catch (e) {
+      setWorkshopError(e instanceof Error ? e.message : "Failed to load problem");
+    }
+  };
 
   // Per-field save state for the inline-edited config block.
   const [saveStates, setSaveStates] = useState<Record<ConfigField, SaveState>>({
@@ -407,6 +432,20 @@ export default function HomeworkDetailPage({
 
   return (
     <>
+    {workshopItem && (
+      <WorkshopModal
+        item={workshopItem}
+        onClose={() => setWorkshopItem(null)}
+        onChanged={() => {
+          // Live edits to a bank item propagate to the HW's rendered
+          // content because the HW stores IDs and re-fetches the
+          // item's text on load. Refetch the HW here so deletions
+          // and status changes (unlikely but possible) are
+          // reflected immediately.
+          void reload();
+        }}
+      />
+    )}
     {showGenerate && (
       <GenerateQuestionsModal
         courseId={courseId}
@@ -673,7 +712,15 @@ export default function HomeworkDetailPage({
                 )}
                 <div className="mt-4 space-y-2">
                   {problems.map((p) => (
-                    <ProblemRow key={`${p.bank_item_id}-${p.position}`} problem={p} />
+                    <ProblemRow
+                      key={`${p.bank_item_id}-${p.position}`}
+                      problem={p}
+                      onClick={
+                        isPublished
+                          ? undefined
+                          : () => void openWorkshopForProblem(p.bank_item_id)
+                      }
+                    />
                   ))}
                 </div>
               </>
@@ -713,6 +760,9 @@ export default function HomeworkDetailPage({
           </div>
 
           {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
+          {workshopError && (
+            <p className="mt-4 text-xs text-red-600">{workshopError}</p>
+          )}
 
           {/* Delete — subtle affordance at the bottom right. Red
               confirm inline to catch accidental clicks. */}
@@ -1134,23 +1184,44 @@ function toLocalDatetimeInputValue(iso: string): string {
 // Fat card with the math-rendered question as the focal element.
 // Read-only — clicking does nothing; editing happens via the Edit
 // problems button at the top of this modal.
-function ProblemRow({ problem }: { problem: AssignmentProblem }) {
-  return (
-    <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
-          {problem.position}
+function ProblemRow({
+  problem,
+  onClick,
+}: {
+  problem: AssignmentProblem;
+  onClick?: () => void;
+}) {
+  const content = (
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
+        {problem.position}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
+          <MathText text={problem.question} />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
-            <MathText text={problem.question} />
-          </div>
-          <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            {problem.difficulty}
-          </div>
+        <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          {problem.difficulty}
         </div>
       </div>
     </div>
+  );
+  if (!onClick) {
+    return (
+      <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
+        {content}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group w-full rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 text-left transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
+      title="Click to edit"
+    >
+      {content}
+    </button>
   );
 }
 
