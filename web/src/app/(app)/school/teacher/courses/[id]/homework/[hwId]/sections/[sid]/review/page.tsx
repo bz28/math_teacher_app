@@ -816,19 +816,9 @@ function SubmissionDetailPanel({
         </button>
       </div>
 
-      {/* Handwritten image */}
+      {/* Handwritten image — compact thumbnail, full view in modal. */}
       {detail.image_data && (
-        <div className="rounded-[--radius-xl] border border-border-light bg-surface p-4 shadow-sm">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Student&apos;s work
-          </p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageDataUrl(detail.image_data)}
-            alt="Student handwritten submission"
-            className="w-full rounded-[--radius-md] border border-border-light"
-          />
-        </div>
+        <StudentWorkImage imageData={detail.image_data} />
       )}
 
       {/* Per-problem grading */}
@@ -1074,4 +1064,75 @@ function IntegritySummary({
         ? "⚠ Handwriting unreadable — student flagged the extraction."
         : "⚠ Uncertain whether the student did this themselves.";
   return <p className={`mt-3 text-[11px] font-semibold ${cls}`}>{label}</p>;
+}
+
+/**
+ * Student's handwritten work: a compact thumbnail by default, full
+ * image on click. The photo is a reference — teachers grade against
+ * the AI-extracted text — so we keep it out of the scan path and make
+ * it one click away when they need to spot-check.
+ */
+function StudentWorkImage({ imageData }: { imageData: string }) {
+  const [open, setOpen] = useState(false);
+  const src = imageDataUrl(imageData);
+  return (
+    <>
+      <div className="rounded-[--radius-xl] border border-border-light bg-surface p-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="group relative h-20 w-28 shrink-0 overflow-hidden rounded-[--radius-md] border border-border-light bg-bg-subtle transition-all hover:border-primary/40 hover:shadow-sm focus:border-primary focus:outline-none"
+            aria-label="View student's handwritten work full size"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+            <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[10px] font-bold text-white opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
+              View
+            </span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Student&apos;s work
+            </p>
+            <p className="mt-0.5 text-xs text-text-muted">
+              Reference photo of the student&apos;s handwritten submission.
+            </p>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="mt-1.5 text-xs font-semibold text-primary hover:underline"
+            >
+              View full ↗
+            </button>
+          </div>
+        </div>
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
+        <div className="flex items-center justify-between pb-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Student&apos;s work
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+            aria-label="Close"
+          >
+            Close ✕
+          </button>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt="Student handwritten submission, full size"
+          className="mx-auto max-h-[80vh] w-auto rounded-[--radius-md] border border-border-light object-contain"
+        />
+      </Modal>
+    </>
+  );
 }
