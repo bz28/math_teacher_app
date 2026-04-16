@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,10 +94,28 @@ async def get_course_grades(
     enrollments = (await db.execute(enrollments_q.order_by(User.name))).all()
 
     assigned_by_section = await _past_due_sections_by_assignment(db, course_id)
+    # Flatten to a single set so the per-student grade/submission
+    # queries below only pull rows for HWs in this course. Without
+    # this, students enrolled in multiple teacher courses would have
+    # their other-course rows fetched and discarded.
+    all_assigned_aids: set[uuid.UUID] = set().union(*assigned_by_section.values()) \
+        if assigned_by_section else set()
 
     student_ids = [e.id for e in enrollments]
-    if not student_ids:
-        return {"sections": sections_out, "students": []}
+    if not student_ids or not all_assigned_aids:
+        return {"sections": sections_out, "students": [
+            {
+                "student_id": str(e.id),
+                "name": e.name,
+                "section_id": str(e.section_id),
+                "section_name": e.section_name,
+                "assigned_count": 0,
+                "graded_count": 0,
+                "missing_count": 0,
+                "avg_percent": None,
+            }
+            for e in enrollments
+        ]}
 
     published_rows = (await db.execute(
         select(
@@ -108,6 +126,7 @@ async def get_course_grades(
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .where(
             Submission.student_id.in_(student_ids),
+            Submission.assignment_id.in_(all_assigned_aids),
             SubmissionGrade.grade_published_at.is_not(None),
             SubmissionGrade.final_score.is_not(None),
         )
@@ -118,7 +137,10 @@ async def get_course_grades(
 
     submitted_rows = (await db.execute(
         select(Submission.student_id, Submission.assignment_id)
-        .where(Submission.student_id.in_(student_ids))
+        .where(
+            Submission.student_id.in_(student_ids),
+            Submission.assignment_id.in_(all_assigned_aids),
+        )
     )).all()
     submitted_by_student: dict[uuid.UUID, set[uuid.UUID]] = {}
     for r in submitted_rows:
@@ -147,19 +169,27 @@ async def get_course_grades(
     return {"sections": sections_out, "students": students_out}
 
 
-@router.get("/courses/{course_id}/students/{student_id}/grades")
+@router.get("/courses/{course_id}/sections/{section_id}/students/{student_id}/grades")
 async def get_student_grades(
     course_id: uuid.UUID,
+    section_id: uuid.UUID,
     student_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Full published-grade record for one student in one course.
-    Drives the student detail page. class_avg is the mean of all
-    published final_scores across non-preview students in the same
-    section, over the same set of past-due HWs — apples-to-apples."""
+    """Full published-grade record for one student in one section.
+    section_id is in the path (not inferred) so dual-enrolled
+    students get the right view and the URL is bookmark-stable.
+
+    class_avg uses Submission.section_id (the section the submission
+    was made in) rather than current SectionEnrollment, so a student
+    who moved sections keeps their old-section grades attached to the
+    old section's class average — which is the historical truth."""
     await get_teacher_course(db, course_id, current_user.user_id)
 
+    # Verify section belongs to course AND student is enrolled in this
+    # specific section. Both in one query — a missing row (no match)
+    # means either: wrong course, wrong section, or student not enrolled.
     student_row = (await db.execute(
         select(
             User.id,
@@ -169,14 +199,20 @@ async def get_student_grades(
         )
         .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
         .join(Section, Section.id == SectionEnrollment.section_id)
-        .where(User.id == student_id, Section.course_id == course_id)
-        .limit(1)
+        .where(
+            User.id == student_id,
+            Section.id == section_id,
+            Section.course_id == course_id,
+        )
     )).first()
     if not student_row:
-        raise HTTPException(status_code=404, detail="Student not found in course")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not enrolled in this section",
+        )
 
     assigned_by_section = await _past_due_sections_by_assignment(db, course_id)
-    assigned_aids = assigned_by_section.get(student_row.section_id, set())
+    assigned_aids = assigned_by_section.get(section_id, set())
 
     if not assigned_aids:
         return {
@@ -235,7 +271,7 @@ async def get_student_grades(
             "graded_at": r.graded_at.isoformat() if r.graded_at else None,
             "final_score": round(r.final_score, 1),
             "teacher_notes": r.teacher_notes,
-            "section_id": str(student_row.section_id),
+            "section_id": str(section_id),
         })
     published_hws.sort(key=lambda h: h["due_at"] or "", reverse=True)
 
@@ -255,9 +291,8 @@ async def get_student_grades(
         select(func.avg(SubmissionGrade.final_score))
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
-        .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
         .where(
-            SectionEnrollment.section_id == student_row.section_id,
+            Submission.section_id == section_id,
             Submission.assignment_id.in_(assigned_aids),
             SubmissionGrade.grade_published_at.is_not(None),
             SubmissionGrade.final_score.is_not(None),
