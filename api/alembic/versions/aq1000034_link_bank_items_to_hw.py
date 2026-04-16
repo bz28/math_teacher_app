@@ -10,10 +10,13 @@ contract is enforced schema-side: `originating_assignment_id` is
 NOT NULL on both the item and the job row, with ON DELETE CASCADE
 so deleting a HW cleans up its problems.
 
-Prerequisite: legacy bank data must be wiped before running this
-migration. The schools platform is pre-launch, so a clean slate is
-expected. If any rows exist at migration time without an originating
-HW, the NOT NULL add will fail — intentional; operator wipes first.
+Legacy bank data is wiped as part of the migration. The schools
+platform is pre-launch, so a clean slate is expected and there is
+no real content worth preserving. FKs with ON DELETE CASCADE on
+bank_consumption and integrity_check_problems clean themselves up;
+assignments.content.problems[].bank_item_id is JSON and may dangle,
+which is acceptable for the throwaway dev/staging content being
+wiped here.
 """
 from collections.abc import Sequence
 
@@ -28,6 +31,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Pre-launch wipe so the NOT NULL add succeeds on envs that have
+    # existing rows (prod). No-op on envs already at a clean slate
+    # (CI, fresh local). See module docstring for the rationale.
+    op.execute("DELETE FROM question_bank_items")
+    op.execute("DELETE FROM question_bank_generation_jobs")
+
     op.add_column(
         "question_bank_items",
         sa.Column(

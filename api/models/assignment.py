@@ -44,6 +44,13 @@ class Assignment(Base):
     integrity_check_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true",
     )
+    # Per-HW toggle for the AI grading pipeline. When enabled, student
+    # submissions are auto-graded using the extraction + answer key +
+    # rubric. Independent from integrity_check_enabled — teacher can
+    # have AI grading without the integrity conversation and vice versa.
+    ai_grading_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true",
+    )
     # Teacher-authored grading rubric. Structured JSON so the AI grader
     # has typed signals and the review UI can render a clean sidebar.
     # Shape (all optional; UI decides which fields to collect):

@@ -433,6 +433,54 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# AI Grading — per-problem grade output from the text-only grading call
+# ---------------------------------------------------------------------------
+
+AI_GRADING_SCHEMA: ToolSchema = {
+    "name": "return_grades",
+    "description": "Return the per-problem grades for the student's submission.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "grades": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "problem_position": {
+                            "type": "integer",
+                            "description": "1-based position matching the problem order.",
+                        },
+                        "student_answer": {
+                            "type": "string",
+                            "description": "The student's final answer (LaTeX) as you understood it from the extraction.",
+                        },
+                        "score_status": {
+                            "type": "string",
+                            "enum": ["full", "partial", "zero"],
+                            "description": "full = 100%, partial = 1-99%, zero = 0%.",
+                        },
+                        "percent": {
+                            "type": "number",
+                            "description": "0-100. Forced to 100 for full, 0 for zero. Teacher-meaningful for partial.",
+                        },
+                        "reasoning": {
+                            "type": "string",
+                            "description": "1-2 sentence explanation of why this grade was given.",
+                        },
+                    },
+                    "required": ["problem_position", "student_answer", "score_status", "percent", "reasoning"],
+                    "additionalProperties": False,
+                },
+                "description": "One grade entry per problem, in problem order.",
+            },
+        },
+        "required": ["grades"],
+        "additionalProperties": False,
+    },
+}
+
 # Agent tool: submit a verdict for a single sampled problem. The
 # agent calls this as it moves through problems in the conversation.
 # Rejected by the server if zero student turns have been recorded
