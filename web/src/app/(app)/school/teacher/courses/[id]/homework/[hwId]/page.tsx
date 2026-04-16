@@ -729,12 +729,15 @@ export default function HomeworkDetailPage({
                 {/* Inline generating strip when we already have
                     problems but the teacher kicked off more */}
                 {activeGenerating && (
-                  <div className="mt-4 flex items-center gap-3 rounded-[--radius-md] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
-                    <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-60" />
-                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500" />
+                  <div className="mt-4 flex items-center gap-3 rounded-[--radius-md] border border-primary/30 bg-primary-bg/30 px-3 py-2 text-xs text-text-primary dark:border-primary/40 dark:bg-primary/10">
+                    <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
                     </span>
-                    <span>Generating more in the background — new ones land in the review queue when ready.</span>
+                    <span>
+                      <span className="font-semibold">Generating more…</span>{" "}
+                      <span className="text-text-secondary">new ones land in the review queue when ready.</span>
+                    </span>
                   </div>
                 )}
                 <div className="mt-4 space-y-2">
