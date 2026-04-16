@@ -166,14 +166,18 @@ async def test_update_assignment_rejects_variation_in_bank_item_ids(
     assert r.status_code == 400
 
 
-async def test_approve_attach_rejects_variation(
+async def test_approve_does_not_attach_variation_to_hw(
     client: AsyncClient,
     world: dict[str, Any],
 ) -> None:
-    """Entry point #3: POST /v1/teacher/question-bank/{id}/approve
-    with assignment_id. This is the workshop modal "→ Add to
-    Homework" path that triggered the original bug. Must 400 even
-    though it's the same endpoint primaries use."""
+    """Entry point #3: POST /v1/teacher/question-bank/{id}/approve.
+
+    Post-refactor (330b5b1), approve no longer takes an assignment_id
+    — it auto-attaches to the item's originating HW. Approving a
+    variation must succeed (status → approved) but the HW's content
+    must stay untouched. The guard is `parent_question_id is None`
+    inside approve_bank_item; this test locks it down.
+    """
     async with get_session_factory()() as s:
         course_id = (await s.execute(
             text("SELECT course_id FROM assignments WHERE id=:id"),
@@ -181,8 +185,8 @@ async def test_approve_attach_rejects_variation(
         )).scalar_one()
     await _link_teacher_to_course(world["teacher_id"], course_id)
 
-    # Unpublish the seeded HW so the approve+attach path is allowed
-    # at all (already-published HWs reject content edits).
+    # Unpublish so the auto-attach branch is actually reachable —
+    # published HWs skip attach for every item.
     async with get_session_factory()() as s:
         await s.execute(
             text("UPDATE assignments SET status='draft' WHERE id=:id"),
@@ -191,8 +195,8 @@ async def test_approve_attach_rejects_variation(
         await s.commit()
 
     sib = await _approved_variation(world)
-    # The variation is already approved in the world fixture; flip
-    # it back to pending so the approve endpoint runs the full path.
+    # Flip back to pending so the approve endpoint runs the full
+    # status transition (not a no-op).
     async with get_session_factory()() as s:
         await s.execute(
             text("UPDATE question_bank_items SET status='pending' WHERE id=:id"),
@@ -203,9 +207,21 @@ async def test_approve_attach_rejects_variation(
     r = await client.post(
         f"/v1/teacher/question-bank/{sib.id}/approve",
         headers={"Authorization": f"Bearer {world['teacher_token']}"},
-        json={"assignment_id": str(world["assignment_id"])},
     )
-    assert r.status_code == 400
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        sib_status = (await s.execute(
+            text("SELECT status FROM question_bank_items WHERE id=:id"),
+            {"id": sib.id},
+        )).scalar_one()
+        content = (await s.execute(
+            text("SELECT content FROM assignments WHERE id=:id"),
+            {"id": world["assignment_id"]},
+        )).scalar_one()
+    assert sib_status == "approved"
+    attached_ids = [p.get("bank_item_id") for p in (content or {}).get("problems") or []]
+    assert str(sib.id) not in attached_ids
 
 
 async def test_primaries_still_work(
