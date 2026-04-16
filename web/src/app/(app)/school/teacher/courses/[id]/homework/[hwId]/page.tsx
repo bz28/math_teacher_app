@@ -25,7 +25,6 @@ import {
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { SubmissionsPanel } from "@/components/school/teacher/_pieces/submissions-panel";
-import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
 
 interface AssignmentProblem {
@@ -111,16 +110,20 @@ export default function HomeworkDetailPage({
   const dueDateInputRef = useRef<HTMLInputElement>(null);
   const { busy, error, setError, run } = useAsyncAction();
 
-  // Resume-queue state: pending bank items whose unit overlaps this
-  // HW's unit_ids. Used to power the "N pending problems" banner and
-  // open the review workshop as a queue. We filter client-side by
-  // hw.unit_ids so multi-unit HWs get their full pool in one call.
+  // Resume-queue state: pending bank items for this HW. Powers the
+  // "N pending problems" banner + the "Resume queue ▸" CTA that
+  // navigates into the full-page approval queue.
   const [pending, setPending] = useState<BankItem[]>([]);
-  const [showReviewQueue, setShowReviewQueue] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
   // Polls bank jobs kicked off from the "Generate more" modal so the
   // pending-banner count updates live when generation completes.
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+  // True once the current polling cycle has observed a done job and
+  // auto-navigated to the review queue. Prevents re-navigation on
+  // subsequent renders while the "done" state lingers.
+  const [autoNavigated, setAutoNavigated] = useState(false);
+
+  const reviewHref = `/school/teacher/courses/${courseId}/homework/${assignmentId}/review`;
 
   // Per-field save state for the inline-edited config block.
   const [saveStates, setSaveStates] = useState<Record<ConfigField, SaveState>>({
@@ -155,6 +158,35 @@ export default function HomeworkDetailPage({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  // Pick up any gen job the wizard kicked off for this HW. The wizard
+  // stashes the job id in sessionStorage on "Create & generate"; we
+  // restore it here so the existing polling effect takes over and
+  // the auto-navigate-to-queue flow works end-to-end. One-shot —
+  // remove the key so a refresh doesn't replay a completed job.
+  useEffect(() => {
+    const key = `hw-gen-${assignmentId}`;
+    const jobId = sessionStorage.getItem(key);
+    if (!jobId) return;
+    sessionStorage.removeItem(key);
+    teacher
+      .bankJob(courseId, jobId)
+      .then(async (job) => {
+        setActiveJob(job);
+        // If the job already finished before we got here (fast gens,
+        // or the teacher was slow to land on the detail page), the
+        // polling effect won't fire. We refetch pending here so the
+        // auto-navigate effect sees the items and pushes the teacher
+        // to /review automatically.
+        if (job.status === "done") {
+          await reloadPending();
+        }
+      })
+      .catch(() => {
+        // If the job lookup fails, fall back to the manual-banner UX.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId, courseId]);
 
   // Fetch pending bank items for THIS HW specifically. The backend
   // filter on originating_assignment_id keeps the pool scoped so two
@@ -201,6 +233,29 @@ export default function HomeworkDetailPage({
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob, courseId]);
+
+  // Auto-navigate to the review queue when a generation job just
+  // completed. Gate with `autoNavigated` so we fire once per job —
+  // don't want to yank the teacher back after they clicked "← Back
+  // to homework" from the queue. Only trigger if there are actually
+  // pending items to review (avoids jumping to an empty queue when
+  // generation produced zero usable problems).
+  useEffect(() => {
+    if (autoNavigated) return;
+    if (activeJob?.status !== "done") return;
+    if (pending.length === 0) return;
+    setAutoNavigated(true);
+    router.push(reviewHref);
+  }, [activeJob, pending.length, autoNavigated, router, reviewHref]);
+
+  // Reset the auto-nav latch whenever a fresh job starts so the next
+  // completion can fire. A new job always has status=queued or
+  // running initially.
+  useEffect(() => {
+    if (activeJob && activeJob.status !== "done" && activeJob.status !== "failed") {
+      setAutoNavigated(false);
+    }
+  }, [activeJob]);
 
   const problems: AssignmentProblem[] =
     hw?.content && typeof hw.content === "object" && "problems" in hw.content
@@ -413,20 +468,6 @@ export default function HomeworkDetailPage({
         onClose={() => setShowingSubmissions(false)}
       />
     )}
-    {showReviewQueue && pending.length > 0 && (
-      <WorkshopModal
-        queue={pending}
-        onClose={() => {
-          setShowReviewQueue(false);
-          // Some items may have been approved or rejected — refresh.
-          void reloadPending();
-          void reload();
-        }}
-        onChanged={() => void reloadPending()}
-        onJobStarted={(job) => setActiveJob(job)}
-        activeJob={activeJob}
-      />
-    )}
     {showGenerate && (
       <GenerateQuestionsModal
         courseId={courseId}
@@ -566,16 +607,15 @@ export default function HomeworkDetailPage({
                     <span className="font-bold">🔔 {pending.length}</span>{" "}
                     {pending.length === 1 ? "problem" : "problems"} pending review
                     <span className="ml-1 text-amber-800/70 dark:text-amber-300/70">
-                      · approve or reject to add them to this homework
+                      · approve to add them to this homework, reject to drop them
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowReviewQueue(true)}
+                  <Link
+                    href={reviewHref}
                     className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700"
                   >
                     Resume queue ▸
-                  </button>
+                  </Link>
                 </div>
               )}
 

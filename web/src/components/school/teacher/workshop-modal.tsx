@@ -57,6 +57,7 @@ export function WorkshopModal({
   onReviewVariations,
   parentTitle,
   onJumpToParent,
+  renderAsPage = false,
 }: {
   item?: BankItem;
   queue?: BankItem[];
@@ -79,6 +80,11 @@ export function WorkshopModal({
   // Click handler for the parent title link. When present, shown as a
   // clickable link; teacher clicks → parent swaps in.
   onJumpToParent?: () => void;
+  // When true, renders inline (no fixed overlay, no backdrop, no
+  // click-outside-to-close). Used by the full-page review route
+  // (`/courses/[id]/homework/[hwId]/review`) so teachers get the same
+  // rich edit+chat UX on a dedicated page instead of inside a modal.
+  renderAsPage?: boolean;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -566,7 +572,14 @@ export function WorkshopModal({
 
   // ── Render: completion ──────────────────────────────────────────
   if (allResolved) {
-    return <CompletionModal counts={counts} total={total} onClose={onClose} />;
+    return (
+      <CompletionModal
+        counts={counts}
+        total={total}
+        onClose={onClose}
+        renderAsPage={renderAsPage}
+      />
+    );
   }
   if (!liveItem) return null;
 
@@ -594,16 +607,33 @@ export function WorkshopModal({
   const resolvedCount = Object.keys(resolved).length;
   const progressPct = isQueueMode ? (resolvedCount / total) * 100 : 0;
 
+  // Outer chrome differs between modal (fixed overlay, backdrop
+  // click-to-close) and page-level (plain container, no backdrop)
+  // rendering. Inner card keeps the same shape either way.
+  const OuterShell = renderAsPage
+    ? ({ children }: { children: React.ReactNode }) => (
+        <div className="mx-auto max-w-6xl px-4 pb-10">{children}</div>
+      )
+    : ({ children }: { children: React.ReactNode }) => (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+        >
+          {children}
+        </div>
+      );
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
+    <OuterShell>
       <div
-        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        className={
+          renderAsPage
+            ? "flex w-full flex-col overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-sm"
+            : "flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
+        }
+        onClick={renderAsPage ? undefined : (e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
@@ -1057,7 +1087,7 @@ export function WorkshopModal({
           }}
         />
       )}
-    </div>
+    </OuterShell>
   );
 }
 
@@ -1702,40 +1732,56 @@ function CompletionModal({
   counts,
   total,
   onClose,
+  renderAsPage = false,
 }: {
   counts: { approved: number; rejected: number; skipped: number };
   total: number;
   onClose: () => void;
+  renderAsPage?: boolean;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="text-5xl">🎉</div>
-        <h2 className="mt-3 text-lg font-bold text-text-primary">All caught up</h2>
-        <p className="mt-1 text-sm text-text-muted">
-          You reviewed {total} question{total === 1 ? "" : "s"}
-        </p>
-        <div className="mt-4 flex justify-center gap-4 text-sm">
-          <span className="font-semibold text-green-700 dark:text-green-400">
-            ✓ {counts.approved} approved
-          </span>
-          <span className="font-semibold text-red-700 dark:text-red-400">
-            ✕ {counts.rejected} rejected
-          </span>
-          {counts.skipped > 0 && (
-            <span className="font-semibold text-text-muted">⏭ {counts.skipped} skipped</span>
-          )}
-        </div>
-        <button
-          onClick={onClose}
-          className="mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
-        >
-          Done
-        </button>
+  const card = (
+    <div
+      className={
+        renderAsPage
+          ? "w-full rounded-[--radius-xl] border border-green-200 bg-green-50 p-10 text-center shadow-sm dark:border-green-500/30 dark:bg-green-500/10"
+          : "w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
+      }
+      onClick={renderAsPage ? undefined : (e) => e.stopPropagation()}
+    >
+      <div className="text-5xl">🎉</div>
+      <h2 className="mt-3 text-lg font-bold text-text-primary">All caught up</h2>
+      <p className="mt-1 text-sm text-text-muted">
+        You reviewed {total} question{total === 1 ? "" : "s"}
+      </p>
+      <div className="mt-4 flex justify-center gap-4 text-sm">
+        <span className="font-semibold text-green-700 dark:text-green-400">
+          ✓ {counts.approved} approved
+        </span>
+        <span className="font-semibold text-red-700 dark:text-red-400">
+          ✕ {counts.rejected} rejected
+        </span>
+        {counts.skipped > 0 && (
+          <span className="font-semibold text-text-muted">⏭ {counts.skipped} skipped</span>
+        )}
       </div>
+      <button
+        onClick={onClose}
+        className="mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
+      >
+        {renderAsPage ? "Back to homework" : "Done"}
+      </button>
+    </div>
+  );
+
+  if (renderAsPage) {
+    return <div className="mx-auto max-w-2xl px-4 pb-10 pt-8">{card}</div>;
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      {card}
     </div>
   );
 }
