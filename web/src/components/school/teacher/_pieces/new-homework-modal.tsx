@@ -416,12 +416,34 @@ function Step2({
   onToggleDoc: (id: string) => void;
   disabled: boolean;
 }) {
-  // The backend caps at 50, and very large batches rarely produce
-  // review-worthy questions. Clamp locally so the teacher gets a
-  // helpful error instead of a server-side 422.
-  const handleCount = (v: number) => {
-    if (Number.isNaN(v)) return;
-    onCountChange(Math.min(50, Math.max(1, Math.round(v))));
+  // Local draft for the count input so the teacher can transiently
+  // clear the field (e.g. to delete "5" and type "12") without the
+  // controlled `value={count}` snapping back to 5 mid-edit. We commit
+  // to the parent whenever the draft parses to a valid number, and
+  // fall back to the last committed count on blur if the field is
+  // left empty.
+  const [countDraft, setCountDraft] = useState(String(count));
+  useEffect(() => {
+    setCountDraft(String(count));
+  }, [count]);
+
+  const clamp = (v: number) => Math.min(50, Math.max(1, Math.round(v)));
+
+  const handleCountChange = (raw: string) => {
+    setCountDraft(raw);
+    const v = parseInt(raw, 10);
+    if (!Number.isNaN(v)) {
+      onCountChange(clamp(v));
+    }
+  };
+
+  const handleCountBlur = () => {
+    const v = parseInt(countDraft, 10);
+    if (Number.isNaN(v)) {
+      setCountDraft(String(count));
+    } else {
+      setCountDraft(String(clamp(v)));
+    }
   };
 
   return (
@@ -453,10 +475,11 @@ function Step2({
           ))}
           <input
             type="number"
-            value={count}
+            value={countDraft}
             min={1}
             max={50}
-            onChange={(e) => handleCount(parseInt(e.target.value, 10))}
+            onChange={(e) => handleCountChange(e.target.value)}
+            onBlur={handleCountBlur}
             disabled={disabled}
             className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
           />
