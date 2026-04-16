@@ -293,6 +293,12 @@ export function WorkshopModal({
       replaceLiveItem(updated);
     });
 
+  // Chat is decoupled from the parent's useAsyncAction `run()`.
+  // Using run() sets setBusy(true) on the parent, triggering a
+  // WorkshopModal re-render that races with ChatPanel's local
+  // optimistic-message render and can swallow it. Instead, chat
+  // manages its own loading via `sendingChat` (= optimistic !== null)
+  // inside ChatPanel.
   const sendChat = async (message: string): Promise<boolean> => {
     if (!liveItem) return false;
     if (liveItem.locked) {
@@ -300,13 +306,14 @@ export function WorkshopModal({
       return false;
     }
     setError(null);
-    let ok = false;
-    await run(async () => {
+    try {
       const next = await teacher.sendBankChat(liveItem.id, message);
       replaceLiveItem(next);
-      ok = true;
-    }, "Chat failed");
-    return ok;
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chat failed");
+      return false;
+    }
   };
 
   const acceptProposal = () =>
@@ -1206,14 +1213,12 @@ function ChatPanel({
 
   const submit = async () => {
     const text = draft.trim();
-    if (!text || busy) return;
+    if (!text || busy || sendingChat) return;
     setOptimistic({ text, ts: new Date().toISOString() });
     setDraft("");
     const ok = await onSend(text);
     setOptimistic(null);
     if (!ok) {
-      // Failure: restore the draft so the teacher can retry without
-      // retyping. The error toast is surfaced by useAsyncAction.
       setDraft(text);
     }
   };
@@ -1325,7 +1330,7 @@ function ChatPanel({
               : "Ask for changes or just chat about this question…"
           }
           className="w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-          disabled={busy || isProposalPending}
+          disabled={busy || sendingChat || isProposalPending}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -1337,14 +1342,14 @@ function ChatPanel({
           <button
             type="button"
             onClick={onStartClear}
-            disabled={busy || isProposalPending || messages.length === 0 || confirmingClearChat}
+            disabled={busy || sendingChat || isProposalPending || messages.length === 0 || confirmingClearChat}
             className="text-[11px] font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
           >
             Clear chat
           </button>
           <button
             type="submit"
-            disabled={busy || isProposalPending || !draft.trim()}
+            disabled={busy || sendingChat || isProposalPending || !draft.trim()}
             className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             Send

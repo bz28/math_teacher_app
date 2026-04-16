@@ -1061,8 +1061,10 @@ async def publish_grades(
     grades = (await db.execute(
         select(SubmissionGrade)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id == a.id,
+            User.is_preview.is_(False),
             SubmissionGrade.final_score.is_not(None),
             SubmissionGrade.grade_published_at.is_(None),
         )

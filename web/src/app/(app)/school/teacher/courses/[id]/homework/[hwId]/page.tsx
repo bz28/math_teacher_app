@@ -1378,19 +1378,21 @@ function RubricField({
   value: string | undefined;
   onCommit: (next: string) => void;
 }) {
-  // Local state for in-progress typing; commit on blur so we don't
-  // round-trip the API on every keystroke.
-  const [draft, setDraft] = useState(value ?? "");
-  // Keep local state in sync when the server-side value changes (e.g.
-  // another tab saved, or the HW reloaded). Guard against clobbering
-  // active typing via a ref to the last committed value.
-  const lastCommittedRef = useRef(value ?? "");
-  useEffect(() => {
-    if (value !== lastCommittedRef.current) {
-      lastCommittedRef.current = value ?? "";
-      setDraft(value ?? "");
-    }
-  }, [value]);
+  // Null-sentinel edit buffer: null means "show the external prop";
+  // a string means "user is actively typing." On blur we parse, fire
+  // onCommit if different, then null the buffer so subsequent external
+  // updates (another tab, reload) flow through automatically. This
+  // avoids the setState-in-effect sync pattern.
+  const [editBuffer, setEditBuffer] = useState<string | null>(null);
+  const external = value ?? "";
+  const draft = editBuffer ?? external;
+
+  const handleBlur = () => {
+    if (editBuffer === null) return; // user didn't touch it
+    const committed = editBuffer;
+    setEditBuffer(null);
+    if (committed !== external) onCommit(committed);
+  };
 
   return (
     <div>
@@ -1402,13 +1404,8 @@ function RubricField({
       </div>
       <textarea
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          if (draft !== lastCommittedRef.current) {
-            lastCommittedRef.current = draft;
-            onCommit(draft);
-          }
-        }}
+        onChange={(e) => setEditBuffer(e.target.value)}
+        onBlur={handleBlur}
         placeholder={placeholder}
         rows={2}
         className="mt-1.5 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
