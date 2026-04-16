@@ -99,13 +99,22 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
 
     try:
         async with get_session_factory()() as db:
-            # ── Shared extraction (1 Vision call) ────────────────
+            # ── Load submission + assignment toggles ─────────────
             sub = (await db.execute(
                 select(Submission).where(Submission.id == submission_id)
             )).scalar_one_or_none()
             if not sub:
                 return
+            assignment = (await db.execute(
+                select(Assignment).where(Assignment.id == sub.assignment_id)
+            )).scalar_one_or_none()
+            if not assignment:
+                return
             user_id = str(sub.student_id)
+            run_integrity = assignment.integrity_check_enabled
+            run_grading = assignment.ai_grading_enabled
+
+            # ── Shared extraction (1 Vision call) ────────────────
             try:
                 extraction = await extract_student_work(
                     submission_id, db, user_id=user_id,
@@ -117,27 +126,29 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                 return
 
             # ── Integrity check (uses shared extraction) ─────────
-            try:
-                await start_integrity_check(
-                    submission_id, db, extraction=extraction,
-                )
-                await db.commit()
-            except Exception:
-                logger.exception(
-                    "integrity pipeline failed for submission %s; "
-                    "submission still saved",
-                    submission_id,
-                )
-                await db.rollback()
+            if run_integrity:
+                try:
+                    await start_integrity_check(
+                        submission_id, db, extraction=extraction,
+                    )
+                    await db.commit()
+                except Exception:
+                    logger.exception(
+                        "integrity pipeline failed for submission %s; "
+                        "submission still saved",
+                        submission_id,
+                    )
+                    await db.rollback()
 
             # ── AI grading (uses same extraction) ────────────────
-            try:
-                await run_ai_grading_for_submission(
-                    submission_id, extraction, db, user_id=user_id,
-                )
-                await db.commit()
-            except Exception:
-                logger.exception(
+            if run_grading:
+                try:
+                    await run_ai_grading_for_submission(
+                        submission_id, extraction, db, user_id=user_id,
+                    )
+                    await db.commit()
+                except Exception:
+                    logger.exception(
                     "ai grading failed for submission %s; "
                     "teacher can grade manually",
                     submission_id,
@@ -584,15 +595,15 @@ async def submit_homework(
     )
     submission_id_for_task = submission.id
 
-    # Spawn the integrity pipeline as a background task so the kid's
-    # submit returns immediately. The pipeline does real Vision +
-    # Sonnet calls that take 20–60s — running inline times out the
-    # HTTP response on Railway. The submission is already committed
-    # above; a pipeline failure can never affect it.
-    #
-    # The frontend polls GET /integrity/submissions/{id} for the
-    # "pending" → "in_progress" transition while this runs.
-    if assignment.integrity_check_enabled:
+    # Spawn the extraction → integrity + grading pipeline as a
+    # background task so the student's submit returns immediately.
+    # The pipeline does Vision + Sonnet calls that take 20–60s —
+    # running inline times out the HTTP response on Railway. The
+    # submission is already committed; a pipeline failure can never
+    # affect it. Runs if EITHER integrity or grading is enabled
+    # (extraction is shared; each downstream phase checks its own
+    # toggle internally).
+    if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
         task = asyncio.create_task(
             _run_submission_pipeline_background(submission_id_for_task),
         )
