@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import Integer, case, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
@@ -226,14 +227,18 @@ async def bulk_assignment_stats(
     )).all()
     submitted = {r.assignment_id: r.c for r in submitted_rows}
 
-    # 3. Reviewed counts per assignment (graded + teacher-reviewed).
+    # 3. Graded counts per assignment — a final_score on the grade row
+    # is the direct signal that grading happened. We used to proxy this
+    # via Submission.status == "teacher_reviewed", but status now
+    # tracks only the upload lifecycle; final_score is the honest
+    # grading signal (written by teacher today, by AI in a future PR).
     graded_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id.in_(assignment_ids),
-            Submission.status == "teacher_reviewed",
+            SubmissionGrade.final_score.is_not(None),
             User.is_preview.is_(False),
         )
         .group_by(Submission.assignment_id)
@@ -635,9 +640,33 @@ async def assign_to_sections(
 
 # ── Submission + Grading endpoints ──
 
+# Grade statuses a teacher can assign to one problem. Drive the per-
+# problem pills in the grading UI. Partial requires an explicit
+# percent; full/zero are auto-normalized server-side.
+GRADE_STATUSES = ("full", "partial", "zero")
+
+
+class BreakdownEntry(BaseModel):
+    problem_id: str  # bank item id
+    score_status: str  # full | partial | zero
+    percent: float | None = None  # 0..100. Auto for full/zero; required for partial.
+    feedback: str | None = None
+
+    @field_validator("score_status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        if v not in GRADE_STATUSES:
+            raise ValueError(f"score_status must be one of {GRADE_STATUSES}")
+        return v
+
+
 class GradeRequest(BaseModel):
-    action: str  # "approve" | "override"
-    teacher_score: float | None = None
+    # Full replacement of the per-problem breakdown. None = leave
+    # unchanged; empty list = clear. Normalization rules:
+    #   full  -> percent forced to 100
+    #   zero  -> percent forced to 0
+    #   partial -> percent must be provided and in (0, 100)
+    breakdown: list[BreakdownEntry] | None = None
     teacher_notes: str | None = None
 
 
@@ -727,6 +756,11 @@ async def list_submissions(
             "teacher_score": grade.teacher_score if grade else None,
             "teacher_notes": grade.teacher_notes if grade else None,
             "final_score": grade.final_score if grade else None,
+            "breakdown": grade.breakdown if grade else None,
+            "grade_published_at": (
+                grade.grade_published_at.isoformat()
+                if grade and grade.grade_published_at else None
+            ),
             "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
             "integrity_overview": integrity_overview,
         })
@@ -734,13 +768,38 @@ async def list_submissions(
     return {"submissions": submissions}
 
 
+def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
+    """Coerce full/zero percents and validate partial has an explicit
+    percent. De-dupe by problem_id (last write wins) so a client
+    retry with a replaced entry doesn't create phantom duplicates."""
+    seen: dict[str, dict[str, Any]] = {}
+    for e in entries:
+        if e.score_status == "full":
+            percent = 100.0
+        elif e.score_status == "zero":
+            percent = 0.0
+        else:  # partial
+            if e.percent is None or not (0 < e.percent < 100):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Partial credit requires a percent strictly between 0 and 100",
+                )
+            percent = float(e.percent)
+        seen[e.problem_id] = {
+            "problem_id": e.problem_id,
+            "score_status": e.score_status,
+            "percent": percent,
+            "feedback": e.feedback,
+        }
+    return list(seen.values())
+
+
 @router.patch("/submissions/{submission_id}/grade")
 async def grade_submission(
     submission_id: uuid.UUID, body: GradeRequest,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-    # Verify teacher owns the assignment
+) -> dict[str, Any]:
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -749,42 +808,96 @@ async def grade_submission(
 
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
-    # Get or create grade record
+    # Race-safe upsert: two concurrent grade requests (same teacher in
+    # two tabs) used to 500 on the UNIQUE(submission_id) constraint
+    # with a SELECT-then-INSERT pattern. ON CONFLICT DO NOTHING makes
+    # it atomic — whichever tx gets there first inserts, the other
+    # no-ops; both then SELECT the now-guaranteed row.
+    await db.execute(
+        pg_insert(SubmissionGrade)
+        .values(submission_id=sub.id)
+        .on_conflict_do_nothing(index_elements=["submission_id"])
+    )
     grade = (await db.execute(
         select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
-    )).scalar_one_or_none()
-    if not grade:
-        grade = SubmissionGrade(submission_id=sub.id)
-        db.add(grade)
+    )).scalar_one()
 
     now = datetime.now(UTC)
+    touched = False
 
-    if body.action == "approve":
-        if grade.ai_score is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot approve: no AI score exists yet",
-            )
-        grade.final_score = grade.ai_score
-        grade.reviewed_by = current_user.user_id
-        grade.reviewed_at = now
-        sub.status = "teacher_reviewed"
-    elif body.action == "override":
-        if body.teacher_score is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="teacher_score required for override")
-        grade.teacher_score = body.teacher_score
-        grade.final_score = body.teacher_score
-        grade.reviewed_by = current_user.user_id
-        grade.reviewed_at = now
-        sub.status = "teacher_reviewed"
-    else:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action must be 'approve' or 'override'")
+    if body.breakdown is not None:
+        normalized = _normalize_breakdown(body.breakdown)
+        grade.breakdown = normalized
+        if normalized:
+            grade.final_score = sum(e["percent"] for e in normalized) / len(normalized)
+            grade.graded_at = now
+            grade.reviewed_by = current_user.user_id
+            grade.reviewed_at = now
+        else:
+            # Un-grade: clear every grade-state field so the row
+            # honestly reflects "not graded." teacher_notes and
+            # grade_published_at are deliberately preserved — notes
+            # are independent of the score, and a retracted-after-
+            # publish state is a UX concern for the frontend to flag.
+            grade.final_score = None
+            grade.graded_at = None
+            grade.reviewed_by = None
+            grade.reviewed_at = None
+        touched = True
 
     if body.teacher_notes is not None:
         grade.teacher_notes = body.teacher_notes
+        touched = True
+
+    if not touched:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No grade fields provided",
+        )
 
     await db.commit()
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "final_score": grade.final_score,
+        "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
+    }
+
+
+@router.post("/assignments/{assignment_id}/publish-grades")
+async def publish_grades(
+    assignment_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Publish all graded submissions on this HW to students at once.
+    Idempotent — already-published grades are left alone; ungraded
+    submissions are skipped (teacher can grade + republish later)."""
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    # Grades are only visible to students once the HW itself is
+    # published. Publishing grades on a draft HW would orphan them
+    # (student has no view of the HW to show the grade on), so reject.
+    if a.status != "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot publish grades on a draft homework",
+        )
+
+    grades = (await db.execute(
+        select(SubmissionGrade)
+        .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .where(
+            Submission.assignment_id == a.id,
+            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.grade_published_at.is_(None),
+        )
+    )).scalars().all()
+
+    now = datetime.now(UTC)
+    for g in grades:
+        g.grade_published_at = now
+
+    await db.commit()
+    return {"status": "ok", "published_count": len(grades)}
 
 
 # ── AI Generation endpoints ──
@@ -875,6 +988,14 @@ class TeacherSubmissionDetail(BaseModel):
     is_late: bool
     image_data: str | None
     problems: list[TeacherSubmissionDetailProblem]
+    # Current grading state. None when the teacher hasn't touched this
+    # submission yet. `breakdown` + `final_score` are teacher-draft
+    # until `grade_published_at` is set, at which point the student
+    # sees them.
+    breakdown: list[dict[str, Any]] | None
+    final_score: float | None
+    teacher_notes: str | None
+    grade_published_at: datetime | None
 
 
 @router.get("/submissions/{submission_id}")
@@ -928,6 +1049,10 @@ async def get_submission_detail(
             student_answer=answers_map.get(str(pid)),
         ))
 
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+
     return TeacherSubmissionDetail(
         submission_id=str(sub.id),
         assignment_id=str(assignment.id),
@@ -939,6 +1064,10 @@ async def get_submission_detail(
         is_late=sub.is_late,
         image_data=sub.image_data,
         problems=problems,
+        breakdown=grade.breakdown if grade else None,
+        final_score=grade.final_score if grade else None,
+        teacher_notes=grade.teacher_notes if grade else None,
+        grade_published_at=grade.grade_published_at if grade else None,
     )
 
 
