@@ -910,8 +910,18 @@ export const teacher = {
       `/teacher/courses/${courseId}/submissions-inbox`,
     );
   },
-  gradeSubmission(submissionId: string, data: { action: string; teacher_score?: number; teacher_notes?: string }) {
-    return apiFetch<{ status: string }>(`/teacher/submissions/${submissionId}/grade`, {
+  /** Replace the per-problem breakdown (and/or teacher notes) for a
+   *  submission. Full replacement semantics — send every entry on
+   *  each call. Returns the recomputed overall `final_score`. */
+  gradeSubmission(
+    submissionId: string,
+    data: { breakdown?: GradeBreakdownEntry[]; teacher_notes?: string },
+  ) {
+    return apiFetch<{
+      status: string;
+      final_score: number | null;
+      grade_published_at: string | null;
+    }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
