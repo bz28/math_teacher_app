@@ -44,10 +44,14 @@ export function NewHomeworkModal({
    *  HW list). Teacher can change the selection. */
   defaultUnitIds?: string[];
   onClose: () => void;
-  /** Fired with the newly-created HW id after a successful create (+
-   *  optional gen kickoff). Parent is expected to navigate into the
-   *  HW detail page. */
-  onCreated: (newAssignmentId: string) => void;
+  /** Fired with the newly-created HW id after a successful create.
+   *  `startedGeneration` lets the parent route "Create & generate"
+   *  straight to the review queue (its skeleton state handles the
+   *  wait) and "Skip for now" to the HW detail page. */
+  onCreated: (
+    newAssignmentId: string,
+    opts: { startedGeneration: boolean },
+  ) => void;
 }) {
   const [step, setStep] = useState<Step>(1);
   const { busy, error, setError, run } = useAsyncAction();
@@ -119,35 +123,32 @@ export function NewHomeworkModal({
   const onSkip = () =>
     run(async () => {
       const id = await createDraft();
-      onCreated(id);
+      onCreated(id, { startedGeneration: false });
     });
 
   const onCreateAndGenerate = () =>
     run(async () => {
       const id = await createDraft();
       // Fire-and-forget: the job runs server-side regardless of the
-      // client. The resume-queue banner on the HW detail page surfaces
-      // pending questions back to the teacher.
+      // client. The teacher routes straight to the review queue —
+      // its skeleton state covers the wait, and items appear as soon
+      // as they land.
+      let startedGeneration = true;
       try {
-        const job = await teacher.generateBank(courseId, {
+        await teacher.generateBank(courseId, {
           count,
           assignment_id: id,
           unit_id: unitIds[0],
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
-        // One-shot handoff so the HW detail page can pick up the job
-        // and poll it. Without this, the detail page has no idea
-        // generation is in flight and can't auto-open the review
-        // queue when it completes. Keyed by HW id so two concurrent
-        // creates don't clobber each other.
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
       } catch {
-        // Swallow — the HW itself was created; a failed gen kickoff
-        // shouldn't block the teacher from landing on the detail page.
-        // They can retry from the HW page via "Generate more".
+        // If the kickoff failed, route the teacher to the HW detail
+        // page where they can retry via "Generate more" — otherwise
+        // they'd stare at an empty review queue that never fills.
+        startedGeneration = false;
       }
-      onCreated(id);
+      onCreated(id, { startedGeneration });
     });
 
   return (
