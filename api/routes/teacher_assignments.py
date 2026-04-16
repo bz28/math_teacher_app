@@ -701,6 +701,149 @@ class GradeRequest(BaseModel):
     teacher_notes: str | None = None
 
 
+@router.get("/courses/{course_id}/submissions-inbox")
+async def submissions_inbox(
+    course_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Per-(HW × section) aggregates for the Submissions tab inbox.
+
+    Only published homework is included — drafts have no student
+    submissions and clutter the feed. Preview students are excluded
+    from every count so teachers don't see their "View as student"
+    scaffolding.
+
+    Row shape:
+      { assignment_id, assignment_title, section_id, section_name,
+        due_at, total_students, submitted, flagged, to_grade, published }
+
+    Sort + client-side: the frontend orders by urgency or due date and
+    renders pills per count.
+    """
+    await get_teacher_course(db, course_id, current_user.user_id)
+
+    # 1. Every (published HW × section) pair owned by this teacher.
+    pairs = (await db.execute(
+        select(
+            Assignment.id,
+            Assignment.title,
+            Assignment.due_at,
+            Section.id,
+            Section.name,
+        )
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .join(Section, Section.id == AssignmentSection.section_id)
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.teacher_id == current_user.user_id,
+            Assignment.type == "homework",
+            Assignment.status == "published",
+        )
+        .order_by(Assignment.due_at.asc().nullslast(), Assignment.created_at.desc())
+    )).all()
+    if not pairs:
+        return {"rows": []}
+
+    assignment_ids = {p[0] for p in pairs}
+    section_ids = {p[3] for p in pairs}
+
+    # 2. Roster size per section (distinct, non-preview students).
+    roster_rows = (await db.execute(
+        select(
+            SectionEnrollment.section_id,
+            func.count(SectionEnrollment.student_id.distinct()).label("c"),
+        )
+        .join(User, User.id == SectionEnrollment.student_id)
+        .where(
+            SectionEnrollment.section_id.in_(section_ids),
+            User.is_preview.is_(False),
+        )
+        .group_by(SectionEnrollment.section_id)
+    )).all()
+    roster: dict[uuid.UUID, int] = {r.section_id: r.c for r in roster_rows}
+
+    # 3. Per-pair aggregates over submissions + their grade / integrity.
+    # One grouped query does the whole sweep.
+    submitted_expr = func.count(Submission.id.distinct()).label("submitted")
+    to_grade_expr = func.sum(
+        case(
+            (
+                (SubmissionGrade.final_score.is_not(None))
+                & (SubmissionGrade.grade_published_at.is_(None)),
+                1,
+            ),
+            else_=0,
+        ),
+    ).cast(Integer).label("to_grade")
+    published_expr = func.sum(
+        case(
+            (SubmissionGrade.grade_published_at.is_not(None), 1),
+            else_=0,
+        ),
+    ).cast(Integer).label("published")
+    flagged_expr = func.sum(
+        case(
+            (
+                IntegrityCheckSubmission.overall_badge.in_(
+                    ("uncertain", "unlikely", "unreadable"),
+                ),
+                1,
+            ),
+            else_=0,
+        ),
+    ).cast(Integer).label("flagged")
+
+    agg_rows = (await db.execute(
+        select(
+            Submission.assignment_id,
+            Submission.section_id,
+            submitted_expr,
+            to_grade_expr,
+            published_expr,
+            flagged_expr,
+        )
+        .select_from(Submission)
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(
+            IntegrityCheckSubmission,
+            IntegrityCheckSubmission.submission_id == Submission.id,
+        )
+        .join(User, User.id == Submission.student_id)
+        .where(
+            Submission.assignment_id.in_(assignment_ids),
+            User.is_preview.is_(False),
+        )
+        .group_by(Submission.assignment_id, Submission.section_id)
+    )).all()
+    agg: dict[tuple[uuid.UUID, uuid.UUID], dict[str, int]] = {
+        (r.assignment_id, r.section_id): {
+            "submitted": int(r.submitted or 0),
+            "to_grade": int(r.to_grade or 0),
+            "published": int(r.published or 0),
+            "flagged": int(r.flagged or 0),
+        }
+        for r in agg_rows
+    }
+
+    rows: list[dict[str, Any]] = []
+    for aid, title, due_at, sid, sname in pairs:
+        counts = agg.get((aid, sid), {})
+        rows.append({
+            "assignment_id": str(aid),
+            "assignment_title": title,
+            "section_id": str(sid),
+            "section_name": sname,
+            "due_at": due_at.isoformat() if due_at else None,
+            "total_students": roster.get(sid, 0),
+            "submitted": counts.get("submitted", 0),
+            "flagged": counts.get("flagged", 0),
+            "to_grade": counts.get("to_grade", 0),
+            "published": counts.get("published", 0),
+        })
+    return {"rows": rows}
+
+
 @router.get("/assignments/{assignment_id}/submissions")
 async def list_submissions(
     assignment_id: uuid.UUID,
