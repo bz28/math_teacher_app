@@ -693,6 +693,23 @@ export interface TeacherAssignment {
   created_at: string;
 }
 
+/** Structured grading rubric. All fields optional — teachers fill in
+ *  what makes sense for the HW. Consumed by the AI grader in a follow-
+ *  up PR; in v1 it's a reference panel during manual grading. */
+export type GradingMode =
+  | "answer_only"
+  | "answer_and_work"
+  | "method_focused"
+  | "custom";
+
+export interface TeacherRubric {
+  grading_mode?: GradingMode;
+  full_credit?: string;
+  partial_credit?: string;
+  common_mistakes?: string;
+  notes?: string;
+}
+
 export interface TeacherSubmission {
   id: string;
   student_name: string;
@@ -829,7 +846,11 @@ export const teacher = {
     return apiFetch<{ assignments: TeacherAssignment[] }>("/teacher/assignments");
   },
   assignment(assignmentId: string) {
-    return apiFetch<TeacherAssignment & { content: unknown; answer_key: unknown }>(`/teacher/assignments/${assignmentId}`);
+    return apiFetch<TeacherAssignment & {
+      content: unknown;
+      answer_key: unknown;
+      rubric: TeacherRubric | null;
+    }>(`/teacher/assignments/${assignmentId}`);
   },
   createAssignment(courseId: string, data: {
     title: string; type: string; source_type?: string; due_at?: string;
