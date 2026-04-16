@@ -957,6 +957,20 @@ function ProblemGradeRow({
     onChange("partial", safe);
   };
 
+  // The teacher has overridden the AI when a grade exists and doesn't
+  // match the AI's pick. Surface this as a "⟲ AI had suggested X"
+  // breadcrumb with one-click undo — the AI's call is preserved, not
+  // thrown away.
+  const teacherOverrode =
+    aiGrade !== null && current !== null && !isAiMatch;
+  const aiGradeLabel = aiGrade
+    ? aiGrade.score_status === "partial"
+      ? `Partial ${Math.round(aiGrade.percent)}%`
+      : aiGrade.score_status === "full"
+        ? "Full"
+        : "Zero"
+    : null;
+
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-bg-base/40 p-4">
       <div className="flex items-baseline gap-2">
@@ -991,15 +1005,40 @@ function ProblemGradeRow({
           </div>
         </div>
       </div>
+
+      {/* AI grading hero — the AI's call is visible before the grade
+          buttons, with reasoning inline instead of buried below. When
+          no AI grade is present (pipeline failed / disabled), this
+          block simply doesn't render. */}
+      {aiGrade && aiGradeLabel && (
+        <div className="mt-3 rounded-[--radius-md] border border-indigo-200 bg-indigo-50 px-3 py-2 dark:border-indigo-900/40 dark:bg-indigo-900/20">
+          <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+            <span className="mr-1" aria-hidden>🤖</span>
+            AI&apos;s call: {aiGradeLabel}
+          </p>
+          {aiGrade.reasoning && (
+            <p className="mt-1 text-[11px] leading-relaxed text-indigo-900/90 dark:text-indigo-200/90">
+              {aiGrade.reasoning}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <GradeBtn
           active={current === "full"}
           tone="green"
           onClick={() => onChange("full")}
+          aiPick={aiGrade?.score_status === "full"}
         >
           Full
         </GradeBtn>
-        <GradeBtn active={current === "partial"} tone="amber" onClick={pickPartial}>
+        <GradeBtn
+          active={current === "partial"}
+          tone="amber"
+          onClick={pickPartial}
+          aiPick={aiGrade?.score_status === "partial"}
+        >
           Partial
         </GradeBtn>
         {current === "partial" && (
@@ -1025,20 +1064,33 @@ function ProblemGradeRow({
             <span aria-hidden>%</span>
           </div>
         )}
-        <GradeBtn active={current === "zero"} tone="red" onClick={() => onChange("zero")}>
+        <GradeBtn
+          active={current === "zero"}
+          tone="red"
+          onClick={() => onChange("zero")}
+          aiPick={aiGrade?.score_status === "zero"}
+        >
           Zero
         </GradeBtn>
-        {isAiMatch && (
-          <span className="rounded-[--radius-pill] bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-            AI
-          </span>
-        )}
       </div>
-      {aiGrade?.reasoning && (
-        <p className="mt-2 text-[11px] italic text-text-muted">
-          <span className="font-semibold not-italic text-primary">AI:</span>{" "}
-          {aiGrade.reasoning}
-        </p>
+
+      {teacherOverrode && aiGrade && aiGradeLabel && (
+        <button
+          type="button"
+          onClick={() =>
+            onChange(
+              aiGrade.score_status,
+              aiGrade.score_status === "partial"
+                ? Math.round(aiGrade.percent)
+                : undefined,
+            )
+          }
+          className="mt-2 inline-flex items-center gap-1 rounded-[--radius-pill] border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-800 hover:border-indigo-400 hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-900/20 dark:text-indigo-200"
+          title="Revert to the AI's suggested grade"
+        >
+          <span aria-hidden>⟲</span>
+          AI had suggested {aiGradeLabel} · revert
+        </button>
       )}
     </div>
   );
@@ -1049,29 +1101,45 @@ function GradeBtn({
   tone,
   onClick,
   children,
+  aiPick = false,
 }: {
   active: boolean;
   tone: "green" | "amber" | "red";
   onClick: () => void;
   children: React.ReactNode;
+  /** Mark this button as the AI's suggestion. When not the active
+   *  choice, a subtle indigo ring signals "the AI recommended this".
+   *  When active AND AI's pick, shows an inline "· AI" suffix. */
+  aiPick?: boolean;
 }) {
   const activeCls = {
     green: "border-green-500 bg-green-500 text-white",
     amber: "border-amber-500 bg-amber-500 text-white",
     red: "border-red-500 bg-red-500 text-white",
   }[tone];
-  const inactiveCls =
-    "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary";
+  const inactiveCls = aiPick
+    ? "border-indigo-300 bg-indigo-50 text-indigo-800 hover:border-indigo-400 dark:border-indigo-800/60 dark:bg-indigo-900/20 dark:text-indigo-200"
+    : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary";
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-[--radius-md] border px-3 py-1.5 text-xs font-bold transition-colors ${
+      className={`inline-flex items-center gap-1 rounded-[--radius-md] border px-3 py-1.5 text-xs font-bold transition-colors ${
         active ? activeCls : inactiveCls
       }`}
     >
       {children}
+      {aiPick && (
+        <span
+          className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold leading-none ${
+            active ? "bg-white/25 text-white" : "bg-indigo-200/70 text-indigo-900"
+          }`}
+          aria-label="AI's suggestion"
+        >
+          AI
+        </span>
+      )}
     </button>
   );
 }
