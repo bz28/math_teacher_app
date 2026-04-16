@@ -402,6 +402,9 @@ export default function HomeworkDetailPage({
   }
   const canPublish = !isPublished && missingForPublish.length === 0;
 
+  const activeGenerating =
+    !!activeJob && activeJob.status !== "done" && activeJob.status !== "failed";
+
   return (
     <>
     {showGenerate && (
@@ -416,7 +419,8 @@ export default function HomeworkDetailPage({
       />
     )}
     <div className="mx-auto max-w-4xl px-4 pb-10">
-      <div className="pt-2">
+      {/* Breadcrumb */}
+      <div className="pt-3">
         <Link
           href={backHref}
           className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
@@ -424,90 +428,267 @@ export default function HomeworkDetailPage({
           ← Back to homework
         </Link>
       </div>
-      <div className="mt-3 rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
+
+      {/* Hero header row: status + title + primary action (publish) */}
+      <header className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0 flex-1">
           {hw && (
             <span
-              className={`shrink-0 rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+              className={`inline-block rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 isPublished
                   ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
-                  : "bg-gray-100 text-gray-600 dark:bg-gray-500/10"
+                  : "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-300"
               }`}
             >
               {hw.status}
             </span>
           )}
-          {editingTitle ? (
-            <form
-              className="flex flex-1 items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                saveTitle();
-              }}
-            >
-              <input
-                type="text"
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                autoFocus
-                maxLength={300}
-                className="flex-1 rounded-[--radius-md] border border-primary bg-bg-base px-3 py-1.5 text-sm font-bold text-text-primary focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-[--radius-sm] bg-primary px-2.5 py-1 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+          <div className="mt-2">
+            {editingTitle ? (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveTitle();
+                }}
               >
-                Save
-              </button>
+                <input
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  autoFocus
+                  maxLength={300}
+                  className="flex-1 rounded-[--radius-md] border border-primary bg-bg-base px-3 py-2 text-xl font-extrabold text-text-primary focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingTitle(false);
+                    setTitleDraft(hw?.title ?? "");
+                  }}
+                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setEditingTitle(false);
-                  setTitleDraft(hw?.title ?? "");
-                }}
-                className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                onClick={() => setEditingTitle(true)}
+                disabled={loading || isPublished}
+                title={isPublished ? "Unpublish to edit" : "Click to edit"}
+                className="cursor-text text-left text-3xl font-extrabold tracking-tight text-text-primary hover:text-primary disabled:cursor-default disabled:hover:text-text-primary"
               >
-                Cancel
+                {hw?.title ?? "Loading…"}
               </button>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingTitle(true)}
-              disabled={loading || isPublished}
-              title={isPublished ? "Unpublish to edit" : "Click to edit"}
-              className="flex-1 cursor-text text-left text-base font-bold text-text-primary hover:text-primary disabled:cursor-default disabled:hover:text-text-primary"
-            >
-              {hw?.title ?? "Loading…"}
-            </button>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="px-6 py-5">
-          {loading || !hw ? (
-            <p className="text-sm text-text-muted">Loading…</p>
-          ) : editingProblems ? (
-            <EditProblemsView
-              courseId={courseId}
-              assignmentId={assignmentId}
-              currentBankIds={problems.map((p) => p.bank_item_id)}
-              onCancel={() => setEditingProblems(false)}
-              onSave={saveProblems}
-              busy={busy}
-            />
-          ) : (
-            <>
-              {isPublished && (
-                <div className="mb-5 rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                  🔒 This homework is published. Students can see it and the
-                  questions inside are locked. Unpublish it to edit.
-                </div>
-              )}
+        {/* Publish / Unpublish lives alongside the title. Draft HWs
+            show a disabled Publish with a tooltip listing what's still
+            needed (e.g. "Missing: at least one problem"). */}
+        {!editingProblems && hw && (
+          <div className="flex shrink-0 items-center gap-2">
+            {isPublished ? (
+              <button
+                type="button"
+                onClick={unpublish}
+                disabled={busy}
+                className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+              >
+                Unpublish
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handlePublishClick}
+                disabled={busy || !canPublish}
+                title={
+                  canPublish
+                    ? "Publish — locks the questions in the bank"
+                    : `Missing: ${missingForPublish.join(", ")}`
+                }
+                className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
+                  canPublish
+                    ? "bg-green-600 hover:bg-green-700 hover:shadow"
+                    : "bg-gray-400 cursor-not-allowed dark:bg-gray-600"
+                }`}
+              >
+                Publish ▸
+              </button>
+            )}
+          </div>
+        )}
+      </header>
 
-              {/* Configuration block */}
+      {/* Soft confirm strip for "publish without a due date". Shown
+          full-width below the header so it's hard to miss, and its
+          CTAs pair with the already-noticed Publish button above. */}
+      {!editingProblems && hw && confirmingNoDueDate && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/40 dark:bg-amber-500/10">
+          <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+            ⚠ Publish without a due date? Students will see &ldquo;no due date&rdquo;.
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingNoDueDate(false);
+                setTimeout(() => {
+                  dueDateInputRef.current?.focus();
+                  dueDateInputRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                }, 0);
+              }}
+              disabled={busy}
+              className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            >
+              Add due date
+            </button>
+            <button
+              type="button"
+              onClick={publish}
+              disabled={busy}
+              className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              Publish anyway
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading / editing-problems states short-circuit the page */}
+      {(loading || !hw) ? (
+        <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm">
+          <p className="text-sm text-text-muted">Loading…</p>
+        </div>
+      ) : editingProblems ? (
+        <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
+          <EditProblemsView
+            courseId={courseId}
+            assignmentId={assignmentId}
+            currentBankIds={problems.map((p) => p.bank_item_id)}
+            onCancel={() => setEditingProblems(false)}
+            onSave={saveProblems}
+            busy={busy}
+          />
+        </div>
+      ) : (
+        <>
+          {isPublished && (
+            <div className="mt-4 rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              🔒 Published — students can see this. Unpublish to edit the
+              problem list or configuration.
+            </div>
+          )}
+
+          {/* Pending review is the primary CTA when generation produced
+              anything. Solid amber-tinted card (no gradient — washes
+              out the text) with high-contrast copy. */}
+          {pending.length > 0 && (
+            <Link
+              href={reviewHref}
+              className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-xl] border border-amber-300 bg-amber-50 px-5 py-4 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-100 hover:shadow dark:border-amber-500/40 dark:bg-amber-500/10 dark:hover:bg-amber-500/20"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl" aria-hidden="true">🔔</span>
+                <div>
+                  <p className="text-sm font-bold text-text-primary">
+                    {pending.length} {pending.length === 1 ? "problem" : "problems"} {pending.length === 1 ? "needs" : "need"} your review
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    Approve to add them to this homework, reject to drop them.
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-[--radius-md] bg-amber-600 px-4 py-2 text-xs font-bold text-white">
+                Review ▸
+              </span>
+            </Link>
+          )}
+
+          {/* Problems — the hero of the page */}
+          <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-border-light pb-3">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">
+                  Problems
+                </h2>
+                <p className="mt-0.5 text-2xl font-extrabold text-text-primary">
+                  {problems.length}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGenerate(true)}
+                  disabled={isPublished}
+                  title={isPublished ? "Unpublish to generate more" : "Generate with AI"}
+                  className="rounded-[--radius-md] border border-primary/40 bg-primary-bg/30 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary-bg/60 disabled:opacity-50"
+                >
+                  ✨ Generate more
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingProblems(true)}
+                  disabled={isPublished}
+                  title={isPublished ? "Unpublish to edit" : "Edit problem list"}
+                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-primary/40 hover:text-primary disabled:opacity-50"
+                >
+                  ✏ Edit
+                </button>
+              </div>
+            </div>
+
+            {/* State-driven body */}
+            {activeGenerating && problems.length === 0 ? (
+              <GeneratingSkeleton count={5} />
+            ) : problems.length === 0 ? (
+              <ProblemsEmptyHero
+                disabled={isPublished}
+                onGenerate={() => setShowGenerate(true)}
+              />
+            ) : (
+              <>
+                {/* Inline generating strip when we already have
+                    problems but the teacher kicked off more */}
+                {activeGenerating && (
+                  <div className="mt-4 flex items-center gap-3 rounded-[--radius-md] border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                    <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-60" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500" />
+                    </span>
+                    <span>Generating more in the background — new ones land in the review queue when ready.</span>
+                  </div>
+                )}
+                <div className="mt-4 space-y-2">
+                  {problems.map((p) => (
+                    <ProblemRow key={`${p.bank_item_id}-${p.position}`} problem={p} />
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* Configuration — collapsed accordion. Auto-expands on a
+              fresh HW with no problems so teachers notice the fields;
+              collapses once they're set. */}
+          <div className="mt-4 space-y-3">
+            <CollapsibleSection
+              label="Settings"
+              summary={configSummary(hw)}
+              defaultOpen={problems.length === 0}
+            >
               <ConfigBlock
                 hw={hw}
                 courseId={courseId}
@@ -520,203 +701,207 @@ export default function HomeworkDetailPage({
                 onChangeLatePolicy={onChangeLatePolicy}
                 onChangeSections={onChangeSections}
               />
+            </CollapsibleSection>
 
-              {/* Rubric block — collapsed by default when empty so it
-                  doesn't crowd the top of the modal. Rubric edits are
-                  allowed even on published HWs (intentionally — see
-                  backend grade_submission handler notes). */}
-              <div className="mt-4">
-                <RubricBlock
-                  rubric={hw.rubric}
-                  saveState={saveStates.rubric}
-                  saveError={saveErrors.rubric}
-                  onChange={onChangeRubric}
-                />
-              </div>
+            {/* RubricBlock has its own collapsed-when-empty behavior */}
+            <RubricBlock
+              rubric={hw.rubric}
+              saveState={saveStates.rubric}
+              saveError={saveErrors.rubric}
+              onChange={onChangeRubric}
+            />
+          </div>
 
-              {/* Resume-queue banner — only when there are pending
-                  items in one of this HW's units. Approved items flow
-                  into the bank picker under Edit problems. */}
-              {pending.length > 0 && (
-                <div className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-md] border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-                  <div className="text-xs text-amber-900 dark:text-amber-200">
-                    <span className="font-bold">🔔 {pending.length}</span>{" "}
-                    {pending.length === 1 ? "problem" : "problems"} pending review
-                    <span className="ml-1 text-amber-800/70 dark:text-amber-300/70">
-                      · approve to add them to this homework, reject to drop them
-                    </span>
-                  </div>
-                  <Link
-                    href={reviewHref}
-                    className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700"
-                  >
-                    Resume queue ▸
-                  </Link>
-                </div>
-              )}
+          {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
 
-              {/* Active generation toast — simple inline status so the
-                  teacher knows their "Generate more" click is working. */}
-              {activeJob && activeJob.status !== "done" && activeJob.status !== "failed" && (
-                <div className="mt-4 rounded-[--radius-md] border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
-                  Generating problems in the background — new ones will appear in
-                  the banner above when they&apos;re ready.
-                </div>
-              )}
-
-              {/* Problems block */}
-              <div className="mt-6">
-                <div className="flex items-baseline justify-between border-b border-border-light pb-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                    Problems · {problems.length}
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowGenerate(true)}
-                      disabled={isPublished}
-                      title={isPublished ? "Unpublish to generate more" : "Generate more problems with AI"}
-                      className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
-                    >
-                      ✨ Generate more
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingProblems(true)}
-                      disabled={isPublished}
-                      title={isPublished ? "Unpublish to edit" : ""}
-                      className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
-                    >
-                      ✏ Edit problems
-                    </button>
-                  </div>
-                </div>
-
-                {problems.length === 0 ? (
-                  <p className="mt-4 text-xs italic text-text-muted">
-                    No problems on this homework. Click Edit problems to add some.
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {problems.map((p) => (
-                      <ProblemRow key={`${p.bank_item_id}-${p.position}`} problem={p} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-        </div>
-
-        {/* Footer */}
-        {!editingProblems && hw && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-light px-6 py-3">
-            {confirmingNoDueDate ? (
-              <div className="flex flex-1 flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                  ⚠ Publish without a due date? Students will see this as
-                  &ldquo;no due date&rdquo;.
-                </span>
-                <div className="ml-auto flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmingNoDueDate(false);
-                      // Focus the date input + scroll it into view so the
-                      // teacher can fix it without hunting.
-                      setTimeout(() => {
-                        dueDateInputRef.current?.focus();
-                        dueDateInputRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "center",
-                        });
-                      }, 0);
-                    }}
-                    disabled={busy}
-                    className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-                  >
-                    Add due date
-                  </button>
-                  <button
-                    type="button"
-                    onClick={publish}
-                    disabled={busy}
-                    className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Publish anyway
-                  </button>
-                </div>
-              </div>
-            ) : (
+          {/* Delete — subtle affordance at the bottom right. Red
+              confirm inline to catch accidental clicks. */}
+          <div className="mt-8 flex justify-end">
+            {confirmingDelete ? (
               <div className="flex items-center gap-2">
-                {isPublished ? (
-                  <button
-                    type="button"
-                    onClick={unpublish}
-                    disabled={busy}
-                    className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-                  >
-                    Unpublish
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handlePublishClick}
-                    disabled={busy || !canPublish}
-                    title={
-                      canPublish
-                        ? "Publish — locks the questions in the bank"
-                        : `Missing: ${missingForPublish.join(", ")}`
-                    }
-                    className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Publish ▸
-                  </button>
-                )}
-              </div>
-            )}
-            {/* Right side hidden while the no-due-date confirm is up
-                so the two confirms don't compete for the row. */}
-            {!confirmingNoDueDate &&
-              (confirmingDelete ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-red-700">
-                    Delete this homework?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(false)}
-                    className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={remove}
-                    disabled={busy}
-                    className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
-                  >
-                    Yes, delete
-                  </button>
-                </div>
-              ) : (
+                <span className="text-xs font-semibold text-red-700 dark:text-red-400">
+                  Delete this homework?
+                </span>
                 <button
                   type="button"
-                  onClick={() => setConfirmingDelete(true)}
-                  disabled={isPublished}
-                  title={isPublished ? "Unpublish before deleting" : ""}
-                  className="rounded-[--radius-md] border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  onClick={() => setConfirmingDelete(false)}
+                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
                 >
-                  🗑 Delete
+                  Cancel
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={remove}
+                  disabled={busy}
+                  className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Yes, delete
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={isPublished}
+                title={isPublished ? "Unpublish before deleting" : "Delete this homework"}
+                className="text-xs font-semibold text-text-muted hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                🗑 Delete homework
+              </button>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Compact one-line summary of the HW's configuration — shows in the
+// collapsed Settings accordion so teachers can see the gist without
+// expanding. Keep it dense; this is a scan line, not a form.
+// ────────────────────────────────────────────────────────────────────
+function configSummary(hw: TeacherAssignment): string {
+  const parts: string[] = [];
+  parts.push(`${hw.unit_ids.length} unit${hw.unit_ids.length === 1 ? "" : "s"}`);
+  if (hw.due_at) {
+    const d = new Date(hw.due_at);
+    parts.push(
+      `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+    );
+  } else {
+    parts.push("No due date");
+  }
+  parts.push(
+    hw.section_ids.length === 0
+      ? "All sections"
+      : `${hw.section_ids.length} section${hw.section_ids.length === 1 ? "" : "s"}`,
+  );
+  return parts.join(" · ");
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Collapsible — lightweight accordion wrapper for the Settings card.
+// `defaultOpen` is captured into state at mount so it doesn't flip
+// when the teacher toggles it manually.
+// ────────────────────────────────────────────────────────────────────
+function CollapsibleSection({
+  label,
+  summary,
+  defaultOpen,
+  children,
+}: {
+  label: string;
+  summary?: string;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left"
+      >
+        <div className="flex items-baseline gap-3">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            {label}
+          </span>
+          {summary && !open && (
+            <span className="text-xs text-text-secondary">{summary}</span>
+          )}
+        </div>
+        <span className="text-xs text-text-muted">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border-light p-5">{children}</div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Empty hero — shown in the Problems section when there are no
+// problems AND nothing is generating. Turns the dead-end into a clear
+// next action.
+// ────────────────────────────────────────────────────────────────────
+function ProblemsEmptyHero({
+  disabled,
+  onGenerate,
+}: {
+  disabled: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="mt-5 rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle/50 px-8 py-12 text-center">
+      <div className="text-5xl" aria-hidden="true">✨</div>
+      <h3 className="mt-4 text-lg font-bold text-text-primary">
+        Let&apos;s add some problems
+      </h3>
+      <p className="mt-1 text-xs text-text-muted">
+        Generate with AI in ~30 seconds, grounded in your uploaded materials.
+      </p>
+      <button
+        type="button"
+        onClick={onGenerate}
+        disabled={disabled}
+        className="mt-5 inline-flex items-center gap-2 rounded-[--radius-md] bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-primary-dark hover:shadow disabled:opacity-50"
+      >
+        ✨ Generate problems
+      </button>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Skeleton rows — shown in the Problems section while a gen job is in
+// flight and we have zero problems to display. Staggered pulse so the
+// rows feel alive.
+// ────────────────────────────────────────────────────────────────────
+function GeneratingSkeleton({ count }: { count: number }) {
+  return (
+    <div className="mt-5 space-y-3">
+      <div className="flex items-center gap-2 text-xs text-text-muted">
+        <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+        </span>
+        <span>Generating problems…</span>
+      </div>
+      {Array.from({ length: count }).map((_, i) => {
+        const style = { animationDelay: `${i * 120}ms` };
+        return (
+          <div
+            key={i}
+            className="rounded-[--radius-md] border border-border-light bg-bg-base/60 p-4"
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className="h-6 w-6 shrink-0 animate-pulse rounded-full bg-bg-subtle"
+                style={style}
+              />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div
+                  className="h-3 w-5/6 animate-pulse rounded bg-bg-subtle"
+                  style={style}
+                />
+                <div
+                  className="h-3 w-11/12 animate-pulse rounded bg-bg-subtle"
+                  style={style}
+                />
+                <div
+                  className="h-3 w-3/5 animate-pulse rounded bg-bg-subtle"
+                  style={style}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
