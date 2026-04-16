@@ -66,11 +66,38 @@ function restoreBrokenLatexCommands(mathSegment: string): string {
   );
 }
 
+/**
+ * Detect strings that are bare LaTeX environments (e.g. `\begin{bmatrix}…\end{bmatrix}`
+ * or `\begin{pmatrix}…\end{pmatrix}`) emitted without the usual `$…$` wrapping.
+ * The AI grader returns `student_answer` in exactly this shape, so we render
+ * it as display math instead of printing the source. Conservative on purpose:
+ * only fires when the whole trimmed input opens with `\begin{` and closes with
+ * `\end{...}`, avoiding any collision with prose that happens to contain a
+ * backslash.
+ */
+function isBareLatexEnvironment(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("\\begin{")) return false;
+  if (trimmed.includes("$")) return false;
+  return /\\end\{[a-zA-Z*]+\}\s*$/.test(trimmed);
+}
+
 function parse(input: string): Segment[] {
   // Clean up before parsing
   let text = input.replace(/<br\s*\/?>/gi, "\n");
   // Strip arrow characters that Claude sometimes inserts inside SVG
   text = text.replace(/→\s*/g, "").replace(/←\s*/g, "");
+
+  // Fast path: the whole string is a bare LaTeX environment. Treat as
+  // display math so matrices / cases / aligned blocks render instead of
+  // printing their source.
+  if (isBareLatexEnvironment(text)) {
+    return [{
+      type: "math-display",
+      content: restoreBrokenLatexCommands(text.trim()),
+    }];
+  }
+
   const segments: Segment[] = [];
   // Match @@{...}@@, $$...$$, $...$, <svg>...</svg>, and **...**
   const pattern = /(@@\{[\s\S]*?\}@@|\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|<svg[\s\S]*?<\/svg>|\*\*[^*]+\*\*)/g;
