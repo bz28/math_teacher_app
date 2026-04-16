@@ -269,12 +269,20 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           courseId={courseId}
           defaultUnitIds={filters.unit ? [filters.unit] : []}
           onClose={() => setShowNew(false)}
-          onCreated={(newId) => {
-            // Land directly on the new HW's detail page so the teacher
-            // can see their generated problems appear (or start adding
-            // them manually).
+          onCreated={(newId, { startedGeneration }) => {
             setShowNew(false);
-            openDetail(newId);
+            if (startedGeneration) {
+              // Route the teacher straight into the review queue —
+              // its skeleton state handles the ~30s wait for gen to
+              // produce items. Feels continuous: click "Create &
+              // generate" → land in a queue that fills up in front
+              // of them.
+              router.push(
+                `/school/teacher/courses/${courseId}/homework/${newId}/review`,
+              );
+            } else {
+              openDetail(newId);
+            }
           }}
         />
       )}

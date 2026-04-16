@@ -118,10 +118,6 @@ export default function HomeworkDetailPage({
   // Polls bank jobs kicked off from the "Generate more" modal so the
   // pending-banner count updates live when generation completes.
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
-  // True once the current polling cycle has observed a done job and
-  // auto-navigated to the review queue. Prevents re-navigation on
-  // subsequent renders while the "done" state lingers.
-  const [autoNavigated, setAutoNavigated] = useState(false);
 
   const reviewHref = `/school/teacher/courses/${courseId}/homework/${assignmentId}/review`;
 
@@ -158,35 +154,6 @@ export default function HomeworkDetailPage({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
-
-  // Pick up any gen job the wizard kicked off for this HW. The wizard
-  // stashes the job id in sessionStorage on "Create & generate"; we
-  // restore it here so the existing polling effect takes over and
-  // the auto-navigate-to-queue flow works end-to-end. One-shot —
-  // remove the key so a refresh doesn't replay a completed job.
-  useEffect(() => {
-    const key = `hw-gen-${assignmentId}`;
-    const jobId = sessionStorage.getItem(key);
-    if (!jobId) return;
-    sessionStorage.removeItem(key);
-    teacher
-      .bankJob(courseId, jobId)
-      .then(async (job) => {
-        setActiveJob(job);
-        // If the job already finished before we got here (fast gens,
-        // or the teacher was slow to land on the detail page), the
-        // polling effect won't fire. We refetch pending here so the
-        // auto-navigate effect sees the items and pushes the teacher
-        // to /review automatically.
-        if (job.status === "done") {
-          await reloadPending();
-        }
-      })
-      .catch(() => {
-        // If the job lookup fails, fall back to the manual-banner UX.
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignmentId, courseId]);
 
   // Fetch pending bank items for THIS HW specifically. The backend
   // filter on originating_assignment_id keeps the pool scoped so two
@@ -233,29 +200,6 @@ export default function HomeworkDetailPage({
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob, courseId]);
-
-  // Auto-navigate to the review queue when a generation job just
-  // completed. Gate with `autoNavigated` so we fire once per job —
-  // don't want to yank the teacher back after they clicked "← Back
-  // to homework" from the queue. Only trigger if there are actually
-  // pending items to review (avoids jumping to an empty queue when
-  // generation produced zero usable problems).
-  useEffect(() => {
-    if (autoNavigated) return;
-    if (activeJob?.status !== "done") return;
-    if (pending.length === 0) return;
-    setAutoNavigated(true);
-    router.push(reviewHref);
-  }, [activeJob, pending.length, autoNavigated, router, reviewHref]);
-
-  // Reset the auto-nav latch whenever a fresh job starts so the next
-  // completion can fire. A new job always has status=queued or
-  // running initially.
-  useEffect(() => {
-    if (activeJob && activeJob.status !== "done" && activeJob.status !== "failed") {
-      setAutoNavigated(false);
-    }
-  }, [activeJob]);
 
   const problems: AssignmentProblem[] =
     hw?.content && typeof hw.content === "object" && "problems" in hw.content
