@@ -89,8 +89,11 @@ export default function HomeworkSectionReviewPage({
   // dialog must disclose cross-section scope, and the header pill needs
   // to distinguish "nothing to publish (nothing graded)" from "nothing
   // to publish (everything already published)". Per-section counts are
-  // derived from roster and stay live as the teacher grades.
+  // derived from roster and stay live as the teacher grades. `dirty`
+  // counts already-published grades the teacher has edited since —
+  // they're folded into the "to release" total alongside fresh ones.
   const [pendingOtherSections, setPendingOtherSections] = useState(0);
+  const [dirtyOtherSections, setDirtyOtherSections] = useState(0);
   const [gradedOtherSections, setGradedOtherSections] = useState(0);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -117,6 +120,7 @@ export default function HomeworkSectionReviewPage({
         // carries the old email and would vanish from the view.
         const submissionByStudent = new Map<string, TeacherSubmissionRow>();
         let otherPending = 0;
+        let otherDirty = 0;
         let otherGraded = 0;
         for (const r of subs.submissions) {
           if (r.is_preview) continue;
@@ -125,9 +129,11 @@ export default function HomeworkSectionReviewPage({
           } else if (r.final_score !== null) {
             otherGraded += 1;
             if (r.grade_published_at === null) otherPending += 1;
+            else if (r.grade_dirty) otherDirty += 1;
           }
         }
         setPendingOtherSections(otherPending);
+        setDirtyOtherSections(otherDirty);
         setGradedOtherSections(otherGraded);
         const merged: RosterEntry[] = s.students
           .map((st) => ({
@@ -138,15 +144,18 @@ export default function HomeworkSectionReviewPage({
           }))
           .sort((a, b) => a.student_name.localeCompare(b.student_name));
         setRoster(merged);
-        // Auto-select the first submitter that still needs review.
-        // If everyone's published, fall back to the first submitter;
-        // if no one has submitted, leave selection empty (the right
-        // pane shows a tidy "nothing to review here" state).
-        const firstUnpublished = merged.find(
-          (e) => e.submission !== null && e.submission.grade_published_at === null,
+        // Auto-select the first submitter that still needs release —
+        // never published or dirty-since-edit. If everyone's clean-
+        // published, fall back to the first submitter; if no one has
+        // submitted, leave selection empty (the right pane shows a
+        // tidy "nothing to review here" state).
+        const firstUnreleased = merged.find(
+          (e) =>
+            e.submission !== null &&
+            (e.submission.grade_published_at === null || e.submission.grade_dirty),
         );
         const firstSubmitter = merged.find((e) => e.submission !== null);
-        const pick = firstUnpublished ?? firstSubmitter;
+        const pick = firstUnreleased ?? firstSubmitter;
         if (pick) setSelectedStudentId(pick.student_id);
       })
       .catch((e) => {
@@ -250,10 +259,13 @@ export default function HomeworkSectionReviewPage({
 
   // Mirror the server's recomputed grade back onto the roster row so
   // the left-list status/score updates the moment a save returns.
+  // `grade_dirty` comes from the server (content-diff against the
+  // published snapshot) so flipping Full → Zero → Full doesn't stick
+  // the row in a dirty state when the net change is zero.
   const applyGradeToRoster = useCallback(
     (
       submissionId: string,
-      patch: Pick<TeacherSubmissionRow, "final_score" | "breakdown">,
+      patch: Pick<TeacherSubmissionRow, "final_score" | "breakdown" | "grade_dirty">,
     ) => {
       setRoster((prev) =>
         prev
@@ -270,15 +282,15 @@ export default function HomeworkSectionReviewPage({
 
   // Persist the current breakdown. Full-replacement semantics: we
   // send every graded entry on every call, the backend writes the
-  // row and recomputes `final_score`. Optimistic local state has
-  // already been mutated by the caller; if the save fails we leave
-  // it as-is and surface an error — teacher can click again. Error
-  // is scoped to a submissionId so a prior failure on student A
-  // can't bleed onto student B's grade summary card.
+  // row, recomputes `final_score`, and returns the authoritative
+  // `grade_dirty` (content-diff). If the save fails we leave local
+  // state as-is and surface an error — teacher can click again.
+  // Error is scoped to a submissionId so a prior failure on student
+  // A can't bleed onto student B's grade summary card. Also mirrors
+  // the server's dirty flag back onto the detail slot so the strip
+  // reflects it without a separate refetch.
   const persistBreakdown = useCallback(
     async (submissionId: string, breakdown: GradeBreakdownEntry[]) => {
-      // Clear any stale error for this submission up front, so a new
-      // in-flight save doesn't visually carry a past failure.
       setSaveError((prev) =>
         prev?.forSubmissionId === submissionId ? null : prev,
       );
@@ -287,7 +299,13 @@ export default function HomeworkSectionReviewPage({
         applyGradeToRoster(submissionId, {
           final_score: res.final_score,
           breakdown,
+          grade_dirty: res.grade_dirty,
         });
+        setDetail((d) =>
+          d && d.submission_id === submissionId
+            ? { ...d, grade_dirty: res.grade_dirty }
+            : d,
+        );
       } catch (e) {
         setSaveError({
           forSubmissionId: submissionId,
@@ -324,28 +342,37 @@ export default function HomeworkSectionReviewPage({
     [detail, persistBreakdown],
   );
 
-  // Derived counts for the publish button state machine. `pending*`
-  // are submissions graded but not yet published; `graded*` include
-  // already-published ones. In-section counts are live via roster;
-  // other-section counts are snapshotted at fetch time.
-  const { pendingInSection, gradedInSection } = useMemo(() => {
+  // Derived counts for the publish button state machine.
+  //   pending = graded but never published
+  //   dirty   = published, but edited since — republish to update
+  //   graded  = union of the above plus already-clean-published
+  // In-section counts are live via roster; other-section counts are
+  // snapshotted at fetch time.
+  const { pendingInSection, dirtyInSection, gradedInSection } = useMemo(() => {
     let pending = 0;
+    let dirty = 0;
     let graded = 0;
     for (const e of roster ?? []) {
       if (!e.submission || e.submission.final_score === null) continue;
       graded += 1;
       if (e.submission.grade_published_at === null) pending += 1;
+      else if (e.submission.grade_dirty) dirty += 1;
     }
-    return { pendingInSection: pending, gradedInSection: graded };
+    return {
+      pendingInSection: pending,
+      dirtyInSection: dirty,
+      gradedInSection: graded,
+    };
   }, [roster]);
   const pendingTotal = pendingInSection + pendingOtherSections;
+  const dirtyTotal = dirtyInSection + dirtyOtherSections;
   const gradedTotal = gradedInSection + gradedOtherSections;
 
-  // Publish every graded submission on the HW. Backend is idempotent
-  // and returns the count actually published. On success we mirror
-  // the publish timestamp onto every local roster entry that was
-  // ready, and zero out the cross-section counter. Other sections
-  // only refresh on next open — acceptable for a one-shot action.
+  // Publish every pending-or-dirty submission on the HW. Backend is
+  // idempotent. On success we mirror the publish timestamp onto every
+  // local roster entry that was in either bucket and flip grade_dirty
+  // to false. Cross-section counters zero out; other sections refresh
+  // on next open — acceptable for a one-shot action.
   const handlePublish = useCallback(async () => {
     setPublishing(true);
     setPublishError(null);
@@ -354,19 +381,33 @@ export default function HomeworkSectionReviewPage({
       const nowIso = new Date().toISOString();
       setRoster((prev) =>
         prev
-          ? prev.map((e) =>
-              e.submission &&
-              e.submission.final_score !== null &&
-              e.submission.grade_published_at === null
-                ? {
-                    ...e,
-                    submission: { ...e.submission, grade_published_at: nowIso },
-                  }
-                : e,
-            )
+          ? prev.map((e) => {
+              const s = e.submission;
+              if (!s || s.final_score === null) return e;
+              const wasPending = s.grade_published_at === null;
+              const wasDirty = !!s.grade_dirty;
+              if (!wasPending && !wasDirty) return e;
+              return {
+                ...e,
+                submission: {
+                  ...s,
+                  grade_published_at: nowIso,
+                  grade_dirty: false,
+                },
+              };
+            })
           : prev,
       );
       setPendingOtherSections(0);
+      setDirtyOtherSections(0);
+      // If the open student's grade was part of the publish, clear
+      // the local dirty flag on detail too so the strip updates
+      // without a refetch.
+      setDetail((d) =>
+        d && (d.grade_published_at === null || d.grade_dirty)
+          ? { ...d, grade_published_at: nowIso, grade_dirty: false }
+          : d,
+      );
       setPublishConfirmOpen(false);
     } catch (e) {
       setPublishError(
@@ -377,10 +418,11 @@ export default function HomeworkSectionReviewPage({
     }
   }, [assignmentId]);
 
-  // Next submitter who still needs a published grade. Wraps to the
-  // start so a teacher grading out-of-order still gets auto-advance.
-  // Returns null if every submitter is published (or the section
-  // has no submitters at all).
+  // Next submitter whose grade isn't released to students yet —
+  // either never published or dirty-since-edit. Wraps to the start so
+  // a teacher grading out of order still gets auto-advance. Returns
+  // null if every submitter is clean-published (or the section has
+  // no submitters at all).
   const nextStudent = useMemo<RosterEntry | null>(() => {
     if (!roster || !selectedEntry) return null;
     const idx = roster.findIndex((e) => e.student_id === selectedEntry.student_id);
@@ -388,7 +430,9 @@ export default function HomeworkSectionReviewPage({
     for (let i = 1; i <= roster.length; i++) {
       const cand = roster[(idx + i) % roster.length];
       if (cand.student_id === selectedEntry.student_id) break;
-      if (cand.submission && cand.submission.grade_published_at === null) {
+      const sub = cand.submission;
+      if (!sub) continue;
+      if (sub.grade_published_at === null || sub.grade_dirty) {
         return cand;
       }
     }
@@ -413,6 +457,7 @@ export default function HomeworkSectionReviewPage({
         {roster !== null && (
           <PublishButton
             pendingTotal={pendingTotal}
+            dirtyTotal={dirtyTotal}
             gradedTotal={gradedTotal}
             onOpen={() => setPublishConfirmOpen(true)}
           />
@@ -504,6 +549,8 @@ export default function HomeworkSectionReviewPage({
         }}
         pendingInSection={pendingInSection}
         pendingOtherSections={pendingOtherSections}
+        dirtyInSection={dirtyInSection}
+        dirtyOtherSections={dirtyOtherSections}
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
@@ -513,25 +560,28 @@ export default function HomeworkSectionReviewPage({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Publish button (page header) — three states, HW-wide counts:
-//   • pendingTotal > 0                → primary CTA opens confirmation
-//   • gradedTotal > 0, no pending     → green "All grades published" pill
-//   • nothing graded yet              → muted "No grades to publish" pill
-// The last two are distinct: "all published" is a done state; "no
-// grades" means the teacher hasn't started grading. Conflating them
-// misleads on a freshly-published HW where no one has been graded.
+// Publish button (page header). HW-wide counts. Four states:
+//   • pending + dirty > 0              → primary CTA opens confirmation
+//   • graded > 0, no pending, no dirty → "All grades published" pill
+//   • nothing graded                   → "No grades to publish" pill
+// The button label flips between "Publish" (fresh-only), "Republish"
+// (dirty-only), and "Publish & republish" (mixed) so the teacher sees
+// what the action will actually do.
 // ────────────────────────────────────────────────────────────────────
 
 function PublishButton({
   pendingTotal,
+  dirtyTotal,
   gradedTotal,
   onOpen,
 }: {
   pendingTotal: number;
+  dirtyTotal: number;
   gradedTotal: number;
   onOpen: () => void;
 }) {
-  if (pendingTotal === 0) {
+  const toRelease = pendingTotal + dirtyTotal;
+  if (toRelease === 0) {
     if (gradedTotal === 0) {
       return (
         <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
@@ -546,13 +596,15 @@ function PublishButton({
       </span>
     );
   }
+  const verb =
+    pendingTotal === 0 ? "Republish" : dirtyTotal === 0 ? "Publish" : "Publish & republish";
   return (
     <button
       type="button"
       onClick={onOpen}
       className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
     >
-      Publish {pendingTotal} {pendingTotal === 1 ? "grade" : "grades"} →
+      {verb} {toRelease} {toRelease === 1 ? "grade" : "grades"} →
     </button>
   );
 }
@@ -568,6 +620,8 @@ function PublishConfirmDialog({
   onClose,
   pendingInSection,
   pendingOtherSections,
+  dirtyInSection,
+  dirtyOtherSections,
   publishing,
   error,
   onConfirm,
@@ -576,24 +630,40 @@ function PublishConfirmDialog({
   onClose: () => void;
   pendingInSection: number;
   pendingOtherSections: number;
+  dirtyInSection: number;
+  dirtyOtherSections: number;
   publishing: boolean;
   error: string | null;
   onConfirm: () => void;
 }) {
-  const total = pendingInSection + pendingOtherSections;
+  const pendingTotal = pendingInSection + pendingOtherSections;
+  const dirtyTotal = dirtyInSection + dirtyOtherSections;
+  const total = pendingTotal + dirtyTotal;
+  const otherSections = pendingOtherSections + dirtyOtherSections;
+  const verb =
+    pendingTotal === 0 ? "Republish" : dirtyTotal === 0 ? "Publish" : "Publish & republish";
+  const body =
+    pendingTotal === 0
+      ? "Students will see the updated scores immediately."
+      : dirtyTotal === 0
+        ? "Students will see their scores immediately. Ungraded submissions aren\u2019t affected."
+        : "Students will see the new and updated scores immediately. Ungraded submissions aren\u2019t affected.";
   return (
     <Modal open={open} onClose={onClose} dismissible={!publishing}>
       <h2 className="text-lg font-bold text-text-primary">
-        Publish {total} {total === 1 ? "grade" : "grades"}?
+        {verb} {total} {total === 1 ? "grade" : "grades"}?
       </h2>
-      <p className="mt-2 text-sm text-text-secondary">
-        Students will see their scores immediately. Ungraded submissions
-        aren&apos;t affected.
-      </p>
-      {pendingOtherSections > 0 && (
+      <p className="mt-2 text-sm text-text-secondary">{body}</p>
+      {dirtyTotal > 0 && pendingTotal > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <span className="font-semibold">{dirtyTotal}</span>{" "}
+          {dirtyTotal === 1 ? "is an edit" : "are edits"} to already-published grades.
+        </p>
+      )}
+      {otherSections > 0 && (
         <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
-          This includes <span className="font-semibold">{pendingOtherSections}</span>{" "}
-          {pendingOtherSections === 1 ? "grade" : "grades"} from other sections
+          This includes <span className="font-semibold">{otherSections}</span>{" "}
+          {otherSections === 1 ? "grade" : "grades"} from other sections
           of this homework.
         </p>
       )}
@@ -617,7 +687,7 @@ function PublishConfirmDialog({
           disabled={publishing}
           className="rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {publishing ? "Publishing…" : "Publish grades"}
+          {publishing ? "Publishing\u2026" : `${verb} grades`}
         </button>
       </div>
     </Modal>
@@ -691,7 +761,7 @@ function StudentRow({
       {sub?.final_score != null && (
         <span
           className={`shrink-0 text-xs font-bold ${
-            sub.grade_published_at
+            sub.grade_published_at && !sub.grade_dirty
               ? "text-green-700 dark:text-green-400"
               : "text-amber-700 dark:text-amber-400"
           }`}
@@ -742,6 +812,9 @@ function rowStatusLabel(entry: RosterEntry): {
     return { text: "Not submitted", dotClass: "bg-gray-300" };
   }
   if (sub.grade_published_at) {
+    if (sub.grade_dirty) {
+      return { text: "Edited · not yet sent", dotClass: "bg-amber-500" };
+    }
     return { text: "Published", dotClass: "bg-green-500" };
   }
   if (sub.final_score !== null) {
@@ -819,15 +892,21 @@ function SubmissionDetailPanel({
             )}
             <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
             {published && row?.grade_published_at ? (
-              <span className="font-semibold text-success">
-                Published{" "}
-                {new Date(row.grade_published_at).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </span>
+              detail.grade_dirty ? (
+                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  Edited since publish · republish to update students
+                </span>
+              ) : (
+                <span className="font-semibold text-success">
+                  Published{" "}
+                  {new Date(row.grade_published_at).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+              )
             ) : gradedCount > 0 ? (
               <span className="font-semibold text-text-primary">
                 AI graded · not yet published
