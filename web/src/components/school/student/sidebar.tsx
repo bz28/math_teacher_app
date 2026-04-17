@@ -34,11 +34,6 @@ export function Sidebar() {
     loadClasses();
   }, []);
 
-  const isActive = (href: string) =>
-    href === "/school/student"
-      ? pathname === "/school/student"
-      : pathname.startsWith(href);
-
   return (
     <>
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border-light bg-surface md:flex">
@@ -55,18 +50,19 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Primary nav */}
+        {/* Primary nav — Dashboard matches only the exact root so a
+            /school/student/grades route doesn't highlight both rows. */}
         <nav className="space-y-0.5 px-3 py-4">
           <NavLink
             href="/school/student"
             label="Dashboard"
-            active={isActive("/school/student") && !pathname.startsWith("/school/student/grades") && !pathname.startsWith("/school/student/courses")}
+            active={pathname === "/school/student"}
             icon={<DashboardIcon />}
           />
           <NavLink
             href="/school/student/grades"
             label="My Grades"
-            active={isActive("/school/student/grades")}
+            active={pathname.startsWith("/school/student/grades")}
             icon={<GradesIcon />}
           />
         </nav>

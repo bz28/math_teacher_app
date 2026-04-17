@@ -1,4 +1,5 @@
 import { PercentBadge } from "@/components/school/shared/percent-badge";
+import { formatRelativeDate } from "@/lib/utils";
 
 /**
  * Slim assignment journey timeline (student portal v1 pillar 2).
@@ -39,7 +40,7 @@ export function AssignmentTimeline({
     {
       key: "submitted",
       label: "Submitted",
-      hint: hasSubmission ? formatDate(submittedAt) : null,
+      hint: submittedAt ? formatRelativeDate(submittedAt) : null,
     },
     {
       key: "reviewing",
@@ -49,7 +50,7 @@ export function AssignmentTimeline({
     {
       key: "graded",
       label: "Graded",
-      hint: hasPublishedGrade ? formatDate(gradePublishedAt) : null,
+      hint: gradePublishedAt ? formatRelativeDate(gradePublishedAt) : null,
     },
   ];
 
@@ -137,15 +138,4 @@ function Connector({ done }: { done: boolean }) {
   return (
     <div className={"mt-[11px] h-0.5 flex-1 " + (done ? "bg-primary" : "bg-border-light")} />
   );
-}
-
-function formatDate(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.round((now.getTime() - d.getTime()) / 86400000);
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays > 0 && diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }

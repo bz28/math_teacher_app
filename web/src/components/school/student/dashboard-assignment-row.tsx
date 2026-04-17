@@ -4,16 +4,15 @@ import { CourseAvatar } from "./dashboard-card";
 import { UrgencyPill } from "./urgency-pill";
 
 /**
- * Row used inside Due this week, Overdue, and In review cards on the
- * student dashboard. Click target is the HW detail page.
+ * Row used inside Due this week and Overdue subsections on the
+ * student dashboard. Click target is the HW detail page. The
+ * In-review bucket renders as a status sentence, not rows, so this
+ * component always shows the urgency pill.
  */
 export function DashboardAssignmentRow({
   assignment,
-  showUrgency = true,
 }: {
   assignment: DashboardAssignment;
-  /** Hide the urgency pill for In-review rows where due-date is moot. */
-  showUrgency?: boolean;
 }) {
   return (
     <Link
@@ -32,7 +31,7 @@ export function DashboardAssignmentRow({
           {assignment.course_name} · {assignment.section_name}
         </div>
       </div>
-      {showUrgency && <UrgencyPill dueAt={assignment.due_at} />}
+      <UrgencyPill dueAt={assignment.due_at} />
       <svg
         className="h-4 w-4 shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
         viewBox="0 0 24 24"

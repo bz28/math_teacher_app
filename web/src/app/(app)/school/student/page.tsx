@@ -7,7 +7,7 @@ import {
 } from "@/lib/api";
 import { DashboardCard } from "@/components/school/student/dashboard-card";
 import { DashboardAssignmentRow } from "@/components/school/student/dashboard-assignment-row";
-import { DashboardGradeRow } from "@/components/school/student/dashboard-grade-row";
+import { StudentGradeRow } from "@/components/school/student/student-grade-row";
 
 /**
  * Student Today dashboard. Top of the school-student portal — what
@@ -120,7 +120,7 @@ export default function SchoolStudentDashboard() {
             count={recently_graded.length || undefined}
           >
             {recently_graded.map((g) => (
-              <DashboardGradeRow key={g.assignment_id} grade={g} />
+              <StudentGradeRow key={g.assignment_id} grade={g} variant="compact" />
             ))}
             {recently_graded.length === 0 && (
               <EmptyRow text="No graded work yet. Once your teacher publishes, scores show up here." />

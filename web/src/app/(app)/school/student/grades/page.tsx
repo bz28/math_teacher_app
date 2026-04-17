@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   schoolStudent,
   type DashboardGrade,
   type StudentGradesResponse,
 } from "@/lib/api";
-import { PercentBadge } from "@/components/school/shared/percent-badge";
-import { CourseAvatar } from "@/components/school/student/dashboard-card";
+import { StudentGradeRow } from "@/components/school/student/student-grade-row";
 
 type Sort = "date_desc" | "date_asc" | "score_desc" | "score_asc";
 
@@ -114,41 +112,15 @@ export default function StudentGradesPage() {
       ) : (
         <div className="overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface">
           {sorted.map((g, i) => (
-            <GradeRow key={`${g.assignment_id}-${i}`} grade={g} />
+            <StudentGradeRow
+              key={`${g.assignment_id}-${i}`}
+              grade={g}
+              variant="detailed"
+            />
           ))}
         </div>
       )}
     </div>
-  );
-}
-
-function GradeRow({ grade }: { grade: DashboardGrade }) {
-  const published = new Date(grade.published_at);
-  return (
-    <Link
-      href={`/school/student/courses/${grade.course_id}/homework/${grade.assignment_id}`}
-      className="group flex items-center gap-3 border-b border-border-light/60 px-5 py-3 transition-colors last:border-b-0 hover:bg-surface-hover"
-    >
-      <CourseAvatar courseId={grade.course_id} courseName={grade.course_name} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-text-primary group-hover:text-primary">
-          {grade.title}
-        </div>
-        <div className="truncate text-xs text-text-muted">
-          {grade.course_name} · {grade.section_name}
-        </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <PercentBadge percent={grade.final_score} size="lg" />
-        <div className="mt-0.5 text-[11px] text-text-muted">
-          {published.toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
-        </div>
-      </div>
-    </Link>
   );
 }
 
