@@ -20,13 +20,12 @@ export function RecentActivity({
   maxQueueSize,
   currentQueueLength,
 }: RecentActivityProps) {
-  const [items, setItems] = useState<SessionHistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<SessionHistoryItem[] | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setItems(null);
     sessionApi
       .history({ subject }, 10, 0)
       .then((res) => {
@@ -34,16 +33,13 @@ export function RecentActivity({
       })
       .catch(() => {
         if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
   }, [subject]);
 
-  const filtered = items.slice(0, 5);
+  if (!items || items.length === 0) return null;
 
-  if (loading || filtered.length === 0) return null;
+  const filtered = items.slice(0, 5);
 
   return (
     <div className="space-y-3">

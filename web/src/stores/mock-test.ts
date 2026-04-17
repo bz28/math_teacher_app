@@ -133,7 +133,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         );
 
         // Solve in background — transition to error if all fail
-        Promise.allSettled(solvePromises).then((results) => {
+        Promise.allSettled(solvePromises).then(() => {
           const { mockTest: current } = get();
           if (!current || current.sessionId !== batchSessionId) return;
           const allFailed = current.questions.every((q) => q.answer === "");
@@ -171,7 +171,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         });
 
         // Solve in background — transition to error if all fail
-        Promise.allSettled(promises).then((results) => {
+        Promise.allSettled(promises).then(() => {
           const { mockTest: current } = get();
           if (!current || current.sessionId !== batchSessionId2) return;
           const allFailed = current.questions.every((q) => q.answer === "");
