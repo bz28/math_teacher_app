@@ -1360,6 +1360,12 @@ export interface StudentHomeworkDetail {
   problems: StudentHomeworkProblem[];
   submitted: boolean;
   submission_id: string | null;
+  /** ISO timestamp — null before submission. */
+  submitted_at: string | null;
+  /** Percent 0-100, or null if no grade published yet. */
+  final_score: number | null;
+  /** ISO timestamp — null until teacher publishes. */
+  grade_published_at: string | null;
 }
 
 export interface StudentSubmission {

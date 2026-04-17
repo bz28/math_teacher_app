@@ -245,6 +245,14 @@ class StudentHomeworkDetail(BaseModel):
     problems: list[StudentHomeworkProblem]
     submitted: bool
     submission_id: str | None
+    # Published-grade snapshot for the HW detail timeline. final_score
+    # is omitted (stays null) until grade_published_at is set — the
+    # student only sees the score after the teacher explicitly
+    # publishes. Breakdown / teacher_notes / ai_breakdown stay off
+    # this payload by design (v1 no feedback surfaces).
+    submitted_at: datetime | None = None
+    final_score: float | None = None
+    grade_published_at: datetime | None = None
 
 
 class SubmitHomeworkRequest(BaseModel):
@@ -813,14 +821,32 @@ async def homework_detail(
         ))
 
     # Existing submission for this student? Drives the HW page's
-    # render branch (submit form vs submitted read-only view).
+    # render branch (submit form vs submitted read-only view), and
+    # feeds the assignment-timeline's Submitted / Graded stages.
     sub = (await db.execute(
-        select(Submission.id).where(
+        select(Submission.id, Submission.submitted_at).where(
             Submission.assignment_id == assignment_id,
             Submission.student_id == user.id,
         )
         .limit(1)
-    )).scalar_one_or_none()
+    )).first()
+
+    # Published grade, if any. Only final_score + grade_published_at
+    # surface here — breakdown / notes / ai_breakdown are v2.
+    final_score: float | None = None
+    grade_published_at: datetime | None = None
+    if sub is not None:
+        grade = (await db.execute(
+            select(SubmissionGrade.final_score, SubmissionGrade.grade_published_at)
+            .where(
+                SubmissionGrade.submission_id == sub.id,
+                SubmissionGrade.grade_published_at.is_not(None),
+            )
+            .limit(1)
+        )).first()
+        if grade is not None:
+            final_score = round(grade.final_score, 1) if grade.final_score is not None else None
+            grade_published_at = grade.grade_published_at
 
     return StudentHomeworkDetail(
         assignment_id=str(assignment.id),
@@ -831,7 +857,10 @@ async def homework_detail(
         course_name=course.name,
         problems=problems,
         submitted=sub is not None,
-        submission_id=str(sub) if sub is not None else None,
+        submission_id=str(sub.id) if sub is not None else None,
+        submitted_at=sub.submitted_at if sub is not None else None,
+        final_score=final_score,
+        grade_published_at=grade_published_at,
     )
 
 

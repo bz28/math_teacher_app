@@ -22,6 +22,7 @@ import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
 import { IntegrityConfirmView } from "@/components/school/student/integrity-confirm-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
+import { AssignmentTimeline } from "@/components/school/student/assignment-timeline";
 import type { IntegrityExtraction } from "@/lib/api";
 
 type Mode =
@@ -314,6 +315,14 @@ export default function HomeworkPage() {
         {hw.problems.length} {hw.problems.length === 1 ? "problem" : "problems"}
         {hw.due_at ? ` · Due ${new Date(hw.due_at).toLocaleDateString()}` : ""}
       </p>
+
+      <div className="mt-5">
+        <AssignmentTimeline
+          submittedAt={hw.submitted_at}
+          finalScore={hw.final_score}
+          gradePublishedAt={hw.grade_published_at}
+        />
+      </div>
 
       <div className="mt-6 space-y-4">
         {hw.problems.map((p) => {
