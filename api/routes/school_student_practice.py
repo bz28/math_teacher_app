@@ -555,15 +555,23 @@ async def get_dashboard(
             recently_graded=[],
         )
 
-    # Which of these has the student submitted?
+    # Which of these has the student submitted? We carry submitted_at
+    # through so the In-review sort doesn't need a second round-trip.
     submitted_rows = (await db.execute(
-        select(Submission.id, Submission.assignment_id).where(
+        select(
+            Submission.id,
+            Submission.assignment_id,
+            Submission.submitted_at,
+        ).where(
             Submission.student_id == user.id,
             Submission.assignment_id.in_(assignments_by_id.keys()),
         )
     )).all()
     submission_by_aid: dict[uuid.UUID, uuid.UUID] = {
-        sub_aid: sub_id for sub_id, sub_aid in submitted_rows
+        sub_aid: sub_id for sub_id, sub_aid, _ in submitted_rows
+    }
+    submitted_at_by_aid: dict[uuid.UUID, datetime] = {
+        sub_aid: sub_at for _, sub_aid, sub_at in submitted_rows
     }
 
     # Published grades keyed by submission_id for the dedupe below.
@@ -641,28 +649,23 @@ async def get_dashboard(
             ))
 
     # Sort: Due soonest first (null due_at last); Overdue most-overdue
-    # first (oldest due_at first, most urgent at top).
+    # first (oldest due_at first, most urgent at top); In-review most-
+    # recently-submitted first (using submitted_at already in memory).
     due_this_week.sort(key=lambda x: (x.due_at is None, x.due_at or now))
     overdue.sort(key=lambda x: x.due_at or now)
-    # In-review: most-recently-submitted first — surfaced via a simple
-    # follow-up query since we didn't carry submitted_at through the map.
-    in_review_submitted_at: dict[str, datetime] = {}
-    if in_review:
-        submitted_at_rows = (await db.execute(
-            select(Submission.assignment_id, Submission.submitted_at).where(
-                Submission.student_id == user.id,
-                Submission.assignment_id.in_([uuid.UUID(x.assignment_id) for x in in_review]),
-            )
-        )).all()
-        in_review_submitted_at = {str(aid): sa for aid, sa in submitted_at_rows}
     in_review.sort(
-        key=lambda x: in_review_submitted_at.get(x.assignment_id, now),
+        key=lambda x: submitted_at_by_aid.get(uuid.UUID(x.assignment_id), now),
         reverse=True,
     )
 
     # Recently graded — join on submission→grade, take top 10 by
     # grade_published_at DESC. Covers all enrolled sections, not
     # limited by the 7-day window on active buckets.
+    #
+    # Filters Assignment.status/type to match the active-bucket query
+    # above — if a teacher unpublished an HW or flipped it to a test,
+    # it should disappear from the student's view everywhere, not
+    # leave a dangling score row with no clickthrough context.
     recent_grade_rows = (await db.execute(
         select(SubmissionGrade, Submission, Assignment)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
@@ -670,6 +673,8 @@ async def get_dashboard(
         .where(
             Submission.student_id == user.id,
             Submission.section_id.in_(section_ids),
+            Assignment.status == "published",
+            Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
             SubmissionGrade.final_score.is_not(None),
         )
@@ -679,12 +684,9 @@ async def get_dashboard(
 
     recently_graded: list[DashboardGrade] = []
     for grade, sub, a in recent_grade_rows:
-        grade_meta = section_meta.get(sub.section_id)
-        if grade_meta is None:
-            # Student was in this section when they submitted but is
-            # no longer enrolled — skip rather than leak a section we
-            # can't label. Rare edge case but worth handling.
-            continue
+        # section_id.in_(section_ids) filter above guarantees section
+        # membership, so section_meta lookup is safe.
+        grade_meta = section_meta[sub.section_id]
         recently_graded.append(DashboardGrade(
             assignment_id=str(a.id),
             title=a.title,
@@ -743,6 +745,8 @@ async def get_all_grades(
         .where(
             Submission.student_id == user.id,
             Submission.section_id.in_(section_ids),
+            Assignment.status == "published",
+            Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
             SubmissionGrade.final_score.is_not(None),
         )
@@ -751,9 +755,8 @@ async def get_all_grades(
 
     grades: list[DashboardGrade] = []
     for grade, sub, a in rows:
-        grade_meta = section_meta.get(sub.section_id)
-        if grade_meta is None:
-            continue
+        # section_id.in_(section_ids) filter above guarantees membership.
+        grade_meta = section_meta[sub.section_id]
         grades.append(DashboardGrade(
             assignment_id=str(a.id),
             title=a.title,

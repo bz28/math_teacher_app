@@ -2,11 +2,16 @@
 
 Covers:
 - Bucket classification: overdue / due-this-week / in-review / graded.
-- Deduping the same assignment when a student is in multiple sections.
-- Grade-publish gates visibility (unpublished grade stays in "in_review").
-- Role guard: teachers cannot hit student endpoints.
+- Published-grade gate (unpublished grade stays in "in_review").
 - Empty state: student with no enrollments returns empty buckets.
 - first_name derived from User.name.
+- Feedback-field guardrail: teacher_notes / breakdown / ai_breakdown
+  never appear in the student-facing payload.
+- Draft assignments and non-homework types excluded from every bucket.
+
+Authorization is not tested as an explicit role guard — the backend
+filters by SectionEnrollment, so non-student users simply get empty
+responses. That's covered by the "no enrollments" test above.
 """
 
 from __future__ import annotations
@@ -38,6 +43,28 @@ async def _set_name(user_id: uuid.UUID, name: str) -> None:
             text("UPDATE users SET name = :name WHERE id = :id"),
             {"name": name, "id": user_id},
         )
+        await s.commit()
+
+
+async def _set_assignment(
+    assignment_id: uuid.UUID,
+    *,
+    status: str | None = None,
+    type_: str | None = None,
+) -> None:
+    """Mutate an assignment's status or type directly. Used by the
+    "draft excluded" / "test type excluded" filter-coverage tests."""
+    async with get_session_factory()() as s:
+        if status is not None:
+            await s.execute(
+                text("UPDATE assignments SET status = :s WHERE id = :id"),
+                {"s": status, "id": assignment_id},
+            )
+        if type_ is not None:
+            await s.execute(
+                text("UPDATE assignments SET type = :t WHERE id = :id"),
+                {"t": type_, "id": assignment_id},
+            )
         await s.commit()
 
 
@@ -264,6 +291,65 @@ async def test_grades_endpoint_excludes_unpublished(
         headers=_auth(world["student_token"]),
     )
     assert r.json()["grades"] == []
+
+
+async def test_dashboard_excludes_draft_assignments(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Draft HWs must be invisible to students — a teacher's in-progress
+    work shouldn't leak through the Today dashboard."""
+    await _set_assignment(world["assignment_id"], status="draft")
+    r = await client.get(
+        "/v1/school/student/dashboard",
+        headers=_auth(world["student_token"]),
+    )
+    body = r.json()
+    assert body["due_this_week"] == []
+    assert body["overdue"] == []
+    assert body["in_review"] == []
+    assert body["recently_graded"] == []
+
+
+async def test_dashboard_excludes_non_homework_types(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Tests / quizzes are surfaced on a different screen (future). The
+    homework dashboard should only show type='homework'."""
+    await _set_assignment(world["assignment_id"], type_="test")
+    r = await client.get(
+        "/v1/school/student/dashboard",
+        headers=_auth(world["student_token"]),
+    )
+    body = r.json()
+    assert body["due_this_week"] == []
+    assert body["overdue"] == []
+
+
+async def test_recently_graded_excludes_unpublished_assignment(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """If a teacher unpublishes an HW AFTER grades are published, the
+    grade should not continue to surface on the dashboard / My Grades.
+    Consistent with how the active buckets hide draft/non-homework."""
+    section_id = await _get_section_id(world)
+    sub_id = await _create_submission(
+        world["assignment_id"], world["student_id"], section_id,
+    )
+    await _publish_grade(sub_id, 95.0)
+    # Teacher pulls the HW back.
+    await _set_assignment(world["assignment_id"], status="draft")
+
+    dash = await client.get(
+        "/v1/school/student/dashboard",
+        headers=_auth(world["student_token"]),
+    )
+    assert dash.json()["recently_graded"] == []
+
+    grades = await client.get(
+        "/v1/school/student/grades",
+        headers=_auth(world["student_token"]),
+    )
+    assert grades.json()["grades"] == []
 
 
 async def test_dashboard_does_not_expose_feedback_fields(
