@@ -55,11 +55,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
       out = out.filter((r) => r.section_id === sectionId);
     }
     if (q) {
-      out = out.filter(
-        (r) =>
-          r.assignment_title.toLowerCase().includes(q) ||
-          r.section_name.toLowerCase().includes(q),
-      );
+      out = out.filter((r) => r.assignment_title.toLowerCase().includes(q));
     }
     return out.slice().sort(compareRows);
   }, [rows, sectionId, search]);
@@ -94,25 +90,23 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by homework or section"
+            placeholder="Search homework"
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
-        {sections.length > 1 && (
-          <select
-            value={sectionId}
-            onChange={(e) => setSectionId(e.target.value)}
-            aria-label="Filter by section"
-            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
-          >
-            <option value="all">All sections</option>
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        )}
+        <select
+          value={sectionId}
+          onChange={(e) => setSectionId(e.target.value)}
+          aria-label="Filter by section"
+          className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+        >
+          <option value="all">All sections</option>
+          {sections.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {filtered.length === 0 ? (
@@ -176,14 +170,14 @@ function InboxRow({
           </span>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {row.flagged > 0 && (
-            <Pill tone="red" label={`${row.flagged} flagged`} />
-          )}
           {row.to_grade > 0 && (
             <Pill tone="amber" label={`${row.to_grade} to grade`} />
           )}
           {row.published > 0 && (
-            <Pill tone="green" label={`${row.published} published`} />
+            <Pill
+              tone="green"
+              label={`${row.published}/${row.submitted} published`}
+            />
           )}
           {!hasWork && row.published === 0 && (
             <Pill tone="muted" label="No submissions yet" />
