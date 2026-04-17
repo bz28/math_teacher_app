@@ -849,7 +849,7 @@ function SubmissionDetailPanel({
           type="button"
           onClick={onSelectNext}
           disabled={!nextStudent}
-          className="shrink-0 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
+          className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
         >
           Next student →
         </button>
@@ -989,7 +989,10 @@ function ProblemGradeRow({
             {problem.student_answer ? (
               <MathText text={problem.student_answer} />
             ) : (
-              <span className="italic text-text-muted">No answer extracted</span>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                <span aria-hidden>⚠</span>
+                Couldn&apos;t extract — check the student&apos;s work
+              </span>
             )}
           </div>
         </div>
@@ -1246,7 +1249,7 @@ function IntegrityBanner({
               {style.label}
             </p>
             {summary && (
-              <p className="mt-1.5 text-xs leading-relaxed text-text-primary/90">
+              <p className="mt-1.5 text-xs leading-relaxed text-text-primary">
                 {summary}
               </p>
             )}
@@ -1439,10 +1442,10 @@ function StudentWorkThumbButton({ imageData }: { imageData: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group inline-flex items-center gap-2 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-xs font-semibold text-text-secondary transition-all hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+        className="group inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-xs font-semibold text-text-secondary transition-all hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
         aria-label="View student's handwritten work full size"
       >
-        <span className="relative block h-10 w-14 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-bg-subtle">
+        <span className="relative block h-7 w-10 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-bg-subtle">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={src}
@@ -1450,7 +1453,7 @@ function StudentWorkThumbButton({ imageData }: { imageData: string }) {
             className="h-full w-full object-cover"
           />
         </span>
-        <span>View student&apos;s work ↗</span>
+        <span>View work ↗</span>
       </button>
       <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
         <div className="flex items-center justify-between pb-2">
