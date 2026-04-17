@@ -19,12 +19,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 
 from api.database import get_session_factory
-from api.models.assignment import (
-    Assignment,
-    AssignmentSection,
-    Submission,
-    SubmissionGrade,
-)
+from api.models.assignment import Submission, SubmissionGrade
 from tests.conftest import auth_headers as _auth
 
 
