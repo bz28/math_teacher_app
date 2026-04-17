@@ -176,7 +176,7 @@ function InboxRow({
           {row.published > 0 && (
             <Pill
               tone="green"
-              label={`${row.published}/${row.submitted} published`}
+              label={`${row.published}/${row.submitted} grades published to students`}
             />
           )}
           {!hasWork && row.published === 0 && (
