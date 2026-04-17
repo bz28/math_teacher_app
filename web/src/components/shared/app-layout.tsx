@@ -25,16 +25,21 @@ const teacherNavItems = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
+  const pathname = usePathname();
   const isTeacher = user?.role === "teacher";
-  // School-linked students get their own sidebar shell. Personal
-  // students keep the original top-bar layout since their world is
-  // Learn / History / Account — different navigation shape entirely.
+  // School-linked students get their own sidebar shell — but only
+  // inside the school world. On shared routes (/account) and personal
+  // routes (/home, /history, /learn, /practice), the regular top-bar
+  // layout keeps its nav coherent: otherwise a school student on
+  // /home would see a sidebar whose nav items point nowhere useful.
   const isSchoolStudent = user?.role === "student" && !!user?.school_id;
+  const inSchoolWorld =
+    pathname.startsWith("/school/student") || pathname === "/account";
 
   if (isTeacher) {
     return <TeacherLayout>{children}</TeacherLayout>;
   }
-  if (isSchoolStudent) {
+  if (isSchoolStudent && inSchoolWorld) {
     return <SchoolStudentLayout>{children}</SchoolStudentLayout>;
   }
   return <StudentLayout>{children}</StudentLayout>;
