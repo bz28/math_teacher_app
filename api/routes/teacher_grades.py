@@ -33,38 +33,41 @@ def _avg(vals: list[float]) -> float | None:
     return round(sum(vals) / len(vals), 1) if vals else None
 
 
-async def _sections_by_assignment(
-    db: AsyncSession, course_id: uuid.UUID, past_due_only: bool,
-) -> dict[uuid.UUID, set[uuid.UUID]]:
-    """For a course, return {section_id: {assignment_id, ...}} of
-    published HWs pushed to each section.
+async def _published_and_past_due(
+    db: AsyncSession, course_id: uuid.UUID,
+) -> tuple[dict[uuid.UUID, set[uuid.UUID]], dict[uuid.UUID, set[uuid.UUID]]]:
+    """For a course, return two {section_id: {assignment_id, ...}} maps:
+      1. all published HWs pushed to each section
+      2. past-due subset (HWs the student "should have turned in by now")
 
-    past_due_only=True → only HWs the student "should have turned in
-    by now." Used by the roster so Progress / missing counts don't
-    inflate from not-yet-due work.
-
-    past_due_only=False → every published HW assigned to the section,
-    regardless of due date. Used by the student detail page so a HW
-    the teacher just published (but hasn't fully graded/published
-    grades for) still shows up as "Not graded yet" instead of vanishing.
+    One query, bucketed in Python. Callers pick what they need:
+      - Roster uses the first map for the Progress denominator
+        (graded / all-published) and the second for the Missing pill.
+      - Detail uses the first map so a HW the teacher just published
+        (but hasn't fully graded) still shows up as "Not graded yet",
+        and the second map to determine the Missing section.
     """
-    q = (
-        select(AssignmentSection.assignment_id, AssignmentSection.section_id)
+    now = datetime.now(UTC)
+    rows = (await db.execute(
+        select(
+            AssignmentSection.assignment_id,
+            AssignmentSection.section_id,
+            Assignment.due_at,
+        )
         .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
         .where(
             Assignment.course_id == course_id,
             Assignment.status == "published",
             AssignmentSection.published_at.is_not(None),
         )
-    )
-    if past_due_only:
-        now = datetime.now(UTC)
-        q = q.where(Assignment.due_at.is_not(None), Assignment.due_at <= now)
-    rows = (await db.execute(q)).all()
-    out: dict[uuid.UUID, set[uuid.UUID]] = {}
+    )).all()
+    assigned_by_sec: dict[uuid.UUID, set[uuid.UUID]] = {}
+    past_due_by_sec: dict[uuid.UUID, set[uuid.UUID]] = {}
     for r in rows:
-        out.setdefault(r.section_id, set()).add(r.assignment_id)
-    return out
+        assigned_by_sec.setdefault(r.section_id, set()).add(r.assignment_id)
+        if r.due_at is not None and r.due_at <= now:
+            past_due_by_sec.setdefault(r.section_id, set()).add(r.assignment_id)
+    return assigned_by_sec, past_due_by_sec
 
 
 @router.get("/courses/{course_id}/grades")
@@ -101,7 +104,7 @@ async def get_course_grades(
         enrollments_q = enrollments_q.where(Section.id == section_id)
     enrollments = (await db.execute(enrollments_q.order_by(User.name))).all()
 
-    assigned_by_section = await _sections_by_assignment(db, course_id, past_due_only=True)
+    assigned_by_section, past_due_by_section = await _published_and_past_due(db, course_id)
     # Flatten to a single set so the per-student grade/submission
     # queries below only pull rows for HWs in this course. Without
     # this, students enrolled in multiple teacher courses would have
@@ -157,12 +160,16 @@ async def get_course_grades(
     students_out = []
     for e in enrollments:
         assigned = assigned_by_section.get(e.section_id, set())
+        past_due = past_due_by_section.get(e.section_id, set())
         graded = graded_by_student.get(e.id, {})
         submitted = submitted_by_student.get(e.id, set())
-        # graded_count is scoped to assigned HWs so a stray published
-        # grade on a not-yet-due HW doesn't inflate Progress.
+        # Progress counts every published HW (including not-yet-due)
+        # as the denominator so the roster doesn't hide work you've
+        # already graded just because it isn't due yet.
         graded_ids = set(graded.keys()) & assigned
-        missing_ids = assigned - submitted
+        # Missing is narrower — past-due and student didn't submit.
+        # A future-due HW with no submission isn't "missing" yet.
+        missing_ids = past_due - submitted
         students_out.append({
             "student_id": str(e.id),
             "name": e.name,
@@ -225,8 +232,9 @@ async def get_student_grades(
     # students. Past-due/no-submission work lands in missing_hws; the
     # rest appears in published_hws with final_score=null when the
     # grade isn't published yet.
-    assigned_by_section = await _sections_by_assignment(db, course_id, past_due_only=False)
+    assigned_by_section, past_due_by_section = await _published_and_past_due(db, course_id)
     assigned_aids = assigned_by_section.get(section_id, set())
+    past_due_aids = past_due_by_section.get(section_id, set())
 
     if not assigned_aids:
         return {
@@ -276,14 +284,7 @@ async def get_student_grades(
 
     # Missing = past-due AND student didn't submit. Computed first so
     # we can exclude those HWs from the main list (no double-display).
-    now = datetime.now(UTC)
-    missing_aids: set[uuid.UUID] = set()
-    for aid in assigned_aids:
-        a = assignment_meta.get(aid)
-        if not a or not a.due_at:
-            continue
-        if a.due_at <= now and aid not in submitted_aids:
-            missing_aids.add(aid)
+    missing_aids = past_due_aids - submitted_aids
 
     published_hws = []
     for aid in assigned_aids - missing_aids:
