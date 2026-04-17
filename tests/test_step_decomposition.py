@@ -22,22 +22,25 @@ class TestParseDecomposition:
             ],
             "final_answer": "x = 3",
         }
-        steps, final_answer, answer_type = _parse_decomposition(data)
+        steps, final_answer, answer_type, topic = _parse_decomposition(data)
         assert len(steps) == 2
         assert steps[0] == {"title": "", "description": "Subtract 6 from both sides to get 2x = 6"}
         assert final_answer == "x = 3"
         assert answer_type == "text"
+        assert topic == ""
 
     def test_parse_with_answer_type(self) -> None:
         data = {
             "steps": ["Solve to get x = 3"],
             "final_answer": "x = 3",
             "answer_type": "diagram",
+            "topic": "Algebra",
         }
-        steps, final_answer, answer_type = _parse_decomposition(data)
+        steps, final_answer, answer_type, topic = _parse_decomposition(data)
         assert len(steps) == 1
         assert final_answer == "x = 3"
         assert answer_type == "diagram"
+        assert topic == "algebra"
 
     def test_parse_invalid_type_raises(self) -> None:
         with pytest.raises((KeyError, TypeError, ValueError)):
