@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import Integer, case, func, or_, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
@@ -777,14 +777,26 @@ async def submissions_inbox(
             else_=0,
         ),
     ).cast(Integer).label("to_grade")
-    # Published but edited after — teacher needs to republish so
-    # students see the new value. Folded into the "to release" pill
-    # alongside `to_grade` on the frontend.
+    # Published but the live draft differs from the published snapshot
+    # — teacher has edited the grade since publishing. Content-based
+    # (not timestamp-based) so flipping a grade back to its original
+    # value doesn't wrongly mark it dirty. `breakdown` is JSON, so
+    # cast to jsonb to get structural equality.
     dirty_expr = func.sum(
         case(
             (
                 (SubmissionGrade.grade_published_at.is_not(None))
-                & (SubmissionGrade.graded_at > SubmissionGrade.grade_published_at),
+                & (
+                    SubmissionGrade.final_score.is_distinct_from(
+                        SubmissionGrade.published_final_score,
+                    )
+                    | SubmissionGrade.teacher_notes.is_distinct_from(
+                        SubmissionGrade.published_teacher_notes,
+                    )
+                    | SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+                        SubmissionGrade.published_breakdown.cast(JSONB),
+                    )
+                ),
                 1,
             ),
             else_=0,
@@ -963,14 +975,19 @@ async def list_submissions(
 
 
 def _is_grade_dirty(grade: SubmissionGrade | None) -> bool:
-    """True if the grade has been published AND edited since. Students
-    still see the `published_*` snapshot — the teacher needs to
-    republish to ship the edits."""
-    if grade is None:
+    """True if the current draft differs from the published snapshot.
+
+    Compares content, not timestamps — a teacher flipping Full → Zero →
+    Full would bump `graded_at` each time but end up with the same
+    values, so a timestamp check would wrongly mark them dirty. Python
+    `!=` on lists/dicts does deep equality, which is what we want."""
+    if grade is None or grade.grade_published_at is None:
         return False
-    if grade.grade_published_at is None or grade.graded_at is None:
-        return False
-    return grade.graded_at > grade.grade_published_at
+    return (
+        grade.final_score != grade.published_final_score
+        or grade.teacher_notes != grade.published_teacher_notes
+        or grade.breakdown != grade.published_breakdown
+    )
 
 
 def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
@@ -1065,6 +1082,7 @@ async def grade_submission(
         "status": "ok",
         "final_score": grade.final_score,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
+        "grade_dirty": _is_grade_dirty(grade),
     }
 
 
@@ -1078,8 +1096,9 @@ async def publish_grades(
 
     Two categories are picked up:
       • fresh — graded but never published
-      • dirty — already published, but `graded_at > grade_published_at`
-                means the teacher edited the grade after publish
+      • dirty — already published, but the live draft differs from
+                the published snapshot (content diff, so a grade
+                flipped back to its original value is not dirty)
 
     Either way, the live `final_score / breakdown / teacher_notes`
     are snapshotted into the `published_*` columns and
@@ -1105,7 +1124,15 @@ async def publish_grades(
             SubmissionGrade.final_score.is_not(None),
             or_(
                 SubmissionGrade.grade_published_at.is_(None),
-                SubmissionGrade.graded_at > SubmissionGrade.grade_published_at,
+                SubmissionGrade.final_score.is_distinct_from(
+                    SubmissionGrade.published_final_score,
+                ),
+                SubmissionGrade.teacher_notes.is_distinct_from(
+                    SubmissionGrade.published_teacher_notes,
+                ),
+                SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+                    SubmissionGrade.published_breakdown.cast(JSONB),
+                ),
             ),
         )
     )).scalars().all()

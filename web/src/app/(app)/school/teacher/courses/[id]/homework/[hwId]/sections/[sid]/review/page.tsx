@@ -259,28 +259,21 @@ export default function HomeworkSectionReviewPage({
 
   // Mirror the server's recomputed grade back onto the roster row so
   // the left-list status/score updates the moment a save returns.
-  // If the submission is already published, flip grade_dirty so the
-  // UI surfaces the "edited — republish to update" state without a
-  // refetch.
+  // `grade_dirty` comes from the server (content-diff against the
+  // published snapshot) so flipping Full → Zero → Full doesn't stick
+  // the row in a dirty state when the net change is zero.
   const applyGradeToRoster = useCallback(
     (
       submissionId: string,
-      patch: Pick<TeacherSubmissionRow, "final_score" | "breakdown">,
+      patch: Pick<TeacherSubmissionRow, "final_score" | "breakdown" | "grade_dirty">,
     ) => {
       setRoster((prev) =>
         prev
-          ? prev.map((e) => {
-              if (e.submission?.id !== submissionId) return e;
-              const isPublished = e.submission.grade_published_at !== null;
-              return {
-                ...e,
-                submission: {
-                  ...e.submission,
-                  ...patch,
-                  ...(isPublished ? { grade_dirty: true } : {}),
-                },
-              };
-            })
+          ? prev.map((e) =>
+              e.submission?.id === submissionId
+                ? { ...e, submission: { ...e.submission, ...patch } }
+                : e,
+            )
           : prev,
       );
     },
@@ -289,15 +282,15 @@ export default function HomeworkSectionReviewPage({
 
   // Persist the current breakdown. Full-replacement semantics: we
   // send every graded entry on every call, the backend writes the
-  // row and recomputes `final_score`. Optimistic local state has
-  // already been mutated by the caller; if the save fails we leave
-  // it as-is and surface an error — teacher can click again. Error
-  // is scoped to a submissionId so a prior failure on student A
-  // can't bleed onto student B's grade summary card.
+  // row, recomputes `final_score`, and returns the authoritative
+  // `grade_dirty` (content-diff). If the save fails we leave local
+  // state as-is and surface an error — teacher can click again.
+  // Error is scoped to a submissionId so a prior failure on student
+  // A can't bleed onto student B's grade summary card. Also mirrors
+  // the server's dirty flag back onto the detail slot so the strip
+  // reflects it without a separate refetch.
   const persistBreakdown = useCallback(
     async (submissionId: string, breakdown: GradeBreakdownEntry[]) => {
-      // Clear any stale error for this submission up front, so a new
-      // in-flight save doesn't visually carry a past failure.
       setSaveError((prev) =>
         prev?.forSubmissionId === submissionId ? null : prev,
       );
@@ -306,7 +299,13 @@ export default function HomeworkSectionReviewPage({
         applyGradeToRoster(submissionId, {
           final_score: res.final_score,
           breakdown,
+          grade_dirty: res.grade_dirty,
         });
+        setDetail((d) =>
+          d && d.submission_id === submissionId
+            ? { ...d, grade_dirty: res.grade_dirty }
+            : d,
+        );
       } catch (e) {
         setSaveError({
           forSubmissionId: submissionId,
@@ -337,12 +336,7 @@ export default function HomeworkSectionReviewPage({
       const nextBreakdown = existing
         ? prior.map((b) => (b.problem_id === problemId ? nextEntry : b))
         : [...prior, nextEntry];
-      // If the submission is already published, editing dirties it.
-      // Flip the flag locally so the strip shows "Edited · republish"
-      // before the next refetch.
-      const nextDirty =
-        detail.grade_published_at !== null ? true : detail.grade_dirty;
-      setDetail({ ...detail, breakdown: nextBreakdown, grade_dirty: nextDirty });
+      setDetail({ ...detail, breakdown: nextBreakdown });
       void persistBreakdown(detail.submission_id, nextBreakdown);
     },
     [detail, persistBreakdown],

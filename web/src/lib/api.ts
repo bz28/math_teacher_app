@@ -1001,6 +1001,7 @@ export const teacher = {
       status: string;
       final_score: number | null;
       grade_published_at: string | null;
+      grade_dirty: boolean;
     }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
