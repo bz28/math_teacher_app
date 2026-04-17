@@ -736,6 +736,10 @@ export interface SubmissionsInboxRow {
   flagged: number;
   /** Graded but not yet published to students. */
   to_grade: number;
+  /** Already published, but the teacher has edited the grade since.
+   *  Students still see the old published snapshot — teacher must
+   *  republish to ship the edits. Folded into the "to release" pill. */
+  dirty: number;
   /** Published — students can see these grades. */
   published: number;
 }
@@ -1207,6 +1211,9 @@ export interface TeacherSubmissionRow {
    *  grades. Future AI PR pre-fills this too. */
   breakdown: GradeBreakdownEntry[] | null;
   grade_published_at: string | null;
+  /** True if the grade has been published AND edited since. Students
+   *  still see the published snapshot — teacher must republish. */
+  grade_dirty: boolean;
   reviewed_at: string | null;
   integrity_overview: IntegrityOverview | null;
 }
@@ -1235,6 +1242,9 @@ export interface TeacherSubmissionDetail {
   final_score: number | null;
   teacher_notes: string | null;
   grade_published_at: string | null;
+  /** True if the grade has been published AND edited since. Students
+   *  still see the published snapshot — teacher must republish. */
+  grade_dirty: boolean;
 }
 
 export interface AiGradeEntry {

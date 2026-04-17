@@ -153,7 +153,7 @@ function InboxRow({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
           <span>{dueLabel}</span>
-          {overdueDays > 0 && hasWork && row.to_grade + row.flagged > 0 && (
+          {overdueDays > 0 && hasWork && row.to_grade + row.dirty + row.flagged > 0 && (
             <>
               <span>·</span>
               <span className="font-semibold text-red-600 dark:text-red-400">
@@ -170,8 +170,8 @@ function InboxRow({
           </span>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {row.to_grade > 0 && (
-            <Pill tone="amber" label={`${row.to_grade} to grade`} />
+          {row.to_grade + row.dirty > 0 && (
+            <Pill tone="amber" label={`${row.to_grade + row.dirty} to release`} />
           )}
           {row.published > 0 && (
             <Pill
@@ -221,8 +221,8 @@ function Pill({
  *  group ordered by due date ascending. Null due dates sink within
  *  their group. */
 function compareRows(a: SubmissionsInboxRow, b: SubmissionsInboxRow): number {
-  const aWork = a.flagged + a.to_grade > 0 ? 0 : 1;
-  const bWork = b.flagged + b.to_grade > 0 ? 0 : 1;
+  const aWork = a.flagged + a.to_grade + a.dirty > 0 ? 0 : 1;
+  const bWork = b.flagged + b.to_grade + b.dirty > 0 ? 0 : 1;
   if (aWork !== bWork) return aWork - bWork;
   return dueKey(a) - dueKey(b);
 }
