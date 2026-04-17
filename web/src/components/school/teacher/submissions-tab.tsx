@@ -8,29 +8,16 @@ import { EmptyState } from "@/components/school/shared/empty-state";
 /**
  * Submissions tab — the teacher's grading inbox.
  *
- * One row per (published HW × section) pair. Default sort is by
- * urgency so the loudest signals (integrity flags, graded-but-not-
- * published) surface first; teacher can flip to due date when they
- * want chronological scan.
- *
- * 8b will build the per-HW review page that Review → links to.
+ * One row per (published HW × section) pair. Rows with outstanding
+ * work (flagged or to-grade) sort to the top by due date ascending;
+ * fully-handled rows sink so finished HWs don't outrank ones that
+ * still need attention.
  */
-type SortKey = "urgency" | "due";
-type ScopeKey = "all" | "week" | "flagged";
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
 export function SubmissionsTab({ courseId }: { courseId: string }) {
   const [rows, setRows] = useState<SubmissionsInboxRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortKey>("urgency");
-  const [scope, setScope] = useState<ScopeKey>("all");
+  const [sectionId, setSectionId] = useState<string>("all");
   const [search, setSearch] = useState("");
-  // Freeze `now` at mount so the "Due this week" filter is stable
-  // during render. Re-reading Date.now() inside useMemo is flagged
-  // by react-hooks/purity; lazy-init side-steps that and any drift
-  // across a long session is immaterial for a 7-day filter window.
-  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -49,10 +36,24 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
     };
   }, [courseId]);
 
+  const sections = useMemo(() => {
+    if (!rows) return [];
+    const seen = new Map<string, string>();
+    for (const r of rows) {
+      if (!seen.has(r.section_id)) seen.set(r.section_id, r.section_name);
+    }
+    return Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [rows]);
+
   const filtered = useMemo(() => {
     if (!rows) return [];
     const q = search.trim().toLowerCase();
     let out = rows;
+    if (sectionId !== "all") {
+      out = out.filter((r) => r.section_id === sectionId);
+    }
     if (q) {
       out = out.filter(
         (r) =>
@@ -60,23 +61,8 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
           r.section_name.toLowerCase().includes(q),
       );
     }
-    if (scope === "flagged") {
-      out = out.filter((r) => r.flagged > 0);
-    } else if (scope === "week") {
-      // "This week" = due within the next 7 days OR overdue by ≤7
-      // days. Ancient overdue items are noise, not actionable.
-      out = out.filter((r) => {
-        if (r.due_at === null) return false;
-        const delta = new Date(r.due_at).getTime() - now;
-        return delta > -WEEK_MS && delta < WEEK_MS;
-      });
-    }
-    const sorted = out.slice();
-    sorted.sort((a, b) =>
-      sort === "urgency" ? urgencyScore(b) - urgencyScore(a) : dueKey(a) - dueKey(b),
-    );
-    return sorted;
-  }, [rows, scope, search, sort, now]);
+    return out.slice().sort(compareRows);
+  }, [rows, sectionId, search]);
 
   if (error) {
     return <p className="mt-6 text-sm text-red-600">{error}</p>;
@@ -96,7 +82,6 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
 
   return (
     <div className="mt-2">
-      {/* Filter + sort row */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <span
@@ -113,11 +98,23 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
-        <ScopeChips scope={scope} onChange={setScope} />
-        <SortToggle sort={sort} onChange={setSort} />
+        {sections.length > 1 && (
+          <select
+            value={sectionId}
+            onChange={(e) => setSectionId(e.target.value)}
+            aria-label="Filter by section"
+            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+          >
+            <option value="all">All sections</option>
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* Filtered-empty vs rendered list */}
       {filtered.length === 0 ? (
         <p className="mt-8 text-center text-xs text-text-muted">
           No homework matches those filters.
@@ -130,62 +127,6 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
         </div>
       )}
     </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-
-function ScopeChips({
-  scope,
-  onChange,
-}: {
-  scope: ScopeKey;
-  onChange: (next: ScopeKey) => void;
-}) {
-  const items: { key: ScopeKey; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "week", label: "Due this week" },
-    { key: "flagged", label: "Flagged only" },
-  ];
-  return (
-    <div className="flex items-center gap-1 rounded-[--radius-pill] bg-bg-subtle p-0.5">
-      {items.map((it) => {
-        const active = scope === it.key;
-        return (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onChange(it.key)}
-            className={`rounded-[--radius-pill] px-3 py-1 text-xs font-semibold transition-colors ${
-              active
-                ? "bg-surface text-text-primary shadow-sm"
-                : "text-text-muted hover:text-text-primary"
-            }`}
-          >
-            {it.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function SortToggle({
-  sort,
-  onChange,
-}: {
-  sort: SortKey;
-  onChange: (next: SortKey) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(sort === "urgency" ? "due" : "urgency")}
-      title="Toggle sort"
-      className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary"
-    >
-      {sort === "urgency" ? "Sort: Urgency ↓" : "Sort: Due date ↓"}
-    </button>
   );
 }
 
@@ -282,13 +223,16 @@ function Pill({
 // Sort + format helpers
 // ────────────────────────────────────────────────────────────────────
 
-/** Higher = more urgent. Flagged submissions dominate, then graded-
- *  not-published, then any ungraded-submissions-waiting. */
-function urgencyScore(r: SubmissionsInboxRow): number {
-  return r.flagged * 1_000_000 + r.to_grade * 1_000 + (r.submitted - r.published);
+/** Rows with outstanding work (flagged or ungraded) come first, each
+ *  group ordered by due date ascending. Null due dates sink within
+ *  their group. */
+function compareRows(a: SubmissionsInboxRow, b: SubmissionsInboxRow): number {
+  const aWork = a.flagged + a.to_grade > 0 ? 0 : 1;
+  const bWork = b.flagged + b.to_grade > 0 ? 0 : 1;
+  if (aWork !== bWork) return aWork - bWork;
+  return dueKey(a) - dueKey(b);
 }
 
-/** For due-date sort: null due = Infinity so it sinks to the end. */
 function dueKey(r: SubmissionsInboxRow): number {
   return r.due_at ? new Date(r.due_at).getTime() : Number.MAX_SAFE_INTEGER;
 }
