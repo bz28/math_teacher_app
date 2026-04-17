@@ -6,8 +6,8 @@ clicked "Publish grades" on the HW (i.e. SubmissionGrade.grade_published_at
 is not null).
 
 Two endpoints:
-  GET /teacher/courses/{course_id}/grades                    → roster
-  GET /teacher/courses/{course_id}/students/{student_id}/grades → detail
+  GET /teacher/courses/{course_id}/grades                                        → roster
+  GET /teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/grades → detail
 """
 
 import uuid
@@ -132,8 +132,8 @@ async def get_course_grades(
         )
     )).all()
     graded_by_student: dict[uuid.UUID, dict[uuid.UUID, float]] = {}
-    for r in published_rows:
-        graded_by_student.setdefault(r.student_id, {})[r.assignment_id] = r.final_score
+    for pr in published_rows:
+        graded_by_student.setdefault(pr.student_id, {})[pr.assignment_id] = pr.final_score
 
     submitted_rows = (await db.execute(
         select(Submission.student_id, Submission.assignment_id)
@@ -143,8 +143,8 @@ async def get_course_grades(
         )
     )).all()
     submitted_by_student: dict[uuid.UUID, set[uuid.UUID]] = {}
-    for r in submitted_rows:
-        submitted_by_student.setdefault(r.student_id, set()).add(r.assignment_id)
+    for sr in submitted_rows:
+        submitted_by_student.setdefault(sr.student_id, set()).add(sr.assignment_id)
 
     students_out = []
     for e in enrollments:
