@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { topUnits } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { HomeworkDetailModal } from "./_pieces/homework-detail-modal";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
 import {
   HomeworkTimeline,
   type BucketedHomeworks,
 } from "./_pieces/homework-timeline";
-
-// Re-export the detail modal so existing import sites in
-// question-bank-tab keep working without churning their import paths.
-export { HomeworkDetailModal };
 
 // ── Filter types ──
 
@@ -33,14 +29,17 @@ const EMPTY_FILTERS: HwFilters = { status: "all", section: null, unit: null };
  * inline dropdown filters for Status, Section, and Unit.
  */
 export function HomeworkTab({ courseId }: { courseId: string }) {
+  const router = useRouter();
   const [homeworks, setHomeworks] = useState<TeacherAssignment[]>([]);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<HwFilters>(EMPTY_FILTERS);
+
+  const openDetail = (hwId: string) =>
+    router.push(`/school/teacher/courses/${courseId}/homework/${hwId}`);
 
   const reload = async () => {
     setLoading(true);
@@ -260,7 +259,7 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           <HomeworkTimeline
             buckets={buckets}
             units={units}
-            onOpen={setOpenId}
+            onOpen={openDetail}
           />
         )}
       </div>
@@ -270,19 +269,21 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           courseId={courseId}
           defaultUnitIds={filters.unit ? [filters.unit] : []}
           onClose={() => setShowNew(false)}
-          onCreated={() => {
+          onCreated={(newId, { startedGeneration }) => {
             setShowNew(false);
-            reload();
+            if (startedGeneration) {
+              // Route the teacher straight into the review queue —
+              // its skeleton state handles the ~30s wait for gen to
+              // produce items. Feels continuous: click "Create &
+              // generate" → land in a queue that fills up in front
+              // of them.
+              router.push(
+                `/school/teacher/courses/${courseId}/homework/${newId}/review`,
+              );
+            } else {
+              openDetail(newId);
+            }
           }}
-        />
-      )}
-
-      {openId && (
-        <HomeworkDetailModal
-          courseId={courseId}
-          assignmentId={openId}
-          onClose={() => setOpenId(null)}
-          onChanged={reload}
         />
       )}
     </div>

@@ -17,8 +17,6 @@ import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 import { InlineTitleEdit } from "./_pieces/inline-title-edit";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
-import { DestinationPicker } from "./question-bank/destination-picker";
-import type { TeacherAssignment } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
@@ -57,6 +55,7 @@ export function WorkshopModal({
   onReviewVariations,
   parentTitle,
   onJumpToParent,
+  renderAsPage = false,
 }: {
   item?: BankItem;
   queue?: BankItem[];
@@ -79,6 +78,11 @@ export function WorkshopModal({
   // Click handler for the parent title link. When present, shown as a
   // clickable link; teacher clicks → parent swaps in.
   onJumpToParent?: () => void;
+  // When true, renders inline (no fixed overlay, no backdrop, no
+  // click-outside-to-close). Used by the full-page review route
+  // (`/courses/[id]/homework/[hwId]/review`) so teachers get the same
+  // rich edit+chat UX on a dedicated page instead of inside a modal.
+  renderAsPage?: boolean;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -101,20 +105,11 @@ export function WorkshopModal({
   // needed during review and should be discoverable. Toggleable via the
   // 💬 AI button or C key.
   const [chatOpen, setChatOpen] = useState(true);
-  // "Add to Homework" picker for single-mode pending items. Replaces
-  // the legacy bare Approve button so approval always commits to a
-  // destination.
-  const [showAddToHomeworkPicker, setShowAddToHomeworkPicker] = useState(false);
-
-  // Queue mode: sticky homework destination. The first Approve in a
-  // primary queue opens the picker; the chosen homework sticks for the
-  // rest of the session. Subsequent Approves auto-attach without
-  // reopening the picker. Teacher can change it via the header pill.
-  // Variation queues (every item has a parent_question_id) don't use
-  // this — variations aren't HW-attached the same way.
+  // Queue-mode variations are rare (generate-similar produces them)
+  // but they need a different approve handler — the backend skips the
+  // auto-attach for variations (Feature 7a), and the teacher closes
+  // the workshop after approving rather than advancing a queue.
   const isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
-  const [stickyHomework, setStickyHomework] = useState<TeacherAssignment | null>(null);
-  const [showStickyPicker, setShowStickyPicker] = useState(false);
 
   const { busy, error, setError, run } = useAsyncAction();
 
@@ -298,6 +293,12 @@ export function WorkshopModal({
       replaceLiveItem(updated);
     });
 
+  // Chat is decoupled from the parent's useAsyncAction `run()`.
+  // Using run() sets setBusy(true) on the parent, triggering a
+  // WorkshopModal re-render that races with ChatPanel's local
+  // optimistic-message render and can swallow it. Instead, chat
+  // manages its own loading via `sendingChat` (= optimistic !== null)
+  // inside ChatPanel.
   const sendChat = async (message: string): Promise<boolean> => {
     if (!liveItem) return false;
     if (liveItem.locked) {
@@ -305,13 +306,14 @@ export function WorkshopModal({
       return false;
     }
     setError(null);
-    let ok = false;
-    await run(async () => {
+    try {
       const next = await teacher.sendBankChat(liveItem.id, message);
       replaceLiveItem(next);
-      ok = true;
-    }, "Chat failed");
-    return ok;
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chat failed");
+      return false;
+    }
   };
 
   const acceptProposal = () =>
@@ -344,121 +346,33 @@ export function WorkshopModal({
       setShowUndo(false);
     });
 
-  // Queue-mode primary Approve: if no homework is sticky yet, open the
-  // picker and wait for a choice. Once set, this approve() fast-paths
-  // straight through — subsequent clicks attach to the sticky homework.
-  const approve = () => {
-    if (isQueueMode && !isVariationQueue && !stickyHomework) {
-      setShowAddToHomeworkPicker(true);
-      return;
-    }
+  // Approve — backend auto-attaches to the item's originating HW
+  // (Feature 7a). No picker, no sticky, no per-queue destination
+  // prompt: every item already knows which HW it belongs to.
+  const approve = () =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
-      const opts =
-        isQueueMode && !isVariationQueue && stickyHomework
-          ? { assignmentId: stickyHomework.id }
-          : undefined;
-      await teacher.approveBankItem(liveItem.id, opts);
+      await teacher.approveBankItem(liveItem.id);
       replaceLiveItem({ ...liveItem, status: "approved" });
       if (isQueueMode) {
         setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
         advanceQueue();
+      } else {
+        // Single-mode approval closes the workshop — nothing else to
+        // do here; the approved item is on its HW.
+        onChanged();
+        onClose();
       }
     });
-  };
 
-  // Queue-mode first approval goes through the picker below. When the
-  // teacher picks a homework, attach + mark sticky + advance. Stays
-  // sticky for the rest of the session.
-  const approveToStickyExisting = (assignment: TeacherAssignment) =>
-    run(async () => {
-      if (!liveItem || blockIfPending()) return;
-      await teacher.approveBankItem(liveItem.id, { assignmentId: assignment.id });
-      setStickyHomework(assignment);
-      setShowAddToHomeworkPicker(false);
-      replaceLiveItem({ ...liveItem, status: "approved" });
-      setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
-      advanceQueue();
-    });
-
-  const approveToStickyNew = (title: string, unitIds: string[]) =>
-    run(async () => {
-      if (!liveItem || blockIfPending()) return;
-      // Approve first, then create the HW with the now-approved item
-      // already attached. Matches the single-mode createHomeworkAndAdd
-      // pattern. Order matters: if step 2 fails, we're left with an
-      // approved-but-unassigned question (recoverable from the approved
-      // list) rather than an empty homework the teacher never wanted.
-      await teacher.approveBankItem(liveItem.id);
-      const created = await teacher.createAssignment(liveItem.course_id, {
-        title,
-        type: "homework",
-        unit_ids: unitIds,
-        bank_item_ids: [liveItem.id],
-      });
-      setStickyHomework({
-        id: created.id,
-        course_id: liveItem.course_id,
-        unit_ids: unitIds,
-        title,
-        type: "homework",
-        source_type: "manual",
-        due_at: null,
-        late_policy: "block",
-        status: created.status,
-        section_ids: [],
-        section_names: [],
-        problem_count: 1,
-        total_students: 0,
-        submitted: 0,
-        graded: 0,
-        avg_score: null,
-        created_at: new Date().toISOString(),
-      });
-      setShowAddToHomeworkPicker(false);
-      replaceLiveItem({ ...liveItem, status: "approved" });
-      setResolved((prev) => ({ ...prev, [queueIndex]: "approved" }));
-      advanceQueue();
-    });
-
-  // Variation single-mode flow: approve + refresh parent + close.
-  // Mirrors addToExistingHomework's lifecycle (the primary flow that
-  // closes the modal). Without this, an approved variation would
-  // leave the workshop open showing the now-approved item with no
-  // affordances, and the parent question-bank list wouldn't refresh.
+  // Variation approval: backend skips the attach (variations aren't
+  // HW primaries) but still flips status. Close the modal so the
+  // teacher returns to wherever they launched from.
   const approveAsVariation = () =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
       await teacher.approveBankItem(liveItem.id);
       onChanged();
-      onClose();
-    });
-
-  // Single-mode pending: clicking "→ Add to Homework" opens the picker;
-  // picking a HW fires the atomic approve+attach call, then closes the
-  // workshop. The workshop entry path can't bypass the "approval
-  // requires a destination" rule.
-  const addToExistingHomework = (assignment: TeacherAssignment) =>
-    run(async () => {
-      if (!liveItem || blockIfPending()) return;
-      await teacher.approveBankItem(liveItem.id, { assignmentId: assignment.id });
-      onChanged();
-      setShowAddToHomeworkPicker(false);
-      onClose();
-    });
-
-  const createHomeworkAndAdd = (title: string, unitIds: string[]) =>
-    run(async () => {
-      if (!liveItem || blockIfPending()) return;
-      await teacher.approveBankItem(liveItem.id);
-      await teacher.createAssignment(liveItem.course_id, {
-        title,
-        type: "homework",
-        unit_ids: unitIds,
-        bank_item_ids: [liveItem.id],
-      });
-      onChanged();
-      setShowAddToHomeworkPicker(false);
       onClose();
     });
 
@@ -511,13 +425,11 @@ export function WorkshopModal({
     approve,
     reject,
     skip,
-    openAddToHomework: () => setShowAddToHomeworkPicker(true),
   });
   handlersRef.current = {
     approve,
     reject,
     skip,
-    openAddToHomework: () => setShowAddToHomeworkPicker(true),
   };
 
   useEffect(() => {
@@ -537,13 +449,7 @@ export function WorkshopModal({
 
       if (e.key === "Enter" || e.key === "a" || e.key === "A") {
         e.preventDefault();
-        // Single-mode pending: route Enter/A to the destination picker
-        // instead of bare approve. Same contract as the click handler.
-        if (!isQueueMode && liveItem?.status === "pending") {
-          handlersRef.current.openAddToHomework();
-        } else {
-          handlersRef.current.approve();
-        }
+        handlersRef.current.approve();
       } else if (e.key === "x" || e.key === "X") {
         e.preventDefault();
         handlersRef.current.reject();
@@ -566,7 +472,14 @@ export function WorkshopModal({
 
   // ── Render: completion ──────────────────────────────────────────
   if (allResolved) {
-    return <CompletionModal counts={counts} total={total} onClose={onClose} />;
+    return (
+      <CompletionModal
+        counts={counts}
+        total={total}
+        onClose={onClose}
+        renderAsPage={renderAsPage}
+      />
+    );
   }
   if (!liveItem) return null;
 
@@ -594,16 +507,33 @@ export function WorkshopModal({
   const resolvedCount = Object.keys(resolved).length;
   const progressPct = isQueueMode ? (resolvedCount / total) * 100 : 0;
 
+  // Outer chrome differs between modal (fixed overlay, backdrop
+  // click-to-close) and page-level (plain container, no backdrop)
+  // rendering. Inner card keeps the same shape either way.
+  const OuterShell = renderAsPage
+    ? ({ children }: { children: React.ReactNode }) => (
+        <div className="mx-auto max-w-6xl px-4 pb-10">{children}</div>
+      )
+    : ({ children }: { children: React.ReactNode }) => (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+        >
+          {children}
+        </div>
+      );
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
+    <OuterShell>
       <div
-        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        className={
+          renderAsPage
+            ? "flex w-full flex-col overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-sm"
+            : "flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
+        }
+        onClick={renderAsPage ? undefined : (e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
@@ -617,47 +547,6 @@ export function WorkshopModal({
               <span className="shrink-0 text-xs font-semibold text-text-muted">
                 {resolvedCount + 1} / {total}
               </span>
-            )}
-            {isQueueMode && !isVariationQueue && stickyHomework && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowStickyPicker((v) => !v)}
-                  disabled={busy}
-                  className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/40 bg-primary-bg/40 px-2 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
-                  title="Change the homework these approvals attach to"
-                >
-                  → {stickyHomework.title}
-                  <span className="text-[9px] opacity-60">change</span>
-                </button>
-                {showStickyPicker && (
-                  <DestinationPicker
-                    courseId={liveItem.course_id}
-                    busy={busy}
-                    align="start"
-                    onClose={() => setShowStickyPicker(false)}
-                    onPickExisting={(a) => {
-                      setStickyHomework(a);
-                      setShowStickyPicker(false);
-                    }}
-                    onCreateNew={async (title, unitIds) => {
-                      const created = await teacher.createAssignment(liveItem.course_id, {
-                        title,
-                        type: "homework",
-                        unit_ids: unitIds,
-                      });
-                      setStickyHomework({
-                        ...stickyHomework,
-                        id: created.id,
-                        title,
-                        unit_ids: unitIds,
-                        status: created.status,
-                      });
-                      setShowStickyPicker(false);
-                    }}
-                  />
-                )}
-              </div>
             )}
             <span
               className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
@@ -1013,26 +902,11 @@ export function WorkshopModal({
           chatOpen={chatOpen}
           busy={busy}
           status={liveItem.status}
-          courseId={liveItem.course_id}
           isVariation={!!liveItem.parent_question_id}
-          showAddToHomeworkPicker={showAddToHomeworkPicker}
-          onOpenAddToHomework={() => setShowAddToHomeworkPicker(true)}
-          onCloseAddToHomework={() => setShowAddToHomeworkPicker(false)}
-          onPickExistingHomework={
-            isQueueMode && !isVariationQueue ? approveToStickyExisting : addToExistingHomework
-          }
-          onCreateNewHomework={
-            isQueueMode && !isVariationQueue ? approveToStickyNew : createHomeworkAndAdd
-          }
           onApprove={approve}
           onApproveAsVariation={approveAsVariation}
           onReject={reject}
           onSkip={skip}
-          approveLabel={
-            isQueueMode && !isVariationQueue && stickyHomework
-              ? `Approve & add to "${truncate(stickyHomework.title, 24)}"`
-              : undefined
-          }
           onToggleChat={() => setChatOpen((v) => !v)}
           onAcceptProposal={acceptProposal}
           onDiscardProposal={discardProposal}
@@ -1057,7 +931,7 @@ export function WorkshopModal({
           }}
         />
       )}
-    </div>
+    </OuterShell>
   );
 }
 
@@ -1077,18 +951,11 @@ function ModeLineFooter({
   chatOpen,
   busy,
   status,
-  courseId,
   isVariation,
-  showAddToHomeworkPicker,
-  onOpenAddToHomework,
-  onCloseAddToHomework,
-  onPickExistingHomework,
-  onCreateNewHomework,
   onApprove,
   onApproveAsVariation,
   onReject,
   onSkip,
-  approveLabel,
   onToggleChat,
   onAcceptProposal,
   onDiscardProposal,
@@ -1102,20 +969,11 @@ function ModeLineFooter({
   chatOpen: boolean;
   busy: boolean;
   status: string;
-  courseId: string;
   isVariation: boolean;
-  showAddToHomeworkPicker: boolean;
-  onOpenAddToHomework: () => void;
-  onCloseAddToHomework: () => void;
-  onPickExistingHomework: (assignment: TeacherAssignment) => void;
-  onCreateNewHomework: (title: string, unitIds: string[]) => void;
   onApprove: () => void;
   onApproveAsVariation: () => void;
   onReject: () => void;
   onSkip: () => void;
-  /** Override the Approve label text — used in queue mode to show the
-   *  sticky homework destination ("Approve & add to HW X"). */
-  approveLabel?: string;
   onToggleChat: () => void;
   onAcceptProposal: () => void;
   onDiscardProposal: () => void;
@@ -1185,28 +1043,17 @@ function ModeLineFooter({
     );
   }
 
-  // Default: reading mode. Show approve/reject/skip/chat/delete.
-  // In single mode, hide Approve/Reject if the question isn't pending
-  // (since they've already been resolved).
+  // Default reading mode: approve/reject/skip/chat/delete. Approve
+  // always goes through the same handler — backend auto-attaches to
+  // the originating HW (Feature 7a). Variations get "Approve as
+  // practice" instead to signal they're scaffolding, not HW content.
   const showApproveReject = isQueueMode || status === "pending";
-  // Single-mode pending replaces bare Approve with "→ Add to Homework"
-  // for PRIMARY problems (no parent_question_id). Variations follow
-  // a different rule: they're practice scaffolding, not HW problems,
-  // so they get a plain Approve button instead. The backend's
-  // snapshot_bank_items guard rejects any attempt to add a variation
-  // as a HW primary regardless, but hiding the button removes the
-  // footgun at the source.
-  const showAddToHomework =
-    !isQueueMode && status === "pending" && !isVariation;
-  const showApproveAsVariation =
-    !isQueueMode && status === "pending" && isVariation;
+  const useVariationLabel = !isQueueMode && status === "pending" && isVariation;
 
   return (
     <div className="border-t border-border-light px-6 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        {/* LEFT — destructive cluster: Reject + Delete. Grouped so the
-            teacher's muscle memory for "this question is bad" stays
-            in one place. */}
+        {/* LEFT — destructive cluster: Reject + Delete. */}
         {showApproveReject && (
           <FooterButton
             onClick={onReject}
@@ -1226,11 +1073,8 @@ function ModeLineFooter({
           🗑
         </button>
 
-        {/* MIDDLE — neutral navigation/chat. Queue-mode gets Skip so the
-            teacher can defer a question they're not sure about. Chat
-            toggle is always present. Forward navigation is implicit via
-            Approve/Reject/Skip; backward nav is intentionally omitted so
-            teachers can't land on already-resolved items and re-approve. */}
+        {/* MIDDLE — neutral nav + chat. Queue-mode gets Skip; chat
+            toggle is always present. */}
         {showApproveReject && isQueueMode && (
           <FooterButton
             onClick={onSkip}
@@ -1248,66 +1092,19 @@ function ModeLineFooter({
           label={chatOpen ? "💬 Hide" : "💬 AI"}
         />
 
-        {/* RIGHT — primary cluster: the "keep this question" actions.
-            Queue mode uses Approve (attaches to sticky homework on first
-            click, fast-paths thereafter). Single-mode pending uses the
-            "Add to Homework" picker, or "Approve as practice" for
-            variations. ml-auto pushes the whole cluster to the right. */}
-        {showApproveReject && isQueueMode && (
-          <div className="relative ml-auto">
+        {/* RIGHT — primary approve. Single unified path: backend
+            auto-attaches (skipped for variations, which are practice
+            scaffolding). */}
+        {showApproveReject && (
+          <div className="ml-auto">
             <FooterButton
-              onClick={onApprove}
+              onClick={useVariationLabel ? onApproveAsVariation : onApprove}
               disabled={busy}
               variant="approve"
               shortcut="↵"
-              label={approveLabel ?? "Approve"}
+              label={useVariationLabel ? "Approve as practice" : "Approve"}
               isLast
             />
-            {showAddToHomeworkPicker && (
-              <DestinationPicker
-                courseId={courseId}
-                busy={busy}
-                align="end"
-                onClose={onCloseAddToHomework}
-                onPickExisting={onPickExistingHomework}
-                onCreateNew={onCreateNewHomework}
-              />
-            )}
-          </div>
-        )}
-        {showAddToHomework && (
-          <div className="relative ml-auto">
-            <button
-              type="button"
-              onClick={onOpenAddToHomework}
-              disabled={busy}
-              className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-            >
-              → Add to Homework
-            </button>
-            {showAddToHomeworkPicker && (
-              <DestinationPicker
-                courseId={courseId}
-                busy={busy}
-                align="end"
-                onClose={onCloseAddToHomework}
-                onPickExisting={onPickExistingHomework}
-                onCreateNew={onCreateNewHomework}
-              />
-            )}
-          </div>
-        )}
-        {showApproveAsVariation && (
-          <div className="ml-auto">
-            <button
-              type="button"
-              onClick={onApproveAsVariation}
-              disabled={busy}
-              className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-              title="Approves this as practice scaffolding for its parent problem. Practice variations are NOT added to a homework as standalone problems — they're served via the student practice loop."
-            >
-              ✓ Approve as practice
-            </button>
           </div>
         )}
       </div>
@@ -1416,14 +1213,12 @@ function ChatPanel({
 
   const submit = async () => {
     const text = draft.trim();
-    if (!text || busy) return;
+    if (!text || busy || sendingChat) return;
     setOptimistic({ text, ts: new Date().toISOString() });
     setDraft("");
     const ok = await onSend(text);
     setOptimistic(null);
     if (!ok) {
-      // Failure: restore the draft so the teacher can retry without
-      // retyping. The error toast is surfaced by useAsyncAction.
       setDraft(text);
     }
   };
@@ -1535,7 +1330,7 @@ function ChatPanel({
               : "Ask for changes or just chat about this question…"
           }
           className="w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-          disabled={busy || isProposalPending}
+          disabled={busy || sendingChat || isProposalPending}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -1547,14 +1342,14 @@ function ChatPanel({
           <button
             type="button"
             onClick={onStartClear}
-            disabled={busy || isProposalPending || messages.length === 0 || confirmingClearChat}
+            disabled={busy || sendingChat || isProposalPending || messages.length === 0 || confirmingClearChat}
             className="text-[11px] font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
           >
             Clear chat
           </button>
           <button
             type="submit"
-            disabled={busy || isProposalPending || !draft.trim()}
+            disabled={busy || sendingChat || isProposalPending || !draft.trim()}
             className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             Send
@@ -1702,40 +1497,56 @@ function CompletionModal({
   counts,
   total,
   onClose,
+  renderAsPage = false,
 }: {
   counts: { approved: number; rejected: number; skipped: number };
   total: number;
   onClose: () => void;
+  renderAsPage?: boolean;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="text-5xl">🎉</div>
-        <h2 className="mt-3 text-lg font-bold text-text-primary">All caught up</h2>
-        <p className="mt-1 text-sm text-text-muted">
-          You reviewed {total} question{total === 1 ? "" : "s"}
-        </p>
-        <div className="mt-4 flex justify-center gap-4 text-sm">
-          <span className="font-semibold text-green-700 dark:text-green-400">
-            ✓ {counts.approved} approved
-          </span>
-          <span className="font-semibold text-red-700 dark:text-red-400">
-            ✕ {counts.rejected} rejected
-          </span>
-          {counts.skipped > 0 && (
-            <span className="font-semibold text-text-muted">⏭ {counts.skipped} skipped</span>
-          )}
-        </div>
-        <button
-          onClick={onClose}
-          className="mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
-        >
-          Done
-        </button>
+  const card = (
+    <div
+      className={
+        renderAsPage
+          ? "w-full rounded-[--radius-xl] border border-green-200 bg-green-50 p-10 text-center shadow-sm dark:border-green-500/30 dark:bg-green-500/10"
+          : "w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
+      }
+      onClick={renderAsPage ? undefined : (e) => e.stopPropagation()}
+    >
+      <div className="text-5xl">🎉</div>
+      <h2 className="mt-3 text-lg font-bold text-text-primary">All caught up</h2>
+      <p className="mt-1 text-sm text-text-muted">
+        You reviewed {total} question{total === 1 ? "" : "s"}
+      </p>
+      <div className="mt-4 flex justify-center gap-4 text-sm">
+        <span className="font-semibold text-green-700 dark:text-green-400">
+          ✓ {counts.approved} approved
+        </span>
+        <span className="font-semibold text-red-700 dark:text-red-400">
+          ✕ {counts.rejected} rejected
+        </span>
+        {counts.skipped > 0 && (
+          <span className="font-semibold text-text-muted">⏭ {counts.skipped} skipped</span>
+        )}
       </div>
+      <button
+        onClick={onClose}
+        className="mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
+      >
+        {renderAsPage ? "Back to homework" : "Done"}
+      </button>
+    </div>
+  );
+
+  if (renderAsPage) {
+    return <div className="mx-auto max-w-2xl px-4 pb-10 pt-8">{card}</div>;
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      {card}
     </div>
   );
 }

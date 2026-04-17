@@ -695,20 +695,113 @@ export interface TeacherAssignment {
   created_at: string;
 }
 
-export interface TeacherSubmission {
-  id: string;
-  student_name: string;
-  student_email: string;
-  is_preview: boolean;
-  status: string;
-  submitted_at: string | null;
-  is_late: boolean;
-  ai_score: number | null;
-  ai_breakdown: { problem: string; score: number; max_score: number; note: string; flagged: boolean }[] | null;
-  teacher_score: number | null;
-  teacher_notes: string | null;
+/** Structured grading rubric. All fields optional — teachers fill in
+ *  what makes sense for the HW. Consumed by the AI grader in a follow-
+ *  up PR; in v1 it's a reference panel during manual grading. */
+export type GradingMode =
+  | "answer_only"
+  | "answer_and_work"
+  | "method_focused"
+  | "custom";
+
+export interface TeacherRubric {
+  grading_mode?: GradingMode;
+  full_credit?: string;
+  partial_credit?: string;
+  common_mistakes?: string;
+  notes?: string;
+}
+
+/** Per-problem grade row. Shape matches the SubmissionGrade.breakdown
+ *  JSON persisted by the grade endpoint — `score_status` drives the
+ *  Full/Partial/Zero pill; `percent` is the committed numeric value. */
+export interface GradeBreakdownEntry {
+  problem_id: string;
+  score_status: "full" | "partial" | "zero";
+  percent: number;
+  feedback: string | null;
+}
+
+/** One row per (published HW × section) pair in the Submissions tab
+ *  inbox feed. Aggregates computed server-side so the tab renders
+ *  with a single GET. */
+export interface SubmissionsInboxRow {
+  assignment_id: string;
+  assignment_title: string;
+  section_id: string;
+  section_name: string;
+  due_at: string | null;
+  total_students: number;
+  submitted: number;
+  /** Submissions whose integrity check flagged them
+   *  (uncertain / unlikely / unreadable). */
+  flagged: number;
+  /** Graded but not yet published to students. */
+  to_grade: number;
+  /** Published — students can see these grades. */
+  published: number;
+}
+
+/** One row per (student × section enrollment) in the Grades tab roster.
+ *  Counts are scoped to assigned+past-due HWs; avg excludes missing. */
+export interface GradesRosterRow {
+  student_id: string;
+  name: string;
+  section_id: string;
+  section_name: string;
+  assigned_count: number;
+  graded_count: number;
+  missing_count: number;
+  /** Mean of published final_scores across assigned HWs. Null if
+   *  the student has no published grades yet. */
+  avg_percent: number | null;
+}
+
+/** Response from the Grades tab roster endpoint. `sections` drives
+ *  the filter dropdown (always the full set for the course). */
+export interface GradesRosterResponse {
+  sections: { id: string; name: string }[];
+  students: GradesRosterRow[];
+}
+
+/** One HW row on the student detail page. Covers both graded
+ *  (final_score set) and still-being-graded (final_score null) HWs —
+ *  the detail page shows every published HW assigned to the section
+ *  so nothing disappears while the teacher is mid-grading. */
+export interface StudentGradePublishedHw {
+  assignment_id: string;
+  title: string;
+  due_at: string | null;
+  graded_at: string | null;
+  /** Null when the grade hasn't been published yet — row renders as
+   *  "Not graded yet" instead of a score. */
   final_score: number | null;
-  reviewed_at: string | null;
+  teacher_notes: string | null;
+  /** Included so the detail page can link into the review page. */
+  section_id: string;
+}
+
+/** One missing HW row (past due, no submission from this student). */
+export interface StudentGradeMissingHw {
+  assignment_id: string;
+  title: string;
+  due_at: string | null;
+}
+
+/** Full published-grade record for one student in one section. */
+export interface StudentGradesResponse {
+  student: {
+    id: string;
+    name: string;
+    section_id: string;
+    section_name: string;
+  };
+  overall_avg: number | null;
+  class_avg: number | null;
+  graded_count: number;
+  missing_count: number;
+  published_hws: StudentGradePublishedHw[];
+  missing_hws: StudentGradeMissingHw[];
 }
 
 export const teacher = {
@@ -831,7 +924,11 @@ export const teacher = {
     return apiFetch<{ assignments: TeacherAssignment[] }>("/teacher/assignments");
   },
   assignment(assignmentId: string) {
-    return apiFetch<TeacherAssignment & { content: unknown; answer_key: unknown }>(`/teacher/assignments/${assignmentId}`);
+    return apiFetch<TeacherAssignment & {
+      content: unknown;
+      answer_key: unknown;
+      rubric: TeacherRubric | null;
+    }>(`/teacher/assignments/${assignmentId}`);
   },
   createAssignment(courseId: string, data: {
     title: string; type: string; source_type?: string; due_at?: string;
@@ -867,13 +964,55 @@ export const teacher = {
     });
   },
   submissions(assignmentId: string) {
-    return apiFetch<{ submissions: TeacherSubmission[] }>(`/teacher/assignments/${assignmentId}/submissions`);
+    return apiFetch<{ submissions: TeacherSubmissionRow[] }>(`/teacher/assignments/${assignmentId}/submissions`);
   },
-  gradeSubmission(submissionId: string, data: { action: string; teacher_score?: number; teacher_notes?: string }) {
-    return apiFetch<{ status: string }>(`/teacher/submissions/${submissionId}/grade`, {
+  /** Inbox feed for the Submissions tab — one row per (published
+   *  HW × section) pair with aggregate counts. See backend comment
+   *  for the shape. */
+  submissionsInbox(courseId: string) {
+    return apiFetch<{ rows: SubmissionsInboxRow[] }>(
+      `/teacher/courses/${courseId}/submissions-inbox`,
+    );
+  },
+  /** Grades tab roster — one row per (student × section). Only
+   *  counts HWs that are published, assigned, and past due. */
+  gradesRoster(courseId: string, sectionId?: string) {
+    const qs = sectionId ? `?section_id=${sectionId}` : "";
+    return apiFetch<GradesRosterResponse>(
+      `/teacher/courses/${courseId}/grades${qs}`,
+    );
+  },
+  /** Full published-grade record for one student in one section. */
+  studentGrades(courseId: string, sectionId: string, studentId: string) {
+    return apiFetch<StudentGradesResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}/grades`,
+    );
+  },
+  /** Replace the per-problem breakdown (and/or teacher notes) for a
+   *  submission. Full replacement semantics — send every entry on
+   *  each call. Returns the recomputed overall `final_score`. */
+  gradeSubmission(
+    submissionId: string,
+    data: { breakdown?: GradeBreakdownEntry[]; teacher_notes?: string },
+  ) {
+    return apiFetch<{
+      status: string;
+      final_score: number | null;
+      grade_published_at: string | null;
+    }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
+  },
+  /** Publish every graded submission on this HW to students at once.
+   *  Idempotent — already-published grades are skipped, and ungraded
+   *  submissions are ignored (teacher can grade + publish more later).
+   *  Returns the count actually published. */
+  publishGrades(assignmentId: string) {
+    return apiFetch<{ status: string; published_count: number }>(
+      `/teacher/assignments/${assignmentId}/publish-grades`,
+      { method: "POST" },
+    );
   },
   // Visibility
   getVisibility(courseId: string) {
@@ -913,6 +1052,10 @@ export const teacher = {
     filters?: {
       status?: string;
       unit_id?: string;
+      /** Scope to questions generated from a specific homework. Used
+       *  by the HW detail banner so two HWs in the same unit don't
+       *  share their pending pool. */
+      assignment_id?: string;
       difficulty?: string;
       parent_question_id?: string;
     },
@@ -920,6 +1063,7 @@ export const teacher = {
     const params = new URLSearchParams();
     if (filters?.status) params.set("status_filter", filters.status);
     if (filters?.unit_id) params.set("unit_id", filters.unit_id);
+    if (filters?.assignment_id) params.set("assignment_id", filters.assignment_id);
     if (filters?.difficulty) params.set("difficulty", filters.difficulty);
     if (filters?.parent_question_id)
       params.set("parent_question_id", filters.parent_question_id);
@@ -930,6 +1074,9 @@ export const teacher = {
   },
   generateBank(courseId: string, data: {
     count: number;
+    /** The HW the teacher is on — every item produced gets stamped
+     *  with this so it knows which homework it belongs to. */
+    assignment_id: string;
     unit_id?: string | null;
     document_ids?: string[];
     constraint?: string | null;
@@ -941,6 +1088,7 @@ export const teacher = {
   },
   uploadWorksheet(courseId: string, data: {
     images: string[];
+    assignment_id: string;
     unit_id?: string | null;
   }) {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/upload`, {
@@ -1017,11 +1165,6 @@ export const teacher = {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/chat/clear`, { method: "POST" });
   },
   // ── Submissions ──
-  listAssignmentSubmissions(assignmentId: string) {
-    return apiFetch<{ submissions: TeacherSubmissionRow[] }>(
-      `/teacher/assignments/${assignmentId}/submissions`,
-    );
-  },
   submissionDetail(submissionId: string) {
     return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
   },
@@ -1049,18 +1192,23 @@ export interface IntegrityOverview {
 
 export interface TeacherSubmissionRow {
   id: string;
+  section_id: string;
+  student_id: string;
   student_name: string;
   student_email: string;
   is_preview: boolean;
   status: string;
   submitted_at: string | null;
   is_late: boolean;
-  // Grading fields included by the existing endpoint; unused in this PR.
   ai_score: number | null;
   ai_breakdown: unknown;
   teacher_score: number | null;
   teacher_notes: string | null;
   final_score: number | null;
+  /** Per-problem grade breakdown; null until the teacher has saved
+   *  grades. Future AI PR pre-fills this too. */
+  breakdown: GradeBreakdownEntry[] | null;
+  grade_published_at: string | null;
   reviewed_at: string | null;
   integrity_overview: IntegrityOverview | null;
 }
@@ -1084,6 +1232,19 @@ export interface TeacherSubmissionDetail {
   is_late: boolean;
   image_data: string | null;
   problems: TeacherSubmissionDetailProblem[];
+  breakdown: GradeBreakdownEntry[] | null;
+  ai_breakdown: AiGradeEntry[] | null;
+  final_score: number | null;
+  teacher_notes: string | null;
+  grade_published_at: string | null;
+}
+
+export interface AiGradeEntry {
+  problem_position: number;
+  student_answer: string;
+  score_status: "full" | "partial" | "zero";
+  percent: number;
+  reasoning: string;
 }
 
 export interface BankChatProposal {

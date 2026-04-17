@@ -429,7 +429,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
 
   useEffect(() => {
     teacher
-      .listAssignmentSubmissions(assignmentId)
+      .submissions(assignmentId)
       .then((d) => setRows(d.submissions))
       .catch(() => setError("Couldn't load submissions."));
   }, [assignmentId]);

@@ -12,22 +12,35 @@ import {
 } from "@/lib/constants";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
-import { QuestionBankTab } from "@/components/school/teacher/question-bank-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
+import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
+import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
 
-type TabKey = "sections" | "materials" | "bank" | "homework" | "tests" | "settings";
+type TabKey =
+  | "sections"
+  | "materials"
+  | "homework"
+  | "tests"
+  | "submissions"
+  | "grades"
+  | "settings";
 
+// Tabs in the visible nav row. Settings is intentionally excluded —
+// it's reachable via the gear icon in the header.
 const TABS: { key: TabKey; label: string }[] = [
   { key: "sections", label: "Sections" },
   { key: "materials", label: "Materials" },
-  { key: "bank", label: "Question Bank" },
-  { key: "homework", label: "Homework" },
+  { key: "homework", label: "HW" },
   { key: "tests", label: "Tests" },
-  { key: "settings", label: "Settings" },
+  { key: "submissions", label: "Submissions" },
+  { key: "grades", label: "Grades" },
 ];
 
-const TAB_KEYS = TABS.map((t) => t.key);
+// All valid tab keys (including settings, which renders but doesn't
+// appear in the tab row).
+const ALL_TAB_KEYS: TabKey[] = [...TABS.map((t) => t.key), "settings"];
+
 const DEFAULT_TAB: TabKey = "sections";
 
 const ACTIVE_JOB_STORAGE_KEY = (courseId: string) => `bank.activeJob.${courseId}`;
@@ -53,10 +66,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   const [error, setError] = useState<string | null>(null);
 
   // Tab state lives in the URL (?tab=materials) so refresh, back/
-  // forward, and deep-linked URLs all land on the right tab. Any
-  // unknown value falls back to the default.
+  // forward, and deep-linked URLs all land on the right tab. Unknown
+  // values fall back to the default.
   const tabParam = searchParams.get("tab");
-  const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey)
+  const tab: TabKey = ALL_TAB_KEYS.includes(tabParam as TabKey)
     ? (tabParam as TabKey)
     : DEFAULT_TAB;
   const setTab = useCallback(
@@ -69,12 +82,11 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     },
     [router, pathname, searchParams],
   );
-  // Lifted from QuestionBankTab so the active generation job survives
-  // when the teacher switches tabs. The polling effect lives here too,
-  // so the job keeps ticking in the background and a small indicator
-  // can show on the Question Bank tab label from any view. Persisted
-  // to sessionStorage so a browser reload also recovers the in-flight
-  // job — the backend keeps generating regardless of the client.
+  // Generation job lifted from the HW-scoped flow so it survives when
+  // the teacher switches tabs, and so any in-flight generation shows a
+  // dot indicator on the HW tab label from any view. Persisted to
+  // sessionStorage so browser reload also recovers the in-flight job —
+  // the backend keeps generating regardless of the client.
   const [activeJob, setActiveJob] = useState<BankJob | null>(null);
 
   // Single setter that keeps React state and sessionStorage in lockstep.
@@ -221,6 +233,18 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
               {course.doc_count} document{course.doc_count === 1 ? "" : "s"}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setTab("settings")}
+            aria-label="Course settings"
+            className={`shrink-0 rounded-full p-2 transition-colors ${
+              tab === "settings"
+                ? "bg-primary/10 text-primary"
+                : "text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+            }`}
+          >
+            <GearIcon />
+          </button>
         </div>
       </motion.div>
 
@@ -237,9 +261,9 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             <span className="inline-flex items-center gap-1.5">
               {t.label}
               {/* Pulsing dot when generation is in flight — visible
-                  from any tab so the teacher knows something's still
-                  happening in the bank. */}
-              {t.key === "bank" && jobInFlight && (
+                  from any tab so the teacher knows problems are still
+                  being generated for one of their HWs. */}
+              {t.key === "homework" && jobInFlight && (
                 <span className="relative flex h-2 w-2" aria-label="Generation in progress">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
@@ -256,16 +280,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
       <div className="mt-6">
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
-        {tab === "bank" && (
-          <QuestionBankTab
-            courseId={course.id}
-            courseSubject={course.subject}
-            activeJob={activeJob}
-            setActiveJob={updateActiveJob}
-          />
-        )}
         {tab === "homework" && <HomeworkTab courseId={course.id} />}
         {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
+        {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
+        {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
       </div>
     </div>
@@ -278,5 +296,24 @@ function ComingSoon({ name, phase }: { name: string; phase: string }) {
       <p className="text-sm font-bold text-text-primary">{name}</p>
       <p className="mt-1 text-xs text-text-muted">Coming in {phase}.</p>
     </div>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
   );
 }

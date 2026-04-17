@@ -1,0 +1,1478 @@
+"use client";
+
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { MathText } from "@/components/shared/math-text";
+import { Modal } from "@/components/ui/modal";
+import {
+  teacher,
+  type AiGradeEntry,
+  type GradeBreakdownEntry,
+  type IntegrityBadge,
+  type TeacherIntegrityDetail,
+  type TeacherIntegrityTranscriptTurn,
+  type TeacherSubmissionDetail,
+  type TeacherSubmissionDetailProblem,
+  type TeacherSubmissionRow,
+} from "@/lib/api";
+
+type GradeStatus = GradeBreakdownEntry["score_status"];
+
+function imageDataUrl(raw: string): string {
+  if (raw.startsWith("data:")) return raw;
+  const mime = raw.startsWith("iVBOR") ? "image/png" : "image/jpeg";
+  return `data:${mime};base64,${raw}`;
+}
+
+/**
+ * Grading review workspace: one HW × one section.
+ *
+ * Route: /school/teacher/courses/[id]/homework/[hwId]/sections/[sid]/review
+ *
+ * Two-pane layout — left is the full section roster (every enrolled
+ * student, whether they've submitted or not), right is the selected
+ * student's work. Students who haven't submitted are visible in the
+ * list with a "Not submitted" marker so the teacher can spot missing
+ * work at a glance.
+ *
+ * Grading model: per-problem Full/Partial/Zero picks auto-save on
+ * every click (the backend accepts full-replacement breakdown writes).
+ * The overall percent is the backend's average of the per-problem
+ * percents; we show it live in the detail pane's summary card. A
+ * "Next student →" button jumps to the next submitter that still
+ * needs a published grade. Publishing is a one-click, HW-wide action
+ * gated by a confirmation dialog (the backend publishes every graded
+ * submission on the HW at once — the dialog discloses cross-section
+ * scope when applicable).
+ */
+type RosterEntry = {
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  /** Present if the student has submitted; null if they haven't. */
+  submission: TeacherSubmissionRow | null;
+};
+
+export default function HomeworkSectionReviewPage({
+  params,
+}: {
+  params: Promise<{ id: string; hwId: string; sid: string }>;
+}) {
+  const { id: courseId, hwId: assignmentId, sid: sectionId } = use(params);
+  const backHref = `/school/teacher/courses/${courseId}?tab=submissions`;
+
+  const [hwTitle, setHwTitle] = useState<string>("");
+  const [sectionName, setSectionName] = useState<string>("");
+  const [roster, setRoster] = useState<RosterEntry[] | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  // Last-fetched detail, kept as-is across switches. Staleness for
+  // the current selection is detected at render via a submission_id
+  // comparison, avoiding a setState-in-effect on every switch. Not a
+  // multi-student cache: `detail` is a single slot, so A→B→A re-fetches
+  // A. Fetch/save errors are scoped to a submissionId so a failure on
+  // one student's grade doesn't render on another student's card.
+  const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
+  // Full integrity detail (overall verdict + reasoning + transcript)
+  // is a separate endpoint from submission detail. Single-slot cache
+  // keyed off submission_id, same staleness-by-derivation pattern as
+  // `detail`. Null on: HW has integrity disabled, or no check ran.
+  const [integrity, setIntegrity] = useState<TeacherIntegrityDetail | null>(null);
+  const [fetchError, setFetchError] = useState<
+    { forSubmissionId: string; message: string } | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<
+    { forSubmissionId: string; message: string } | null
+  >(null);
+  // Counters for grades in *other* sections of this HW. Snapshotted
+  // from the initial fetch — the publish endpoint is HW-wide, so the
+  // dialog must disclose cross-section scope, and the header pill needs
+  // to distinguish "nothing to publish (nothing graded)" from "nothing
+  // to publish (everything already published)". Per-section counts are
+  // derived from roster and stay live as the teacher grades.
+  const [pendingOtherSections, setPendingOtherSections] = useState(0);
+  const [gradedOtherSections, setGradedOtherSections] = useState(0);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  // Load HW + section roster + submissions and merge into one list:
+  // every enrolled student in this section, with their submission if
+  // they've turned one in.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      teacher.assignment(assignmentId),
+      teacher.section(courseId, sectionId),
+      teacher.submissions(assignmentId),
+    ])
+      .then(([a, s, subs]) => {
+        if (cancelled) return;
+        setError(null);
+        setHwTitle(a.title);
+        setSectionName(s.name);
+        // Join submissions to roster by student_id. Email would work
+        // today but breaks silently if a student ever changes their
+        // account email after submitting — the submission still
+        // carries the old email and would vanish from the view.
+        const submissionByStudent = new Map<string, TeacherSubmissionRow>();
+        let otherPending = 0;
+        let otherGraded = 0;
+        for (const r of subs.submissions) {
+          if (r.is_preview) continue;
+          if (r.section_id === sectionId) {
+            submissionByStudent.set(r.student_id, r);
+          } else if (r.final_score !== null) {
+            otherGraded += 1;
+            if (r.grade_published_at === null) otherPending += 1;
+          }
+        }
+        setPendingOtherSections(otherPending);
+        setGradedOtherSections(otherGraded);
+        const merged: RosterEntry[] = s.students
+          .map((st) => ({
+            student_id: st.id,
+            student_name: st.name || st.email,
+            student_email: st.email,
+            submission: submissionByStudent.get(st.id) ?? null,
+          }))
+          .sort((a, b) => a.student_name.localeCompare(b.student_name));
+        setRoster(merged);
+        // Auto-select the first submitter that still needs review.
+        // If everyone's published, fall back to the first submitter;
+        // if no one has submitted, leave selection empty (the right
+        // pane shows a tidy "nothing to review here" state).
+        const firstUnpublished = merged.find(
+          (e) => e.submission !== null && e.submission.grade_published_at === null,
+        );
+        const firstSubmitter = merged.find((e) => e.submission !== null);
+        const pick = firstUnpublished ?? firstSubmitter;
+        if (pick) setSelectedStudentId(pick.student_id);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Failed to load submissions");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId, courseId, sectionId]);
+
+  const selectedEntry = useMemo(
+    () =>
+      roster
+        ? (roster.find((e) => e.student_id === selectedStudentId) ?? null)
+        : null,
+    [roster, selectedStudentId],
+  );
+  const selectedSubmissionId = selectedEntry?.submission?.id ?? null;
+
+  // Detail staleness is derived, not managed: a match on submission_id
+  // means the single-slot `detail` belongs to the current selection.
+  // Any mismatch (different student, just switched, not yet fetched)
+  // shows the loading state — no reset-on-switch setState required.
+  // Errors are derived from their scoping keys for the same reason.
+  const detailIsCurrent =
+    !!selectedSubmissionId && detail?.submission_id === selectedSubmissionId;
+  const currentFetchError =
+    fetchError && fetchError.forSubmissionId === selectedSubmissionId
+      ? fetchError.message
+      : null;
+  const currentSaveError =
+    saveError && saveError.forSubmissionId === selectedSubmissionId
+      ? saveError.message
+      : null;
+  const detailLoading =
+    !!selectedSubmissionId && !detailIsCurrent && currentFetchError === null;
+
+  // Fetch only when we don't already have the current selection.
+  useEffect(() => {
+    if (!selectedSubmissionId) return;
+    if (detail?.submission_id === selectedSubmissionId) return;
+    let cancelled = false;
+    const id = selectedSubmissionId;
+    teacher
+      .submissionDetail(id)
+      .then((d) => {
+        if (cancelled) return;
+        setDetail(d);
+        // Clear any prior fetch error for this submission — a later
+        // retry that succeeds shouldn't leave the red banner showing
+        // alongside the now-loaded panel.
+        setFetchError((prev) => (prev?.forSubmissionId === id ? null : prev));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setFetchError({
+          forSubmissionId: id,
+          message: e instanceof Error ? e.message : "Failed to load submission",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSubmissionId, detail?.submission_id]);
+
+  // Fetch the full integrity detail in parallel. Independent of
+  // submissionDetail so a missing/404 integrity record (HW had the
+  // check disabled, or the pipeline never ran) doesn't block the
+  // grading UI — the banner just hides.
+  useEffect(() => {
+    if (!selectedSubmissionId) return;
+    if (integrity?.submission_id === selectedSubmissionId) return;
+    let cancelled = false;
+    const id = selectedSubmissionId;
+    teacher
+      .integrityDetail(id)
+      .then((d) => {
+        if (cancelled) return;
+        setIntegrity(d);
+      })
+      .catch(() => {
+        // 404 / disabled — clear any stale integrity for the prior
+        // selection so we don't show another student's verdict.
+        if (cancelled) return;
+        setIntegrity((prev) => (prev?.submission_id === id ? prev : null));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSubmissionId, integrity?.submission_id]);
+
+  const pageTitle = useMemo(() => {
+    if (!hwTitle && !sectionName) return "Reviewing…";
+    const parts = [hwTitle, sectionName].filter(Boolean);
+    return parts.join(" · ");
+  }, [hwTitle, sectionName]);
+
+  const submittedCount = roster?.filter((e) => e.submission).length ?? 0;
+  const totalRoster = roster?.length ?? 0;
+
+  // Mirror the server's recomputed grade back onto the roster row so
+  // the left-list status/score updates the moment a save returns.
+  const applyGradeToRoster = useCallback(
+    (
+      submissionId: string,
+      patch: Pick<TeacherSubmissionRow, "final_score" | "breakdown">,
+    ) => {
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission?.id === submissionId
+                ? { ...e, submission: { ...e.submission, ...patch } }
+                : e,
+            )
+          : prev,
+      );
+    },
+    [],
+  );
+
+  // Persist the current breakdown. Full-replacement semantics: we
+  // send every graded entry on every call, the backend writes the
+  // row and recomputes `final_score`. Optimistic local state has
+  // already been mutated by the caller; if the save fails we leave
+  // it as-is and surface an error — teacher can click again. Error
+  // is scoped to a submissionId so a prior failure on student A
+  // can't bleed onto student B's grade summary card.
+  const persistBreakdown = useCallback(
+    async (submissionId: string, breakdown: GradeBreakdownEntry[]) => {
+      // Clear any stale error for this submission up front, so a new
+      // in-flight save doesn't visually carry a past failure.
+      setSaveError((prev) =>
+        prev?.forSubmissionId === submissionId ? null : prev,
+      );
+      try {
+        const res = await teacher.gradeSubmission(submissionId, { breakdown });
+        applyGradeToRoster(submissionId, {
+          final_score: res.final_score,
+          breakdown,
+        });
+      } catch (e) {
+        setSaveError({
+          forSubmissionId: submissionId,
+          message: e instanceof Error ? e.message : "Failed to save grade",
+        });
+      }
+    },
+    [applyGradeToRoster],
+  );
+
+  // Optimistic writer — mutates `detail.breakdown` in place so the
+  // UI reacts instantly, then fires the save. `feedback` is kept if
+  // it was already there (future AI feedback stays alongside a
+  // teacher-overridden score).
+  const setProblemGrade = useCallback(
+    (problemId: string, status: GradeStatus, partialPercent?: number) => {
+      if (!detail) return;
+      const percent =
+        status === "full" ? 100 : status === "zero" ? 0 : (partialPercent ?? 50);
+      const prior = detail.breakdown ?? [];
+      const existing = prior.find((b) => b.problem_id === problemId);
+      const nextEntry: GradeBreakdownEntry = {
+        problem_id: problemId,
+        score_status: status,
+        percent,
+        feedback: existing?.feedback ?? null,
+      };
+      const nextBreakdown = existing
+        ? prior.map((b) => (b.problem_id === problemId ? nextEntry : b))
+        : [...prior, nextEntry];
+      setDetail({ ...detail, breakdown: nextBreakdown });
+      void persistBreakdown(detail.submission_id, nextBreakdown);
+    },
+    [detail, persistBreakdown],
+  );
+
+  // Derived counts for the publish button state machine. `pending*`
+  // are submissions graded but not yet published; `graded*` include
+  // already-published ones. In-section counts are live via roster;
+  // other-section counts are snapshotted at fetch time.
+  const { pendingInSection, gradedInSection } = useMemo(() => {
+    let pending = 0;
+    let graded = 0;
+    for (const e of roster ?? []) {
+      if (!e.submission || e.submission.final_score === null) continue;
+      graded += 1;
+      if (e.submission.grade_published_at === null) pending += 1;
+    }
+    return { pendingInSection: pending, gradedInSection: graded };
+  }, [roster]);
+  const pendingTotal = pendingInSection + pendingOtherSections;
+  const gradedTotal = gradedInSection + gradedOtherSections;
+
+  // Publish every graded submission on the HW. Backend is idempotent
+  // and returns the count actually published. On success we mirror
+  // the publish timestamp onto every local roster entry that was
+  // ready, and zero out the cross-section counter. Other sections
+  // only refresh on next open — acceptable for a one-shot action.
+  const handlePublish = useCallback(async () => {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      await teacher.publishGrades(assignmentId);
+      const nowIso = new Date().toISOString();
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission &&
+              e.submission.final_score !== null &&
+              e.submission.grade_published_at === null
+                ? {
+                    ...e,
+                    submission: { ...e.submission, grade_published_at: nowIso },
+                  }
+                : e,
+            )
+          : prev,
+      );
+      setPendingOtherSections(0);
+      setPublishConfirmOpen(false);
+    } catch (e) {
+      setPublishError(
+        e instanceof Error ? e.message : "Failed to publish grades",
+      );
+    } finally {
+      setPublishing(false);
+    }
+  }, [assignmentId]);
+
+  // Next submitter who still needs a published grade. Wraps to the
+  // start so a teacher grading out-of-order still gets auto-advance.
+  // Returns null if every submitter is published (or the section
+  // has no submitters at all).
+  const nextStudent = useMemo<RosterEntry | null>(() => {
+    if (!roster || !selectedEntry) return null;
+    const idx = roster.findIndex((e) => e.student_id === selectedEntry.student_id);
+    if (idx < 0) return null;
+    for (let i = 1; i <= roster.length; i++) {
+      const cand = roster[(idx + i) % roster.length];
+      if (cand.student_id === selectedEntry.student_id) break;
+      if (cand.submission && cand.submission.grade_published_at === null) {
+        return cand;
+      }
+    }
+    return null;
+  }, [roster, selectedEntry]);
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 pb-10">
+      <div className="pt-3">
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
+        >
+          ← Back to submissions
+        </Link>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+          {pageTitle}
+        </h1>
+        {roster !== null && (
+          <PublishButton
+            pendingTotal={pendingTotal}
+            gradedTotal={gradedTotal}
+            onOpen={() => setPublishConfirmOpen(true)}
+          />
+        )}
+      </div>
+
+      {error && (
+        <p className="mt-4 text-sm text-red-600">{error}</p>
+      )}
+
+      {roster === null && !error && (
+        <p className="mt-6 text-sm text-text-muted">Loading…</p>
+      )}
+
+      {roster !== null && roster.length === 0 && (
+        <div className="mt-6 rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center">
+          <p className="text-sm font-bold text-text-primary">
+            No students in this section yet
+          </p>
+          <p className="mt-1 text-xs text-text-muted">
+            Invite students from the Sections tab, then publish homework.
+          </p>
+        </div>
+      )}
+
+      {roster !== null && roster.length > 0 && (
+        <div className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]">
+          {/* Student list */}
+          <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
+            <div className="border-b border-border-light px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Students · {submittedCount}/{totalRoster} submitted
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto">
+              {roster.map((e) => (
+                <StudentRow
+                  key={e.student_id}
+                  entry={e}
+                  selected={e.student_id === selectedStudentId}
+                  onSelect={() => setSelectedStudentId(e.student_id)}
+                />
+              ))}
+            </div>
+          </aside>
+
+          {/* Detail */}
+          <section className="min-w-0">
+            {!selectedEntry && (
+              <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center text-sm text-text-muted">
+                Pick a student on the left to see their work.
+              </div>
+            )}
+            {selectedEntry && !selectedEntry.submission && (
+              <NotSubmittedCard entry={selectedEntry} />
+            )}
+            {selectedEntry?.submission && detailLoading && (
+              <p className="text-sm text-text-muted">Loading student work…</p>
+            )}
+            {selectedEntry?.submission && currentFetchError && (
+              <p className="text-sm text-red-600">{currentFetchError}</p>
+            )}
+            {detailIsCurrent && detail && selectedEntry?.submission && (
+              <SubmissionDetailPanel
+                detail={detail}
+                integrity={
+                  integrity?.submission_id === selectedSubmissionId
+                    ? integrity
+                    : null
+                }
+                row={selectedEntry.submission}
+                saveError={currentSaveError}
+                nextStudent={nextStudent}
+                onSelectNext={() => {
+                  if (nextStudent) setSelectedStudentId(nextStudent.student_id);
+                }}
+                onGradeProblem={setProblemGrade}
+              />
+            )}
+          </section>
+        </div>
+      )}
+
+      <PublishConfirmDialog
+        open={publishConfirmOpen}
+        onClose={() => {
+          if (!publishing) {
+            setPublishConfirmOpen(false);
+            setPublishError(null);
+          }
+        }}
+        pendingInSection={pendingInSection}
+        pendingOtherSections={pendingOtherSections}
+        publishing={publishing}
+        error={publishError}
+        onConfirm={handlePublish}
+      />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Publish button (page header) — three states, HW-wide counts:
+//   • pendingTotal > 0                → primary CTA opens confirmation
+//   • gradedTotal > 0, no pending     → green "All grades published" pill
+//   • nothing graded yet              → muted "No grades to publish" pill
+// The last two are distinct: "all published" is a done state; "no
+// grades" means the teacher hasn't started grading. Conflating them
+// misleads on a freshly-published HW where no one has been graded.
+// ────────────────────────────────────────────────────────────────────
+
+function PublishButton({
+  pendingTotal,
+  gradedTotal,
+  onOpen,
+}: {
+  pendingTotal: number;
+  gradedTotal: number;
+  onOpen: () => void;
+}) {
+  if (pendingTotal === 0) {
+    if (gradedTotal === 0) {
+      return (
+        <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
+          No grades to publish
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
+        <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+        All grades published
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+    >
+      Publish {pendingTotal} {pendingTotal === 1 ? "grade" : "grades"} →
+    </button>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Confirmation dialog before publishing. Makes the HW-wide scope
+// explicit when there are grades in other sections — the button was
+// clicked from one section's view but the action affects all of them.
+// ────────────────────────────────────────────────────────────────────
+
+function PublishConfirmDialog({
+  open,
+  onClose,
+  pendingInSection,
+  pendingOtherSections,
+  publishing,
+  error,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  pendingInSection: number;
+  pendingOtherSections: number;
+  publishing: boolean;
+  error: string | null;
+  onConfirm: () => void;
+}) {
+  const total = pendingInSection + pendingOtherSections;
+  return (
+    <Modal open={open} onClose={onClose} dismissible={!publishing}>
+      <h2 className="text-lg font-bold text-text-primary">
+        Publish {total} {total === 1 ? "grade" : "grades"}?
+      </h2>
+      <p className="mt-2 text-sm text-text-secondary">
+        Students will see their scores immediately. Ungraded submissions
+        aren&apos;t affected.
+      </p>
+      {pendingOtherSections > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
+          This includes <span className="font-semibold">{pendingOtherSections}</span>{" "}
+          {pendingOtherSections === 1 ? "grade" : "grades"} from other sections
+          of this homework.
+        </p>
+      )}
+      {error && (
+        <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={publishing}
+          className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={publishing}
+          className="rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {publishing ? "Publishing…" : "Publish grades"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Empty state for a student who hasn't turned in work. No grading
+// path from here — we can't grade missing work.
+// ────────────────────────────────────────────────────────────────────
+
+function NotSubmittedCard({ entry }: { entry: RosterEntry }) {
+  return (
+    <div className="rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
+      <h2 className="text-lg font-bold text-text-primary">{entry.student_name}</h2>
+      <p className="text-xs text-text-muted">{entry.student_email}</p>
+      <div className="mt-5 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle/60 px-6 py-10 text-center">
+        <p className="text-sm font-bold text-text-primary">Not submitted</p>
+        <p className="mt-1 text-xs text-text-muted">
+          This student hasn&apos;t turned in this homework yet.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Student list row — the clickable link to a specific submission.
+// ────────────────────────────────────────────────────────────────────
+
+function StudentRow({
+  entry,
+  selected,
+  onSelect,
+}: {
+  entry: RosterEntry;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const sub = entry.submission;
+  const statusLabel = rowStatusLabel(entry);
+  const mutedName = sub === null;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex w-full items-center justify-between gap-2 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
+        selected ? "bg-primary-bg/40" : "hover:bg-bg-subtle"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div
+          className={`truncate font-semibold ${
+            mutedName ? "text-text-muted" : "text-text-primary"
+          }`}
+        >
+          {entry.student_name}
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+          <span
+            className={`inline-block h-1.5 w-1.5 rounded-full ${statusLabel.dotClass}`}
+          />
+          {statusLabel.text}
+          {sub?.is_late && (
+            <span className="ml-1 font-semibold text-red-600 dark:text-red-400">
+              · late
+            </span>
+          )}
+        </div>
+      </div>
+      {sub?.final_score != null && (
+        <span
+          className={`shrink-0 text-xs font-bold ${
+            sub.grade_published_at
+              ? "text-green-700 dark:text-green-400"
+              : "text-amber-700 dark:text-amber-400"
+          }`}
+        >
+          {Math.round(sub.final_score)}%
+        </span>
+      )}
+      {sub?.integrity_overview?.overall_badge === "unlikely" && (
+        <span
+          className="shrink-0 text-[11px] font-bold text-red-600 dark:text-red-400"
+          role="img"
+          aria-label="Integrity flag: unlikely the student did this work"
+          title="Integrity flag: unlikely the student did this work"
+        >
+          🔴
+        </span>
+      )}
+      {sub?.integrity_overview?.overall_badge === "uncertain" && (
+        <span
+          className="shrink-0 text-[11px] font-bold text-amber-600 dark:text-amber-400"
+          role="img"
+          aria-label="Integrity flag: uncertain"
+          title="Integrity flag: uncertain"
+        >
+          🟡
+        </span>
+      )}
+      {sub?.integrity_overview?.overall_badge === "unreadable" && (
+        <span
+          className="shrink-0 text-[11px] font-bold text-text-muted"
+          role="img"
+          aria-label="Integrity flag: handwriting unreadable"
+          title="Integrity flag: handwriting unreadable"
+        >
+          📄
+        </span>
+      )}
+    </button>
+  );
+}
+
+function rowStatusLabel(entry: RosterEntry): {
+  text: string;
+  dotClass: string;
+} {
+  const sub = entry.submission;
+  if (!sub) {
+    return { text: "Not submitted", dotClass: "bg-gray-300" };
+  }
+  if (sub.grade_published_at) {
+    return { text: "Published", dotClass: "bg-green-500" };
+  }
+  if (sub.final_score !== null) {
+    return { text: "Graded, not published", dotClass: "bg-amber-500" };
+  }
+  return { text: "Needs review", dotClass: "bg-gray-400" };
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Submission detail — right pane. Handwritten image is the source of
+// truth; typed answers sit alongside the answer key so the teacher
+// can compare without switching contexts. Per-problem Full/Partial/
+// Zero picks auto-save on click.
+// ────────────────────────────────────────────────────────────────────
+
+function SubmissionDetailPanel({
+  detail,
+  integrity,
+  row,
+  saveError,
+  nextStudent,
+  onSelectNext,
+  onGradeProblem,
+}: {
+  detail: TeacherSubmissionDetail;
+  integrity: TeacherIntegrityDetail | null;
+  row: TeacherSubmissionRow | null;
+  saveError: string | null;
+  nextStudent: RosterEntry | null;
+  onSelectNext: () => void;
+  onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
+}) {
+  const breakdownByProblem = useMemo(() => {
+    const map = new Map<string, GradeBreakdownEntry>();
+    for (const b of detail.breakdown ?? []) map.set(b.problem_id, b);
+    return map;
+  }, [detail.breakdown]);
+  // AI grades keyed by position → problem. Used to show "AI" badges
+  // and reasoning tooltips on grades the AI pre-filled.
+  const aiByPosition = useMemo(() => {
+    const map = new Map<number, AiGradeEntry>();
+    for (const a of detail.ai_breakdown ?? []) map.set(a.problem_position, a);
+    return map;
+  }, [detail.ai_breakdown]);
+  const gradedCount = breakdownByProblem.size;
+  const totalProblems = detail.problems.length;
+  const published = !!row?.grade_published_at;
+
+  return (
+    <div className="space-y-4">
+      {/* Compact student strip — name on the left, progress + next on
+          the right. Replaces the old profile card + grade-progress card;
+          the roster already shows the student name, so this strip is
+          just "what context am I in right now?", not a profile. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-2.5 shadow-sm">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+            <span className="font-bold text-text-primary">
+              {detail.student_name}
+            </span>
+            <span className="text-xs text-text-muted">{detail.student_email}</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-muted">
+            Submitted{" "}
+            {new Date(detail.submitted_at).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+            {detail.is_late && (
+              <span className="ml-1.5 font-semibold text-red-600 dark:text-red-400">
+                · late
+              </span>
+            )}
+            <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
+            {published && row?.grade_published_at ? (
+              <span className="font-semibold text-success">
+                Published{" "}
+                {new Date(row.grade_published_at).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+            ) : gradedCount > 0 ? (
+              <span className="font-semibold text-text-primary">
+                AI graded · not yet published
+              </span>
+            ) : (
+              <span className="text-text-muted">Not graded yet</span>
+            )}
+          </p>
+          {saveError && (
+            <p className="mt-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+              {saveError}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onSelectNext}
+          disabled={!nextStudent}
+          className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
+        >
+          Next student →
+        </button>
+      </div>
+
+      {/* Integrity verdict — the #1 trust signal. First full content
+          block so the teacher sees the verdict before they start
+          grading. Hides when HW had integrity disabled / no check. */}
+      <IntegrityBanner
+        integrity={integrity}
+        overviewFallback={row?.integrity_overview ?? null}
+      />
+
+      {/* Per-problem grading — the main scan-unit. Image thumbnail
+          lives inline in the header as a reference at point-of-use. */}
+      <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Problems · {totalProblems}
+          </p>
+          {detail.image_data && (
+            <StudentWorkThumbButton imageData={detail.image_data} />
+          )}
+        </div>
+        <div className="mt-3 space-y-3">
+          {detail.problems.map((p) => (
+            <ProblemGradeRow
+              key={p.bank_item_id}
+              problem={p}
+              entry={breakdownByProblem.get(p.bank_item_id) ?? null}
+              aiGrade={aiByPosition.get(p.position) ?? null}
+              onChange={(status, partialPercent) =>
+                onGradeProblem(p.bank_item_id, status, partialPercent)
+              }
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Per-problem grading row: answer compare + Full/Partial/Zero picker.
+// Partial opens an inline number input; Enter or blur commits with
+// the typed value. Full/Zero clicks commit immediately.
+// ────────────────────────────────────────────────────────────────────
+
+function ProblemGradeRow({
+  problem,
+  entry,
+  aiGrade,
+  onChange,
+}: {
+  problem: TeacherSubmissionDetailProblem;
+  entry: GradeBreakdownEntry | null;
+  aiGrade: AiGradeEntry | null;
+  onChange: (status: GradeStatus, partialPercent?: number) => void;
+}) {
+  const current = entry?.score_status ?? null;
+  // Show "AI" badge when the active grade matches the AI suggestion
+  // (i.e. teacher hasn't overridden it yet).
+  const isAiMatch =
+    aiGrade !== null &&
+    current === aiGrade.score_status &&
+    (current !== "partial" || Math.round(entry?.percent ?? 0) === Math.round(aiGrade.percent));
+  // Local edit buffer for the inline partial input. `null` means
+  // "show the current server-side value"; a string means "user is
+  // typing". On commit we parse + fire onChange, then null the
+  // buffer so the displayed value falls back to the external entry.
+  // This avoids a sync-via-effect pattern (which is disallowed by
+  // react-hooks/set-state-in-effect).
+  const [editBuffer, setEditBuffer] = useState<string | null>(null);
+  const externalPartial =
+    entry?.score_status === "partial" ? String(Math.round(entry.percent)) : "50";
+  const partialDraft = editBuffer ?? externalPartial;
+
+  // Focus + select the partial input on the next mount triggered by
+  // a user clicking the Partial button. Using a callback ref (not an
+  // effect) keeps this out of the render pipeline and avoids stealing
+  // focus on the row's *initial* mount (e.g. when detail loads with a
+  // pre-existing partial grade). Stable identity via useCallback so
+  // React doesn't re-run it on every render.
+  const focusOnMount = useRef(false);
+  const setInputRef = useCallback((el: HTMLInputElement | null) => {
+    if (el && focusOnMount.current) {
+      focusOnMount.current = false;
+      el.focus();
+      el.select();
+    }
+  }, []);
+
+  const commitPartial = () => {
+    if (editBuffer === null) return; // user didn't actually edit
+    const n = parseInt(editBuffer, 10);
+    setEditBuffer(null); // always drop back to external after commit
+    if (!Number.isFinite(n) || n <= 0 || n >= 100) return; // invalid: snap back
+    if (entry?.score_status === "partial" && Math.round(entry.percent) === n) return;
+    onChange("partial", n);
+  };
+
+  const pickPartial = () => {
+    const n = parseInt(partialDraft, 10);
+    const safe = Number.isFinite(n) && n > 0 && n < 100 ? n : 50;
+    focusOnMount.current = true;
+    onChange("partial", safe);
+  };
+
+  // The teacher has overridden the AI when a grade exists and doesn't
+  // match the AI's pick. Surface this as a "⟲ AI had suggested X"
+  // breadcrumb with one-click undo — the AI's call is preserved, not
+  // thrown away.
+  const teacherOverrode =
+    aiGrade !== null && current !== null && !isAiMatch;
+  const aiGradeLabel = aiGrade
+    ? aiGrade.score_status === "partial"
+      ? `Partial ${Math.round(aiGrade.percent)}%`
+      : aiGrade.score_status === "full"
+        ? "Full"
+        : "Zero"
+    : null;
+
+  return (
+    <div className="rounded-[--radius-md] border border-border-light bg-bg-base/40 p-4">
+      <div className="flex items-baseline gap-2">
+        <span className="text-xs font-bold text-text-muted">{problem.position}.</span>
+        <div className="min-w-0 flex-1 text-sm text-text-primary">
+          <MathText text={problem.question} />
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Student answer
+          </p>
+          <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
+            {problem.student_answer ? (
+              <MathText text={problem.student_answer} />
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                <span aria-hidden>⚠</span>
+                Couldn&apos;t extract — check the student&apos;s work
+              </span>
+            )}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Answer key
+          </p>
+          <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
+            {problem.final_answer ? (
+              <MathText text={problem.final_answer} />
+            ) : (
+              <span className="italic text-text-muted">—</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* AI grading hero — the AI's call is visible before the grade
+          buttons, with reasoning inline instead of buried below. When
+          no AI grade is present (pipeline failed / disabled), this
+          block simply doesn't render. */}
+      {aiGrade && aiGradeLabel && (
+        <div className="mt-3 rounded-[--radius-md] border border-primary/25 bg-primary-bg px-3 py-2">
+          <p className="text-xs font-bold text-text-primary">
+            <span className="mr-1 text-primary" aria-hidden>🤖</span>
+            <span className="text-primary">AI&apos;s call:</span>{" "}
+            {aiGradeLabel}
+          </p>
+          {aiGrade.reasoning && (
+            <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+              {aiGrade.reasoning}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <GradeBtn
+          active={current === "full"}
+          tone="green"
+          onClick={() => onChange("full")}
+          aiPick={aiGrade?.score_status === "full"}
+        >
+          Full
+        </GradeBtn>
+        <GradeBtn
+          active={current === "partial"}
+          tone="amber"
+          onClick={pickPartial}
+          aiPick={aiGrade?.score_status === "partial"}
+        >
+          Partial
+        </GradeBtn>
+        {current === "partial" && (
+          <div className="inline-flex items-center gap-1 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            <input
+              ref={setInputRef}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={99}
+              value={partialDraft}
+              onChange={(e) => setEditBuffer(e.target.value)}
+              onBlur={commitPartial}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              aria-label="Partial credit percent (1-99)"
+              className="w-12 bg-transparent text-right tabular-nums focus:outline-none"
+            />
+            <span aria-hidden>%</span>
+          </div>
+        )}
+        <GradeBtn
+          active={current === "zero"}
+          tone="red"
+          onClick={() => onChange("zero")}
+          aiPick={aiGrade?.score_status === "zero"}
+        >
+          Zero
+        </GradeBtn>
+      </div>
+
+      {teacherOverrode && aiGrade && aiGradeLabel && (
+        <button
+          type="button"
+          onClick={() =>
+            onChange(
+              aiGrade.score_status,
+              aiGrade.score_status === "partial"
+                ? Math.round(aiGrade.percent)
+                : undefined,
+            )
+          }
+          className="mt-2 inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-2.5 py-1 text-[11px] font-semibold text-primary hover:border-primary/60 hover:bg-primary/10"
+          title="Revert to the AI's suggested grade"
+        >
+          <span aria-hidden>⟲</span>
+          AI had suggested {aiGradeLabel} · revert
+        </button>
+      )}
+    </div>
+  );
+}
+
+function GradeBtn({
+  active,
+  tone,
+  onClick,
+  children,
+  aiPick = false,
+}: {
+  active: boolean;
+  tone: "green" | "amber" | "red";
+  onClick: () => void;
+  children: React.ReactNode;
+  /** Mark this button as the AI's suggestion. When not the active
+   *  choice, a subtle primary-tinted outline signals "the AI
+   *  recommended this". Always pairs with an inline "AI" pill. */
+  aiPick?: boolean;
+}) {
+  const activeCls = {
+    green: "border-green-500 bg-green-500 text-white",
+    amber: "border-amber-500 bg-amber-500 text-white",
+    red: "border-red-500 bg-red-500 text-white",
+  }[tone];
+  const inactiveCls = aiPick
+    ? "border-primary/40 bg-primary-bg text-text-primary hover:border-primary/60"
+    : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1 rounded-[--radius-md] border px-3 py-1.5 text-xs font-bold transition-colors ${
+        active ? activeCls : inactiveCls
+      }`}
+    >
+      {children}
+      {aiPick && (
+        <span
+          className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold leading-none ${
+            active ? "bg-white/30 text-white" : "bg-primary/15 text-primary"
+          }`}
+          aria-label="AI's suggestion"
+        >
+          AI
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Visual treatment for each integrity verdict. Paired with both an
+// icon and explicit copy so color-only signal is never the whole
+// story (colorblind-safe by design).
+const INTEGRITY_STYLE: Record<
+  IntegrityBadge | "in_progress" | "none",
+  { bg: string; border: string; text: string; icon: string; label: string }
+> = {
+  likely: {
+    bg: "bg-green-50 dark:bg-green-900/20",
+    border: "border-green-200 dark:border-green-900/40",
+    text: "text-green-800 dark:text-green-300",
+    icon: "✓",
+    label: "Looks like the student's own work",
+  },
+  uncertain: {
+    bg: "bg-amber-50 dark:bg-amber-900/20",
+    border: "border-amber-200 dark:border-amber-900/40",
+    text: "text-amber-800 dark:text-amber-300",
+    icon: "⚠",
+    label: "Some concerns — the AI couldn't verify everything",
+  },
+  unlikely: {
+    bg: "bg-red-50 dark:bg-red-900/20",
+    border: "border-red-200 dark:border-red-900/40",
+    text: "text-red-800 dark:text-red-300",
+    icon: "🚩",
+    label: "Likely not the student's own work",
+  },
+  unreadable: {
+    bg: "bg-bg-subtle",
+    border: "border-border-light",
+    text: "text-text-muted",
+    icon: "◌",
+    label: "Handwriting unreadable — couldn't run the check",
+  },
+  in_progress: {
+    bg: "bg-bg-subtle",
+    border: "border-border-light",
+    text: "text-text-muted",
+    icon: "…",
+    label: "Integrity check running",
+  },
+  none: {
+    bg: "bg-bg-subtle",
+    border: "border-border-light",
+    text: "text-text-muted",
+    icon: "·",
+    label: "Couldn't determine",
+  },
+};
+
+/**
+ * Top-of-pane integrity verdict. Shows the overall badge + AI summary
+ * inline, and exposes the full agent↔student conversation behind a
+ * "View conversation" button. When the full `TeacherIntegrityDetail`
+ * hasn't loaded yet, falls back to the overview on the submission row
+ * so the teacher still sees the verdict/in-progress state during the
+ * brief fetch gap. Hides entirely when there's no integrity signal.
+ */
+function IntegrityBanner({
+  integrity,
+  overviewFallback,
+}: {
+  integrity: TeacherIntegrityDetail | null;
+  overviewFallback: TeacherSubmissionRow["integrity_overview"] | null;
+}) {
+  const [open, setOpen] = useState(false);
+
+  // Prefer full detail. If it's missing (fetch pending / 404), use
+  // the overview so the "in progress" and overall-badge signals still
+  // surface without waiting for a second round-trip.
+  const badge = integrity?.overall_badge ?? overviewFallback?.overall_badge ?? null;
+  const inProgress =
+    !integrity && overviewFallback?.overall_status === "in_progress";
+  const summary = integrity?.overall_summary ?? null;
+
+  // Nothing to show: no integrity data and not in progress. Bail so
+  // the layout doesn't reserve a phantom row.
+  if (!badge && !inProgress && !integrity) return null;
+
+  const key: IntegrityBadge | "in_progress" | "none" = inProgress
+    ? "in_progress"
+    : (badge ?? "none");
+  const style = INTEGRITY_STYLE[key];
+  const hasTranscript = !!integrity && integrity.transcript.length > 0;
+
+  return (
+    <>
+      <div
+        className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-bold ${style.text}`}>
+              <span className="mr-1.5" aria-hidden>{style.icon}</span>
+              {style.label}
+            </p>
+            {summary && (
+              <p className="mt-1.5 text-xs leading-relaxed text-text-primary">
+                {summary}
+              </p>
+            )}
+            {inProgress && overviewFallback && (
+              <p className="mt-1.5 text-xs text-text-muted">
+                {overviewFallback.complete_count} of{" "}
+                {overviewFallback.problem_count} sampled problems graded.
+              </p>
+            )}
+          </div>
+          {hasTranscript && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+            >
+              View conversation →
+            </button>
+          )}
+        </div>
+      </div>
+      {integrity && (
+        <ConversationModal
+          open={open}
+          onClose={() => setOpen(false)}
+          integrity={integrity}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Full agent↔student transcript + per-problem verdicts. This is the
+ * "drill in" surface for a teacher who doesn't trust the banner's
+ * one-line verdict. Turn-by-turn so the teacher can judge for
+ * themselves whether the student's explanations actually matched
+ * their written work.
+ */
+function ConversationModal({
+  open,
+  onClose,
+  integrity,
+}: {
+  open: boolean;
+  onClose: () => void;
+  integrity: TeacherIntegrityDetail;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0">
+      <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
+        <div>
+          <h3 className="text-sm font-bold text-text-primary">
+            AI ↔ student conversation
+          </h3>
+          <p className="text-[11px] text-text-muted">
+            {integrity.transcript.length} turns
+            {integrity.problems.length > 0 && (
+              <> · {integrity.problems.length} problems verified</>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+          aria-label="Close"
+        >
+          Close ✕
+        </button>
+      </div>
+      <div className="max-h-[70vh] space-y-3 overflow-y-auto px-5 py-4">
+        {integrity.transcript.map((t) => (
+          <TranscriptTurn key={t.ordinal} turn={t} />
+        ))}
+        {integrity.problems.length > 0 && (
+          <div className="mt-4 border-t border-border-light pt-4">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Per-problem verdicts
+            </p>
+            <div className="space-y-2">
+              {integrity.problems.map((p) => (
+                <PerProblemVerdict key={p.problem_id} problem={p} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
+  // Tool turns are AI internals; kept collapsed by default so teachers
+  // see the human-readable conversation first. An expander reveals them
+  // when the teacher wants to audit exactly what the agent did.
+  const isTool = turn.role === "tool_call" || turn.role === "tool_result";
+  const [expanded, setExpanded] = useState(false);
+  if (isTool) {
+    return (
+      <details
+        open={expanded}
+        onToggle={(e) => setExpanded((e.target as HTMLDetailsElement).open)}
+        className="rounded-[--radius-sm] border border-dashed border-border-light bg-bg-subtle px-3 py-1.5 text-[11px] text-text-muted"
+      >
+        <summary className="cursor-pointer font-semibold">
+          {turn.role === "tool_call" ? "↳ tool call" : "↲ tool result"}
+          {turn.tool_name && <span className="ml-1 opacity-70">· {turn.tool_name}</span>}
+        </summary>
+        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px]">
+          {turn.content}
+        </pre>
+      </details>
+    );
+  }
+  const isAgent = turn.role === "agent";
+  return (
+    <div className={`flex gap-2 ${isAgent ? "" : "flex-row-reverse"}`}>
+      <div
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+          isAgent
+            ? "bg-primary text-white"
+            : "bg-bg-subtle text-text-secondary"
+        }`}
+        aria-hidden
+      >
+        {isAgent ? "AI" : "S"}
+      </div>
+      <div
+        className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
+          isAgent
+            ? "bg-primary-bg text-text-primary"
+            : "bg-bg-subtle text-text-primary"
+        }`}
+      >
+        <MathText text={turn.content} />
+        {turn.seconds_on_turn != null && !isAgent && (
+          <span className="mt-1 block text-[10px] text-text-muted">
+            · {Math.round(turn.seconds_on_turn)}s to reply
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PerProblemVerdict({
+  problem,
+}: {
+  problem: TeacherIntegrityDetail["problems"][number];
+}) {
+  const style = INTEGRITY_STYLE[problem.badge ?? "none"];
+  return (
+    <div
+      className={`rounded-[--radius-md] border ${style.border} ${style.bg} px-3 py-2`}
+    >
+      <p className="flex items-center gap-1.5 text-xs font-semibold">
+        <span className={style.text}>
+          {style.icon} {style.label}
+        </span>
+        {problem.confidence != null && (
+          <span className="text-text-muted">
+            · {Math.round(problem.confidence * 100)}% conf
+          </span>
+        )}
+      </p>
+      <p className="mt-1 text-xs text-text-primary">
+        <MathText text={problem.question} />
+      </p>
+      {problem.ai_reasoning && (
+        <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+          {problem.ai_reasoning}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Student's handwritten work: compact thumbnail + label that opens
+ * the full photo in a modal. The image is a reference the teacher
+ * consults WHILE grading, so it lives inline in the Problems card
+ * header — not as its own scan-path block.
+ */
+function StudentWorkThumbButton({ imageData }: { imageData: string }) {
+  const [open, setOpen] = useState(false);
+  const src = imageDataUrl(imageData);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-xs font-semibold text-text-secondary transition-all hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+        aria-label="View student's handwritten work full size"
+      >
+        <span className="relative block h-7 w-10 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-bg-subtle">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        </span>
+        <span>View work ↗</span>
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
+        <div className="flex items-center justify-between pb-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Student&apos;s work
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+            aria-label="Close"
+          >
+            Close ✕
+          </button>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt="Student handwritten submission, full size"
+          className="mx-auto max-h-[80vh] w-auto rounded-[--radius-md] border border-border-light object-contain"
+        />
+      </Modal>
+    </>
+  );
+}

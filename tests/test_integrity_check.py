@@ -124,6 +124,7 @@ async def test_submit_caps_sample_at_max_sample(
         for i in range(MAX_SAMPLE + 2):
             clone = QuestionBankItem(
                 course_id=original.course_id,
+                originating_assignment_id=original.originating_assignment_id,
                 title=f"Extra {i}",
                 question=f"Extra problem {i}",
                 solution_steps=[],
@@ -189,7 +190,7 @@ async def test_pipeline_failure_does_not_roll_back_submission(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
     with patch(
-        "api.core.integrity_pipeline.extract_student_work",
+        "api.core.integrity_ai.extract_student_work",
         side_effect=RuntimeError("simulated pipeline failure"),
     ):
         r = await _submit(client, world)
@@ -217,7 +218,7 @@ async def test_unreadable_gate_skips_entire_check(
     started."""
     low_conf = {"steps": [], "confidence": 0.05}
     with patch(
-        "api.core.integrity_pipeline.extract_student_work",
+        "api.core.integrity_ai.extract_student_work",
         return_value=low_conf,
     ):
         r = await _submit(client, world)

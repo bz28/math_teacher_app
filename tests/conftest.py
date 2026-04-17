@@ -158,10 +158,25 @@ async def _mock_run_agent_turn(
 
 @pytest.fixture(autouse=True)
 def _mock_integrity_ai() -> Any:
-    """Mock all integrity AI calls so tests don't hit Claude."""
+    """Mock every LLM call the submit pipeline fans out to.
+
+    The submit endpoint spawns a background task that runs extraction
+    (Vision) then integrity (agent) and AI grading (JSON tool). All
+    three must be mocked or tests trip the real Claude client.
+
+    `extract_student_work` is patched at its source module
+    (`api.core.integrity_ai`) because school_student_practice and
+    integrity_pipeline both import it by name — patching at the
+    source catches both call sites in one place.
+    """
     _AGENT_SCRIPT.clear()
     _AGENT_CALL_LOG.clear()
     with (
+        patch(
+            "api.core.integrity_ai.extract_student_work",
+            new_callable=AsyncMock,
+            return_value=_MOCK_EXTRACTION,
+        ),
         patch(
             "api.core.integrity_pipeline.extract_student_work",
             new_callable=AsyncMock,
@@ -170,6 +185,11 @@ def _mock_integrity_ai() -> Any:
         patch(
             "api.core.integrity_pipeline.run_agent_turn",
             side_effect=_mock_run_agent_turn,
+        ),
+        patch(
+            "api.core.grading_ai.run_ai_grading_for_submission",
+            new_callable=AsyncMock,
+            return_value=None,
         ),
     ):
         yield
@@ -246,8 +266,24 @@ async def world() -> dict[str, Any]:
 
         s.add(SectionEnrollment(section_id=section.id, student_id=student.id))
 
+        # Assignment is created first so bank items can back-reference it
+        # via originating_assignment_id (NOT NULL since aq1000034). The
+        # content snapshot is filled in below once the primary has an id.
+        assignment = Assignment(
+            course_id=course.id,
+            unit_ids=[],
+            teacher_id=teacher.id,
+            title="HW 1",
+            type="homework",
+            status="published",
+            content={"problems": []},
+        )
+        s.add(assignment)
+        await s.flush()
+
         primary = QuestionBankItem(
             course_id=course.id,
+            originating_assignment_id=assignment.id,
             title="Quadratics 1",
             question="Solve x^2 - 5x + 6 = 0",
             solution_steps=[{"title": "Factor", "description": "(x-2)(x-3)"}],
@@ -267,6 +303,7 @@ async def world() -> dict[str, Any]:
         ]):
             sib = QuestionBankItem(
                 course_id=course.id,
+                originating_assignment_id=assignment.id,
                 title=q[0],
                 question=q[1],
                 solution_steps=[{"title": "Factor", "description": "..."}],
@@ -281,6 +318,7 @@ async def world() -> dict[str, Any]:
 
         pending_sib = QuestionBankItem(
             course_id=course.id,
+            originating_assignment_id=assignment.id,
             title="Sib pending",
             question="Solve x^2 - 13x + 42 = 0",
             solution_steps=[],
@@ -293,24 +331,15 @@ async def world() -> dict[str, Any]:
         s.add(pending_sib)
         await s.flush()
 
-        assignment = Assignment(
-            course_id=course.id,
-            unit_ids=[],
-            teacher_id=teacher.id,
-            title="HW 1",
-            type="homework",
-            status="published",
-            content={"problems": [
-                {
-                    "bank_item_id": str(primary.id), "position": 1,
-                    "question": primary.question,
-                    "solution_steps": primary.solution_steps,
-                    "final_answer": primary.final_answer,
-                    "difficulty": primary.difficulty,
-                },
-            ]},
-        )
-        s.add(assignment)
+        assignment.content = {"problems": [
+            {
+                "bank_item_id": str(primary.id), "position": 1,
+                "question": primary.question,
+                "solution_steps": primary.solution_steps,
+                "final_answer": primary.final_answer,
+                "difficulty": primary.difficulty,
+            },
+        ]}
         await s.flush()
         s.add(AssignmentSection(
             assignment_id=assignment.id,

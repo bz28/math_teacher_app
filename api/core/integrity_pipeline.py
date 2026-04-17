@@ -109,13 +109,20 @@ ROLE_TOOL_RESULT = "tool_result"
 async def start_integrity_check(
     submission_id: uuid.UUID,
     db: AsyncSession,
+    *,
+    extraction: dict[str, Any] | None = None,
 ) -> None:
-    """Run the extraction + opening-turn generation for a fresh
-    submission. Idempotent: if an IntegrityCheckSubmission already
-    exists for the submission_id, bails cleanly.
+    """Run the integrity check for a fresh submission.
 
-    Caller is responsible for committing the surrounding transaction
-    (see school_student_practice._run_integrity_pipeline_background).
+    If `extraction` is provided (from a shared Vision call), uses it
+    directly instead of calling extract_student_work again. This lets
+    the background pipeline share one Vision call across integrity +
+    AI grading.
+
+    Idempotent: if an IntegrityCheckSubmission already exists for the
+    submission_id, bails cleanly.
+
+    Caller is responsible for committing the surrounding transaction.
     """
     submission = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
@@ -187,7 +194,8 @@ async def start_integrity_check(
     # turn. Stringified because llm_calls.user_id is stored as string.
     user_id = str(submission.student_id)
 
-    extraction = await extract_student_work(submission_id, db, user_id=user_id)
+    if extraction is None:
+        extraction = await extract_student_work(submission_id, db, user_id=user_id)
     confidence = extraction.get("confidence", 0.0)
     if confidence < UNREADABLE_THRESHOLD:
         logger.info(

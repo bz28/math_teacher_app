@@ -44,6 +44,10 @@ _VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 
 class GenerateRequest(BaseModel):
     count: int
+    # The homework the teacher kicked this off from. Required — there's
+    # no longer a standalone question-bank flow; every item belongs to
+    # a HW.
+    assignment_id: uuid.UUID
     unit_id: uuid.UUID | None = None
     document_ids: list[uuid.UUID] = []
     constraint: str | None = None  # natural-language extra instructions
@@ -61,6 +65,7 @@ class GenerateRequest(BaseModel):
 
 class UploadWorksheetRequest(BaseModel):
     images: list[str]  # base64-encoded JPEG/PNG
+    assignment_id: uuid.UUID
     unit_id: uuid.UUID | None = None
 
     @field_validator("images")
@@ -85,14 +90,6 @@ class UpdateBankItemRequest(BaseModel):
 
 class RegenerateRequest(BaseModel):
     instructions: str | None = None
-
-
-class ApproveRequest(BaseModel):
-    """Optional payload for the approve endpoint. When `assignment_id`
-    is provided, the item is approved AND attached to that draft
-    homework in a single round-trip — the act of "approve into a
-    homework" the new review flow expects."""
-    assignment_id: uuid.UUID | None = None
 
 
 class GenerateSimilarRequest(BaseModel):
@@ -203,6 +200,7 @@ async def list_bank_items(
     course_id: uuid.UUID,
     status_filter: str | None = None,
     unit_id: uuid.UUID | None = None,
+    assignment_id: uuid.UUID | None = None,
     difficulty: str | None = None,
     parent_question_id: uuid.UUID | None = None,
     current_user: CurrentUser = Depends(require_teacher),
@@ -226,6 +224,10 @@ async def list_bank_items(
         query = query.where(QuestionBankItem.status == status_filter)
     if unit_id:
         query = query.where(QuestionBankItem.unit_id == unit_id)
+    # Per-HW scoping: HW detail pages filter to their own problems so
+    # two HWs in the same unit don't share a pending pool.
+    if assignment_id:
+        query = query.where(QuestionBankItem.originating_assignment_id == assignment_id)
     if difficulty:
         query = query.where(QuestionBankItem.difficulty == difficulty)
     if parent_question_id:
@@ -265,6 +267,16 @@ async def generate_bank_questions(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
 
+    # Validate the assignment belongs to this teacher + this course.
+    # get_teacher_assignment enforces ownership; the course_id check
+    # here prevents cross-course attachment.
+    assignment = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
+    if assignment.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignment does not belong to this course",
+        )
+
     # Defense in depth: bank questions only live at the top-unit level.
     # Frontend gates this in the generate-questions-modal but a stale UI
     # or direct API call could bypass and save into a subfolder, leaving
@@ -288,6 +300,7 @@ async def generate_bank_questions(
     job = QuestionBankGenerationJob(
         course_id=course_id,
         unit_id=body.unit_id,
+        originating_assignment_id=body.assignment_id,
         created_by_id=current_user.user_id,
         status="queued",
         requested_count=body.count,
@@ -348,9 +361,18 @@ async def upload_worksheet(
             ) from e
         validated_images.append({"data": img_b64, "media_type": media_type})
 
+    # Validate the assignment belongs to this teacher + this course.
+    assignment = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
+    if assignment.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignment does not belong to this course",
+        )
+
     job = QuestionBankGenerationJob(
         course_id=course_id,
         unit_id=body.unit_id,
+        originating_assignment_id=body.assignment_id,
         created_by_id=current_user.user_id,
         mode="upload",
         status="queued",
@@ -460,35 +482,35 @@ async def revert_bank_item(
 
 @router.post("/question-bank/{item_id}/approve")
 async def approve_bank_item(
-    body: ApproveRequest | None = None,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Approve a bank item. If `assignment_id` is provided in the body,
-    also attach the freshly-approved item to that draft homework in
-    one transaction. The new review flow uses this so "approve" and
-    "add to homework" land as a single user-visible action."""
+    """Approve a bank item AND auto-attach it to its originating HW.
+
+    Every item has `originating_assignment_id` (Feature 6d contract),
+    so approval always means "add this problem to that HW's content."
+    No picker, no cross-HW sharing — the plan's per-HW model.
+
+    If the originating HW is already published, the approve still
+    lands but the attach is skipped (published HWs are locked). The
+    teacher can unpublish and re-approve to force attach, or leave
+    the item approved for reference.
+    """
     _ensure_unlocked(item)
     item.status = "approved"
 
-    if body and body.assignment_id is not None:
-        a = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
-        if a.course_id != item.course_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Assignment belongs to a different course",
-            )
-        if a.type != "homework":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Can only attach to homework assignments",
-            )
-        if a.status == "published":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unpublish before adding problems",
-            )
+    # get_teacher_assignment enforces teacher ownership of the
+    # originating HW. Should always succeed since the item's FK is
+    # guaranteed valid — belt-and-suspenders for the rare case of a
+    # stale item row being approved after its HW was deleted.
+    a = await get_teacher_assignment(db, item.originating_assignment_id, current_user.user_id)
+
+    # Auto-attach only applies to HW primaries. Variations (children
+    # of a primary via parent_question_id) are practice scaffolding
+    # served through the student loop — they never belong in HW
+    # content. snapshot_bank_items would reject them anyway.
+    if a.status != "published" and item.parent_question_id is None:
         existing_ids: list[uuid.UUID] = []
         content = a.content if isinstance(a.content, dict) else {}
         for raw in content.get("problem_ids") or []:
@@ -498,12 +520,11 @@ async def approve_bank_item(
                 continue
         if item.id not in existing_ids:
             existing_ids.append(item.id)
-        # snapshot_bank_items re-validates that every id in the list
-        # belongs to the course and is approved — including the one we
-        # just flipped above (which is fine since we haven't committed
-        # yet but the in-memory state is "approved").
-        await db.flush()
-        a.content = await snapshot_bank_items(db, a.course_id, existing_ids)
+            # snapshot_bank_items re-validates that every id in the list
+            # belongs to the course and is approved — including the one
+            # we just flipped above (in-memory state is "approved").
+            await db.flush()
+            a.content = await snapshot_bank_items(db, a.course_id, existing_ids)
 
     await db.commit()
     return {"status": "ok"}
@@ -569,6 +590,9 @@ async def generate_similar_bank_questions(
     job = QuestionBankGenerationJob(
         course_id=parent.course_id,
         unit_id=parent.unit_id,
+        # Children inherit the parent's originating HW — a variation
+        # lives and dies with the HW its primary belongs to.
+        originating_assignment_id=parent.originating_assignment_id,
         created_by_id=current_user.user_id,
         status="queued",
         requested_count=body.count,
