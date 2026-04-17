@@ -788,10 +788,6 @@ function SubmissionDetailPanel({
   }, [detail.ai_breakdown]);
   const gradedCount = breakdownByProblem.size;
   const totalProblems = detail.problems.length;
-  const avgPercent =
-    gradedCount > 0
-      ? (detail.breakdown ?? []).reduce((s, b) => s + b.percent, 0) / gradedCount
-      : null;
   const published = !!row?.grade_published_at;
 
   return (
@@ -822,21 +818,22 @@ function SubmissionDetailPanel({
               </span>
             )}
             <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
-            <span className="font-semibold text-text-primary">
-              {gradedCount}/{totalProblems} graded
-            </span>
-            {avgPercent !== null && (
-              <>
-                <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
-                <span className="font-semibold text-text-primary">
-                  {Math.round(avgPercent)}%
-                </span>
-              </>
-            )}
-            {published && (
-              <span className="ml-1.5 rounded-[--radius-pill] bg-success-light px-1.5 py-0.5 text-[10px] font-bold text-success">
-                Published
+            {published && row?.grade_published_at ? (
+              <span className="font-semibold text-success">
+                Published{" "}
+                {new Date(row.grade_published_at).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               </span>
+            ) : gradedCount > 0 ? (
+              <span className="font-semibold text-text-primary">
+                AI graded · not yet published
+              </span>
+            ) : (
+              <span className="text-text-muted">Not graded yet</span>
             )}
           </p>
           {saveError && (
