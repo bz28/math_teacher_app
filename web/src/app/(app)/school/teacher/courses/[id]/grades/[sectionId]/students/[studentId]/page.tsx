@@ -210,7 +210,13 @@ function PublishedHwRow({
           </div>
         )}
       </div>
-      <PercentBadge percent={hw.final_score} size="lg" className="shrink-0" />
+      {hw.final_score === null ? (
+        <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-bg-subtle px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Not graded yet
+        </span>
+      ) : (
+        <PercentBadge percent={hw.final_score} size="lg" className="shrink-0" />
+      )}
     </Link>
   );
 }

@@ -762,13 +762,18 @@ export interface GradesRosterResponse {
   students: GradesRosterRow[];
 }
 
-/** One published HW row on the student detail page. */
+/** One HW row on the student detail page. Covers both graded
+ *  (final_score set) and still-being-graded (final_score null) HWs —
+ *  the detail page shows every published HW assigned to the section
+ *  so nothing disappears while the teacher is mid-grading. */
 export interface StudentGradePublishedHw {
   assignment_id: string;
   title: string;
   due_at: string | null;
   graded_at: string | null;
-  final_score: number;
+  /** Null when the grade hasn't been published yet — row renders as
+   *  "Not graded yet" instead of a score. */
+  final_score: number | null;
   teacher_notes: string | null;
   /** Included so the detail page can link into the review page. */
   section_id: string;

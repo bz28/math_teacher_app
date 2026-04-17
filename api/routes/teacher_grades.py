@@ -33,26 +33,34 @@ def _avg(vals: list[float]) -> float | None:
     return round(sum(vals) / len(vals), 1) if vals else None
 
 
-async def _past_due_sections_by_assignment(
-    db: AsyncSession, course_id: uuid.UUID,
+async def _sections_by_assignment(
+    db: AsyncSession, course_id: uuid.UUID, past_due_only: bool,
 ) -> dict[uuid.UUID, set[uuid.UUID]]:
-    """For a course, return {section_id: {assignment_id, ...}} of all
-    HWs that are published, pushed to that section, and past due — the
-    set of work a student "should have turned in by now." Not-yet-due
-    HWs are excluded so they don't pull down Progress or avg.
+    """For a course, return {section_id: {assignment_id, ...}} of
+    published HWs pushed to each section.
+
+    past_due_only=True → only HWs the student "should have turned in
+    by now." Used by the roster so Progress / missing counts don't
+    inflate from not-yet-due work.
+
+    past_due_only=False → every published HW assigned to the section,
+    regardless of due date. Used by the student detail page so a HW
+    the teacher just published (but hasn't fully graded/published
+    grades for) still shows up as "Not graded yet" instead of vanishing.
     """
-    now = datetime.now(UTC)
-    rows = (await db.execute(
+    q = (
         select(AssignmentSection.assignment_id, AssignmentSection.section_id)
         .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
         .where(
             Assignment.course_id == course_id,
             Assignment.status == "published",
-            Assignment.due_at.is_not(None),
-            Assignment.due_at <= now,
             AssignmentSection.published_at.is_not(None),
         )
-    )).all()
+    )
+    if past_due_only:
+        now = datetime.now(UTC)
+        q = q.where(Assignment.due_at.is_not(None), Assignment.due_at <= now)
+    rows = (await db.execute(q)).all()
     out: dict[uuid.UUID, set[uuid.UUID]] = {}
     for r in rows:
         out.setdefault(r.section_id, set()).add(r.assignment_id)
@@ -93,7 +101,7 @@ async def get_course_grades(
         enrollments_q = enrollments_q.where(Section.id == section_id)
     enrollments = (await db.execute(enrollments_q.order_by(User.name))).all()
 
-    assigned_by_section = await _past_due_sections_by_assignment(db, course_id)
+    assigned_by_section = await _sections_by_assignment(db, course_id, past_due_only=True)
     # Flatten to a single set so the per-student grade/submission
     # queries below only pull rows for HWs in this course. Without
     # this, students enrolled in multiple teacher courses would have
@@ -211,7 +219,13 @@ async def get_student_grades(
             detail="Student not enrolled in this section",
         )
 
-    assigned_by_section = await _past_due_sections_by_assignment(db, course_id)
+    # Detail view shows every published HW assigned to this section —
+    # including ones still mid-grading — so a teacher who's partway
+    # through publishing grades doesn't see the HW vanish on unfinished
+    # students. Past-due/no-submission work lands in missing_hws; the
+    # rest appears in published_hws with final_score=null when the
+    # grade isn't published yet.
+    assigned_by_section = await _sections_by_assignment(db, course_id, past_due_only=False)
     assigned_aids = assigned_by_section.get(section_id, set())
 
     if not assigned_aids:
@@ -251,6 +265,7 @@ async def get_student_grades(
             SubmissionGrade.final_score.is_not(None),
         )
     )).all()
+    published_by_aid = {r.assignment_id: r for r in published_rows}
     submitted_aids = {r.assignment_id for r in (await db.execute(
         select(Submission.assignment_id)
         .where(
@@ -259,24 +274,36 @@ async def get_student_grades(
         )
     )).all()}
 
+    # Missing = past-due AND student didn't submit. Computed first so
+    # we can exclude those HWs from the main list (no double-display).
+    now = datetime.now(UTC)
+    missing_aids: set[uuid.UUID] = set()
+    for aid in assigned_aids:
+        a = assignment_meta.get(aid)
+        if not a or not a.due_at:
+            continue
+        if a.due_at <= now and aid not in submitted_aids:
+            missing_aids.add(aid)
+
     published_hws = []
-    for r in published_rows:
-        a = assignment_meta.get(r.assignment_id)
+    for aid in assigned_aids - missing_aids:
+        a = assignment_meta.get(aid)
         if not a:
             continue
+        grade = published_by_aid.get(aid)
         published_hws.append({
             "assignment_id": str(a.id),
             "title": a.title,
             "due_at": a.due_at.isoformat() if a.due_at else None,
-            "graded_at": r.graded_at.isoformat() if r.graded_at else None,
-            "final_score": round(r.final_score, 1),
-            "teacher_notes": r.teacher_notes,
+            "graded_at": grade.graded_at.isoformat() if grade and grade.graded_at else None,
+            "final_score": round(grade.final_score, 1) if grade else None,
+            "teacher_notes": grade.teacher_notes if grade else None,
             "section_id": str(section_id),
         })
     published_hws.sort(key=lambda h: h["due_at"] or "", reverse=True)
 
     missing_hws = []
-    for aid in assigned_aids - submitted_aids:
+    for aid in missing_aids:
         a = assignment_meta.get(aid)
         if not a:
             continue
@@ -300,6 +327,7 @@ async def get_student_grades(
         )
     )).scalar()
 
+    graded_scores = [h["final_score"] for h in published_hws if h["final_score"] is not None]
     return {
         "student": {
             "id": str(student_row.id),
@@ -307,9 +335,9 @@ async def get_student_grades(
             "section_id": str(student_row.section_id),
             "section_name": student_row.section_name,
         },
-        "overall_avg": _avg([h["final_score"] for h in published_hws]),
+        "overall_avg": _avg(graded_scores),
         "class_avg": round(class_avg_val, 1) if class_avg_val is not None else None,
-        "graded_count": len(published_hws),
+        "graded_count": len(graded_scores),
         "missing_count": len(missing_hws),
         "published_hws": published_hws,
         "missing_hws": missing_hws,
