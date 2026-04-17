@@ -679,8 +679,8 @@ async def get_dashboard(
 
     recently_graded: list[DashboardGrade] = []
     for grade, sub, a in recent_grade_rows:
-        meta = section_meta.get(sub.section_id)
-        if meta is None:
+        grade_meta = section_meta.get(sub.section_id)
+        if grade_meta is None:
             # Student was in this section when they submitted but is
             # no longer enrolled — skip rather than leak a section we
             # can't label. Rare edge case but worth handling.
@@ -688,9 +688,9 @@ async def get_dashboard(
         recently_graded.append(DashboardGrade(
             assignment_id=str(a.id),
             title=a.title,
-            course_id=str(meta["course_id"]),
-            course_name=meta["course_name"],
-            section_name=meta["section_name"],
+            course_id=str(grade_meta["course_id"]),
+            course_name=grade_meta["course_name"],
+            section_name=grade_meta["section_name"],
             final_score=round(grade.final_score, 1),
             published_at=grade.grade_published_at,
         ))
@@ -751,15 +751,15 @@ async def get_all_grades(
 
     grades: list[DashboardGrade] = []
     for grade, sub, a in rows:
-        meta = section_meta.get(sub.section_id)
-        if meta is None:
+        grade_meta = section_meta.get(sub.section_id)
+        if grade_meta is None:
             continue
         grades.append(DashboardGrade(
             assignment_id=str(a.id),
             title=a.title,
-            course_id=str(meta["course_id"]),
-            course_name=meta["course_name"],
-            section_name=meta["section_name"],
+            course_id=str(grade_meta["course_id"]),
+            course_name=grade_meta["course_name"],
+            section_name=grade_meta["section_name"],
             final_score=round(grade.final_score, 1),
             published_at=grade.grade_published_at,
         ))
