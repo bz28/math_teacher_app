@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
-import { PercentBadge } from "@/components/school/teacher/percent-badge";
+import { PercentBadge } from "@/components/school/shared/percent-badge";
 
 /**
  * Grades → Student detail page.

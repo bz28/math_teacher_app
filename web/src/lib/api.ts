@@ -1360,6 +1360,12 @@ export interface StudentHomeworkDetail {
   problems: StudentHomeworkProblem[];
   submitted: boolean;
   submission_id: string | null;
+  /** ISO timestamp — null before submission. */
+  submitted_at: string | null;
+  /** Percent 0-100, or null if no grade published yet. */
+  final_score: number | null;
+  /** ISO timestamp — null until teacher publishes. */
+  grade_published_at: string | null;
 }
 
 export interface StudentSubmission {
@@ -1396,9 +1402,52 @@ export interface FlaggedConsumption {
   served_at: string;
 }
 
+// ── Student dashboard + grades (mirror api/routes/school_student_practice.py) ──
+
+export interface DashboardAssignment {
+  assignment_id: string;
+  title: string;
+  type: string;
+  due_at: string | null;
+  course_id: string;
+  course_name: string;
+  section_name: string;
+  status: "not_started" | "submitted";
+  is_late: boolean;
+}
+
+export interface DashboardGrade {
+  assignment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string;
+  section_name: string;
+  /** Percent 0-100. Render with shared PercentBadge. */
+  final_score: number;
+  published_at: string;
+}
+
+export interface StudentDashboardResponse {
+  first_name: string;
+  due_this_week: DashboardAssignment[];
+  overdue: DashboardAssignment[];
+  in_review: DashboardAssignment[];
+  recently_graded: DashboardGrade[];
+}
+
+export interface StudentGradesResponse {
+  grades: DashboardGrade[];
+}
+
 export const schoolStudent = {
   listClasses() {
     return apiFetch<StudentClassSummary[]>("/school/student/classes");
+  },
+  getDashboard() {
+    return apiFetch<StudentDashboardResponse>("/school/student/dashboard");
+  },
+  getAllGrades() {
+    return apiFetch<StudentGradesResponse>("/school/student/grades");
   },
   listHomework(courseId: string) {
     return apiFetch<StudentHomeworkSummary[]>(`/school/student/courses/${courseId}/homework`);

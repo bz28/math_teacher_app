@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { teacher, type GradesRosterResponse, type GradesRosterRow } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { PercentBadge } from "@/components/school/teacher/percent-badge";
+import { PercentBadge } from "@/components/school/shared/percent-badge";
 
 /**
  * Grades tab — the read-only final-record view.
