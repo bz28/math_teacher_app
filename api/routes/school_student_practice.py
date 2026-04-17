@@ -27,7 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,7 +40,7 @@ from api.core.integrity_pipeline import start_integrity_check
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
-from api.models.assignment import Assignment, AssignmentSection, Submission
+from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.question_bank import BankConsumption, QuestionBankItem
 from api.models.section import Section
@@ -269,6 +269,51 @@ class StudentSubmissionDetail(BaseModel):
     final_answers: dict[str, str]
 
 
+# ── Dashboard / grades shapes ──
+#
+# Surfaces aggregated read-only data for the student "Today" dashboard
+# and "My Grades" page. Deliberately omits teacher_notes, breakdown,
+# and ai_breakdown — per v1 scope, students see scores only. Feedback
+# surfacing lives in v2 (see plans/student-portal-v1-dashboard.md).
+
+class DashboardAssignment(BaseModel):
+    assignment_id: str
+    title: str
+    type: str
+    due_at: datetime | None
+    course_id: str
+    course_name: str
+    section_name: str
+    # "not_started" (in Due/Overdue) or "submitted" (in In review).
+    status: Literal["not_started", "submitted"]
+    is_late: bool
+
+
+class DashboardGrade(BaseModel):
+    assignment_id: str
+    title: str
+    course_id: str
+    course_name: str
+    section_name: str
+    # By existing convention in teacher_grades.py, final_score is a
+    # percent 0-100 rounded to 1 decimal. We expose it as-is so the
+    # shared PercentBadge can render it directly.
+    final_score: float
+    published_at: datetime
+
+
+class StudentDashboardResponse(BaseModel):
+    first_name: str
+    due_this_week: list[DashboardAssignment]
+    overdue: list[DashboardAssignment]
+    in_review: list[DashboardAssignment]
+    recently_graded: list[DashboardGrade]
+
+
+class StudentGradesResponse(BaseModel):
+    grades: list[DashboardGrade]
+
+
 # ── Helpers ──
 
 def _serialize(item: QuestionBankItem) -> VariationPayload:
@@ -420,6 +465,298 @@ async def list_homework(
         )
         for a in rows
     ]
+
+
+@router.get("/dashboard")
+async def get_dashboard(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentDashboardResponse:
+    """Aggregate everything the student Today dashboard needs: upcoming
+    HW (due this week), overdue HW, submitted-awaiting-grade, and the
+    most recent published grades — all in one round trip.
+
+    Scoped to the student's enrolled sections. Draft assignments are
+    invisible; quizzes/tests are excluded (homework only, matching
+    list_homework). Feedback fields (breakdown, teacher_notes,
+    ai_breakdown) are deliberately not surfaced — v1 shows scores only.
+    """
+    # All (section_id, section_name, course_id, course_name) pairs the
+    # student is enrolled in. One round-trip; cached in a dict for
+    # per-assignment lookups below.
+    class_rows = (await db.execute(
+        select(
+            Section.id.label("section_id"),
+            Section.name.label("section_name"),
+            Course.id.label("course_id"),
+            Course.name.label("course_name"),
+        )
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .join(Course, Course.id == Section.course_id)
+        .where(SectionEnrollment.student_id == user.id)
+    )).all()
+    section_ids = [row.section_id for row in class_rows]
+    # Per-section metadata — a student can be in multiple sections of
+    # the same course, so we key by section_id not course_id.
+    section_meta: dict[uuid.UUID, dict[str, Any]] = {
+        row.section_id: {
+            "section_name": row.section_name,
+            "course_id": row.course_id,
+            "course_name": row.course_name,
+        }
+        for row in class_rows
+    }
+
+    first_name = user.name.split(" ", 1)[0] if user.name else ""
+
+    if not section_ids:
+        return StudentDashboardResponse(
+            first_name=first_name,
+            due_this_week=[],
+            overdue=[],
+            in_review=[],
+            recently_graded=[],
+        )
+
+    # Every published HW the student has access to, paired with the
+    # section that granted access. A student in two sections of the
+    # same HW sees it once (we de-dupe below by assignment_id —
+    # picking the first section encountered).
+    assignment_rows = (await db.execute(
+        select(Assignment, AssignmentSection.section_id)
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .where(
+            Assignment.status == "published",
+            Assignment.type == "homework",
+            AssignmentSection.section_id.in_(section_ids),
+        )
+    )).all()
+
+    # De-dupe by assignment_id — first section encountered wins.
+    assignments_by_id: dict[uuid.UUID, tuple[Assignment, uuid.UUID]] = {}
+    for a, sid in assignment_rows:
+        if a.id not in assignments_by_id:
+            assignments_by_id[a.id] = (a, sid)
+
+    if not assignments_by_id:
+        return StudentDashboardResponse(
+            first_name=first_name,
+            due_this_week=[],
+            overdue=[],
+            in_review=[],
+            recently_graded=[],
+        )
+
+    # Which of these has the student submitted?
+    submitted_rows = (await db.execute(
+        select(Submission.id, Submission.assignment_id).where(
+            Submission.student_id == user.id,
+            Submission.assignment_id.in_(assignments_by_id.keys()),
+        )
+    )).all()
+    submission_by_aid: dict[uuid.UUID, uuid.UUID] = {
+        sub_aid: sub_id for sub_id, sub_aid in submitted_rows
+    }
+
+    # Published grades keyed by submission_id for the dedupe below.
+    published_grades = (await db.execute(
+        select(SubmissionGrade).where(
+            SubmissionGrade.submission_id.in_(submission_by_aid.values()),
+            SubmissionGrade.grade_published_at.is_not(None),
+            SubmissionGrade.final_score.is_not(None),
+        )
+    )).scalars().all() if submission_by_aid else []
+    published_by_sid: dict[uuid.UUID, SubmissionGrade] = {
+        g.submission_id: g for g in published_grades
+    }
+
+    now = datetime.now(UTC)
+    week_from_now = now + timedelta(days=7)
+
+    due_this_week: list[DashboardAssignment] = []
+    overdue: list[DashboardAssignment] = []
+    in_review: list[DashboardAssignment] = []
+
+    for aid, (a, sid) in assignments_by_id.items():
+        meta = section_meta[sid]
+        submission_id = submission_by_aid.get(aid)
+        is_submitted = submission_id is not None
+        is_published = is_submitted and submission_id in published_by_sid
+
+        # A published grade removes the HW from every active bucket —
+        # it surfaces instead in recently_graded.
+        if is_published:
+            continue
+
+        if is_submitted:
+            # Awaiting grade (integrity check running, teacher hasn't
+            # published yet, or no grade row at all).
+            in_review.append(DashboardAssignment(
+                assignment_id=str(a.id),
+                title=a.title,
+                type=a.type,
+                due_at=a.due_at,
+                course_id=str(meta["course_id"]),
+                course_name=meta["course_name"],
+                section_name=meta["section_name"],
+                status="submitted",
+                is_late=bool(a.due_at and a.due_at < now),
+            ))
+            continue
+
+        # Unsubmitted — into Due or Overdue. HWs with no due date
+        # go into Due (sorted last, nullslast) so students can still
+        # see them; they're never "overdue" without a deadline.
+        if a.due_at and a.due_at < now:
+            overdue.append(DashboardAssignment(
+                assignment_id=str(a.id),
+                title=a.title,
+                type=a.type,
+                due_at=a.due_at,
+                course_id=str(meta["course_id"]),
+                course_name=meta["course_name"],
+                section_name=meta["section_name"],
+                status="not_started",
+                is_late=True,
+            ))
+        elif a.due_at is None or a.due_at <= week_from_now:
+            due_this_week.append(DashboardAssignment(
+                assignment_id=str(a.id),
+                title=a.title,
+                type=a.type,
+                due_at=a.due_at,
+                course_id=str(meta["course_id"]),
+                course_name=meta["course_name"],
+                section_name=meta["section_name"],
+                status="not_started",
+                is_late=False,
+            ))
+
+    # Sort: Due soonest first (null due_at last); Overdue most-overdue
+    # first (oldest due_at first, most urgent at top).
+    due_this_week.sort(key=lambda x: (x.due_at is None, x.due_at or now))
+    overdue.sort(key=lambda x: x.due_at or now)
+    # In-review: most-recently-submitted first — surfaced via a simple
+    # follow-up query since we didn't carry submitted_at through the map.
+    in_review_submitted_at: dict[str, datetime] = {}
+    if in_review:
+        submitted_at_rows = (await db.execute(
+            select(Submission.assignment_id, Submission.submitted_at).where(
+                Submission.student_id == user.id,
+                Submission.assignment_id.in_([uuid.UUID(x.assignment_id) for x in in_review]),
+            )
+        )).all()
+        in_review_submitted_at = {str(aid): sa for aid, sa in submitted_at_rows}
+    in_review.sort(
+        key=lambda x: in_review_submitted_at.get(x.assignment_id, now),
+        reverse=True,
+    )
+
+    # Recently graded — join on submission→grade, take top 10 by
+    # grade_published_at DESC. Covers all enrolled sections, not
+    # limited by the 7-day window on active buckets.
+    recent_grade_rows = (await db.execute(
+        select(SubmissionGrade, Submission, Assignment)
+        .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(
+            Submission.student_id == user.id,
+            Submission.section_id.in_(section_ids),
+            SubmissionGrade.grade_published_at.is_not(None),
+            SubmissionGrade.final_score.is_not(None),
+        )
+        .order_by(SubmissionGrade.grade_published_at.desc())
+        .limit(10)
+    )).all()
+
+    recently_graded: list[DashboardGrade] = []
+    for grade, sub, a in recent_grade_rows:
+        meta = section_meta.get(sub.section_id)
+        if meta is None:
+            # Student was in this section when they submitted but is
+            # no longer enrolled — skip rather than leak a section we
+            # can't label. Rare edge case but worth handling.
+            continue
+        recently_graded.append(DashboardGrade(
+            assignment_id=str(a.id),
+            title=a.title,
+            course_id=str(meta["course_id"]),
+            course_name=meta["course_name"],
+            section_name=meta["section_name"],
+            final_score=round(grade.final_score, 1),
+            published_at=grade.grade_published_at,
+        ))
+
+    return StudentDashboardResponse(
+        first_name=first_name,
+        due_this_week=due_this_week,
+        overdue=overdue,
+        in_review=in_review,
+        recently_graded=recently_graded,
+    )
+
+
+@router.get("/grades")
+async def get_all_grades(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentGradesResponse:
+    """Every published grade for the student across every enrolled
+    section. Ordered newest first. No pagination — volume is bounded
+    by how many HWs a student has been graded on (small at v1)."""
+    class_rows = (await db.execute(
+        select(
+            Section.id.label("section_id"),
+            Section.name.label("section_name"),
+            Course.id.label("course_id"),
+            Course.name.label("course_name"),
+        )
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .join(Course, Course.id == Section.course_id)
+        .where(SectionEnrollment.student_id == user.id)
+    )).all()
+    section_ids = [row.section_id for row in class_rows]
+    if not section_ids:
+        return StudentGradesResponse(grades=[])
+
+    section_meta: dict[uuid.UUID, dict[str, Any]] = {
+        row.section_id: {
+            "section_name": row.section_name,
+            "course_id": row.course_id,
+            "course_name": row.course_name,
+        }
+        for row in class_rows
+    }
+
+    rows = (await db.execute(
+        select(SubmissionGrade, Submission, Assignment)
+        .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(
+            Submission.student_id == user.id,
+            Submission.section_id.in_(section_ids),
+            SubmissionGrade.grade_published_at.is_not(None),
+            SubmissionGrade.final_score.is_not(None),
+        )
+        .order_by(SubmissionGrade.grade_published_at.desc())
+    )).all()
+
+    grades: list[DashboardGrade] = []
+    for grade, sub, a in rows:
+        meta = section_meta.get(sub.section_id)
+        if meta is None:
+            continue
+        grades.append(DashboardGrade(
+            assignment_id=str(a.id),
+            title=a.title,
+            course_id=str(meta["course_id"]),
+            course_name=meta["course_name"],
+            section_name=meta["section_name"],
+            final_score=round(grade.final_score, 1),
+            published_at=grade.grade_published_at,
+        ))
+
+    return StudentGradesResponse(grades=grades)
 
 
 @router.get("/homework/{assignment_id}")
