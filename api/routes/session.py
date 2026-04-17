@@ -161,6 +161,8 @@ async def create(
 async def history(
     subject: str | None = Query(default=None),
     section_id: uuid.UUID | None = Query(default=None),
+    mode: str | None = Query(default=None),
+    topic: str | None = Query(default=None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user_full),
@@ -192,6 +194,20 @@ async def history(
         filters.append(SessionModel.subject == subject)
     if section_id:
         filters.append(SessionModel.section_id == section_id)
+    if mode:
+        valid_modes = {m.value for m in SessionMode}
+        if mode not in valid_modes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid mode. Must be one of: {', '.join(sorted(valid_modes))}",
+            )
+        # "learn" filter includes both learn and practice (practice isn't user-facing)
+        if mode == SessionMode.LEARN:
+            filters.append(SessionModel.mode.in_([SessionMode.LEARN, SessionMode.PRACTICE]))
+        else:
+            filters.append(SessionModel.mode == mode)
+    if topic:
+        filters.append(SessionModel.topic == topic)
 
     query = (
         select(SessionModel)
@@ -227,9 +243,36 @@ async def history(
             total_steps=s.total_steps,
             created_at=s.created_at,
             mode=s.mode,
+            topic=s.topic,
             all_problems=all_problems,
         ))
     return SessionHistoryResponse(items=items, has_more=has_more)
+
+
+@router.get("/history/topics")
+async def history_topics(
+    subject: str = Query(...),
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, list[str]]:
+    """Return distinct topic labels from the user's session history for a subject."""
+    if subject not in VALID_SUBJECTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid subject. Must be one of: {', '.join(sorted(VALID_SUBJECTS))}",
+        )
+    result = await db.execute(
+        select(SessionModel.topic)
+        .where(
+            SessionModel.user_id == user.id,
+            SessionModel.subject == subject,
+            SessionModel.topic.isnot(None),
+        )
+        .distinct()
+        .order_by(SessionModel.topic)
+    )
+    topics = [row[0] for row in result.all()]
+    return {"topics": topics}
 
 
 @router.post("/{session_id}/abandon")

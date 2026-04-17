@@ -120,6 +120,9 @@ async def create_session(
                 random.shuffle(choices)
                 last["choices"] = choices
 
+    # Topic from decomposition (both branches set decomp or decomposition)
+    topic = (decomp if mode == SessionMode.PRACTICE else decomposition).topic or None
+
     session = Session(
         user_id=user_id,
         problem=problem,
@@ -131,6 +134,7 @@ async def create_session(
         mode=mode,
         subject=subject,
         section_id=section_id,
+        topic=topic,
         exchanges=[],
     )
     db.add(session)

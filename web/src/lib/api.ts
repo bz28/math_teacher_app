@@ -86,6 +86,7 @@ export interface PracticeProblem {
   question: string;
   answer: string;
   distractors?: string[];
+  topic?: string;
 }
 
 export interface PracticeGenerateResponse {
@@ -128,6 +129,7 @@ export interface SessionHistoryItem {
   total_steps: number;
   created_at: string;
   mode: string;
+  topic: string | null;
   all_problems: string[];
 }
 
@@ -477,16 +479,22 @@ export const session = {
   },
 
   history(
-    filter: { subject: string } | { section_id: string },
+    filter: { subject: string; mode?: string; topic?: string } | { section_id: string },
     limit = 20,
     offset = 0,
   ) {
     const params = new URLSearchParams({
       limit: String(limit),
       offset: String(offset),
-      ...filter,
     });
+    for (const [k, v] of Object.entries(filter)) {
+      if (v) params.set(k, v);
+    }
     return apiFetch<SessionHistoryResponse>(`/session/history?${params}`);
+  },
+
+  historyTopics(subject: string) {
+    return apiFetch<{ topics: string[] }>(`/session/history/topics?subject=${subject}`);
   },
 
   abandon(sessionId: string) {

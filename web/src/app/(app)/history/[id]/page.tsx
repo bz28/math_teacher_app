@@ -66,7 +66,7 @@ export default function SessionReviewPage({
         <Button
           variant="secondary"
           className="mt-4"
-          onClick={() => router.push("/history")}
+          onClick={() => router.back()}
         >
           Back to History
         </Button>
@@ -90,7 +90,7 @@ export default function SessionReviewPage({
         animate={{ opacity: 1, y: 0 }}
       >
         <button
-          onClick={() => router.push("/history")}
+          onClick={() => router.back()}
           className="mb-4 flex items-center gap-1 text-sm font-medium text-text-muted hover:text-primary transition-colors"
         >
           <svg

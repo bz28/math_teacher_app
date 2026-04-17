@@ -89,6 +89,7 @@ class Decomposition:
     final_answer: str
     problem_type: str
     answer_type: str = "text"
+    topic: str = ""
 
 
 _OVER_ESCAPED_MARKERS = (
@@ -130,11 +131,12 @@ def _ensure_math_delimiters(answer: str) -> str:
     return answer
 
 
-def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, str]:
-    """Parse LLM JSON response into steps, final_answer, and answer_type."""
+def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, str, str]:
+    """Parse LLM JSON response into steps, final_answer, answer_type, and topic."""
     steps_data = data["steps"]
     final_answer = data.get("final_answer", "")
     answer_type = str(data.get("answer_type", "text"))
+    topic = str(data.get("topic", "")).strip().lower()
 
     if not isinstance(steps_data, list):
         raise ValueError("Expected 'steps' to be a list")
@@ -159,6 +161,7 @@ def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]],
         steps,
         final_answer_str,
         answer_type,
+        topic,
     )
 
 
@@ -254,7 +257,7 @@ async def decompose_problem(
             user_id=user_id,
         )
 
-    steps, final_answer, answer_type = _parse_decomposition(data)
+    steps, final_answer, answer_type, topic = _parse_decomposition(data)
     if not steps:
         raise RuntimeError("Empty steps returned from decomposition")
     if not final_answer:
@@ -266,6 +269,7 @@ async def decompose_problem(
         final_answer=final_answer,
         problem_type=problem_type,
         answer_type=answer_type,
+        topic=topic,
     )
     logger.info(
         "Decomposition succeeded for %s",

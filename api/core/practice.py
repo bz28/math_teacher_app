@@ -101,6 +101,7 @@ async def solve_problem(
         "question": problem,
         "answer": decomposition.final_answer,
         "distractors": distractors,
+        "topic": decomposition.topic,
     }
 
 

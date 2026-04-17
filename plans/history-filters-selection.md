@@ -12,23 +12,29 @@ The "More ->" link on the Recent Activity panel (Plan 1) sends users to the hist
 
 ## A: Subtopic Classification
 
-### Fixed enum per subject
+### Approach: Free-form with scope-anchoring examples
 
-The LLM picks from a closed set during decomposition — no free-text. The decomposition prompt says: *"Classify this problem into exactly one of the following topics: [list]. Return the exact string."*
+The LLM generates a topic label freely (no fixed enum), but the prompt anchors the scope level with examples so labels stay consistent. This avoids maintaining a fixed list per subject while keeping labels at a uniform granularity (e.g. "derivatives" not "calculus", "perimeters" not "geometry").
 
-**Math:** algebra, geometry, trigonometry, calculus, statistics, linear algebra, number theory, arithmetic, combinatorics
+The decomposition prompt includes:
 
-**Physics:** mechanics, kinematics, thermodynamics, electromagnetism, optics, waves, nuclear physics, fluid mechanics
+> *"Classify this problem with exactly ONE word (lowercase) representing the broad mathematical/scientific branch. Examples: algebra, geometry, trigonometry, calculus, statistics, combinatorics, arithmetic, mechanics, thermodynamics, optics, stoichiometry, electrochemistry, organic."*
 
-**Chemistry:** organic chemistry, inorganic chemistry, physical chemistry, biochemistry, stoichiometry, electrochemistry, thermochemistry
+One-word broad labels produce the most consistent grouping. Multi-word specific labels (e.g. "inverse trigonometric equations" vs "trigonometric equations") created inconsistent splits in testing. Broad one-word branches (e.g. "trigonometry" covers both) are reliably consistent across runs.
 
-If a problem genuinely doesn't fit, the LLM returns `"other"`.
+### Future: two-level classification
+
+The current design uses a single `topic` column. The code should be structured so adding a second level (broad topic + specific subtopic) later is a clean migration:
+- The `topic` column and `Decomposition.topic` field remain as-is
+- A future `broad_topic` column can be added alongside without breaking anything
+- The filter UI uses a flat dropdown now but can be swapped to a grouped dropdown later
+- The decomposition prompt can be extended to request both levels without changing the schema pattern
 
 ### Backend implementation
 
-1. **Add `topic` to `DECOMPOSITION_SCHEMA`** in `api/core/llm_schemas.py` — new enum string property. The system prompt includes the subject-specific list so the LLM is constrained.
+1. **Add `topic` to `DECOMPOSITION_SCHEMA`** in `api/core/llm_schemas.py` — new string property with a description that includes the scope-anchoring examples.
 
-2. **Update `Decomposition` dataclass** in `api/core/step_decomposition.py` — add `topic: str`, populate from LLM response. Pass the correct enum list based on subject.
+2. **Update `Decomposition` dataclass** in `api/core/step_decomposition.py` — add `topic: str`, populate from LLM response, normalize to lowercase/trimmed.
 
 3. **Add `topic` column to `Session` model** in `api/models/session.py` — `topic: Mapped[str | None] = mapped_column(String(50), nullable=True)`. New Alembic migration.
 

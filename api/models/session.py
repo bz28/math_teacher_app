@@ -46,6 +46,7 @@ class Session(Base):
     status: Mapped[str] = mapped_column(String(20), default=SessionStatus.ACTIVE, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False, default=SessionMode.LEARN)
     subject: Mapped[str] = mapped_column(String(30), nullable=False, server_default="math")
+    topic: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # School context — tags session to a class section for teacher analytics
     section_id: Mapped[uuid.UUID | None] = mapped_column(

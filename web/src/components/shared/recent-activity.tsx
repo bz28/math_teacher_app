@@ -4,49 +4,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { session as sessionApi, type SessionHistoryItem } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
+import { formatRelativeDate } from "@/lib/utils";
 
 interface RecentActivityProps {
   subject: string;
-  activeTab: "learn" | "mock-test";
   onUseProblems: (problems: string[]) => void;
   maxQueueSize: number;
   currentQueueLength: number;
 }
 
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
-
-const ONE_HOUR_MS = 60 * 60 * 1000;
-
-function filterForTab(
-  items: SessionHistoryItem[],
-  tab: "learn" | "mock-test",
-): SessionHistoryItem[] {
-  if (tab === "mock-test") {
-    // Mock Test tab: show everything
-    return items;
-  }
-  // Learn tab: exclude learn-mode sessions from the past hour
-  const cutoff = Date.now() - ONE_HOUR_MS;
-  return items.filter((item) => {
-    if (item.mode === "mock_test") return true;
-    // Learn/practice sessions: only show if older than 1 hour
-    return new Date(item.created_at).getTime() < cutoff;
-  });
-}
 
 export function RecentActivity({
   subject,
-  activeTab,
   onUseProblems,
   maxQueueSize,
   currentQueueLength,
@@ -72,7 +41,7 @@ export function RecentActivity({
     return () => { cancelled = true; };
   }, [subject]);
 
-  const filtered = filterForTab(items, activeTab).slice(0, 5);
+  const filtered = items.slice(0, 5);
 
   if (loading || filtered.length === 0) return null;
 
@@ -97,40 +66,38 @@ export function RecentActivity({
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   {isMockTest ? (
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                      className="flex w-full items-center gap-1 text-left"
-                    >
+                    <>
                       <p className="text-sm font-semibold text-text-primary">
                         Mock Test
                         <span className="ml-1 text-xs font-normal text-text-muted">
                           · {problemCount} question{problemCount !== 1 ? "s" : ""}
                         </span>
                       </p>
-                      <svg
-                        className={`ml-auto h-3.5 w-3.5 flex-shrink-0 text-text-muted transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+                        <span>{formatRelativeDate(item.created_at)}</span>
+                        <span className="text-[10px]">·</span>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {isExpanded ? "Hide" : "View"} questions
+                        </button>
+                      </div>
+                    </>
                   ) : (
-                    <div className="truncate text-sm font-medium text-text-primary">
-                      <MathText text={item.problem} />
-                    </div>
+                    <>
+                      <div className="truncate text-sm font-medium text-text-primary">
+                        <MathText text={item.problem} />
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+                        <span className="rounded-full bg-primary-bg px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                          Learn
+                        </span>
+                        <span>{formatRelativeDate(item.created_at)}</span>
+                      </div>
+                    </>
                   )}
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
-                    {!isMockTest && (
-                      <span className="rounded-full bg-primary-bg px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                        Learn
-                      </span>
-                    )}
-                    <span>{relativeTime(item.created_at)}</span>
-                  </div>
                 </div>
                 <button
                   onClick={() => onUseProblems(item.all_problems)}
@@ -147,16 +114,11 @@ export function RecentActivity({
               {/* Expandable problem preview for mock tests */}
               {isMockTest && isExpanded && (
                 <div className="mt-2 space-y-1 border-t border-border pt-2">
-                  {item.all_problems.slice(0, 3).map((p, pi) => (
-                    <div key={pi} className="truncate text-xs text-text-muted">
-                      <MathText text={`${pi + 1}. ${p}`} />
-                    </div>
-                  ))}
-                  {item.all_problems.length > 3 && (
-                    <p className="text-[11px] text-text-muted">
-                      +{item.all_problems.length - 3} more
+                  {item.all_problems.map((p, pi) => (
+                    <p key={pi} className="truncate text-xs text-text-secondary">
+                      <span className="text-text-muted">{pi + 1}.</span> {p}
                     </p>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
@@ -164,7 +126,7 @@ export function RecentActivity({
         })}
       </div>
       <Link
-        href="/history"
+        href={`/history?select=true&subject=${subject}`}
         className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
       >
         More

@@ -85,6 +85,7 @@ class SessionHistoryItem(BaseModel):
     total_steps: int
     created_at: datetime
     mode: str = "learn"
+    topic: str | None = None
     all_problems: list[str] = []
 
 

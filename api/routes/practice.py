@@ -65,6 +65,7 @@ async def generate(
                 question=result["question"],
                 answer=result["answer"],
                 distractors=result.get("distractors", []),
+                topic=result.get("topic", ""),
             )]
         )
 

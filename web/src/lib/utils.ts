@@ -33,6 +33,20 @@ export function formatRelativeDate(date: string | Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/** Format a date as "Apr 15, 10:45 PM" for precise identification. */
+export function formatDateTime(date: string | Date): string {
+  const d = new Date(date);
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Truncate text to a max length with ellipsis. */
 export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;

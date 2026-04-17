@@ -23,6 +23,7 @@ class PracticeProblem(BaseModel):
     question: str
     answer: str
     distractors: list[str] = []
+    topic: str = ""
 
 
 class PracticeGenerateResponse(BaseModel):

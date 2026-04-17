@@ -66,7 +66,16 @@ function LearnPageContent() {
   }, [incrementScansUsed, fetchEntitlements]);
 
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"learn" | "mock-test">("learn");
+  const initialMode = searchParams.get("mode") === "mock-test" ? "mock-test" : "learn";
+  const [mode, setModeState] = useState<"learn" | "mock-test">(initialMode);
+
+  function setMode(m: "learn" | "mock-test") {
+    setModeState(m);
+    const params = new URLSearchParams(searchParams.toString());
+    if (m === "mock-test") params.set("mode", m);
+    else params.delete("mode");
+    router.replace(`/learn?${params.toString()}`, { scroll: false });
+  }
 
   // Mock test config
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
@@ -75,14 +84,17 @@ function LearnPageContent() {
   const [difficulty, setDifficulty] = useState<Difficulty>("same");
   const [multipleChoice, setMultipleChoice] = useState(true);
 
+  const fromHistory = searchParams.get("from") === "history";
   useEffect(() => {
     setSubject(subject);
     setSectionId(sectionId);
     document.documentElement.setAttribute("data-subject", subject);
-    setProblemQueue([]);
+    // Don't clear queue if arriving from history selection
+    if (!fromHistory) setProblemQueue([]);
     // Refresh quota counts so remaining is accurate
     fetchEntitlements();
     return () => { document.documentElement.removeAttribute("data-subject"); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fromHistory is read once on mount
   }, [subject, sectionId, setSubject, setSectionId, setProblemQueue, fetchEntitlements]);
 
   const maxQueueSize = isPro ? 10 : Math.min(10, remainingSessions);
@@ -499,7 +511,6 @@ function LearnPageContent() {
       <div className="hidden w-72 shrink-0 lg:block sticky top-24 self-start">
         <RecentActivity
           subject={subject}
-          activeTab={mode}
           onUseProblems={(problems) => problems.forEach((p) => addToQueue(p))}
           maxQueueSize={maxQueueSize}
           currentQueueLength={problemQueue.length}

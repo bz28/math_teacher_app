@@ -146,8 +146,21 @@ DECOMPOSITION_SCHEMA: ToolSchema = {
                 "enum": ["text", "diagram"],
                 "description": "Whether the answer is text or a diagram.",
             },
+            "topic": {
+                "type": "string",
+                "description": (
+                    "Classify this problem with exactly ONE word (lowercase) representing "
+                    "the broad mathematical/scientific branch. Use the broadest standard "
+                    "branch that still meaningfully categorizes it. "
+                    "Examples: algebra, geometry, trigonometry, calculus, statistics, "
+                    "combinatorics, arithmetic, mechanics, thermodynamics, optics, "
+                    "stoichiometry, electrochemistry, organic. "
+                    "NEVER use multi-word labels like 'linear equations' or "
+                    "'inverse trigonometric equations' — just 'algebra' or 'trigonometry'."
+                ),
+            },
         },
-        "required": ["steps", "final_answer", "answer_type"],
+        "required": ["steps", "final_answer", "answer_type", "topic"],
         "additionalProperties": False,
     },
 }
