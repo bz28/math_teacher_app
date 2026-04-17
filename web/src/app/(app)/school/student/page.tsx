@@ -73,54 +73,60 @@ export default function SchoolStudentDashboard() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Greeting firstName={first_name} />
+      <div className="dashboard-card-enter">
+        <Greeting firstName={first_name} />
 
-      {in_review.length > 0 && (
-        <p className="mb-6 text-sm text-text-secondary">
-          <span className="font-semibold text-text-primary">
-            {in_review.length}{" "}
-            {in_review.length === 1 ? "assignment" : "assignments"}
-          </span>{" "}
-          submitted — waiting for your teacher.
-        </p>
-      )}
+        {in_review.length > 0 && (
+          <p className="mb-6 text-sm text-text-secondary">
+            <span className="font-semibold text-text-primary">
+              {in_review.length}{" "}
+              {in_review.length === 1 ? "assignment" : "assignments"}
+            </span>{" "}
+            submitted — waiting for your teacher.
+          </p>
+        )}
+      </div>
 
       <div className="space-y-6">
-        <DashboardCard title="Due this week" count={dueCount}>
-          {overdue.length > 0 && (
-            <div className="border-b border-error/30 bg-error-light/40 px-5 py-2">
-              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-error">
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                Overdue ({overdue.length})
+        <div className="dashboard-card-enter" style={{ animationDelay: "80ms" }}>
+          <DashboardCard title="Due this week" count={dueCount}>
+            {overdue.length > 0 && (
+              <div className="border-b border-error/30 bg-error-light/40 px-5 py-2">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-error">
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  Overdue ({overdue.length})
+                </div>
               </div>
-            </div>
-          )}
-          {overdue.map((a) => (
-            <DashboardAssignmentRow key={`ov-${a.assignment_id}`} assignment={a} />
-          ))}
-          {due_this_week.map((a) => (
-            <DashboardAssignmentRow key={`due-${a.assignment_id}`} assignment={a} />
-          ))}
-          {dueCount === 0 && (
-            <EmptyRow text="You're all caught up — nothing due this week." />
-          )}
-        </DashboardCard>
+            )}
+            {overdue.map((a) => (
+              <DashboardAssignmentRow key={`ov-${a.assignment_id}`} assignment={a} />
+            ))}
+            {due_this_week.map((a) => (
+              <DashboardAssignmentRow key={`due-${a.assignment_id}`} assignment={a} />
+            ))}
+            {dueCount === 0 && (
+              <EmptyRow text="You're all caught up — nothing due this week." />
+            )}
+          </DashboardCard>
+        </div>
 
-        <DashboardCard
-          title="Recently graded"
-          count={recently_graded.length || undefined}
-        >
-          {recently_graded.map((g) => (
-            <DashboardGradeRow key={g.assignment_id} grade={g} />
-          ))}
-          {recently_graded.length === 0 && (
-            <EmptyRow text="No graded work yet. Once your teacher publishes, scores show up here." />
-          )}
-        </DashboardCard>
+        <div className="dashboard-card-enter" style={{ animationDelay: "160ms" }}>
+          <DashboardCard
+            title="Recently graded"
+            count={recently_graded.length || undefined}
+          >
+            {recently_graded.map((g) => (
+              <DashboardGradeRow key={g.assignment_id} grade={g} />
+            ))}
+            {recently_graded.length === 0 && (
+              <EmptyRow text="No graded work yet. Once your teacher publishes, scores show up here." />
+            )}
+          </DashboardCard>
+        </div>
       </div>
     </div>
   );
