@@ -136,7 +136,7 @@ function InboxRow({
   const href = `/school/teacher/courses/${courseId}/homework/${row.assignment_id}/sections/${row.section_id}/review`;
   const dueLabel = row.due_at ? formatDue(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
-  const hasWork = row.submitted > 0 || row.flagged > 0 || row.to_grade > 0;
+  const hasOutstanding = row.to_grade + row.dirty + row.flagged > 0;
 
   return (
     <Link
@@ -153,7 +153,7 @@ function InboxRow({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
           <span>{dueLabel}</span>
-          {overdueDays > 0 && hasWork && row.to_grade + row.dirty + row.flagged > 0 && (
+          {overdueDays > 0 && hasOutstanding && (
             <>
               <span>·</span>
               <span className="font-semibold text-red-600 dark:text-red-400">
@@ -170,16 +170,12 @@ function InboxRow({
           </span>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {row.to_grade + row.dirty > 0 && (
-            <Pill tone="amber" label={`${row.to_grade + row.dirty} to release`} />
-          )}
-          {row.published > 0 && (
+          {row.submitted > 0 ? (
             <Pill
-              tone="green"
+              tone={progressTone(row.published, row.submitted)}
               label={`${row.published}/${row.submitted} grades published to students`}
             />
-          )}
-          {!hasWork && row.published === 0 && (
+          ) : (
             <Pill tone="muted" label="No submissions yet" />
           )}
         </div>
@@ -248,4 +244,16 @@ function daysOverdue(iso: string): number {
   if (Number.isNaN(t)) return 0;
   const days = Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000));
   return days > 0 ? days : 0;
+}
+
+/** Pill tone for the published-progress fraction: red when nothing
+ *  has been released yet, amber while in progress, green when every
+ *  submission has had its grade released. */
+function progressTone(
+  published: number,
+  submitted: number,
+): "red" | "amber" | "green" {
+  if (published === 0) return "red";
+  if (published >= submitted) return "green";
+  return "amber";
 }
