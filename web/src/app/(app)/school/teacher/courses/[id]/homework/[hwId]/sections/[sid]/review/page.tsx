@@ -795,17 +795,20 @@ function SubmissionDetailPanel({
   const published = !!row?.grade_published_at;
 
   return (
-    <div className="space-y-5">
-      {/* Snapshot header */}
-      <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-bold text-text-primary">
+    <div className="space-y-4">
+      {/* Compact student strip — name on the left, progress + next on
+          the right. Replaces the old profile card + grade-progress card;
+          the roster already shows the student name, so this strip is
+          just "what context am I in right now?", not a profile. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-2.5 shadow-sm">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+            <span className="font-bold text-text-primary">
               {detail.student_name}
-            </h2>
-            <p className="text-xs text-text-muted">{detail.student_email}</p>
-          </div>
-          <p className="text-[11px] text-text-muted">
+            </span>
+            <span className="text-xs text-text-muted">{detail.student_email}</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-muted">
             Submitted{" "}
             {new Date(detail.submitted_at).toLocaleString(undefined, {
               month: "short",
@@ -814,38 +817,27 @@ function SubmissionDetailPanel({
               minute: "2-digit",
             })}
             {detail.is_late && (
-              <span className="ml-2 font-semibold text-red-600 dark:text-red-400">
+              <span className="ml-1.5 font-semibold text-red-600 dark:text-red-400">
                 · late
               </span>
             )}
-          </p>
-        </div>
-      </div>
-
-      {/* Integrity verdict — prefer the full detail; fall back to the
-          roster-row overview when the detail fetch hasn't landed yet
-          (status spinner / low-signal cases). Hides entirely when both
-          are null — HW had integrity disabled, or no check exists. */}
-      <IntegrityBanner
-        integrity={integrity}
-        overviewFallback={row?.integrity_overview ?? null}
-      />
-
-      {/* Grade summary — live overall score + Next student jump */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[--radius-xl] border border-border-light bg-surface p-4 shadow-sm">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            {published ? "Published grade" : "Grade (not yet published)"}
-          </p>
-          <p className="mt-0.5 text-lg font-bold text-text-primary">
-            {avgPercent === null ? (
-              <span className="text-text-muted">—</span>
-            ) : (
-              <>{Math.round(avgPercent)}%</>
-            )}
-            <span className="ml-2 text-xs font-semibold text-text-muted">
-              {gradedCount}/{totalProblems} problems graded
+            <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
+            <span className="font-semibold text-text-primary">
+              {gradedCount}/{totalProblems} graded
             </span>
+            {avgPercent !== null && (
+              <>
+                <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
+                <span className="font-semibold text-text-primary">
+                  {Math.round(avgPercent)}%
+                </span>
+              </>
+            )}
+            {published && (
+              <span className="ml-1.5 rounded-[--radius-pill] bg-success-light px-1.5 py-0.5 text-[10px] font-bold text-success">
+                Published
+              </span>
+            )}
           </p>
           {saveError && (
             <p className="mt-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
@@ -857,22 +849,31 @@ function SubmissionDetailPanel({
           type="button"
           onClick={onSelectNext}
           disabled={!nextStudent}
-          className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
+          className="shrink-0 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
         >
           Next student →
         </button>
       </div>
 
-      {/* Handwritten image — compact thumbnail, full view in modal. */}
-      {detail.image_data && (
-        <StudentWorkImage imageData={detail.image_data} />
-      )}
+      {/* Integrity verdict — the #1 trust signal. First full content
+          block so the teacher sees the verdict before they start
+          grading. Hides when HW had integrity disabled / no check. */}
+      <IntegrityBanner
+        integrity={integrity}
+        overviewFallback={row?.integrity_overview ?? null}
+      />
 
-      {/* Per-problem grading */}
+      {/* Per-problem grading — the main scan-unit. Image thumbnail
+          lives inline in the header as a reference at point-of-use. */}
       <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-          Problems · {totalProblems}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Problems · {totalProblems}
+          </p>
+          {detail.image_data && (
+            <StudentWorkThumbButton imageData={detail.image_data} />
+          )}
+        </div>
         <div className="mt-3 space-y-3">
           {detail.problems.map((p) => (
             <ProblemGradeRow
@@ -1425,51 +1426,32 @@ function PerProblemVerdict({
 }
 
 /**
- * Student's handwritten work: a compact thumbnail by default, full
- * image on click. The photo is a reference — teachers grade against
- * the AI-extracted text — so we keep it out of the scan path and make
- * it one click away when they need to spot-check.
+ * Student's handwritten work: compact thumbnail + label that opens
+ * the full photo in a modal. The image is a reference the teacher
+ * consults WHILE grading, so it lives inline in the Problems card
+ * header — not as its own scan-path block.
  */
-function StudentWorkImage({ imageData }: { imageData: string }) {
+function StudentWorkThumbButton({ imageData }: { imageData: string }) {
   const [open, setOpen] = useState(false);
   const src = imageDataUrl(imageData);
   return (
     <>
-      <div className="rounded-[--radius-xl] border border-border-light bg-surface p-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="group relative h-20 w-28 shrink-0 overflow-hidden rounded-[--radius-md] border border-border-light bg-bg-subtle transition-all hover:border-primary/40 hover:shadow-sm focus:border-primary focus:outline-none"
-            aria-label="View student's handwritten work full size"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={src}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-            <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[10px] font-bold text-white opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
-              View
-            </span>
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              Student&apos;s work
-            </p>
-            <p className="mt-0.5 text-xs text-text-muted">
-              Reference photo of the student&apos;s handwritten submission.
-            </p>
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="mt-1.5 text-xs font-semibold text-primary hover:underline"
-            >
-              View full ↗
-            </button>
-          </div>
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group inline-flex items-center gap-2 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-xs font-semibold text-text-secondary transition-all hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+        aria-label="View student's handwritten work full size"
+      >
+        <span className="relative block h-10 w-14 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-bg-subtle">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        </span>
+        <span>View student&apos;s work ↗</span>
+      </button>
       <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
         <div className="flex items-center justify-between pb-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
