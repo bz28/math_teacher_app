@@ -7,7 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import Integer, case, func, or_, select
-from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
