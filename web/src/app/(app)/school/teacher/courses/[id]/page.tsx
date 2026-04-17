@@ -14,6 +14,7 @@ import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
 import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
+import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
 
 type TabKey =
@@ -282,7 +283,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "homework" && <HomeworkTab courseId={course.id} />}
         {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
-        {tab === "grades" && <ComingSoon name="Grades" phase="a future update" />}
+        {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
       </div>
     </div>
