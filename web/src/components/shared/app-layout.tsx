@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth";
 import { teacher, enterPreviewMode } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
+import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
 
 // ── Student nav items ──
 
@@ -25,9 +26,16 @@ const teacherNavItems = [
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const isTeacher = user?.role === "teacher";
+  // School-linked students get their own sidebar shell. Personal
+  // students keep the original top-bar layout since their world is
+  // Learn / History / Account — different navigation shape entirely.
+  const isSchoolStudent = user?.role === "student" && !!user?.school_id;
 
   if (isTeacher) {
     return <TeacherLayout>{children}</TeacherLayout>;
+  }
+  if (isSchoolStudent) {
+    return <SchoolStudentLayout>{children}</SchoolStudentLayout>;
   }
   return <StudentLayout>{children}</StudentLayout>;
 }
