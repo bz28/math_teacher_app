@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Integer, case, func, select
+from sqlalchemy import Integer, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -716,7 +716,8 @@ async def submissions_inbox(
 
     Row shape:
       { assignment_id, assignment_title, section_id, section_name,
-        due_at, total_students, submitted, flagged, to_grade, published }
+        due_at, total_students, submitted, flagged, to_grade, dirty,
+        published }
 
     Sort + client-side: the frontend orders by urgency or due date and
     renders pills per count.
@@ -776,6 +777,19 @@ async def submissions_inbox(
             else_=0,
         ),
     ).cast(Integer).label("to_grade")
+    # Published but edited after — teacher needs to republish so
+    # students see the new value. Folded into the "to release" pill
+    # alongside `to_grade` on the frontend.
+    dirty_expr = func.sum(
+        case(
+            (
+                (SubmissionGrade.grade_published_at.is_not(None))
+                & (SubmissionGrade.graded_at > SubmissionGrade.grade_published_at),
+                1,
+            ),
+            else_=0,
+        ),
+    ).cast(Integer).label("dirty")
     published_expr = func.sum(
         case(
             (SubmissionGrade.grade_published_at.is_not(None), 1),
@@ -800,6 +814,7 @@ async def submissions_inbox(
             Submission.section_id,
             submitted_expr,
             to_grade_expr,
+            dirty_expr,
             published_expr,
             flagged_expr,
         )
@@ -820,6 +835,7 @@ async def submissions_inbox(
         (r.assignment_id, r.section_id): {
             "submitted": int(r.submitted or 0),
             "to_grade": int(r.to_grade or 0),
+            "dirty": int(r.dirty or 0),
             "published": int(r.published or 0),
             "flagged": int(r.flagged or 0),
         }
@@ -839,6 +855,7 @@ async def submissions_inbox(
             "submitted": counts.get("submitted", 0),
             "flagged": counts.get("flagged", 0),
             "to_grade": counts.get("to_grade", 0),
+            "dirty": counts.get("dirty", 0),
             "published": counts.get("published", 0),
         })
     return {"rows": rows}
@@ -937,11 +954,23 @@ async def list_submissions(
                 grade.grade_published_at.isoformat()
                 if grade and grade.grade_published_at else None
             ),
+            "grade_dirty": _is_grade_dirty(grade),
             "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
             "integrity_overview": integrity_overview,
         })
 
     return {"submissions": submissions}
+
+
+def _is_grade_dirty(grade: SubmissionGrade | None) -> bool:
+    """True if the grade has been published AND edited since. Students
+    still see the `published_*` snapshot — the teacher needs to
+    republish to ship the edits."""
+    if grade is None:
+        return False
+    if grade.grade_published_at is None or grade.graded_at is None:
+        return False
+    return grade.graded_at > grade.grade_published_at
 
 
 def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
@@ -1045,9 +1074,17 @@ async def publish_grades(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Publish all graded submissions on this HW to students at once.
-    Idempotent — already-published grades are left alone; ungraded
-    submissions are skipped (teacher can grade + republish later)."""
+    """Publish (or republish) all graded submissions on this HW.
+
+    Two categories are picked up:
+      • fresh — graded but never published
+      • dirty — already published, but `graded_at > grade_published_at`
+                means the teacher edited the grade after publish
+
+    Either way, the live `final_score / breakdown / teacher_notes`
+    are snapshotted into the `published_*` columns and
+    `grade_published_at` is stamped. Ungraded submissions are skipped.
+    """
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
     # Grades are only visible to students once the HW itself is
     # published. Publishing grades on a draft HW would orphan them
@@ -1066,12 +1103,18 @@ async def publish_grades(
             Submission.assignment_id == a.id,
             User.is_preview.is_(False),
             SubmissionGrade.final_score.is_not(None),
-            SubmissionGrade.grade_published_at.is_(None),
+            or_(
+                SubmissionGrade.grade_published_at.is_(None),
+                SubmissionGrade.graded_at > SubmissionGrade.grade_published_at,
+            ),
         )
     )).scalars().all()
 
     now = datetime.now(UTC)
     for g in grades:
+        g.published_final_score = g.final_score
+        g.published_breakdown = g.breakdown
+        g.published_teacher_notes = g.teacher_notes
         g.grade_published_at = now
 
     await db.commit()
@@ -1178,6 +1221,10 @@ class TeacherSubmissionDetail(BaseModel):
     final_score: float | None
     teacher_notes: str | None
     grade_published_at: datetime | None
+    # True when this submission has been published AND the teacher has
+    # edited the grade since. The live breakdown/final_score above are
+    # the draft; students still see the published_* snapshot.
+    grade_dirty: bool
 
 
 @router.get("/submissions/{submission_id}")
@@ -1276,6 +1323,7 @@ async def get_submission_detail(
         final_score=grade.final_score if grade else None,
         teacher_notes=grade.teacher_notes if grade else None,
         grade_published_at=grade.grade_published_at if grade else None,
+        grade_dirty=_is_grade_dirty(grade),
     )
 
 
