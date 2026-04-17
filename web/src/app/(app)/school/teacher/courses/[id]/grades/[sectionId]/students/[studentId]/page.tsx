@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
+import { PercentBadge } from "@/components/school/teacher/percent-badge";
 
 /**
  * Grades → Student detail page.
@@ -209,7 +210,7 @@ function PublishedHwRow({
           </div>
         )}
       </div>
-      <ScoreBadge percent={hw.final_score} />
+      <PercentBadge percent={hw.final_score} size="lg" className="shrink-0" />
     </Link>
   );
 }
@@ -230,17 +231,6 @@ function MissingHwRow({ hw }: { hw: StudentGradesResponse["missing_hws"][number]
       </span>
     </div>
   );
-}
-
-function ScoreBadge({ percent }: { percent: number }) {
-  const rounded = Math.round(percent);
-  const tone =
-    rounded >= 85
-      ? "text-green-700 dark:text-green-400"
-      : rounded >= 70
-        ? "text-text-primary"
-        : "text-red-700 dark:text-red-400";
-  return <span className={`shrink-0 text-lg font-bold ${tone}`}>{rounded}%</span>;
 }
 
 // ────────────────────────────────────────────────────────────────────

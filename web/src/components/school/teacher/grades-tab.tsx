@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { teacher, type GradesRosterResponse, type GradesRosterRow } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
+import { PercentBadge } from "@/components/school/teacher/percent-badge";
 
 /**
  * Grades tab — the read-only final-record view.
@@ -191,7 +192,7 @@ function RosterRow({
         )}
       </td>
       <td className="px-4 py-3 text-right">
-        <AvgCell avg={row.avg_percent} />
+        <PercentBadge percent={row.avg_percent} />
       </td>
       <td className="px-4 py-3 text-right">
         <Link
@@ -204,20 +205,6 @@ function RosterRow({
       </td>
     </tr>
   );
-}
-
-function AvgCell({ avg }: { avg: number | null }) {
-  if (avg === null) {
-    return <span className="text-xs text-text-muted">—</span>;
-  }
-  // Color code so "who's struggling" is glanceable.
-  const tone =
-    avg >= 85
-      ? "text-green-700 dark:text-green-400"
-      : avg >= 70
-        ? "text-text-primary"
-        : "text-red-700 dark:text-red-400";
-  return <span className={`text-sm font-bold ${tone}`}>{Math.round(avg)}%</span>;
 }
 
 // ────────────────────────────────────────────────────────────────────
