@@ -455,8 +455,10 @@ AI_GRADING_SCHEMA: ToolSchema = {
                         "student_answer": {
                             "type": "string",
                             "description": (
-                                "The student's final answer (LaTeX) as you "
-                                "understood it from the extraction."
+                                "The student's final answer as you understood "
+                                "it from the extraction. Wrap math in $...$ "
+                                "for inline or $$...$$ for display so the "
+                                "teacher sees rendered math, not raw LaTeX."
                             ),
                         },
                         "score_status": {
