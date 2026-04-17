@@ -109,7 +109,7 @@ export function WorkshopModal({
   // but they need a different approve handler — the backend skips the
   // auto-attach for variations (Feature 7a), and the teacher closes
   // the workshop after approving rather than advancing a queue.
-  const isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
+  const _isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
 
   const { busy, error, setError, run } = useAsyncAction();
 
@@ -940,7 +940,7 @@ export function WorkshopModal({
 // Vim's status line: tells the teacher what they're doing right now.
 // ─────────────────────────────────────────────────────────────────────
 
-function truncate(s: string, n: number): string {
+function _truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 

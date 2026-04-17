@@ -25,7 +25,6 @@ export function RecentActivity({
 
   useEffect(() => {
     let cancelled = false;
-    setItems(null);
     sessionApi
       .history({ subject }, 10, 0)
       .then((res) => {
