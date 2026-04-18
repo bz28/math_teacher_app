@@ -26,7 +26,12 @@ interface PerProblemPool {
   approved: BankItem[];
   pending: BankItem[];
   rejected: BankItem[];
+  /** True when the parent primary was edited after some variation was
+   *  created — existing pool may no longer match the question. */
+  stale: boolean;
 }
+
+const DISMISS_INTRO_KEY = "dismissed_practice_intro";
 
 type AssignmentWithExtras = TeacherAssignment & {
   content: unknown;
@@ -69,6 +74,12 @@ export default function PracticePage({
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [generateForId, setGenerateForId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState<Record<string, boolean>>({});
+  const [showIntro, setShowIntro] = useState(false);
+  // `pollingUntil` is a timestamp; while now < it, we refetch every
+  // 3s so newly-generated variations land in the UI without a manual
+  // reload. Set by generate actions; cleared when time runs out or
+  // the teacher navigates.
+  const [pollingUntil, setPollingUntil] = useState<number>(0);
 
   const reload = useCallback(async () => {
     try {
@@ -92,6 +103,37 @@ export default function PracticePage({
     void reload();
   }, [reload]);
 
+  // One-time intro banner on the first Practice page visit ever.
+  // localStorage-gated so teachers aren't re-introduced on every HW.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const dismissed = window.localStorage.getItem(DISMISS_INTRO_KEY);
+    if (!dismissed) setShowIntro(true);
+  }, []);
+
+  const dismissIntro = () => {
+    setShowIntro(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DISMISS_INTRO_KEY, "1");
+    }
+  };
+
+  // Simple poll: after a generate action sets pollingUntil, refetch
+  // every 3s until that timestamp passes. Keeps the pool rendering
+  // fresh without a full job-polling hook (that can come later with
+  // a dedicated stream endpoint).
+  useEffect(() => {
+    if (pollingUntil <= Date.now()) return;
+    const interval = setInterval(() => {
+      if (Date.now() > pollingUntil) {
+        clearInterval(interval);
+        return;
+      }
+      void reload();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [pollingUntil, reload]);
+
   // Group bank items by parent (= HW primary). Variations have a
   // parent_question_id; anything without one is a primary itself and
   // not a "practice problem" for this view.
@@ -99,19 +141,36 @@ export default function PracticePage({
     if (!hw) return [];
     const problems = extractProblems(hw.content);
     const byParent = new Map<string, BankItem[]>();
+    const primaryById = new Map<string, BankItem>();
     for (const it of items) {
-      if (!it.parent_question_id) continue;
-      const arr = byParent.get(it.parent_question_id) ?? [];
-      arr.push(it);
-      byParent.set(it.parent_question_id, arr);
+      if (it.parent_question_id) {
+        const arr = byParent.get(it.parent_question_id) ?? [];
+        arr.push(it);
+        byParent.set(it.parent_question_id, arr);
+      } else {
+        primaryById.set(it.id, it);
+      }
     }
     return problems.map((p) => {
       const all = byParent.get(p.bank_item_id) ?? [];
+      const primary = primaryById.get(p.bank_item_id);
+      // Staleness: any variation created before the primary's last
+      // update means the primary was edited after that variation was
+      // written — existing practice may not match the current question.
+      // 1-second tolerance guards against server clock skew at insert.
+      const stale =
+        !!primary &&
+        all.some(
+          (v) =>
+            new Date(v.created_at).getTime() <
+            new Date(primary.updated_at).getTime() - 1000,
+        );
       return {
         problem: p,
         approved: all.filter((v) => v.status === "approved"),
         pending: all.filter((v) => v.status === "pending"),
         rejected: all.filter((v) => v.status === "rejected"),
+        stale,
       };
     });
   }, [hw, items]);
@@ -152,6 +211,9 @@ export default function PracticePage({
         );
         // Wait a beat, then reload so the spinners appear. A future
         // commit adds proper job polling for live updates.
+        // Poll for 60s — most jobs finish within 10–20s. Initial
+        // refetch after a short beat surfaces the queued-state rows.
+        setPollingUntil(Date.now() + 60_000);
         setTimeout(() => {
           void reload();
         }, 1500);
@@ -278,6 +340,40 @@ export default function PracticePage({
         <p className="mt-0.5 text-sm text-text-secondary">Practice problems</p>
       </header>
 
+      {showIntro && (
+        <div className="mt-4 flex items-start gap-3 rounded-[--radius-xl] border border-primary/30 bg-primary-bg/30 px-4 py-3 dark:bg-primary/10">
+          <span aria-hidden="true" className="mt-0.5 text-lg">
+            ✨
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-text-primary">
+              Practice problems, generated for you
+            </div>
+            <div className="mt-0.5 text-xs text-text-secondary">
+              When you publish a homework, we auto-generate a pool of
+              similar problems for each question. Review them here,
+              approve what you like, reject what you don&apos;t. Change
+              the default in{" "}
+              <Link
+                href="/school/teacher/preferences"
+                className="font-bold text-primary hover:underline"
+              >
+                Preferences
+              </Link>
+              .
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={dismissIntro}
+            aria-label="Dismiss"
+            className="shrink-0 text-text-muted hover:text-text-primary"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm">
           <p className="text-sm text-text-muted">Loading…</p>
@@ -302,6 +398,24 @@ export default function PracticePage({
             onReviewPending={jumpToFirstPending}
             toppingUp={toppingUp}
           />
+
+          {pollingUntil > Date.now() && (
+            <div className="mt-3 flex items-center gap-2 rounded-[--radius-md] border border-primary/30 bg-primary-bg/30 px-3 py-2 text-xs text-text-primary dark:border-primary/40 dark:bg-primary/10">
+              <span
+                className="relative flex h-2.5 w-2.5 shrink-0"
+                aria-hidden="true"
+              >
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+              </span>
+              <span>
+                <span className="font-semibold">Generating…</span>{" "}
+                <span className="text-text-secondary">
+                  new practice problems land here as they&apos;re ready.
+                </span>
+              </span>
+            </div>
+          )}
 
           {totals.approved + totals.pending === 0 ? (
             <EmptyNoPractice
@@ -349,9 +463,7 @@ export default function PracticePage({
               onStarted={() => {
                 setGenerateForId(null);
                 toast.info("Generation started");
-                // Poll-free refresh after a beat — new items land in
-                // pending within a few seconds. A full polling hook
-                // lands with the staleness-and-polish commit.
+                setPollingUntil(Date.now() + 60_000);
                 setTimeout(() => void reload(), 1500);
               }}
             />
@@ -612,6 +724,11 @@ function ProblemRow({
               {atTarget && ready > 0 ? " ✓" : ""}
             </span>
           </div>
+          {pool.stale && (
+            <div className="mt-1.5 inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+              ⚠ Edited — existing practice may not match
+            </div>
+          )}
         </div>
         <span className="shrink-0 text-text-muted">
           {expanded ? "▴" : "▾"}
