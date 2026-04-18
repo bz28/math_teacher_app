@@ -45,37 +45,56 @@ function PersonalHistory() {
   const initialSubject = (searchParams.get("subject") ?? "math") as Subject;
   const initialMode = searchParams.get("mode") ?? "all";
   const initialTopic = searchParams.get("topic") ?? "all";
+  const initialDateFrom = searchParams.get("date_from") ?? "";
+  const initialDateTo = searchParams.get("date_to") ?? "";
+  const initialSearch = searchParams.get("q") ?? "";
 
   const { setSubject, setProblemQueue, startSession } = useSessionStore();
   const [subject, setLocalSubjectState] = useState<Subject>(initialSubject);
   const [modeFilter, setModeFilterState] = useState<string>(initialMode);
   const [topicFilter, setTopicFilterState] = useState<string>(initialTopic);
+  const [dateFrom, setDateFromState] = useState(initialDateFrom);
+  const [dateTo, setDateToState] = useState(initialDateTo);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [topics, setTopics] = useState<string[]>([]);
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<Map<string, SessionHistoryItem>>(new Map());
 
-  // Sync filter state to URL so filters persist across navigation.
-  // Always pass all three values explicitly to avoid stale closures.
-  function updateFilters(sub: Subject, mode: string, topic: string) {
+  // Sync all filter state to URL so filters persist across navigation.
+  function updateFilters(
+    sub: Subject, mode: string, topic: string,
+    df = dateFrom, dt = dateTo, q = searchQuery,
+  ) {
     setLocalSubjectState(sub);
     setModeFilterState(mode);
     setTopicFilterState(topic);
+    setDateFromState(df);
+    setDateToState(dt);
+    setSearchQuery(q);
     const params = new URLSearchParams();
     params.set("subject", sub);
     if (mode !== "all") params.set("mode", mode);
     if (topic !== "all") params.set("topic", topic);
+    if (df) params.set("date_from", df);
+    if (dt) params.set("date_to", dt);
+    if (q) params.set("q", q);
     if (selectMode) params.set("select", "true");
     router.replace(`/history?${params.toString()}`, { scroll: false });
   }
 
-  const fetchHistory = useCallback(async (sub: Subject, mode: string, topic: string, offset = 0) => {
+  const fetchHistory = useCallback(async (
+    sub: Subject, mode: string, topic: string,
+    df: string, dt: string, offset = 0,
+  ) => {
     setLoading(true);
     try {
-      const filter: { subject: string; mode?: string; topic?: string } = { subject: sub };
+      const filter: { subject: string; mode?: string; topic?: string; date_from?: string; date_to?: string } = { subject: sub };
       if (mode !== "all") filter.mode = mode;
       if (topic !== "all") filter.topic = topic;
+      if (df) filter.date_from = df;
+      if (dt) filter.date_to = dt;
       const res = await sessionApi.history(filter, 20, offset);
       setItems((prev) => (offset === 0 ? res.items : [...prev, ...res.items]));
       setHasMore(res.has_more);
@@ -91,10 +110,21 @@ function PersonalHistory() {
     sessionApi.historyTopics(subject).then((res) => setTopics(res.topics)).catch(() => setTopics([]));
   }, [subject]);
 
-  // Fetch history when any filter changes
+  // Fetch history when any server-side filter changes
   useEffect(() => {
-    fetchHistory(subject, modeFilter, topicFilter);
-  }, [subject, modeFilter, topicFilter, fetchHistory]);
+    fetchHistory(subject, modeFilter, topicFilter, dateFrom, dateTo);
+  }, [subject, modeFilter, topicFilter, dateFrom, dateTo, fetchHistory]);
+
+  // Client-side search filter (prefix match, applied on loaded items)
+  const query = searchQuery.toLowerCase();
+  const displayItems = query
+    ? items.filter((item) => {
+        if (item.mode === "mock_test") {
+          return item.all_problems.some((p) => p.toLowerCase().startsWith(query));
+        }
+        return item.problem.toLowerCase().startsWith(query);
+      })
+    : items;
 
   function toggleSelect(item: SessionHistoryItem) {
     setSelected((prev) => {
@@ -131,7 +161,7 @@ function PersonalHistory() {
             key={sub}
             active={subject === sub}
             onClick={() => {
-              updateFilters(sub, "all", "all");
+              updateFilters(sub, "all", "all", "", "", "");
               setItems([]);
               setSelected(new Map());
             }}
@@ -151,7 +181,7 @@ function PersonalHistory() {
           ] as const).map((m) => (
             <button
               key={m.id}
-              onClick={() => { updateFilters(subject, m.id, "all"); setItems([]); }}
+              onClick={() => { updateFilters(subject, m.id, "all", dateFrom, dateTo, searchQuery); setItems([]); }}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
                 modeFilter === m.id
@@ -167,7 +197,7 @@ function PersonalHistory() {
         {topics.length > 0 && (
           <select
             value={topicFilter}
-            onChange={(e) => { updateFilters(subject, modeFilter, e.target.value); setItems([]); }}
+            onChange={(e) => { updateFilters(subject, modeFilter, e.target.value, dateFrom, dateTo, searchQuery); setItems([]); }}
             className="rounded-[--radius-md] border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary focus:border-primary focus:outline-none"
           >
             <option value="all">All Topics</option>
@@ -178,12 +208,56 @@ function PersonalHistory() {
         )}
       </div>
 
+      {/* Date range + search */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-text-muted">From</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { updateFilters(subject, modeFilter, topicFilter, e.target.value, dateTo, searchQuery); setItems([]); }}
+            className="rounded-[--radius-md] border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-text-muted">To</label>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { updateFilters(subject, modeFilter, topicFilter, dateFrom, e.target.value, searchQuery); setItems([]); }}
+            className="rounded-[--radius-md] border border-border bg-surface px-2 py-1.5 text-xs text-text-secondary focus:border-primary focus:outline-none"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <button
+            onClick={() => { updateFilters(subject, modeFilter, topicFilter, "", "", searchQuery); setItems([]); }}
+            className="text-xs font-semibold text-text-muted hover:text-primary"
+          >
+            Clear dates
+          </button>
+        )}
+      </div>
+
+      <div className="relative">
+        <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Search problems..."
+          value={searchQuery}
+          onChange={(e) => updateFilters(subject, modeFilter, topicFilter, dateFrom, dateTo, e.target.value)}
+          className="w-full rounded-[--radius-md] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
+        />
+      </div>
+
       {/* Session list */}
       <SessionList
         loading={loading}
-        items={items}
+        items={displayItems}
         hasMore={hasMore}
-        onLoadMore={() => fetchHistory(subject, modeFilter, topicFilter, items.length)}
+        onLoadMore={() => fetchHistory(subject, modeFilter, topicFilter, dateFrom, dateTo, items.length)}
         onReview={(item) => {
           if (selectMode) {
             toggleSelect(item);
@@ -398,10 +472,24 @@ function SessionList({
   }
   const isMT = (item: SessionHistoryItem) => item.mode === "mock_test";
 
+  // In selection mode, float selected items to the top — including
+  // items selected from a previous filter that aren't in current results
+  let sortedItems = items;
+  let selectedCount = 0;
+  if (selectMode && selected && selected.size > 0) {
+    const currentIds = new Set(items.map((item) => item.id));
+    const selectedFromOtherFilters = [...selected.values()].filter((item) => !currentIds.has(item.id));
+    const selectedInCurrent = items.filter((item) => selected.has(item.id));
+    const unselected = items.filter((item) => !selected.has(item.id));
+    sortedItems = [...selectedFromOtherFilters, ...selectedInCurrent, ...unselected];
+    selectedCount = selectedFromOtherFilters.length + selectedInCurrent.length;
+  }
+
   return (
     <div className="space-y-3">
-      {items.map((item, i) => {
+      {sortedItems.map((item, i) => {
         const isSelected = selected?.has(item.id) ?? false;
+        const showDivider = selectMode && selectedCount > 0 && i === selectedCount && !isSelected;
         return (
           <motion.div
             key={item.id}
@@ -409,6 +497,9 @@ function SessionList({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.03 * Math.min(i, 10) }}
           >
+            {showDivider && (
+              <div className="mb-3 border-t border-border" />
+            )}
             <Card
               variant="interactive"
               onClick={() => {

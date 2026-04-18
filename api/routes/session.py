@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -163,6 +164,8 @@ async def history(
     section_id: uuid.UUID | None = Query(default=None),
     mode: str | None = Query(default=None),
     topic: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user_full),
@@ -208,6 +211,21 @@ async def history(
             filters.append(SessionModel.mode == mode)
     if topic:
         filters.append(SessionModel.topic == topic)
+    if date_from:
+        try:
+            from datetime import datetime
+            dt_from = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=UTC)
+            filters.append(SessionModel.created_at >= dt_from)
+        except ValueError:
+            pass  # ignore malformed dates
+    if date_to:
+        try:
+            from datetime import datetime, timedelta
+            # Inclusive: "to April 15" includes all of April 15
+            dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=UTC) + timedelta(days=1)
+            filters.append(SessionModel.created_at < dt_to)
+        except ValueError:
+            pass  # ignore malformed dates
 
     query = (
         select(SessionModel)

@@ -479,7 +479,7 @@ export const session = {
   },
 
   history(
-    filter: { subject: string; mode?: string; topic?: string } | { section_id: string },
+    filter: { subject: string; mode?: string; topic?: string; date_from?: string; date_to?: string } | { section_id: string },
     limit = 20,
     offset = 0,
   ) {
