@@ -25,6 +25,7 @@ import {
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import { HwNavStrip } from "@/components/school/teacher/_pieces/hw-nav-strip";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -493,6 +494,15 @@ export default function HomeworkDetailPage({
           ← Back to homework
         </Link>
       </div>
+
+      {/* Section nav — sits between breadcrumb and the hero so the
+          teacher can jump to Practice or Review without scrolling. */}
+      <HwNavStrip
+        courseId={courseId}
+        assignmentId={assignmentId}
+        reviewEnabled={!!hw && hw.status === "published"}
+        pendingCount={pending.filter((p) => p.parent_question_id).length}
+      />
 
       {/* Hero header row: status + title + primary action (publish) */}
       <header className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
