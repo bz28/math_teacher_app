@@ -13,6 +13,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { HwNavStrip } from "@/components/school/teacher/_pieces/hw-nav-strip";
 import { GenerateSimilarDialog } from "@/components/school/teacher/_pieces/generate-similar-dialog";
+import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -75,6 +76,11 @@ export default function PracticePage({
   const [generateForId, setGenerateForId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState<Record<string, boolean>>({});
   const [showIntro, setShowIntro] = useState(false);
+  // Queue-mode review: when non-null, opens the WorkshopModal over the
+  // Practice page with these items queued for approve/reject/edit/chat.
+  // Set by clicking "Review N pending" at either the top-level action
+  // row or a per-row button.
+  const [reviewQueue, setReviewQueue] = useState<BankItem[] | null>(null);
   // `pollingUntil` is a timestamp; while now < it, we refetch every
   // 3s so newly-generated variations land in the UI without a manual
   // reload. Set by generate actions; cleared when time runs out or
@@ -227,18 +233,6 @@ export default function PracticePage({
     }
   };
 
-  const approveVariation = async (id: string) => {
-    setActionBusyId(id);
-    try {
-      await teacher.approveBankItem(id);
-      await reload();
-    } catch {
-      toast.error("Couldn't approve");
-    } finally {
-      setActionBusyId(null);
-    }
-  };
-
   const rejectVariation = async (id: string) => {
     setActionBusyId(id);
     try {
@@ -276,20 +270,19 @@ export default function PracticePage({
     }
   };
 
-  const jumpToFirstPending = () => {
-    const firstPending = pools.find((p) => p.pending.length > 0);
-    if (!firstPending) return;
-    setExpanded((e) => ({
-      ...e,
-      [firstPending.problem.bank_item_id]: true,
-    }));
-    // Scroll after a tick so the expanded row is in the DOM.
-    setTimeout(() => {
-      const el = document.getElementById(
-        `prow-${firstPending.problem.bank_item_id}`,
-      );
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
+  const openReviewAll = () => {
+    // Flatten every pool's pending into a single queue so the teacher
+    // walks through all HW variations in one sitting. Per-problem
+    // "Review N pending" on each row scopes to a single parent.
+    const allPending = pools.flatMap((p) => p.pending);
+    if (allPending.length === 0) return;
+    setReviewQueue(allPending);
+  };
+
+  const openReviewForParent = (parentId: string) => {
+    const pool = pools.find((p) => p.problem.bank_item_id === parentId);
+    if (!pool || pool.pending.length === 0) return;
+    setReviewQueue(pool.pending);
   };
 
   const toggleAutoGenForHw = async () => {
@@ -395,7 +388,7 @@ export default function PracticePage({
             pendingCount={totals.pending}
             target={effectiveTarget}
             onGenerateMissing={generateMissing}
-            onReviewPending={jumpToFirstPending}
+            onReviewPending={openReviewAll}
             toppingUp={toppingUp}
           />
 
@@ -445,7 +438,7 @@ export default function PracticePage({
                       setShowRejected((s) => ({ ...s, [pid]: !s[pid] }))
                     }
                     actionBusyId={actionBusyId}
-                    onApprove={approveVariation}
+                    onReviewPending={() => openReviewForParent(pid)}
                     onReject={rejectVariation}
                     onRestore={restoreVariation}
                     onRegenerate={regenerateVariation}
@@ -465,6 +458,25 @@ export default function PracticePage({
                 toast.info("Generation started");
                 setPollingUntil(Date.now() + 60_000);
                 setTimeout(() => void reload(), 1500);
+              }}
+            />
+          )}
+
+          {reviewQueue && reviewQueue.length > 0 && (
+            <WorkshopModal
+              queue={reviewQueue}
+              onClose={() => {
+                setReviewQueue(null);
+                // Pool state may have changed while reviewing —
+                // refetch so the dashboard reflects approved/rejected
+                // counts accurately on return.
+                void reload();
+              }}
+              onChanged={() => {
+                // Fires on individual approve/reject inside the
+                // queue. Don't reload on every action (the modal is
+                // its own source of truth for the queue walk); reload
+                // when the teacher closes.
               }}
             />
           )}
@@ -637,7 +649,7 @@ function ProblemRow({
   showRejected,
   onToggleRejected,
   actionBusyId,
-  onApprove,
+  onReviewPending,
   onReject,
   onRestore,
   onRegenerate,
@@ -652,7 +664,9 @@ function ProblemRow({
   showRejected: boolean;
   onToggleRejected: () => void;
   actionBusyId: string | null;
-  onApprove: (id: string) => void;
+  /** Click handler for the per-row "Review N pending" button. Opens
+   *  the WorkshopModal queue scoped to THIS parent's pending pool. */
+  onReviewPending: () => void;
   onReject: (id: string) => void;
   onRestore: (id: string) => void;
   onRegenerate: (id: string) => void;
@@ -750,32 +764,35 @@ function ProblemRow({
             </button>
           </div>
 
-          {/* Pending first — most urgent review surface */}
+          {/* Pending — single prominent CTA opens the queue modal. No
+              inline approve/reject buttons; deep review happens in the
+              WorkshopModal so teachers get the full edit/chat/undo UX
+              for each variation. */}
           {pool.pending.length > 0 && (
-            <div className="mt-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                Pending review · {pool.pending.length}
-              </div>
-              <div className="mt-1.5 space-y-1.5">
-                {pool.pending.map((v) => (
-                  <VariationCard
-                    key={v.id}
-                    variation={v}
-                    bucket="pending"
-                    expanded={!!previewOpen[v.id]}
-                    onTogglePreview={() => onTogglePreview(v.id)}
-                    busy={actionBusyId === v.id}
-                    onApprove={() => onApprove(v.id)}
-                    onReject={() => onReject(v.id)}
-                    onRegenerate={() => onRegenerate(v.id)}
-                    onRestore={() => onRestore(v.id)}
-                  />
-                ))}
+            <div className="mt-3 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-3 py-2.5 dark:border-amber-500/40 dark:bg-amber-500/10">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                    Pending review · {pool.pending.length}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-amber-800/80 dark:text-amber-300/80">
+                    Walk through each one to approve, edit, or reject.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onReviewPending}
+                  className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700"
+                >
+                  Review {pool.pending.length} →
+                </button>
               </div>
             </div>
           )}
 
-          {/* Approved */}
+          {/* Approved — read-only list with preview-on-click. Rare
+              one-off corrections (Regenerate / Reject) still live here
+              since the queue modal is pending-only. */}
           {pool.approved.length > 0 && (
             <div className="mt-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-success">
@@ -790,7 +807,6 @@ function ProblemRow({
                     expanded={!!previewOpen[v.id]}
                     onTogglePreview={() => onTogglePreview(v.id)}
                     busy={actionBusyId === v.id}
-                    onApprove={() => onApprove(v.id)}
                     onReject={() => onReject(v.id)}
                     onRegenerate={() => onRegenerate(v.id)}
                     onRestore={() => onRestore(v.id)}
@@ -822,7 +838,6 @@ function ProblemRow({
                       expanded={!!previewOpen[v.id]}
                       onTogglePreview={() => onTogglePreview(v.id)}
                       busy={actionBusyId === v.id}
-                      onApprove={() => onApprove(v.id)}
                       onReject={() => onReject(v.id)}
                       onRegenerate={() => onRegenerate(v.id)}
                       onRestore={() => onRestore(v.id)}
@@ -861,27 +876,22 @@ function VariationCard({
   expanded,
   onTogglePreview,
   busy,
-  onApprove,
   onReject,
   onRegenerate,
   onRestore,
 }: {
   variation: BankItem;
-  bucket: "approved" | "pending" | "rejected";
+  /** "pending" removed — pending variations are reviewed via the
+   *  queue modal, not shown in per-row cards. */
+  bucket: "approved" | "rejected";
   expanded: boolean;
   onTogglePreview: () => void;
   busy: boolean;
-  onApprove: () => void;
   onReject: () => void;
   onRegenerate: () => void;
   onRestore: () => void;
 }) {
-  const dotCls =
-    bucket === "approved"
-      ? "bg-success"
-      : bucket === "pending"
-        ? "bg-amber-500"
-        : "bg-bg-subtle";
+  const dotCls = bucket === "approved" ? "bg-success" : "bg-bg-subtle";
 
   return (
     <div
@@ -908,27 +918,6 @@ function VariationCard({
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
-          {bucket === "pending" && (
-            <>
-              <ActionButton
-                label="Approve"
-                variant="primary"
-                onClick={onApprove}
-                busy={busy}
-              />
-              <ActionButton
-                label="Regenerate"
-                onClick={onRegenerate}
-                busy={busy}
-              />
-              <ActionButton
-                label="Reject"
-                variant="danger"
-                onClick={onReject}
-                busy={busy}
-              />
-            </>
-          )}
           {bucket === "approved" && (
             <>
               <ActionButton
