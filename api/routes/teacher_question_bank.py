@@ -541,6 +541,26 @@ async def reject_bank_item(
     return {"status": "ok"}
 
 
+@router.post("/question-bank/{item_id}/restore")
+async def restore_bank_item(
+    item: QuestionBankItem = Depends(get_bank_item),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Move a rejected bank item back to pending. Gives the teacher an
+    undo after an accidental reject on the Practice tab. No-ops if the
+    item isn't actually rejected — the UI wouldn't show a Restore
+    affordance for non-rejected items anyway, but defensive."""
+    _ensure_unlocked(item)
+    if item.status != "rejected":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only rejected items can be restored",
+        )
+    item.status = "pending"
+    await db.commit()
+    return {"status": "ok"}
+
+
 @router.post("/question-bank/{item_id}/regenerate")
 async def regenerate_bank_item(
     body: RegenerateRequest,

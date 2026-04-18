@@ -1138,13 +1138,26 @@ async def _approved_sibling_count(db: AsyncSession, anchor_id: uuid.UUID) -> int
     )).scalar_one())
 
 
+class CompleteConsumptionRequest(BaseModel):
+    # Practice MCQ correctness, recorded on terminal completion.
+    # Optional — Learn mode has no correctness and early clients
+    # may not send it. Server writes is_correct only the FIRST time
+    # the row is completed (idempotent semantics).
+    is_correct: bool | None = None
+
+
 @router.post("/bank-consumption/{consumption_id}/complete", status_code=204)
 async def complete_consumption(
     consumption_id: uuid.UUID,
+    body: CompleteConsumptionRequest | None = None,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Mark a consumption row as completed. Idempotent."""
+    """Mark a consumption row as completed. Idempotent.
+
+    First call writes completed_at (and is_correct if provided).
+    Subsequent calls no-op so double-clicks don't re-write the result.
+    """
     row = (await db.execute(
         select(BankConsumption).where(BankConsumption.id == consumption_id)
     )).scalar_one_or_none()
@@ -1154,6 +1167,8 @@ async def complete_consumption(
         raise HTTPException(status_code=403, detail="Not your consumption")
     if row.completed_at is None:
         row.completed_at = datetime.now(UTC)
+        if body is not None and body.is_correct is not None:
+            row.is_correct = body.is_correct
         await db.commit()
 
 

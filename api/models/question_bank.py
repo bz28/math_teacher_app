@@ -208,6 +208,12 @@ class BankConsumption(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    # Answer correctness for practice MCQ attempts. Null for Learn
+    # mode (no correctness semantics) and for rows that haven't been
+    # completed yet. Set by the /complete endpoint from the client —
+    # the client already knows the correct answer (distractors are
+    # local). Captured for v2 stats without blocking this PR on views.
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
