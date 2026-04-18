@@ -128,18 +128,22 @@ async def get_course_grades(
             for e in enrollments
         ]}
 
+    # Students see the published snapshot, not the live teacher draft.
+    # Filter on the snapshot column too — guards against rows where
+    # `grade_published_at` is set but the snapshot somehow is null
+    # (shouldn't happen via the normal flow, but be explicit).
     published_rows = (await db.execute(
         select(
             Submission.student_id,
             Submission.assignment_id,
-            SubmissionGrade.final_score,
+            SubmissionGrade.published_final_score.label("final_score"),
         )
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .where(
             Submission.student_id.in_(student_ids),
             Submission.assignment_id.in_(all_assigned_aids),
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
     )).all()
     graded_by_student: dict[uuid.UUID, dict[uuid.UUID, float]] = {}
@@ -258,19 +262,20 @@ async def get_student_grades(
     )).all()
     assignment_meta = {a.id: a for a in assignments}
 
+    # Show the published snapshot, not the teacher's live draft.
     published_rows = (await db.execute(
         select(
             Submission.assignment_id,
-            SubmissionGrade.final_score,
-            SubmissionGrade.teacher_notes,
-            SubmissionGrade.graded_at,
+            SubmissionGrade.published_final_score.label("final_score"),
+            SubmissionGrade.published_teacher_notes.label("teacher_notes"),
+            SubmissionGrade.grade_published_at.label("graded_at"),
         )
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .where(
             Submission.student_id == student_id,
             Submission.assignment_id.in_(assigned_aids),
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
     )).all()
     published_by_aid = {r.assignment_id: r for r in published_rows}
@@ -316,14 +321,14 @@ async def get_student_grades(
     missing_hws.sort(key=lambda h: h["due_at"] or "", reverse=True)
 
     class_avg_val = (await db.execute(
-        select(func.avg(SubmissionGrade.final_score))
+        select(func.avg(SubmissionGrade.published_final_score))
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
         .where(
             Submission.section_id == section_id,
             Submission.assignment_id.in_(assigned_aids),
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
             User.is_preview.is_(False),
         )
     )).scalar()

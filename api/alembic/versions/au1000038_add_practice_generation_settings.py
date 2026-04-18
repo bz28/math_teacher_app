@@ -1,20 +1,25 @@
 """add practice-generation settings to users and assignments
 
-Revision ID: as1000036
-Revises: ar1000035
+Revision ID: au1000038
+Revises: at1000037
 Create Date: 2026-04-18 04:27:00.000000
 
 Two teacher-level defaults on `users` (auto-on, count=3) and matching
 nullable overrides on `assignments`. Null on the assignment means
 "inherit the teacher's default"; a value overrides for that HW.
+
+Note: originally authored as as1000036 on an older tip of main; renamed
+to au1000038 after main landed its own as1000036 (grade publish
+snapshot). at1000037 now follows main's as1000036 in the chain and
+this one follows at1000037.
 """
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "as1000036"
-down_revision: str | None = "ar1000035"
+revision: str = "au1000038"
+down_revision: str | None = "at1000037"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

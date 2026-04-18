@@ -151,6 +151,13 @@ class SubmissionGrade(Base):
     # teacher clicks "Publish grades" on the HW. Drives student
     # visibility of the final_score + breakdown.
     grade_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Snapshot taken at publish time. Students see these fields, not
+    # the live `final_score / breakdown / teacher_notes` above — edits
+    # after publish stay as drafts until the teacher republishes.
+    # `graded_at > grade_published_at` flags the dirty state.
+    published_final_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    published_breakdown: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    published_teacher_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )

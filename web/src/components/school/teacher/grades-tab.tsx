@@ -106,6 +106,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
         <select
           value={sectionFilter}
           onChange={(e) => setSectionFilter(e.target.value)}
+          aria-label="Filter by section"
           className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary hover:border-primary/40 focus:border-primary focus:outline-none"
         >
           <option value="all">All sections</option>
