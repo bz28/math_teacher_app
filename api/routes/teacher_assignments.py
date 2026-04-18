@@ -627,8 +627,16 @@ async def publish_assignment(
 
     # Auto-generate practice variations after publish if the teacher
     # hasn't opted out. Per-HW override wins over teacher default.
-    # Fires per-primary in the background — returns immediately.
-    await _schedule_auto_practice(db, a, current_user.user_id)
+    # Best-effort — publish itself already succeeded above, so an
+    # auto-gen failure should surface as a log line, not a 500 on
+    # the publish response.
+    try:
+        await _schedule_auto_practice(db, a, current_user.user_id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "auto-gen practice scheduling failed for assignment %s", a.id,
+        )
 
     return {"status": "ok"}
 
