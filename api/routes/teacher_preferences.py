@@ -1,8 +1,9 @@
 """Teacher-level preferences (UI-configurable defaults).
 
-Today: auto-generate practice at publish + default practice count.
-Extensible — more fields can land on User and surface here without
-changing the endpoint shape beyond the Pydantic schema.
+Today the surface is minimal — auto-generate practice on publish and
+default practice count. Extensible; more fields can land on User and
+surface here without changing the endpoint shape beyond the Pydantic
+schema.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
