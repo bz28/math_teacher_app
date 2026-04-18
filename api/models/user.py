@@ -51,6 +51,16 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Teacher-only preferences. Stored on User because there's no
+    # TeacherProfile table and these are cheap to carry. Students
+    # never read them.
+    auto_generate_practice_on_publish: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true",
+    )
+    default_practice_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default="3",
+    )
+
     # Password reset
     password_reset_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     password_reset_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

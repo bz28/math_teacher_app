@@ -51,6 +51,15 @@ class Assignment(Base):
     ai_grading_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true",
     )
+    # Per-HW overrides for practice-variation auto-generation. Nullable
+    # so null = inherit the teacher's User-level defaults. Set a value
+    # on either column to override for THIS homework specifically.
+    auto_generate_practice_on_publish: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True,
+    )
+    default_practice_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
     # Teacher-authored grading rubric. Structured JSON so the AI grader
     # has typed signals and the review UI can render a clean sidebar.
     # Shape (all optional; UI decides which fields to collect):
