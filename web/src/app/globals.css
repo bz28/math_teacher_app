@@ -350,6 +350,28 @@ html {
   border-color: var(--color-primary);
 }
 
+/* ── Student dashboard: gentle stagger on card mount ── */
+@keyframes dashboard-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-card-enter {
+  animation: dashboard-card-in 320ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-card-enter {
+    animation: none;
+  }
+}
+
 /* ── Marketing: display typography utility ── */
 .text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; }
 .text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; }

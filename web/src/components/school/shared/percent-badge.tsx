@@ -1,9 +1,8 @@
 /**
- * Shared percent badge for the Grades UI.
+ * Shared percent badge for grade UIs (teacher + student).
  *
- * Used by the Grades roster (avg column) and the student detail page
- * (per-HW score). Color-tone thresholds are centralized here so that
- * "what counts as struggling" is one knob to turn.
+ * Color-tone thresholds are centralized here so "what counts as
+ * struggling" is one knob to turn.
  *
  * - percent === null  → muted em-dash (roster case: no graded HWs yet)
  * - percent >= 85     → green

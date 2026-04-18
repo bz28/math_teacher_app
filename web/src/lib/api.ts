@@ -746,6 +746,10 @@ export interface SubmissionsInboxRow {
   flagged: number;
   /** Graded but not yet published to students. */
   to_grade: number;
+  /** Already published, but the teacher has edited the grade since.
+   *  Students still see the old published snapshot — teacher must
+   *  republish to ship the edits. Folded into the "to release" pill. */
+  dirty: number;
   /** Published — students can see these grades. */
   published: number;
 }
@@ -1007,6 +1011,7 @@ export const teacher = {
       status: string;
       final_score: number | null;
       grade_published_at: string | null;
+      grade_dirty: boolean;
     }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -1217,6 +1222,9 @@ export interface TeacherSubmissionRow {
    *  grades. Future AI PR pre-fills this too. */
   breakdown: GradeBreakdownEntry[] | null;
   grade_published_at: string | null;
+  /** True if the grade has been published AND edited since. Students
+   *  still see the published snapshot — teacher must republish. */
+  grade_dirty: boolean;
   reviewed_at: string | null;
   integrity_overview: IntegrityOverview | null;
 }
@@ -1245,6 +1253,9 @@ export interface TeacherSubmissionDetail {
   final_score: number | null;
   teacher_notes: string | null;
   grade_published_at: string | null;
+  /** True if the grade has been published AND edited since. Students
+   *  still see the published snapshot — teacher must republish. */
+  grade_dirty: boolean;
 }
 
 export interface AiGradeEntry {
@@ -1370,6 +1381,12 @@ export interface StudentHomeworkDetail {
   problems: StudentHomeworkProblem[];
   submitted: boolean;
   submission_id: string | null;
+  /** ISO timestamp — null before submission. */
+  submitted_at: string | null;
+  /** Percent 0-100, or null if no grade published yet. */
+  final_score: number | null;
+  /** ISO timestamp — null until teacher publishes. */
+  grade_published_at: string | null;
 }
 
 export interface StudentSubmission {
@@ -1406,9 +1423,52 @@ export interface FlaggedConsumption {
   served_at: string;
 }
 
+// ── Student dashboard + grades (mirror api/routes/school_student_practice.py) ──
+
+export interface DashboardAssignment {
+  assignment_id: string;
+  title: string;
+  type: string;
+  due_at: string | null;
+  course_id: string;
+  course_name: string;
+  section_name: string;
+  status: "not_started" | "submitted";
+  is_late: boolean;
+}
+
+export interface DashboardGrade {
+  assignment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string;
+  section_name: string;
+  /** Percent 0-100. Render with shared PercentBadge. */
+  final_score: number;
+  published_at: string;
+}
+
+export interface StudentDashboardResponse {
+  first_name: string;
+  due_this_week: DashboardAssignment[];
+  overdue: DashboardAssignment[];
+  in_review: DashboardAssignment[];
+  recently_graded: DashboardGrade[];
+}
+
+export interface StudentGradesResponse {
+  grades: DashboardGrade[];
+}
+
 export const schoolStudent = {
   listClasses() {
     return apiFetch<StudentClassSummary[]>("/school/student/classes");
+  },
+  getDashboard() {
+    return apiFetch<StudentDashboardResponse>("/school/student/dashboard");
+  },
+  getAllGrades() {
+    return apiFetch<StudentGradesResponse>("/school/student/grades");
   },
   listHomework(courseId: string) {
     return apiFetch<StudentHomeworkSummary[]>(`/school/student/courses/${courseId}/homework`);
