@@ -173,10 +173,10 @@ export default function HomeworkPage() {
         });
       } else if (resp.status === "exhausted") {
         setError(
-          "You've practiced everything available for this problem — ask your teacher for more.",
+          "You've practiced everything available for this problem. Check back soon — more practice may be on the way.",
         );
       } else {
-        setError("No practice problems are available for this one yet.");
+        setError("Practice isn't ready yet — check back soon.");
       }
     } catch {
       setError("Couldn't load a practice problem. Please try again.");

@@ -113,7 +113,9 @@ export function PracticeLoopSurface({
     setAdvancing(true);
     setError(null);
     try {
-      await schoolStudent.completeConsumption(consumptionId);
+      await schoolStudent.completeConsumption(consumptionId, {
+        isCorrect: picked != null ? picked === correctAnswer : undefined,
+      });
       const resp = await schoolStudent.nextVariation(
         assignmentId,
         anchorBankItemId,
@@ -140,7 +142,9 @@ export function PracticeLoopSurface({
     if (advancing) return;
     setAdvancing(true);
     try {
-      await schoolStudent.completeConsumption(consumptionId);
+      await schoolStudent.completeConsumption(consumptionId, {
+        isCorrect: picked != null ? picked === correctAnswer : undefined,
+      });
     } catch {
       /* non-fatal */
     }
@@ -153,7 +157,9 @@ export function PracticeLoopSurface({
     // Complete the current Practice attempt first — it's a distinct
     // mode-attempt and should be marked finished in the history.
     try {
-      await schoolStudent.completeConsumption(consumptionId);
+      await schoolStudent.completeConsumption(consumptionId, {
+        isCorrect: picked != null ? picked === correctAnswer : undefined,
+      });
     } catch {
       /* non-fatal */
     }

@@ -1506,9 +1506,15 @@ export const schoolStudent = {
       { method: "POST" },
     );
   },
-  completeConsumption(consumptionId: string) {
+  completeConsumption(
+    consumptionId: string,
+    opts?: { isCorrect?: boolean },
+  ) {
+    const body: Record<string, unknown> = {};
+    if (opts?.isCorrect !== undefined) body.is_correct = opts.isCorrect;
     return apiFetch<void>(`/school/student/bank-consumption/${consumptionId}/complete`, {
       method: "POST",
+      body: JSON.stringify(body),
     });
   },
   flagConsumption(consumptionId: string, flagged: boolean) {
