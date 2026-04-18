@@ -74,12 +74,22 @@ export default function HomeworkReviewPage({
         setHwTitle(a.title);
         if (items.length > 0) {
           setPhase({ kind: "ready", items });
-        } else {
-          // Empty on first load → assume generation might be in
-          // flight. Start polling. If nothing arrives before the
-          // ceiling, we flip to the empty-state message.
-          setPhase({ kind: "waiting", since: Date.now() });
+          return;
         }
+        // Empty on first load. Only wait if there's actually a gen
+        // job in flight — the "Create & generate" wizard stashes its
+        // job id here as a signal. Without it, this is a regular
+        // navigation to a settled HW's review page (via the section
+        // nav strip), not a post-generate landing. Skipping the wait
+        // avoids a false 2-minute "Generating…" state.
+        const hasStashedJob =
+          typeof window !== "undefined" &&
+          !!window.sessionStorage.getItem(`hw-gen-${assignmentId}`);
+        setPhase(
+          hasStashedJob
+            ? { kind: "waiting", since: Date.now() }
+            : { kind: "empty" },
+        );
       })
       .catch((e) => {
         if (cancelled) return;
