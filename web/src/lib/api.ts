@@ -690,6 +690,12 @@ export interface TeacherAssignment {
   submitted: number;
   graded: number;
   avg_score: number | null;
+  /** Per-HW override for practice auto-gen. Null = inherit teacher
+   *  default. Non-null overrides for this HW only. */
+  auto_generate_practice_on_publish: boolean | null;
+  /** Per-HW override for practice count. Null = inherit teacher
+   *  default. */
+  default_practice_count: number | null;
   created_at: string;
 }
 

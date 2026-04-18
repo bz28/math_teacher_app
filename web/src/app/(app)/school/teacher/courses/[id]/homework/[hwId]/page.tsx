@@ -10,8 +10,10 @@ import {
   type BankJob,
   type GradingMode,
   type TeacherAssignment,
+  type TeacherPreferences,
   type TeacherRubric,
 } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -91,8 +93,21 @@ export default function HomeworkDetailPage({
 }) {
   const { id: courseId, hwId: assignmentId } = use(params);
   const router = useRouter();
+  const toast = useToast();
   const backHref = `/school/teacher/courses/${courseId}?tab=homework`;
   const goBack = () => router.push(backHref);
+
+  // Teacher-level practice prefs. Fetched once on mount so publish
+  // can compute the effective auto-gen value (HW override wins over
+  // teacher default) without a second request at click time.
+  const [prefs, setPrefs] = useState<TeacherPreferences | null>(null);
+  useEffect(() => {
+    teacher.preferences().then(setPrefs).catch(() => {
+      // Non-fatal — if prefs can't load, publish silently skips the
+      // auto-gen toast. The backend still fires generation based on
+      // its own resolution.
+    });
+  }, []);
 
   const [hw, setHw] = useState<
     (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
@@ -295,6 +310,21 @@ export default function HomeworkDetailPage({
     run(async () => {
       await teacher.publishAssignment(assignmentId);
       setConfirmingNoDueDate(false);
+      // Resolve effective auto-gen: per-HW override wins; otherwise
+      // teacher-level default. Null-coalesce handles the "prefs failed
+      // to load" case by skipping the toast silently.
+      if (hw && prefs) {
+        const autoOn =
+          hw.auto_generate_practice_on_publish ??
+          prefs.auto_generate_practice_on_publish;
+        const count =
+          hw.default_practice_count ?? prefs.default_practice_count;
+        if (autoOn) {
+          toast.info(
+            `✨ Generating ${count} practice problem${count === 1 ? "" : "s"} per question — review on the Practice page.`,
+          );
+        }
+      }
       await reload();
     });
 
