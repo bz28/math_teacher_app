@@ -1179,7 +1179,46 @@ export const teacher = {
   previewAsStudent() {
     return apiFetch<TokenPair>("/teacher/preview-student", { method: "POST" });
   },
+  // ── Preferences ──
+  preferences() {
+    return apiFetch<TeacherPreferences>("/teacher/preferences");
+  },
+  updatePreferences(data: Partial<TeacherPreferences>) {
+    return apiFetch<TeacherPreferences>("/teacher/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+  // ── Practice variations (per-HW) ──
+  /** Fill every primary's practice pool up to target_count. Returns
+   *  the scheduled job ids so the caller can poll. Primaries already
+   *  at target or with in-flight jobs are skipped. */
+  topUpPractice(
+    assignmentId: string,
+    data: { target_count: number; parent_ids?: string[] | null },
+  ) {
+    return apiFetch<{
+      scheduled: string[];
+      skipped: string[];
+      target_count: number;
+    }>(`/teacher/assignments/${assignmentId}/practice/top-up`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  /** Move a rejected bank item back to pending. */
+  restoreBankItem(itemId: string) {
+    return apiFetch<{ status: string }>(
+      `/teacher/question-bank/${itemId}/restore`,
+      { method: "POST" },
+    );
+  },
 };
+
+export interface TeacherPreferences {
+  auto_generate_practice_on_publish: boolean;
+  default_practice_count: number;
+}
 
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";

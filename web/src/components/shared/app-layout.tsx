@@ -21,7 +21,27 @@ const studentNavItems = [
 
 const teacherNavItems = [
   { label: "Courses", href: "/school/teacher", icon: CoursesIcon },
+  { label: "Preferences", href: "/school/teacher/preferences", icon: PreferencesIcon },
 ];
+
+/**
+ * Teacher nav active-matching. Plain startsWith treats every sub-route
+ * under "/school/teacher" as matching Courses, which would highlight
+ * both Courses and Preferences when the teacher is on Preferences.
+ * Exact-match or non-overlapping-prefix to keep highlights correct.
+ */
+function isTeacherNavActive(pathname: string, href: string): boolean {
+  // Root Courses: active only when NOT under any other teacher nav
+  // item's href.
+  if (href === "/school/teacher") {
+    if (pathname === "/school/teacher") return true;
+    if (!pathname.startsWith("/school/teacher/")) return false;
+    return !teacherNavItems.some(
+      (i) => i.href !== "/school/teacher" && pathname.startsWith(i.href),
+    );
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
@@ -177,7 +197,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 space-y-0.5 px-3 py-4">
           {teacherNavItems.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = isTeacherNavActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
@@ -274,7 +294,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-surface/95 backdrop-blur-md md:hidden">
           <div className="flex h-16 items-stretch">
             {teacherNavItems.map((item) => {
-              const active = pathname.startsWith(item.href);
+              const active = isTeacherNavActive(pathname, item.href);
               return (
                 <Link
                   key={item.href}
@@ -340,6 +360,15 @@ function CoursesIcon({ active }: { active: boolean }) {
     <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
       <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+    </svg>
+  );
+}
+
+function PreferencesIcon({ active }: { active: boolean }) {
+  return (
+    <svg className={cn("h-5 w-5", active ? "text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h.01a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51h.01a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
     </svg>
   );
 }
