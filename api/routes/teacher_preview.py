@@ -78,22 +78,30 @@ async def get_or_create_preview_student(
     )).scalars().all()
 
     if teacher_course_ids:
-        all_section_ids = set((await db.execute(
-            select(Section.id).where(Section.course_id.in_(teacher_course_ids))
-        )).scalars().all())
+        # One enrollment per (student, course) — pick the earliest-created
+        # section per course the teacher teaches. A teacher with multiple
+        # sections of the same course sees that course's view from one
+        # of them; flipping between sections isn't a preview concern.
+        picked_sections = (await db.execute(
+            select(Section.id, Section.course_id)
+            .where(Section.course_id.in_(teacher_course_ids))
+            .order_by(Section.course_id, Section.created_at, Section.id)
+            .distinct(Section.course_id)
+        )).all()
 
-        # Existing enrollments for the shadow
-        existing_enrollment_ids = set((await db.execute(
-            select(SectionEnrollment.section_id).where(
+        existing_course_ids = set((await db.execute(
+            select(SectionEnrollment.course_id).where(
                 SectionEnrollment.student_id == shadow.id,
             )
         )).scalars().all())
 
-        # Add missing enrollments
-        for sid in all_section_ids - existing_enrollment_ids:
+        for section_id, course_id in picked_sections:
+            if course_id in existing_course_ids:
+                continue
             db.add(SectionEnrollment(
                 student_id=shadow.id,
-                section_id=sid,
+                section_id=section_id,
+                course_id=course_id,
             ))
 
     await db.commit()

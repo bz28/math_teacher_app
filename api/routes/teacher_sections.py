@@ -176,7 +176,25 @@ async def invite_student(
         )).scalar_one_or_none()
         if already_enrolled:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student already in section")
-        db.add(SectionEnrollment(section_id=section_id, student_id=existing_user.id))
+        # Block if the student is in a different section of this same course.
+        other_section = (await db.execute(
+            select(Section.name)
+            .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+            .where(
+                SectionEnrollment.student_id == existing_user.id,
+                SectionEnrollment.course_id == course_id,
+            )
+        )).scalar_one_or_none()
+        if other_section:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Student is already enrolled in {other_section} for this class.",
+            )
+        db.add(SectionEnrollment(
+            section_id=section_id,
+            course_id=course_id,
+            student_id=existing_user.id,
+        ))
         _stamp_school_id(existing_user, course)
         try:
             await db.commit()
@@ -358,7 +376,27 @@ async def join_section(
     )).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already in this section")
-    db.add(SectionEnrollment(section_id=section.id, student_id=current_user.user_id))
+    # One enrollment per (student, course) — a student who's already in
+    # another section of this course can't join a second one. Gives a
+    # cleaner error than hitting the DB unique constraint.
+    other_section = (await db.execute(
+        select(Section.name)
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .where(
+            SectionEnrollment.student_id == current_user.user_id,
+            SectionEnrollment.course_id == section.course_id,
+        )
+    )).scalar_one_or_none()
+    if other_section:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"You're already enrolled in {other_section} for this class.",
+        )
+    db.add(SectionEnrollment(
+        section_id=section.id,
+        course_id=section.course_id,
+        student_id=current_user.user_id,
+    ))
 
     # Stamp school_id on the joining user (if not already set) so the
     # frontend role gate routes them to /school/student. Never overwrite
