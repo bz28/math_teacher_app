@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Integer, case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from api.core.integrity_pipeline import (
 from api.core.integrity_pipeline import (
     STATUS_SKIPPED_UNREADABLE as INTEGRITY_SKIPPED,
 )
+from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -24,6 +25,7 @@ from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
 )
+from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
@@ -119,6 +121,13 @@ class UpdateAssignmentRequest(BaseModel):
     # passing an empty dict (mirrors the due_at pattern).
     rubric: dict[str, Any] | None = None
     clear_rubric: bool = False
+    # Per-HW practice-generation overrides. None = leave unchanged.
+    # Pass explicit bool / int to override the teacher default for
+    # this HW; clear_* to revert to the teacher default (null column).
+    auto_generate_practice_on_publish: bool | None = None
+    clear_auto_generate_practice_on_publish: bool = False
+    default_practice_count: int | None = None
+    clear_default_practice_count: bool = False
 
     @field_validator("unit_ids")
     @classmethod
@@ -312,6 +321,11 @@ def assignment_to_dict(
         "submitted": stats["submitted"],
         "graded": stats["graded"],
         "avg_score": stats["avg_score"],
+        # Per-HW practice-gen overrides. Null means "inherit the
+        # teacher's default" — the frontend resolves the effective
+        # value by combining this with /teacher/preferences.
+        "auto_generate_practice_on_publish": a.auto_generate_practice_on_publish,
+        "default_practice_count": a.default_practice_count,
         "created_at": a.created_at.isoformat(),
     }
 
@@ -507,6 +521,20 @@ async def update_assignment(
     elif body.rubric is not None:
         a.rubric = body.rubric
 
+    if body.clear_auto_generate_practice_on_publish:
+        a.auto_generate_practice_on_publish = None
+    elif body.auto_generate_practice_on_publish is not None:
+        a.auto_generate_practice_on_publish = body.auto_generate_practice_on_publish
+    if body.clear_default_practice_count:
+        a.default_practice_count = None
+    elif body.default_practice_count is not None:
+        if not 1 <= body.default_practice_count <= 20:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="default_practice_count must be between 1 and 20",
+            )
+        a.default_practice_count = body.default_practice_count
+
     await db.commit()
     return {"status": "ok"}
 
@@ -596,7 +624,96 @@ async def publish_assignment(
     await db.flush()
     await recompute_bank_locks(db, a.course_id)
     await db.commit()
+
+    # Auto-generate practice variations after publish if the teacher
+    # hasn't opted out. Per-HW override wins over teacher default.
+    # Fires per-primary in the background — returns immediately.
+    await _schedule_auto_practice(db, a, current_user.user_id)
+
     return {"status": "ok"}
+
+
+async def _schedule_auto_practice(
+    db: AsyncSession, a: Assignment, teacher_id: uuid.UUID,
+) -> list[uuid.UUID]:
+    """Enqueue generate-similar jobs for every approved primary in the
+    HW, honoring the teacher + per-HW auto-gen settings. Returns the
+    list of scheduled job ids (empty when auto-gen is off or nothing
+    to do).
+
+    Called automatically from publish and manually via the Practice
+    tab's "Generate missing practice" action. Idempotent-ish: it does
+    NOT check existing variation counts here — that's the caller's
+    job for top-up semantics. The publish path always fires exactly
+    `count` per problem.
+    """
+    teacher = (await db.execute(
+        select(User).where(User.id == teacher_id)
+    )).scalar_one()
+    resolved_on = (
+        a.auto_generate_practice_on_publish
+        if a.auto_generate_practice_on_publish is not None
+        else teacher.auto_generate_practice_on_publish
+    )
+    if not resolved_on:
+        return []
+    count = (
+        a.default_practice_count
+        if a.default_practice_count is not None
+        else teacher.default_practice_count
+    )
+    return await _fire_generate_similar_for_problems(
+        db, a, teacher_id, count=count, parent_ids=None,
+    )
+
+
+async def _fire_generate_similar_for_problems(
+    db: AsyncSession,
+    a: Assignment,
+    teacher_id: uuid.UUID,
+    count: int,
+    parent_ids: list[uuid.UUID] | None,
+) -> list[uuid.UUID]:
+    """Enqueue one generate-similar job per approved primary. If
+    `parent_ids` is None, fires for every approved primary in the HW.
+    Caller must have already verified auto-gen is on when relevant."""
+    primary_ids = [uuid.UUID(p) for p in problem_ids_in_content(a.content)]
+    if parent_ids is not None:
+        allowed = set(primary_ids)
+        primary_ids = [pid for pid in parent_ids if pid in allowed]
+    if not primary_ids:
+        return []
+    # Only approved root questions can seed generate-similar (matches
+    # the invariant in the generate-similar route).
+    parents = (await db.execute(
+        select(QuestionBankItem).where(
+            QuestionBankItem.id.in_(primary_ids),
+            QuestionBankItem.status == "approved",
+            QuestionBankItem.parent_question_id.is_(None),
+        )
+    )).scalars().all()
+    job_ids: list[uuid.UUID] = []
+    for parent in parents:
+        job = QuestionBankGenerationJob(
+            course_id=parent.course_id,
+            unit_id=parent.unit_id,
+            originating_assignment_id=parent.originating_assignment_id,
+            created_by_id=teacher_id,
+            status="queued",
+            requested_count=count,
+            difficulty="mixed",
+            constraint=None,
+            source_doc_ids=parent.source_doc_ids,
+            parent_question_id=parent.id,
+        )
+        db.add(job)
+        await db.flush()
+        job_ids.append(job.id)
+    if job_ids:
+        await db.commit()
+        for jid in job_ids:
+            schedule_generation_job(jid)
+    return job_ids
 
 
 @router.post("/assignments/{assignment_id}/unpublish")
@@ -1278,4 +1395,93 @@ async def get_submission_detail(
         grade_published_at=grade.grade_published_at if grade else None,
     )
 
+
+# ── Practice-variation management ──
+
+
+class PracticeTopUpRequest(BaseModel):
+    # Target pool size per primary. Any primary with fewer than this
+    # many (approved + pending) variations gets a job to fill the gap.
+    target_count: int = Field(ge=1, le=20)
+    # If given, restrict to just these primary bank item ids. None =
+    # every approved primary in the HW.
+    parent_ids: list[uuid.UUID] | None = None
+
+
+class PracticeTopUpResponse(BaseModel):
+    scheduled: list[str]  # job ids just kicked off
+    skipped: list[str]    # primary ids already at or above target
+    target_count: int
+
+
+@router.post("/assignments/{assignment_id}/practice/top-up")
+async def top_up_practice(
+    assignment_id: uuid.UUID,
+    body: PracticeTopUpRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> PracticeTopUpResponse:
+    """Fill each primary's practice pool up to `target_count`.
+
+    For every approved primary in the HW (optionally restricted to
+    `parent_ids`), count approved + pending variations; if below
+    target, schedule one generate-similar job for the missing count.
+    Returns the list of scheduled job ids so the frontend can poll.
+    """
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    primary_ids = [uuid.UUID(p) for p in problem_ids_in_content(a.content)]
+    if body.parent_ids is not None:
+        allowed = set(primary_ids)
+        primary_ids = [pid for pid in body.parent_ids if pid in allowed]
+    if not primary_ids:
+        return PracticeTopUpResponse(
+            scheduled=[], skipped=[], target_count=body.target_count,
+        )
+
+    # Current approved + pending counts per primary (both live pools).
+    count_rows = (await db.execute(
+        select(
+            QuestionBankItem.parent_question_id,
+            func.count(QuestionBankItem.id),
+        )
+        .where(
+            QuestionBankItem.parent_question_id.in_(primary_ids),
+            QuestionBankItem.status.in_(("approved", "pending")),
+        )
+        .group_by(QuestionBankItem.parent_question_id)
+    )).all()
+    counts: dict[uuid.UUID, int] = {pid: 0 for pid in primary_ids}
+    for pid, n in count_rows:
+        counts[pid] = int(n)
+
+    # Also skip primaries that already have an in-flight job — prevents
+    # double-spend when the teacher mashes the button.
+    inflight_rows = (await db.execute(
+        select(QuestionBankGenerationJob.parent_question_id)
+        .where(
+            QuestionBankGenerationJob.parent_question_id.in_(primary_ids),
+            QuestionBankGenerationJob.status.in_(("queued", "running")),
+        )
+    )).scalars().all()
+    inflight = set(inflight_rows)
+
+    scheduled: list[str] = []
+    skipped: list[str] = []
+    for pid in primary_ids:
+        needed = body.target_count - counts[pid]
+        if needed <= 0 or pid in inflight:
+            skipped.append(str(pid))
+            continue
+        # Fire one job per primary with the exact delta needed.
+        jobs = await _fire_generate_similar_for_problems(
+            db, a, current_user.user_id,
+            count=needed, parent_ids=[pid],
+        )
+        for jid in jobs:
+            scheduled.append(str(jid))
+    return PracticeTopUpResponse(
+        scheduled=scheduled,
+        skipped=skipped,
+        target_count=body.target_count,
+    )
 
