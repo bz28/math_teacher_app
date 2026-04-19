@@ -264,7 +264,11 @@ async def world() -> dict[str, Any]:
         s.add(section)
         await s.flush()
 
-        s.add(SectionEnrollment(section_id=section.id, student_id=student.id))
+        s.add(SectionEnrollment(
+            section_id=section.id,
+            course_id=course.id,
+            student_id=student.id,
+        ))
 
         # Assignment is created first so bank items can back-reference it
         # via originating_assignment_id (NOT NULL since aq1000034). The
