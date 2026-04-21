@@ -209,11 +209,20 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     db.add(user)
     await db.flush()
 
-    if section_invite is not None:
-        db.add(SectionEnrollment(section_id=section_invite.section_id, student_id=user.id))
+    # Brand-new user, so no pre-check for duplicate course enrollment.
+    if section_invite is not None and section_course is not None:
+        db.add(SectionEnrollment(
+            section_id=section_invite.section_id,
+            course_id=section_course.id,
+            student_id=user.id,
+        ))
         section_invite.status = "accepted"
     if join_section_obj is not None:
-        db.add(SectionEnrollment(section_id=join_section_obj.id, student_id=user.id))
+        db.add(SectionEnrollment(
+            section_id=join_section_obj.id,
+            course_id=join_section_obj.course_id,
+            student_id=user.id,
+        ))
 
     await db.commit()
     await db.refresh(user)
@@ -251,7 +260,25 @@ async def claim_section_invite(
         )
     )).scalar_one_or_none()
     if not already_enrolled:
-        db.add(SectionEnrollment(section_id=invite.section_id, student_id=user.id))
+        # Block if the student is in a different section of this course.
+        other_section = (await db.execute(
+            select(Section.name)
+            .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+            .where(
+                SectionEnrollment.student_id == user.id,
+                SectionEnrollment.course_id == course.id,
+            )
+        )).scalar_one_or_none()
+        if other_section:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"You're already enrolled in {other_section} for this class.",
+            )
+        db.add(SectionEnrollment(
+            section_id=invite.section_id,
+            course_id=course.id,
+            student_id=user.id,
+        ))
     if user.school_id is None and course is not None and course.school_id is not None:
         user.school_id = course.school_id
     invite.status = "accepted"

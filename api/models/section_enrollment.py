@@ -17,6 +17,14 @@ class SectionEnrollment(Base):
     section_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"), nullable=False, index=True,
     )
+    # Denormalized mirror of `sections.course_id`. Enforces one
+    # enrollment per (student, course) at the DB level — Postgres
+    # can't reference another table from a unique index, and a
+    # section's course doesn't change, so the mirror stays in sync
+    # trivially. Writers must set this alongside section_id.
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False,
+    )
     student_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True,
     )
@@ -24,4 +32,5 @@ class SectionEnrollment(Base):
 
     __table_args__ = (
         UniqueConstraint("section_id", "student_id", name="uq_section_student"),
+        UniqueConstraint("student_id", "course_id", name="uq_section_enrollments_student_course"),
     )
