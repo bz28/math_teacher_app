@@ -18,6 +18,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { getOfferings, purchasePackage, restorePurchases } from "../services/revenuecat";
 import { redeemPromoCode } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
+import { LEGAL_URLS } from "../constants/legal";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 interface PaywallProps {
@@ -64,9 +65,6 @@ const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Get AI-powered grading on your work",
   },
 };
-
-const TERMS_URL = "https://veradicai.com/terms";
-const PRIVACY_URL = "https://veradicai.com/privacy";
 
 export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }: PaywallProps) {
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("annual");
@@ -287,11 +285,12 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           <Text style={styles.noChargeNote}>You won't be charged today</Text>
         )}
 
-        {/* Auto-renewal disclosure (Apple Guideline 3.1.2) */}
+        {/* Auto-renewal disclosure (Apple Guideline 3.1.2). Uses trialText
+            verbatim so we don't assume day/week/month unit or singular/plural. */}
         {!loadingOfferings && selectedPlanOption && (
           <Text style={styles.renewalDisclosure}>
             {selectedPlanOption.trialText
-              ? `Free for ${selectedPlanOption.trialText.replace("-day free trial", " days")}, then ${selectedPlanOption.priceText}. `
+              ? `${selectedPlanOption.trialText}, then ${selectedPlanOption.priceText}. `
               : `${selectedPlanOption.priceText}. `}
             Subscription auto-renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your App Store account settings.
           </Text>
@@ -336,11 +335,11 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 
         {/* Legal */}
         <View style={styles.legalRow}>
-          <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
+          <TouchableOpacity onPress={() => Linking.openURL(LEGAL_URLS.terms)}>
             <Text style={styles.legalText}>Terms of Use</Text>
           </TouchableOpacity>
           <Text style={styles.legalDot}>{" · "}</Text>
-          <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
+          <TouchableOpacity onPress={() => Linking.openURL(LEGAL_URLS.privacy)}>
             <Text style={styles.legalText}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>

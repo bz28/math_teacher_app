@@ -21,6 +21,7 @@ import { PaywallScreen } from "./PaywallScreen";
 import { ThemeToggle } from "./ThemeToggle";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
+import { LEGAL_URLS } from "../constants/legal";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface AccountScreenProps {
@@ -232,15 +233,15 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
 
         {/* Legal links */}
         <View style={styles.legalRow}>
-          <AnimatedPressable onPress={() => Linking.openURL("https://veradicai.com/privacy")}>
+          <AnimatedPressable onPress={() => Linking.openURL(LEGAL_URLS.privacy)}>
             <Text style={styles.legalLink}>Privacy Policy</Text>
           </AnimatedPressable>
           <Text style={styles.legalDot}>·</Text>
-          <AnimatedPressable onPress={() => Linking.openURL("https://veradicai.com/terms")}>
+          <AnimatedPressable onPress={() => Linking.openURL(LEGAL_URLS.terms)}>
             <Text style={styles.legalLink}>Terms of Service</Text>
           </AnimatedPressable>
           <Text style={styles.legalDot}>·</Text>
-          <AnimatedPressable onPress={() => Linking.openURL("https://veradicai.com/support")}>
+          <AnimatedPressable onPress={() => Linking.openURL(LEGAL_URLS.support)}>
             <Text style={styles.legalLink}>Support</Text>
           </AnimatedPressable>
         </View>
@@ -283,11 +284,11 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
               Veradic is a supplementary learning tool and is not a substitute for professional instruction.
             </Text>
             <AnimatedPressable
-              style={[styles.modalDeleteBtn, { backgroundColor: colors.primary }]}
+              style={[styles.modalCtaBtn, { backgroundColor: colors.primary }]}
               onPress={() => setAboutAiVisible(false)}
               scaleDown={0.97}
             >
-              <Text style={styles.modalDeleteBtnText}>Got it</Text>
+              <Text style={styles.modalCtaBtnText}>Got it</Text>
             </AnimatedPressable>
           </View>
         </View>
@@ -327,7 +328,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
             )}
 
             <AnimatedPressable
-              style={[styles.modalDeleteBtn, deleteLoading && { opacity: 0.6 }]}
+              style={[styles.modalCtaBtn, { backgroundColor: colors.error }, deleteLoading && { opacity: 0.6 }]}
               onPress={handleConfirmDelete}
               scaleDown={0.97}
               disabled={deleteLoading}
@@ -335,7 +336,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
               {deleteLoading ? (
                 <ActivityIndicator color={colors.white} size="small" />
               ) : (
-                <Text style={styles.modalDeleteBtnText}>Delete My Account</Text>
+                <Text style={styles.modalCtaBtnText}>Delete My Account</Text>
               )}
             </AnimatedPressable>
 
@@ -660,14 +661,17 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     textAlign: "center",
     marginBottom: spacing.sm,
   },
-  modalDeleteBtn: {
-    backgroundColor: colors.error,
+  // Modal CTA — shared between the delete-confirmation modal (destructive,
+  // passes colors.error inline) and the About AI modal (info, passes
+  // colors.primary inline). Callers own the background color so the style
+  // stays semantically neutral.
+  modalCtaBtn: {
     borderRadius: radii.md,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: spacing.md,
   },
-  modalDeleteBtnText: {
+  modalCtaBtnText: {
     ...typography.button,
     color: colors.white,
   },
