@@ -15,6 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { Coachmark } from "./Coachmark";
 import { CompletedCard } from "./CompletedCard";
 import { MockTestScreen } from "./MockTestScreen";
 import { MockTestSummary } from "./MockTestSummary";
@@ -31,6 +32,7 @@ import { UpgradePrompt } from "./UpgradePrompt";
 import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { useOnboardingFlags } from "../stores/onboardingFlags";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 import { makeSessionScreenStyles } from "./sessionScreenStyles";
@@ -73,6 +75,9 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const chatsRemaining = useEntitlementStore((s) => s.chatsRemaining);
   const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
+  const onboardingLoaded = useOnboardingFlags((s) => s.loaded);
+  const hasSeenChatCoachmark = useOnboardingFlags((s) => s.hasSeenChatCoachmark);
+  const markSeenChatCoachmark = useOnboardingFlags((s) => s.markSeenChatCoachmark);
   const { show: showUpgrade, promptProps, paywallVisible: chatPaywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
   const isBatchMode = !!practiceBatch;
@@ -89,6 +94,12 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }, [lastResponse]);
+
+  // Dismiss the chat coachmark the first time the user engages with Ask —
+  // they've discovered the feature, no need to keep pointing.
+  useEffect(() => {
+    if (askMode && !hasSeenChatCoachmark) markSeenChatCoachmark();
+  }, [askMode, hasSeenChatCoachmark, markSeenChatCoachmark]);
 
   // Auto-scroll: consolidated trigger for every state change that should
   // re-anchor the scroll view at the bottom. Covers:
@@ -321,6 +332,18 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       {/* Sticky bottom action area for Learn mode */}
       {!isCompleted && (
         <View style={readerStyles.actionBar}>
+          {/* First-session hint near the Ask button. Dismisses on tap or the
+              first time the user switches into askMode. */}
+          {!askMode && onboardingLoaded && !hasSeenChatCoachmark && (
+            <View style={readerStyles.chatCoachmarkWrap}>
+              <Coachmark
+                visible
+                text="Stuck on a step? Tap Ask to chat with Veradic about it."
+                onDismiss={() => markSeenChatCoachmark()}
+                arrow="down"
+              />
+            </View>
+          )}
           {askMode ? (
             <View style={readerStyles.askInputRow}>
               <TextInput
@@ -522,6 +545,9 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,
+  },
+  chatCoachmarkWrap: {
+    marginBottom: spacing.md,
   },
   actionRow: {
     flexDirection: "row",

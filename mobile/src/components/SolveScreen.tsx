@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Coachmark } from "./Coachmark";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
@@ -27,10 +28,22 @@ import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { useOnboardingFlags } from "../stores/onboardingFlags";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 const MAX_PROBLEMS = 10;
+const CHIP_PREVIEW_LIMIT = 30;
+const SAMPLE_PROBLEM = "2x + 5 = 13";
+
+// Queue chips show the problem text inline. Long word problems turn into
+// awkward single-line ellipsis that cuts mid-word; hard-truncating before
+// render keeps the pill compact and readable.
+function truncateForChip(text: string): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= CHIP_PREVIEW_LIMIT) return oneLine;
+  return oneLine.slice(0, CHIP_PREVIEW_LIMIT).trimEnd() + "…";
+}
 
 type Mode = "learn" | "mock_test";
 
@@ -80,6 +93,12 @@ export function SolveScreen({
 
   const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
+  // First-use onboarding: pre-fill a sample problem and show a one-time hint.
+  const onboardingLoaded = useOnboardingFlags((s) => s.loaded);
+  const hasCompletedFirstProblem = useOnboardingFlags((s) => s.hasCompletedFirstProblem);
+  const markCompletedFirstProblem = useOnboardingFlags((s) => s.markCompletedFirstProblem);
+  const didPrefillRef = useRef(false);
+
   // Subscribe to the raw used/limit primitives (NOT the sessionsRemaining /
   // scansRemaining function selectors — those return stable refs that never
   // fire re-renders, leaving the "X of Y left today" copy stale after
@@ -95,6 +114,16 @@ export function SolveScreen({
   const scansLeft = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
 
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
+
+  // Pre-fill the sample problem once on first launch when the user has no
+  // existing state. Guarded by didPrefillRef so re-renders don't overwrite
+  // the user if they clear the input.
+  useEffect(() => {
+    if (!onboardingLoaded || hasCompletedFirstProblem || didPrefillRef.current) return;
+    if (input !== "" || problemQueue.length > 0) return;
+    didPrefillRef.current = true;
+    setInput(SAMPLE_PROBLEM);
+  }, [onboardingLoaded, hasCompletedFirstProblem, input, problemQueue.length]);
 
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsLeft);
@@ -170,6 +199,7 @@ export function SolveScreen({
     setInput("");
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!hasCompletedFirstProblem) markCompletedFirstProblem();
     inputRef.current?.focus();
   };
 
@@ -209,6 +239,7 @@ export function SolveScreen({
     }
     setQuotaConfirm(false);
 
+    if (!hasCompletedFirstProblem) markCompletedFirstProblem();
     onSessionStart();
 
     try {
@@ -350,6 +381,16 @@ export function SolveScreen({
             {mode === "mock_test" ? "What do you want to test?" : "What do you want to learn?"}
           </Text>
 
+          {/* First-use hint. Dismissed on tap or as soon as the user adds
+              any problem (the mark-completed effect hides it). */}
+          <View style={styles.coachmarkWrap}>
+            <Coachmark
+              visible={onboardingLoaded && !hasCompletedFirstProblem}
+              text="Welcome to Veradic! We added a sample problem — tap the + to add it, then Solve to see how Learn Mode works."
+              onDismiss={() => markCompletedFirstProblem()}
+            />
+          </View>
+
           {/* Mock Test config — shown at the TOP when in test mode */}
           {mode === "mock_test" && (
             <MockTestConfig
@@ -470,7 +511,7 @@ export function SolveScreen({
                         numberOfLines={1}
                         style={{ ...typography.label, color: theme.primary, fontSize: 13 }}
                       >
-                        {p}
+                        {truncateForChip(p)}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -656,6 +697,9 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.text,
     lineHeight: 28,
     marginBottom: spacing.lg,
+  },
+  coachmarkWrap: {
+    marginBottom: spacing.md,
   },
 
   // Snap card — horizontal row with icon + text, larger to fill more page
