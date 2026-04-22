@@ -1154,24 +1154,20 @@ function ProblemGradeRow({
     onChange("partial", safe);
   };
 
-  // Student-facing feedback. Default is the AI's reasoning when
-  // present — teachers ship that as-is unless they want to edit. Same
-  // local-buffer pattern as the partial input: `null` means "show the
-  // external value", a string means "user is typing". Persisted on
-  // blur; the parent's setProblemFeedback dedupes no-op saves.
+  // Student-facing feedback. When an entry exists we honor its value
+  // verbatim — including explicit null, which means "teacher cleared
+  // this on purpose". We only fall back to the AI's reasoning when
+  // there's no entry at all (disabled state, below). Same local-buffer
+  // pattern as the partial input: `null` means "show the external
+  // value", a string means "user is typing". Persisted on blur; the
+  // parent's setProblemFeedback dedupes no-op saves.
   const [feedbackBuffer, setFeedbackBuffer] = useState<string | null>(null);
   const externalFeedback =
-    entry?.feedback ?? aiGrade?.reasoning ?? "";
+    entry === null
+      ? aiGrade?.reasoning ?? ""
+      : entry.feedback ?? "";
   const feedbackDraft = feedbackBuffer ?? externalFeedback;
   const feedbackDisabled = entry === null;
-  // True when what the teacher sees in the textarea is still the AI's
-  // reasoning verbatim — so we can flag it as a draft the teacher
-  // should review/accept before publishing. Flips to false the moment
-  // the teacher types anything that diverges.
-  const isAiDraft =
-    !feedbackDisabled
-    && aiGrade?.reasoning != null
-    && feedbackDraft === aiGrade.reasoning;
 
   const commitFeedback = () => {
     // Always commit the displayed value — that way an un-edited blur
@@ -1335,23 +1331,12 @@ function ProblemGradeRow({
       )}
 
       {/* Per-problem feedback, shown to the student once the grade is
-          published. Defaults to the AI's reasoning so teachers who trust
-          the AI ship rich feedback with one extra click (publish). */}
+          published. Pre-filled with the AI's reasoning when present so
+          teachers can accept, edit, or clear — no UI fanfare either
+          way. The published text is the teacher's voice to the student. */}
       <div className="mt-3">
-        <label className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-          <span>
-            Feedback
-            <span className="font-normal normal-case tracking-normal text-text-muted/80"> · shown to student when published</span>
-          </span>
-          {isAiDraft && (
-            <span
-              className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary"
-              title="The AI drafted this — edit if you want to change what the student sees, or publish as-is."
-            >
-              <span aria-hidden>🤖</span>
-              AI draft
-            </span>
-          )}
+        <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
         </label>
         <textarea
           // When disabled (no grade yet), render empty so the
