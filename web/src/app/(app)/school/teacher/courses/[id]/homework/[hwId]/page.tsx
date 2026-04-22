@@ -748,12 +748,23 @@ export default function HomeworkDetailPage({
             )}
           </section>
 
+          {/* Grading setup — prominent card right below Problems so
+              teachers see and use it. Placing it here (above
+              Configuration) makes the rubric a first-class step in
+              homework authoring rather than an optional footnote. */}
+          <GradingSetupCard
+            rubric={hw.rubric}
+            saveState={saveStates.rubric}
+            saveError={saveErrors.rubric}
+            onChange={onChangeRubric}
+          />
+
           {/* Configuration — collapsed accordion. Auto-expands on a
               fresh HW with no problems so teachers notice the fields;
               collapses once they're set. */}
-          <div className="mt-4 space-y-3">
+          <div className="mt-4">
             <CollapsibleSection
-              label="Settings"
+              label="Configuration"
               summary={configSummary(hw)}
               defaultOpen={problems.length === 0}
             >
@@ -770,13 +781,6 @@ export default function HomeworkDetailPage({
                 onChangeSections={onChangeSections}
               />
             </CollapsibleSection>
-
-            <GradingSetupCard
-              rubric={hw.rubric}
-              saveState={saveStates.rubric}
-              saveError={saveErrors.rubric}
-              onChange={onChangeRubric}
-            />
           </div>
 
           {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
