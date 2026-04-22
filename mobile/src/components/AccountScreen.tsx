@@ -75,6 +75,9 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
   const [deleteLoading, setDeleteLoading] = useState(false);
   const shakeAnim = useRef(new RNAnimated.Value(0)).current;
 
+  // About AI disclosure (Apple Guideline 4.1 — visible AI disclosure)
+  const [aboutAiVisible, setAboutAiVisible] = useState(false);
+
   const initial = (name ?? "?")[0].toUpperCase();
 
   const handleManageSubscription = () => {
@@ -218,6 +221,30 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           <ThemeToggle />
         </View>
 
+        {/* About AI */}
+        <AnimatedPressable style={styles.aboutAiRow} onPress={() => setAboutAiVisible(true)} scaleDown={0.98}>
+          <View style={styles.aboutAiLeft}>
+            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+            <Text style={styles.aboutAiLabel}>About Veradic AI</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </AnimatedPressable>
+
+        {/* Legal links */}
+        <View style={styles.legalRow}>
+          <AnimatedPressable onPress={() => Linking.openURL("https://veradicai.com/privacy")}>
+            <Text style={styles.legalLink}>Privacy Policy</Text>
+          </AnimatedPressable>
+          <Text style={styles.legalDot}>·</Text>
+          <AnimatedPressable onPress={() => Linking.openURL("https://veradicai.com/terms")}>
+            <Text style={styles.legalLink}>Terms of Service</Text>
+          </AnimatedPressable>
+          <Text style={styles.legalDot}>·</Text>
+          <AnimatedPressable onPress={() => Linking.openURL("https://veradicai.com/support")}>
+            <Text style={styles.legalLink}>Support</Text>
+          </AnimatedPressable>
+        </View>
+
         {/* Delete Account */}
         <AnimatedPressable style={styles.deleteButton} onPress={handleDeleteAccount} scaleDown={0.97}>
           <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
@@ -236,6 +263,35 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
         onClose={() => setPaywallVisible(false)}
         onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
       />
+
+      {/* About Veradic AI Modal */}
+      <Modal
+        visible={aboutAiVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAboutAiVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, shadows.lg]}>
+            <View style={[styles.modalAccent, { backgroundColor: colors.primary }]} />
+            <Text style={styles.modalTitle}>About Veradic AI</Text>
+            <Text style={styles.aboutAiBody}>
+              Veradic uses Anthropic's Claude AI to generate step-by-step tutoring, practice problems, and feedback on your handwritten work.
+              {"\n\n"}
+              AI responses can sometimes be wrong or incomplete. Always double-check important answers with your teacher or textbook, especially before a graded assignment or exam.
+              {"\n\n"}
+              Veradic is a supplementary learning tool and is not a substitute for professional instruction.
+            </Text>
+            <AnimatedPressable
+              style={[styles.modalDeleteBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setAboutAiVisible(false)}
+              scaleDown={0.97}
+            >
+              <Text style={styles.modalDeleteBtnText}>Got it</Text>
+            </AnimatedPressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Delete Account Password Modal */}
       <Modal
@@ -472,6 +528,49 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     fontSize: 14,
+  },
+  aboutAiRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  aboutAiLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  aboutAiLabel: {
+    ...typography.body,
+    color: colors.text,
+    fontSize: 14,
+  },
+  aboutAiBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  legalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  legalLink: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textDecorationLine: "underline",
+  },
+  legalDot: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   deleteButton: {
     flexDirection: "row",
