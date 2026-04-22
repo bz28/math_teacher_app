@@ -10,7 +10,8 @@ import { GradingPreview } from "@/components/school/teacher/_pieces/grading-prev
 
 // Default rubric text shown pre-filled in the two primary fields.
 //
-// KEEP IN SYNC with api/core/grading_ai.py::_build_rubric_block defaults.
+// KEEP IN SYNC with the backend fallbacks in
+// api/core/grading_ai.py::_DEFAULT_FULL_CREDIT / _DEFAULT_PARTIAL_CREDIT.
 // When the teacher doesn't edit, the stored rubric stays null and the
 // backend falls back to this same text — so what the teacher sees here
 // is exactly what the AI grader applies.

@@ -73,27 +73,42 @@ partial credit.
 - Keep reasoning concise (1-2 sentences per problem)."""
 
 
+# Default rubric strings. KEEP IN SYNC with the frontend pre-fill in
+# web/src/components/school/teacher/_pieces/grading-setup-card.tsx
+# (GRADING_SETUP_DEFAULTS). When the teacher doesn't author a rubric,
+# the frontend shows these strings in the textareas and the backend
+# grades against them — so what the teacher sees is what the AI
+# applies. If you update one side, update the other.
+_DEFAULT_FULL_CREDIT = (
+    "Correct final answer. Mathematically equivalent forms "
+    "(e.g. 1/2 and 0.5) count as correct. Work shown when the "
+    "problem asks for it."
+)
+_DEFAULT_PARTIAL_CREDIT = (
+    "Right approach with an arithmetic or sign error — typically "
+    "around 60%. Multiple errors or unfinished work — around 30%."
+)
+
+
 def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
     """Format the teacher-authored rubric as labeled fields the model can
     reference by name. Labels match the rubric-application instructions in
-    the system prompt so the model can cite them in reasoning."""
-    if not rubric:
-        return (
-            "No rubric provided. Use default criteria:\n"
-            '- "Full credit": correct final answer\n'
-            '- "Partial credit": right approach but arithmetic/sign error\n'
-            '- "Zero": wrong answer or no attempt'
-        )
-    parts: list[str] = []
-    if rubric.get("full_credit"):
-        parts.append(f'"Full credit": {rubric["full_credit"]}')
-    if rubric.get("partial_credit"):
-        parts.append(f'"Partial credit": {rubric["partial_credit"]}')
-    if rubric.get("common_mistakes"):
+    the system prompt so the model can cite them in reasoning. Any field
+    the teacher left unset falls back to the default string so the model
+    always sees complete criteria."""
+    full_credit = (rubric or {}).get("full_credit") or _DEFAULT_FULL_CREDIT
+    partial_credit = (
+        (rubric or {}).get("partial_credit") or _DEFAULT_PARTIAL_CREDIT
+    )
+    parts: list[str] = [
+        f'"Full credit": {full_credit}',
+        f'"Partial credit": {partial_credit}',
+    ]
+    if rubric and rubric.get("common_mistakes"):
         parts.append(f'"Common mistakes": {rubric["common_mistakes"]}')
-    if rubric.get("notes"):
+    if rubric and rubric.get("notes"):
         parts.append(f'"Notes": {rubric["notes"]}')
-    return "\n".join(parts) if parts else "No specific criteria. Use your best judgment."
+    return "\n".join(parts)
 
 
 def _build_user_message(
