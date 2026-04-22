@@ -48,8 +48,12 @@ from api.services.bank import problem_ids_in_content
 
 logger = logging.getLogger(__name__)
 
-# Fewer problems, more depth (was 5 in the quiz-style pipeline).
-MAX_SAMPLE = 3
+# V1 picks a single probe problem (the most differentiation-valuable
+# one the student attempted). The schema + pipeline still support up
+# to 3 sampled problems so a v2 escalation path ("expand to a second
+# problem when signal is mixed") can land without another schema
+# change.
+MAX_SAMPLE = 1
 
 # How many student turns (total across the conversation) before the
 # server force-finalizes the check. 9 is a soft nudge; 10 is the hard
@@ -143,6 +147,70 @@ ROLE_TOOL_CALL = "tool_call"
 ROLE_TOOL_RESULT = "tool_result"
 
 
+# ── Adaptive probe selection ────────────────────────────────────────
+
+# Difficulty tiers from the QuestionBankItem.difficulty column, ranked
+# so higher = harder = better probe target. Anything unrecognised
+# falls back to "medium" so a stray tag value doesn't crash selection.
+_DIFFICULTY_RANK: dict[str, int] = {
+    "easy": 0,
+    "medium": 1,
+    "hard": 2,
+}
+
+
+def _differentiation_score(item: QuestionBankItem) -> tuple[int, int]:
+    """Higher score = better probe target.
+
+    Primary: difficulty tier — hard > medium > easy. This is the
+    authoritative signal for "how hard is this problem" (set by the
+    teacher or the generating AI).
+
+    Tiebreak within tier: count of canonical solution_steps — more
+    steps = more decision points for the agent to probe ("why this
+    step?"). NOT a difficulty measure — a long arithmetic problem
+    has many steps but isn't conceptually hard. Only used after
+    difficulty ties.
+    """
+    difficulty_rank = _DIFFICULTY_RANK.get(
+        (item.difficulty or "medium").lower(), 1,
+    )
+    steps_count = len(item.solution_steps or [])
+    return (difficulty_rank, steps_count)
+
+
+def select_probe_problems(
+    items_by_id: dict[uuid.UUID, QuestionBankItem],
+    candidate_ids: list[uuid.UUID],
+    *,
+    max_picks: int = MAX_SAMPLE,
+) -> tuple[list[uuid.UUID], str]:
+    """Pick up to `max_picks` probe targets, ordered best-first.
+
+    v1 selection = highest differentiation value: rank by
+    `_differentiation_score`, pick the top `max_picks`. No correctness
+    filter (would require AI equivalence check pre-grading, which
+    doubles cost/latency for marginal benefit — the agent's rubric +
+    TUTOR_PIVOT disposition already handles the "student didn't get it"
+    case naturally). No anomaly/copy-smell detection (v2).
+
+    Returns (picked_ids_in_order, selection_reason). `candidate_ids`
+    is filtered through `items_by_id` so callers don't have to
+    pre-drop missing bank items.
+    """
+    candidates = [
+        items_by_id[bid] for bid in candidate_ids
+        if bid in items_by_id
+    ]
+    if not candidates:
+        return ([], SELECTION_REASON_HIGHEST_DIFFERENTIATION)
+    # max() gives the single best; sorted() + slice would let us
+    # return the top-N for a future multi-probe escalation path.
+    ranked = sorted(candidates, key=_differentiation_score, reverse=True)
+    picked = ranked[:max_picks]
+    return ([p.id for p in picked], SELECTION_REASON_HIGHEST_DIFFERENTIATION)
+
+
 # ── Pipeline start (called from submit_homework's background task) ──
 
 async def start_integrity_check(
@@ -200,30 +268,43 @@ async def start_integrity_check(
     if not primary_id_strs:
         return
 
-    sampled_strs = primary_id_strs[:MAX_SAMPLE]
-    sampled_uuids: list[uuid.UUID] = []
-    for s in sampled_strs:
+    # Parse every primary bank id into a candidate pool, then let the
+    # selection algorithm pick the best subset. Invalid UUIDs log and
+    # skip — a malformed assignment.content shouldn't wedge the check.
+    candidate_uuids: list[uuid.UUID] = []
+    for s in primary_id_strs:
         try:
-            sampled_uuids.append(uuid.UUID(str(s)))
+            candidate_uuids.append(uuid.UUID(str(s)))
         except (ValueError, TypeError):
             logger.warning(
                 "start_integrity_check: invalid bank id %r in assignment %s",
                 s, assignment.id,
             )
-    if not sampled_uuids:
+    if not candidate_uuids:
         return
 
-    # Hydrate picked problems in a single query.
+    # Hydrate candidates in one query so the selection algorithm can
+    # score by difficulty + solution_step count.
     items_by_id: dict[uuid.UUID, QuestionBankItem] = {}
     rows = (await db.execute(
-        select(QuestionBankItem).where(QuestionBankItem.id.in_(sampled_uuids))
+        select(QuestionBankItem).where(QuestionBankItem.id.in_(candidate_uuids))
     )).scalars().all()
     for it in rows:
         items_by_id[it.id] = it
 
+    picked_ids, selection_reason = select_probe_problems(
+        items_by_id, candidate_uuids,
+    )
+    if not picked_ids:
+        # Every primary id was deleted between publish and submit.
+        # Don't create a stuck row — just return and let the teacher
+        # handle the submission without an integrity trace.
+        return
+
     check = IntegrityCheckSubmission(
         submission_id=submission_id,
         status=STATUS_EXTRACTING,
+        probe_selection_reason=selection_reason,
     )
     db.add(check)
     await db.flush()
@@ -241,15 +322,14 @@ async def start_integrity_check(
             "Handwriting unreadable (confidence=%.2f) for submission %s",
             confidence, submission_id,
         )
-        for sample_position, bid in enumerate(sampled_uuids):
-            if bid not in items_by_id:
-                continue
+        for sample_position, bid in enumerate(picked_ids):
             db.add(IntegrityCheckProblem(
                 integrity_check_submission_id=check.id,
                 bank_item_id=bid,
                 sample_position=sample_position,
                 status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
                 student_work_extraction=extraction,
+                selected_reason=selection_reason,
             ))
         # Unreadable submissions: status carries the meaning, disposition
         # stays null. Teacher dashboard surfaces the skipped-unreadable
@@ -259,17 +339,14 @@ async def start_integrity_check(
         return
 
     problem_rows: list[IntegrityCheckProblem] = []
-    for sample_position, bid in enumerate(sampled_uuids):
-        item = items_by_id.get(bid)
-        if item is None:
-            # Picked problem was deleted between publish and submit.
-            continue
+    for sample_position, bid in enumerate(picked_ids):
         row = IntegrityCheckProblem(
             integrity_check_submission_id=check.id,
             bank_item_id=bid,
             sample_position=sample_position,
             status=PROBLEM_STATUS_PENDING,
             student_work_extraction=extraction,
+            selected_reason=selection_reason,
         )
         db.add(row)
         problem_rows.append(row)
