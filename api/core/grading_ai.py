@@ -155,13 +155,20 @@ async def grade_submission_with_ai(
     )
     user_message = _build_user_message(extraction, problems)
 
+    # Extended thinking lets the model reason through partial-credit
+    # calls, ambiguous extractions, and rubric judgments privately before
+    # committing to a grade. Budget must be < max_tokens (see
+    # llm_client._build_thinking_kwargs); 2048 thinking + 4096 response
+    # gives room for both. Pipeline runs in the background, so the 2-3x
+    # latency is not user-visible.
     result = await call_claude_json(
         system,
         user_message,
         LLMMode.AI_GRADING,
         tool_schema=AI_GRADING_SCHEMA,
         model=MODEL_REASON,
-        max_tokens=1024,
+        max_tokens=4096,
+        thinking_budget=2048,
         user_id=user_id,
     )
     return result
