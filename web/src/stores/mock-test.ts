@@ -94,16 +94,21 @@ const initialState = {
   error: null as string | null,
 };
 
+// Incremented on each startMockTest call so stale async continuations bail
+let _startGeneration = 0;
+
 export const useMockTestStore = create<MockTestState>((set, get, store) => ({
   ...initialState,
 
   async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true, difficulty: Difficulty = "same") {
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
+    const gen = ++_startGeneration;
     set({ phase: "loading", error: null });
     try {
       if (generateCount > 0) {
         // Phase 1: batch generate similar question texts (1 Claude call)
         const res = await practiceApi.generate({ problems, subject, difficulty });
+        if (gen !== _startGeneration) return; // cancelled or new exam started
         const questionTexts = res.problems.map((p) => p.question);
 
         // Phase 2: show exam immediately with placeholders, solve in parallel
@@ -112,6 +117,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           answer: "",
         }));
         const { id } = await sessionApi.createMockTest(problems[0], questionTexts, subject);
+        if (gen !== _startGeneration) return;
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
         set({ mockTest: mt });
 
@@ -147,6 +153,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           answer: "",
         }));
         const { id } = await sessionApi.createMockTest(problems[0], problems, subject);
+        if (gen !== _startGeneration) return;
 
         // Set mockTest with placeholders first so .then() handlers can find it
         const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
@@ -370,6 +377,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
   },
 
   reset() {
+    _startGeneration++;
     set(initialState);
   },
 }));

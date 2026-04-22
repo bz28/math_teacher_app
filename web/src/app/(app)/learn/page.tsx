@@ -84,13 +84,13 @@ function LearnPageContent() {
   const [difficulty, setDifficulty] = useState<Difficulty>("same");
   const [multipleChoice, setMultipleChoice] = useState(true);
 
-  const fromHistory = searchParams.get("from") === "history";
+  const keepQueue = searchParams.get("keep_queue") === "true" || searchParams.get("from") === "history";
   useEffect(() => {
     setSubject(subject);
     setSectionId(sectionId);
     document.documentElement.setAttribute("data-subject", subject);
-    // Don't clear queue if arriving from history selection
-    if (!fromHistory) setProblemQueue([]);
+    // Don't clear queue if arriving from history selection or mock test cancel
+    if (!keepQueue) setProblemQueue([]);
     // Refresh quota counts so remaining is accurate
     fetchEntitlements();
     return () => { document.documentElement.removeAttribute("data-subject"); };

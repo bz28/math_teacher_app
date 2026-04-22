@@ -106,7 +106,7 @@ export default function MockTestPage() {
         mockTest={mockTest}
         isTimed={mockTest.timeLimitSeconds !== null}
         onBegin={beginMockTest}
-        onCancel={() => { reset(); router.push("/learn"); }}
+        onCancel={() => router.push(`/learn?subject=${subject}&keep_queue=true`)}
       />
     );
   }
@@ -290,22 +290,16 @@ export default function MockTestPage() {
             <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&larr;</kbd>
             Previous
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              setMockTestIndex(
-                Math.min(
-                  mockTest.questions.length - 1,
-                  mockTest.currentIndex + 1,
-                ),
-              )
-            }
-            disabled={mockTest.currentIndex === mockTest.questions.length - 1}
-          >
-            Next
-            <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&rarr;</kbd>
-          </Button>
+          {mockTest.currentIndex < mockTest.questions.length - 1 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setMockTestIndex(mockTest.currentIndex + 1)}
+            >
+              Next
+              <kbd className="hidden rounded border border-border bg-input-bg px-1.5 py-0.5 font-mono text-[10px] text-text-muted sm:inline">&rarr;</kbd>
+            </Button>
+          )}
         </div>
       </Card>
       {UpgradeModal}

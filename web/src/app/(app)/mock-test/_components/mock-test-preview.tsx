@@ -56,7 +56,7 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Preparing answers…
+                Preparing exam…
               </span>
             )}
           </Button>
@@ -75,9 +75,11 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-extrabold text-text-primary">Your exam is ready</h1>
+        <h1 className="text-2xl font-extrabold text-text-primary">
+          {allSolved ? "Your exam is ready" : "Preparing your exam…"}
+        </h1>
         <p className="mt-1 text-sm text-text-muted">
-          {mockTest.questions.length} question{mockTest.questions.length !== 1 ? "s" : ""} · Review before you begin
+          {mockTest.questions.length} question{mockTest.questions.length !== 1 ? "s" : ""} · {allSolved ? "Review before you begin" : "Loading answer choices"}
         </p>
       </motion.div>
 
@@ -113,7 +115,7 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Preparing answers…
+              Preparing exam…
             </span>
           )}
         </Button>
