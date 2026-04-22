@@ -331,6 +331,10 @@ export default function HomeworkSectionReviewPage({
         problem_id: problemId,
         score_status: status,
         percent,
+        // Teacher click = manual override; no AI confidence applies.
+        // The AI's confidence lives on `ai_breakdown` and drives the
+        // "Low confidence" badge separately.
+        confidence: null,
         feedback: existing?.feedback ?? null,
       };
       const nextBreakdown = existing
