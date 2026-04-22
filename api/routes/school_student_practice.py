@@ -235,6 +235,18 @@ class StudentHomeworkProblem(BaseModel):
     approved_variation_count: int
 
 
+class StudentProblemFeedback(BaseModel):
+    """One per-problem row on the published-grade snapshot the student
+    sees. Shape mirrors the teacher-side SubmissionGrade.published_breakdown
+    minus fields the student doesn't need (student_answer — they already
+    know what they wrote; confidence — an internal AI-trust signal)."""
+
+    problem_id: str
+    score_status: Literal["full", "partial", "zero"]
+    percent: float
+    feedback: str | None
+
+
 class StudentHomeworkDetail(BaseModel):
     assignment_id: str
     title: str
@@ -245,14 +257,15 @@ class StudentHomeworkDetail(BaseModel):
     problems: list[StudentHomeworkProblem]
     submitted: bool
     submission_id: str | None
-    # Published-grade snapshot for the HW detail timeline. final_score
-    # is omitted (stays null) until grade_published_at is set — the
-    # student only sees the score after the teacher explicitly
-    # publishes. Breakdown / teacher_notes / ai_breakdown stay off
-    # this payload by design (v1 no feedback surfaces).
+    # Published-grade snapshot. All grade-related fields stay null until
+    # grade_published_at is set — the student sees anything only after
+    # the teacher explicitly publishes. `breakdown` uses the
+    # published_breakdown SNAPSHOT (not the live teacher draft), so mid-
+    # edit work never leaks.
     submitted_at: datetime | None = None
     final_score: float | None = None
     grade_published_at: datetime | None = None
+    breakdown: list[StudentProblemFeedback] | None = None
 
 
 class SubmitHomeworkRequest(BaseModel):
@@ -834,13 +847,22 @@ async def homework_detail(
         .limit(1)
     )).first()
 
-    # Published grade, if any. Only final_score + grade_published_at
-    # surface here — breakdown / notes / ai_breakdown are v2.
+    # Published grade + per-problem feedback, if any. Reads the
+    # published_* snapshot columns — students never see the live
+    # teacher draft, so mid-edit work on an already-published grade
+    # can't leak. feedback is the one student-facing column; other
+    # published fields (teacher_notes, ai_breakdown) stay off this
+    # payload.
     final_score: float | None = None
     grade_published_at: datetime | None = None
+    breakdown_out: list[StudentProblemFeedback] | None = None
     if sub is not None:
         grade = (await db.execute(
-            select(SubmissionGrade.final_score, SubmissionGrade.grade_published_at)
+            select(
+                SubmissionGrade.published_final_score,
+                SubmissionGrade.grade_published_at,
+                SubmissionGrade.published_breakdown,
+            )
             .where(
                 SubmissionGrade.submission_id == sub.id,
                 SubmissionGrade.grade_published_at.is_not(None),
@@ -848,8 +870,24 @@ async def homework_detail(
             .limit(1)
         )).first()
         if grade is not None:
-            final_score = round(grade.final_score, 1) if grade.final_score is not None else None
+            final_score = (
+                round(grade.published_final_score, 1)
+                if grade.published_final_score is not None
+                else None
+            )
             grade_published_at = grade.grade_published_at
+            if grade.published_breakdown:
+                breakdown_out = []
+                for entry in grade.published_breakdown:
+                    status = entry.get("score_status")
+                    if status not in ("full", "partial", "zero"):
+                        continue  # defensive: skip malformed historical rows
+                    breakdown_out.append(StudentProblemFeedback(
+                        problem_id=str(entry.get("problem_id", "")),
+                        score_status=status,
+                        percent=float(entry.get("percent", 0)),
+                        feedback=entry.get("feedback"),
+                    ))
 
     return StudentHomeworkDetail(
         assignment_id=str(assignment.id),
@@ -864,6 +902,7 @@ async def homework_detail(
         submitted_at=sub.submitted_at if sub is not None else None,
         final_score=final_score,
         grade_published_at=grade_published_at,
+        breakdown=breakdown_out,
     )
 
 
