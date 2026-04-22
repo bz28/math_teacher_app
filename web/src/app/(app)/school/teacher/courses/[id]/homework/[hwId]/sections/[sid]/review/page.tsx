@@ -11,6 +11,7 @@ import {
   type IntegrityBadge,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
+  type TeacherRubric,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionRow,
@@ -63,6 +64,11 @@ export default function HomeworkSectionReviewPage({
 
   const [hwTitle, setHwTitle] = useState<string>("");
   const [sectionName, setSectionName] = useState<string>("");
+  // Teacher's rubric for this HW — rendered as an expandable panel at
+  // the top of the Problems card so the teacher can sanity-check the
+  // AI's grades against their own stated criteria. Null when no rubric
+  // was authored (all rubric fields empty or the HW predates rubrics).
+  const [rubric, setRubric] = useState<TeacherRubric | null>(null);
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // Last-fetched detail, kept as-is across switches. Staleness for
@@ -114,6 +120,7 @@ export default function HomeworkSectionReviewPage({
         setError(null);
         setHwTitle(a.title);
         setSectionName(s.name);
+        setRubric(a.rubric);
         // Join submissions to roster by student_id. Email would work
         // today but breaks silently if a student ever changes their
         // account email after submitting — the submission still
@@ -530,6 +537,7 @@ export default function HomeworkSectionReviewPage({
                     ? integrity
                     : null
                 }
+                rubric={rubric}
                 row={selectedEntry.submission}
                 saveError={currentSaveError}
                 nextStudent={nextStudent}
@@ -837,6 +845,7 @@ function rowStatusLabel(entry: RosterEntry): {
 function SubmissionDetailPanel({
   detail,
   integrity,
+  rubric,
   row,
   saveError,
   nextStudent,
@@ -845,6 +854,7 @@ function SubmissionDetailPanel({
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
+  rubric: TeacherRubric | null;
   row: TeacherSubmissionRow | null;
   saveError: string | null;
   nextStudent: RosterEntry | null;
@@ -954,6 +964,9 @@ function SubmissionDetailPanel({
             <StudentWorkThumbButton imageData={detail.image_data} />
           )}
         </div>
+        <div className="mt-3">
+          <RubricSection rubric={rubric} />
+        </div>
         <div className="mt-3 space-y-3">
           {detail.problems.map((p) => (
             <ProblemGradeRow
@@ -969,6 +982,52 @@ function SubmissionDetailPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Rubric expandable section — the teacher's own authored criteria,
+// surfaced at the top of the Problems card so they can sanity-check
+// the AI's grades against what they said full/partial credit means.
+// Collapsed by default (the AI is the first line of grading; rubric is
+// a reference consulted when the teacher disagrees). Hides entirely
+// when no rubric was authored.
+// ────────────────────────────────────────────────────────────────────
+
+function RubricSection({ rubric }: { rubric: TeacherRubric | null }) {
+  const [open, setOpen] = useState(false);
+  const fields: { label: string; text: string }[] = [];
+  if (rubric?.full_credit) fields.push({ label: "Full credit", text: rubric.full_credit });
+  if (rubric?.partial_credit) fields.push({ label: "Partial credit", text: rubric.partial_credit });
+  if (rubric?.common_mistakes) fields.push({ label: "Common mistakes", text: rubric.common_mistakes });
+  if (rubric?.notes) fields.push({ label: "Notes", text: rubric.notes });
+  if (fields.length === 0) return null;
+  return (
+    <details
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+      className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
+    >
+      <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary hover:text-text-primary">
+        <span aria-hidden>{open ? "▾" : "▸"}</span>
+        Rubric
+        <span className="font-normal normal-case tracking-normal text-text-muted">
+          · click to {open ? "hide" : "show"}
+        </span>
+      </summary>
+      <div className="space-y-2 border-t border-border-light px-3 py-2.5">
+        {fields.map((f) => (
+          <div key={f.label}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              {f.label}
+            </p>
+            <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-text-primary">
+              {f.text}
+            </p>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
