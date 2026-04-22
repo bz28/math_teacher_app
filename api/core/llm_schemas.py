@@ -470,12 +470,28 @@ AI_GRADING_SCHEMA: ToolSchema = {
                             "type": "number",
                             "description": "0-100. Forced to 100 for full, 0 for zero. Teacher-meaningful for partial.",
                         },
+                        "confidence": {
+                            "type": "number",
+                            "description": (
+                                "Calibrated confidence in this grade, 0.0 to 1.0. "
+                                "See the system prompt's calibration bands — be honest, "
+                                "don't inflate. Below 0.4 means you're guessing and your "
+                                "reasoning should say why."
+                            ),
+                        },
                         "reasoning": {
                             "type": "string",
-                            "description": "1-2 sentence explanation of why this grade was given.",
+                            "description": (
+                                "1-2 sentence explanation of why this grade was given. "
+                                "Reference the specific rubric criterion (by name) that "
+                                "drove the decision."
+                            ),
                         },
                     },
-                    "required": ["problem_position", "student_answer", "score_status", "percent", "reasoning"],
+                    "required": [
+                        "problem_position", "student_answer", "score_status",
+                        "percent", "confidence", "reasoning",
+                    ],
                     "additionalProperties": False,
                 },
                 "description": "One grade entry per problem, in problem order.",

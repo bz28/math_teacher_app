@@ -712,11 +712,14 @@ export interface TeacherRubric {
 
 /** Per-problem grade row. Shape matches the SubmissionGrade.breakdown
  *  JSON persisted by the grade endpoint — `score_status` drives the
- *  Full/Partial/Zero pill; `percent` is the committed numeric value. */
+ *  Full/Partial/Zero pill; `percent` is the committed numeric value.
+ *  `confidence` is set by the AI grader (null when grade was entered by
+ *  the teacher manually, or on historical rows before the field existed). */
 export interface GradeBreakdownEntry {
   problem_id: string;
   score_status: "full" | "partial" | "zero";
   percent: number;
+  confidence: number | null;
   feedback: string | null;
 }
 
@@ -1253,6 +1256,10 @@ export interface AiGradeEntry {
   student_answer: string;
   score_status: "full" | "partial" | "zero";
   percent: number;
+  /** Calibrated 0.0-1.0 from the AI grader. Null on historical rows
+   *  before the field existed. The review UI shows a "Low confidence"
+   *  badge when below 0.6. */
+  confidence: number | null;
   reasoning: string;
 }
 
@@ -1361,6 +1368,16 @@ export interface StudentHomeworkProblem {
   approved_variation_count: number;
 }
 
+/** Per-problem published-grade row on the student-facing HW detail.
+ *  Shape mirrors api/routes/school_student_practice.py::StudentProblemFeedback
+ *  — the student-safe projection of SubmissionGrade.published_breakdown. */
+export interface StudentProblemFeedback {
+  problem_id: string;
+  score_status: "full" | "partial" | "zero";
+  percent: number;
+  feedback: string | null;
+}
+
 export interface StudentHomeworkDetail {
   assignment_id: string;
   title: string;
@@ -1377,6 +1394,10 @@ export interface StudentHomeworkDetail {
   final_score: number | null;
   /** ISO timestamp — null until teacher publishes. */
   grade_published_at: string | null;
+  /** Per-problem published-grade rows; null before publish. Uses the
+   *  published_breakdown snapshot — the live teacher draft never
+   *  surfaces here. */
+  breakdown: StudentProblemFeedback[] | null;
 }
 
 export interface StudentSubmission {

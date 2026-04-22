@@ -43,9 +43,25 @@ Your job:
 answer key.
 2. Assign a grade: "full" (100%), "partial" (1-99%), or "zero" (0%).
 3. For partial credit, set a specific percent and explain why.
+4. Emit a calibrated `confidence` score (0.0-1.0) for each grade.
 
-Grading criteria:
+Teacher's rubric (apply these criteria explicitly):
 {rubric_block}
+
+Rubric application (required for each problem):
+- Does the student meet the "Full credit" criterion? If so, grade "full".
+- If not, which "Partial credit" condition applies, and why?
+- Did any of the listed "Common mistakes" appear in the student's work? Call them out by name.
+- In your reasoning, reference the specific rubric criterion (by name) that drove the grade.
+
+Confidence calibration — be honest:
+- 0.9-1.0: Answer matches the key (or is trivially equivalent). Rubric criteria \
+clearly met or clearly not met.
+- 0.7-0.9: Confident in the grade, but some judgment involved — partial-credit \
+percent, small extraction noise, or an interpretable rubric dimension.
+- 0.4-0.7: Substantive ambiguity. Extraction unclear OR the rubric is hard to \
+judge from the work shown.
+- below 0.4: You are guessing. State "I'm unsure because X" in your reasoning.
 
 Rules:
 - Grade ONLY based on the student's extracted work — do not solve the problem yourself.
@@ -58,22 +74,25 @@ partial credit.
 
 
 def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
+    """Format the teacher-authored rubric as labeled fields the model can
+    reference by name. Labels match the rubric-application instructions in
+    the system prompt so the model can cite them in reasoning."""
     if not rubric:
         return (
             "No rubric provided. Use default criteria:\n"
-            "- Full credit: correct final answer\n"
-            "- Partial credit: right approach but arithmetic/sign error\n"
-            "- Zero: wrong answer or no attempt"
+            '- "Full credit": correct final answer\n'
+            '- "Partial credit": right approach but arithmetic/sign error\n'
+            '- "Zero": wrong answer or no attempt'
         )
     parts: list[str] = []
     if rubric.get("full_credit"):
-        parts.append(f"- Full credit: {rubric['full_credit']}")
+        parts.append(f'"Full credit": {rubric["full_credit"]}')
     if rubric.get("partial_credit"):
-        parts.append(f"- Partial credit: {rubric['partial_credit']}")
+        parts.append(f'"Partial credit": {rubric["partial_credit"]}')
     if rubric.get("common_mistakes"):
-        parts.append(f"- Common mistakes to watch for: {rubric['common_mistakes']}")
+        parts.append(f'"Common mistakes": {rubric["common_mistakes"]}')
     if rubric.get("notes"):
-        parts.append(f"- Additional notes: {rubric['notes']}")
+        parts.append(f'"Notes": {rubric["notes"]}')
     return "\n".join(parts) if parts else "No specific criteria. Use your best judgment."
 
 
@@ -129,20 +148,27 @@ async def grade_submission_with_ai(
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
-                      percent, reasoning}]}
+                      percent, confidence, reasoning}]}
     """
     system = _GRADING_SYSTEM.format(
         rubric_block=_build_rubric_block(rubric),
     )
     user_message = _build_user_message(extraction, problems)
 
+    # Extended thinking lets the model reason through partial-credit
+    # calls, ambiguous extractions, and rubric judgments privately before
+    # committing to a grade. Budget must be < max_tokens (see
+    # llm_client._build_thinking_kwargs); 2048 thinking + 4096 response
+    # gives room for both. Pipeline runs in the background, so the 2-3x
+    # latency is not user-visible.
     result = await call_claude_json(
         system,
         user_message,
         LLMMode.AI_GRADING,
         tool_schema=AI_GRADING_SCHEMA,
         model=MODEL_REASON,
-        max_tokens=1024,
+        max_tokens=4096,
+        thinking_budget=2048,
         user_id=user_id,
     )
     return result
@@ -221,6 +247,17 @@ async def run_ai_grading_for_submission(
     if not grades:
         return
 
+    # Clamp confidence to [0, 1] in place on each grade entry so both the
+    # raw ai_breakdown (read for the "AI's call" badge on the UI) and the
+    # actionable breakdown carry bounded values. Non-numeric / missing
+    # values become None so the UI renders a neutral state.
+    for g in grades:
+        raw_conf = g.get("confidence")
+        if isinstance(raw_conf, (int, float)):
+            g["confidence"] = max(0.0, min(1.0, float(raw_conf)))
+        else:
+            g["confidence"] = None
+
     # Map position → bank_item_id so breakdown uses the same IDs as
     # the teacher's manual grading flow.
     pos_to_bid = {p["position"]: p["bank_item_id"] for p in problems}
@@ -237,6 +274,7 @@ async def run_ai_grading_for_submission(
             "problem_id": bid,
             "score_status": status,
             "percent": percent,
+            "confidence": g.get("confidence"),
             "feedback": g.get("reasoning"),
             "student_answer": g.get("student_answer", ""),
         })

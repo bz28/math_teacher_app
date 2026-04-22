@@ -7,6 +7,7 @@ import {
   schoolStudent,
   type StudentHomeworkDetail,
   type StudentHomeworkProblem,
+  type StudentProblemFeedback,
   type StudentSubmission,
   type VariationPayload,
 } from "@/lib/api";
@@ -328,6 +329,12 @@ export default function HomeworkPage() {
         {hw.problems.map((p) => {
           const noVariations = p.approved_variation_count === 0;
           const isLoading = loadingProblemId === p.bank_item_id;
+          // Per-problem published grade entry, if the teacher has
+          // published grades. Backend only sets `breakdown` once
+          // grade_published_at is set, so finding an entry here is a
+          // safe signal that this problem is ready to show.
+          const gradeEntry =
+            hw.breakdown?.find((b) => b.problem_id === p.bank_item_id) ?? null;
           return (
             <div
               key={p.bank_item_id}
@@ -349,6 +356,10 @@ export default function HomeworkPage() {
                       <LockIcon />
                     </span>
                   </div>
+
+                  {gradeEntry !== null && (
+                    <PublishedGradePanel entry={gradeEntry} />
+                  )}
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <button
@@ -417,5 +428,61 @@ function LockIcon() {
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 0110 0v4" />
     </svg>
+  );
+}
+
+const GRADE_TONE: Record<
+  StudentProblemFeedback["score_status"],
+  { bg: string; border: string; text: string; icon: string; label: string }
+> = {
+  full: {
+    bg: "bg-green-50 dark:bg-green-900/20",
+    border: "border-green-200 dark:border-green-900/40",
+    text: "text-green-800 dark:text-green-300",
+    icon: "✓",
+    label: "Full credit",
+  },
+  partial: {
+    bg: "bg-amber-50 dark:bg-amber-900/20",
+    border: "border-amber-200 dark:border-amber-900/40",
+    text: "text-amber-800 dark:text-amber-300",
+    icon: "◐",
+    label: "Partial credit",
+  },
+  zero: {
+    bg: "bg-red-50 dark:bg-red-900/20",
+    border: "border-red-200 dark:border-red-900/40",
+    text: "text-red-800 dark:text-red-300",
+    icon: "✗",
+    label: "No credit",
+  },
+};
+
+/**
+ * Per-problem published-grade panel — score status + teacher/AI
+ * feedback. Only renders when the teacher has published grades (the
+ * backend only returns breakdown entries once grade_published_at is
+ * set, so if we have an entry, the grade is safe to show).
+ */
+function PublishedGradePanel({ entry }: { entry: StudentProblemFeedback }) {
+  const tone = GRADE_TONE[entry.score_status];
+  const percent = Math.round(entry.percent);
+  return (
+    <div
+      role="status"
+      aria-label={`${tone.label}, ${percent} percent`}
+      className={`mt-4 rounded-[--radius-md] border ${tone.border} ${tone.bg} px-4 py-3`}
+    >
+      <p className={`flex items-center gap-1.5 text-sm font-bold ${tone.text}`}>
+        <span aria-hidden>{tone.icon}</span>
+        {tone.label}
+        <span className="font-normal text-text-muted">· {percent}%</span>
+      </p>
+      {entry.feedback && (
+        <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-text-primary">
+          {entry.feedback}
+        </p>
+      )}
+    </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   type IntegrityBadge,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
+  type TeacherRubric,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionRow,
@@ -63,6 +64,17 @@ export default function HomeworkSectionReviewPage({
 
   const [hwTitle, setHwTitle] = useState<string>("");
   const [sectionName, setSectionName] = useState<string>("");
+  // Teacher's rubric for this HW — rendered as an expandable panel at
+  // the top of the Problems card so the teacher can sanity-check the
+  // AI's grades against their own stated criteria. Null when no rubric
+  // was authored (all rubric fields empty or the HW predates rubrics).
+  const [rubric, setRubric] = useState<TeacherRubric | null>(null);
+  // Rubric visibility is a session preference, not a per-student one.
+  // Lifting it here means expanding the rubric on student A keeps it
+  // expanded when the teacher hits "Next student" — otherwise
+  // SubmissionDetailPanel unmounts during the switch and local state
+  // inside RubricSection would reset to collapsed every time.
+  const [rubricOpen, setRubricOpen] = useState(false);
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // Last-fetched detail, kept as-is across switches. Staleness for
@@ -114,6 +126,7 @@ export default function HomeworkSectionReviewPage({
         setError(null);
         setHwTitle(a.title);
         setSectionName(s.name);
+        setRubric(a.rubric);
         // Join submissions to roster by student_id. Email would work
         // today but breaks silently if a student ever changes their
         // account email after submitting — the submission still
@@ -331,11 +344,44 @@ export default function HomeworkSectionReviewPage({
         problem_id: problemId,
         score_status: status,
         percent,
+        // Confidence describes the AI's call; a teacher click never
+        // updates it. Preserve whatever was previously stored — the
+        // original AI value if the row came from the pipeline, or
+        // null on a purely-teacher-authored grade. This keeps the row
+        // from going "dirty" post-publish when the teacher re-clicks
+        // a grade that already matches the published snapshot.
+        confidence: existing?.confidence ?? null,
         feedback: existing?.feedback ?? null,
       };
       const nextBreakdown = existing
         ? prior.map((b) => (b.problem_id === problemId ? nextEntry : b))
         : [...prior, nextEntry];
+      setDetail({ ...detail, breakdown: nextBreakdown });
+      void persistBreakdown(detail.submission_id, nextBreakdown);
+    },
+    [detail, persistBreakdown],
+  );
+
+  // Feedback writer — updates the per-problem student-facing feedback
+  // without touching the grade. No-op when the problem has no breakdown
+  // entry yet (textarea is disabled in that case). No-op when the text
+  // equals what's already stored — prevents false-dirty saves from a
+  // teacher just re-focusing the field. When the stored feedback is
+  // null but the text matches the AI's reasoning default, we DO persist
+  // on first save so students see the AI-generated text even if the
+  // teacher didn't edit (plan locks this decision).
+  const setProblemFeedback = useCallback(
+    (problemId: string, text: string) => {
+      if (!detail) return;
+      const prior = detail.breakdown ?? [];
+      const existing = prior.find((b) => b.problem_id === problemId);
+      if (!existing) return;
+      const nextFeedback = text.length === 0 ? null : text;
+      if ((existing.feedback ?? null) === nextFeedback) return;
+      const nextEntry: GradeBreakdownEntry = { ...existing, feedback: nextFeedback };
+      const nextBreakdown = prior.map((b) =>
+        b.problem_id === problemId ? nextEntry : b,
+      );
       setDetail({ ...detail, breakdown: nextBreakdown });
       void persistBreakdown(detail.submission_id, nextBreakdown);
     },
@@ -526,6 +572,9 @@ export default function HomeworkSectionReviewPage({
                     ? integrity
                     : null
                 }
+                rubric={rubric}
+                rubricOpen={rubricOpen}
+                onToggleRubric={setRubricOpen}
                 row={selectedEntry.submission}
                 saveError={currentSaveError}
                 nextStudent={nextStudent}
@@ -533,6 +582,7 @@ export default function HomeworkSectionReviewPage({
                   if (nextStudent) setSelectedStudentId(nextStudent.student_id);
                 }}
                 onGradeProblem={setProblemGrade}
+                onFeedbackChange={setProblemFeedback}
               />
             )}
           </section>
@@ -833,19 +883,27 @@ function rowStatusLabel(entry: RosterEntry): {
 function SubmissionDetailPanel({
   detail,
   integrity,
+  rubric,
+  rubricOpen,
+  onToggleRubric,
   row,
   saveError,
   nextStudent,
   onSelectNext,
   onGradeProblem,
+  onFeedbackChange,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
+  rubric: TeacherRubric | null;
+  rubricOpen: boolean;
+  onToggleRubric: (open: boolean) => void;
   row: TeacherSubmissionRow | null;
   saveError: string | null;
   nextStudent: RosterEntry | null;
   onSelectNext: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
+  onFeedbackChange: (problemId: string, text: string) => void;
 }) {
   const breakdownByProblem = useMemo(() => {
     const map = new Map<string, GradeBreakdownEntry>();
@@ -950,6 +1008,13 @@ function SubmissionDetailPanel({
             <StudentWorkThumbButton imageData={detail.image_data} />
           )}
         </div>
+        <div className="mt-3">
+          <RubricSection
+            rubric={rubric}
+            open={rubricOpen}
+            onToggle={onToggleRubric}
+          />
+        </div>
         <div className="mt-3 space-y-3">
           {detail.problems.map((p) => (
             <ProblemGradeRow
@@ -960,11 +1025,64 @@ function SubmissionDetailPanel({
               onChange={(status, partialPercent) =>
                 onGradeProblem(p.bank_item_id, status, partialPercent)
               }
+              onFeedbackChange={(text) =>
+                onFeedbackChange(p.bank_item_id, text)
+              }
             />
           ))}
         </div>
       </div>
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Rubric expandable section — the teacher's own authored criteria,
+// surfaced at the top of the Problems card so they can sanity-check
+// the AI's grades against what they said full/partial credit means.
+// Collapsed by default (the AI is the first line of grading; rubric is
+// a reference consulted when the teacher disagrees). Hides entirely
+// when no rubric was authored.
+// ────────────────────────────────────────────────────────────────────
+
+function RubricSection({
+  rubric,
+  open,
+  onToggle,
+}: {
+  rubric: TeacherRubric | null;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
+  const fields: { label: string; text: string }[] = [];
+  if (rubric?.full_credit) fields.push({ label: "Full credit", text: rubric.full_credit });
+  if (rubric?.partial_credit) fields.push({ label: "Partial credit", text: rubric.partial_credit });
+  if (rubric?.common_mistakes) fields.push({ label: "Common mistakes", text: rubric.common_mistakes });
+  if (rubric?.notes) fields.push({ label: "Notes", text: rubric.notes });
+  if (fields.length === 0) return null;
+  return (
+    <details
+      open={open}
+      onToggle={(e) => onToggle((e.target as HTMLDetailsElement).open)}
+      className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
+    >
+      <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary hover:text-text-primary">
+        <span aria-hidden>{open ? "▾" : "▸"}</span>
+        Rubric
+      </summary>
+      <div className="space-y-2 border-t border-border-light px-3 py-2.5">
+        {fields.map((f) => (
+          <div key={f.label}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              {f.label}
+            </p>
+            <div className="mt-0.5 text-xs leading-relaxed text-text-primary">
+              <MathText text={f.text} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -979,11 +1097,13 @@ function ProblemGradeRow({
   entry,
   aiGrade,
   onChange,
+  onFeedbackChange,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
   aiGrade: AiGradeEntry | null;
   onChange: (status: GradeStatus, partialPercent?: number) => void;
+  onFeedbackChange: (text: string) => void;
 }) {
   const current = entry?.score_status ?? null;
   // Show "AI" badge when the active grade matches the AI suggestion
@@ -1032,6 +1152,31 @@ function ProblemGradeRow({
     const safe = Number.isFinite(n) && n > 0 && n < 100 ? n : 50;
     focusOnMount.current = true;
     onChange("partial", safe);
+  };
+
+  // Student-facing feedback. When an entry exists we honor its value
+  // verbatim — including explicit null, which means "teacher cleared
+  // this on purpose". We only fall back to the AI's reasoning when
+  // there's no entry at all (disabled state, below). Same local-buffer
+  // pattern as the partial input: `null` means "show the external
+  // value", a string means "user is typing". Persisted on blur; the
+  // parent's setProblemFeedback dedupes no-op saves.
+  const [feedbackBuffer, setFeedbackBuffer] = useState<string | null>(null);
+  const externalFeedback =
+    entry === null
+      ? aiGrade?.reasoning ?? ""
+      : entry.feedback ?? "";
+  const feedbackDraft = feedbackBuffer ?? externalFeedback;
+  const feedbackDisabled = entry === null;
+
+  const commitFeedback = () => {
+    // Always commit the displayed value — that way an un-edited blur
+    // still saves the AI-reasoning default when the stored feedback is
+    // null. The parent's setProblemFeedback dedupes against what's
+    // already persisted, so no-op blurs don't false-dirty the row.
+    const committed = feedbackBuffer ?? externalFeedback;
+    setFeedbackBuffer(null);
+    onFeedbackChange(committed);
   };
 
   // The teacher has overridden the AI when a grade exists and doesn't
@@ -1089,13 +1234,24 @@ function ProblemGradeRow({
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When
           no AI grade is present (pipeline failed / disabled), this
-          block simply doesn't render. */}
+          block simply doesn't render. Low-confidence calls (<0.6) get
+          an amber pill so the teacher knows where to focus attention;
+          historical rows without a confidence value stay neutral. */}
       {aiGrade && aiGradeLabel && (
         <div className="mt-3 rounded-[--radius-md] border border-primary/25 bg-primary-bg px-3 py-2">
-          <p className="text-xs font-bold text-text-primary">
-            <span className="mr-1 text-primary" aria-hidden>🤖</span>
-            <span className="text-primary">AI&apos;s call:</span>{" "}
-            {aiGradeLabel}
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-text-primary">
+            <span className="text-primary" aria-hidden>🤖</span>
+            <span className="text-primary">AI&apos;s call:</span>
+            <span>{aiGradeLabel}</span>
+            {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+                title="AI reported low confidence — review this one carefully"
+              >
+                <span aria-hidden>⚠</span>
+                Low confidence · {Math.round(aiGrade.confidence * 100)}%
+              </span>
+            )}
           </p>
           {aiGrade.reasoning && (
             <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
@@ -1173,6 +1329,34 @@ function ProblemGradeRow({
           AI had suggested {aiGradeLabel} · revert
         </button>
       )}
+
+      {/* Per-problem feedback, shown to the student once the grade is
+          published. Pre-filled with the AI's reasoning when present so
+          teachers can accept, edit, or clear — no UI fanfare either
+          way. The published text is the teacher's voice to the student. */}
+      <div className="mt-3">
+        <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
+        </label>
+        <textarea
+          // When disabled (no grade yet), render empty so the
+          // placeholder "Pick Full/Partial/Zero first..." is visible.
+          // Otherwise the textarea would show AI reasoning as an
+          // uneditable grey block, which hides the actual instruction.
+          value={feedbackDisabled ? "" : feedbackDraft}
+          onChange={(e) => setFeedbackBuffer(e.target.value)}
+          onBlur={commitFeedback}
+          disabled={feedbackDisabled}
+          maxLength={2000}
+          rows={3}
+          placeholder={
+            feedbackDisabled
+              ? "Pick Full / Partial / Zero first — then you can leave feedback."
+              : "Add a sentence the student will see…"
+          }
+          className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
+        />
+      </div>
     </div>
   );
 }
