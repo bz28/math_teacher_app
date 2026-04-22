@@ -4,7 +4,6 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,31 +13,33 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { LoginForm } from "./LoginForm";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface AuthScreenProps {
   onAuth: () => void;
   defaultToRegister?: boolean;
 }
 
-const GRADES = [
-  { label: "6-8", range: "6th - 8th", value: 8 },
-  { label: "9-12", range: "9th - 12th", value: 12 },
-  { label: "College", range: "Undergraduate", value: 16 },
-];
-
 const MIN_AGE = 13;
-const MAX_AGE = 25;
+const MAX_AGE = 99;
 const DEFAULT_AGE = 13;
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
-type RegisterStep = "name" | "age" | "grade" | "credentials";
+// Derive backend grade_level from age. Three buckets match the old grade picker.
+function ageToGradeLevel(age: number): number {
+  if (age <= 14) return 8;   // middle school (6-8)
+  if (age <= 18) return 12;  // high school (9-12)
+  return 16;                  // college / adult
+}
+
+type RegisterStep = "name" | "age" | "credentials";
 
 export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
@@ -47,7 +48,6 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
   // Form state
   const [name, setName] = useState("");
   const [age, setAge] = useState<number>(DEFAULT_AGE);
-  const [selectedGrade, setSelectedGrade] = useState<typeof GRADES[number] | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -62,14 +62,6 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
   };
 
   const handleAgeNext = () => {
-    if (age < MIN_AGE) return;
-    setError(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRegisterStep("grade");
-  };
-
-  const handleGradeNext = () => {
-    if (!selectedGrade) return;
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRegisterStep("credentials");
@@ -88,7 +80,8 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     try {
       const normalizedEmail = email.trim().toLowerCase();
       await checkEmail(normalizedEmail);
-      const resp = await register(normalizedEmail, password, name.trim(), selectedGrade!.value);
+      const gradeLevel = ageToGradeLevel(age);
+      const resp = await register(normalizedEmail, password, name.trim(), gradeLevel);
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -109,8 +102,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   const stepNumber =
     registerStep === "name" ? 1 :
-    registerStep === "age" ? 2 :
-    registerStep === "grade" ? 3 : 4;
+    registerStep === "age" ? 2 : 3;
 
   // ── Login ──────────────────────────────────────────────
   if (isLogin) {
@@ -140,19 +132,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     />;
   }
 
-  // ── Register Step 3: Grade ─────────────────────────────
-  if (registerStep === "grade") {
-    return <GradeStep
-      name={name}
-      selectedGrade={selectedGrade}
-      onGradeSelect={setSelectedGrade}
-      onNext={handleGradeNext}
-      onBack={() => setRegisterStep("age")}
-      stepNumber={stepNumber}
-    />;
-  }
-
-  // ── Register Step 4: Credentials ───────────────────────
+  // ── Register Step 3: Credentials ───────────────────────
   return <CredentialsStep
     name={name}
     email={email}
@@ -164,7 +144,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     loading={loading}
     error={error}
     onSubmit={handleRegisterSubmit}
-    onBack={() => setRegisterStep("grade")}
+    onBack={() => setRegisterStep("age")}
     onSwitch={switchMode}
     stepNumber={stepNumber}
   />;
@@ -263,21 +243,6 @@ function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
   const pickerAnim = useFadeInUp(150, 400);
   const buttonAnim = useFadeInUp(300, 400);
 
-  const underAge = age < MIN_AGE;
-
-  const decrement = () => {
-    if (age > MIN_AGE - 5) {
-      onAgeChange(age - 1);
-      Haptics.selectionAsync();
-    }
-  };
-  const increment = () => {
-    if (age < MAX_AGE) {
-      onAgeChange(age + 1);
-      Haptics.selectionAsync();
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -294,45 +259,39 @@ function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
           <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
-        <Animated.View style={[styles.agePickerWrap, pickerAnim]}>
-          <AnimatedPressable
-            onPress={decrement}
-            disabled={age <= MIN_AGE - 5}
-            scaleDown={0.9}
-            style={[styles.ageStepperBtn, age <= MIN_AGE - 5 && styles.ageStepperBtnDisabled]}
-          >
-            <Ionicons name="remove" size={28} color={colors.primary} />
-          </AnimatedPressable>
-
-          <View style={styles.ageDisplay}>
-            <Text style={styles.ageNumber}>{age}</Text>
-            <Text style={styles.ageUnit}>years old</Text>
-          </View>
-
-          <AnimatedPressable
-            onPress={increment}
-            disabled={age >= MAX_AGE}
-            scaleDown={0.9}
-            style={[styles.ageStepperBtn, age >= MAX_AGE && styles.ageStepperBtnDisabled]}
-          >
-            <Ionicons name="add" size={28} color={colors.primary} />
-          </AnimatedPressable>
+        <Animated.View style={[styles.ageDisplayWrap, pickerAnim]}>
+          <Text style={styles.ageNumber}>{age}</Text>
+          <Text style={styles.ageUnit}>years old</Text>
         </Animated.View>
 
-        {underAge && (
-          <View style={styles.ageBlockCard}>
-            <Ionicons name="information-circle" size={20} color={colors.error} />
-            <Text style={styles.ageBlockText}>
-              Veradic is designed for students 13 and older. Please come back when you're 13.
-            </Text>
+        <Animated.View style={[styles.sliderWrap, pickerAnim]}>
+          <Slider
+            style={styles.slider}
+            minimumValue={MIN_AGE}
+            maximumValue={MAX_AGE}
+            step={1}
+            value={age}
+            onValueChange={(v) => {
+              const next = Math.round(v);
+              if (next !== age) {
+                onAgeChange(next);
+                Haptics.selectionAsync();
+              }
+            }}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.border}
+            thumbTintColor={colors.primary}
+          />
+          <View style={styles.sliderLabels}>
+            <Text style={styles.sliderLabel}>{MIN_AGE}</Text>
+            <Text style={styles.sliderLabel}>{MAX_AGE}</Text>
           </View>
-        )}
+        </Animated.View>
 
         <Animated.View style={buttonAnim}>
           <AnimatedPressable
-            style={[{ marginTop: spacing.xxl }, underAge && styles.buttonDisabled]}
+            style={{ marginTop: spacing.xxl }}
             onPress={onNext}
-            disabled={underAge}
             scaleDown={0.97}
           >
             <LinearGradient
@@ -350,109 +309,7 @@ function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
   );
 }
 
-/* ── Step 3: Grade ────────────────────────────────────────── */
-
-function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNumber }: {
-  name: string;
-  selectedGrade: typeof GRADES[number] | null;
-  onGradeSelect: (g: typeof GRADES[number]) => void;
-  onNext: () => void;
-  onBack: () => void;
-  stepNumber: number;
-}) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const headerAnim = useFadeInUp(0, 400);
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <AnimatedPressable onPress={onBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={20} color={colors.primary} />
-          <Text style={styles.backText}>Back</Text>
-        </AnimatedPressable>
-
-        <Animated.View style={[styles.header, headerAnim]}>
-          <Text style={styles.title}>Nice to meet you,{"\n"}{name.trim()}!</Text>
-          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
-          <Text style={styles.subtitle}>
-            What grade are you in?
-          </Text>
-        </Animated.View>
-
-        <View style={styles.gradeGrid}>
-          {GRADES.map((g, i) => (
-            <GradeCard
-              key={g.label}
-              grade={g}
-              selected={selectedGrade?.label === g.label}
-              onSelect={() => {
-                onGradeSelect(g);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              delay={100 + i * 80}
-            />
-          ))}
-        </View>
-
-        <AnimatedPressable
-          style={[
-            { marginTop: spacing.xxl },
-            !selectedGrade && styles.buttonDisabled,
-          ]}
-          onPress={onNext}
-          disabled={!selectedGrade}
-          scaleDown={0.97}
-        >
-          <LinearGradient
-            colors={gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Continue</Text>
-          </LinearGradient>
-        </AnimatedPressable>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-function GradeCard({ grade, selected, onSelect, delay }: {
-  grade: typeof GRADES[number];
-  selected: boolean;
-  onSelect: () => void;
-  delay: number;
-}) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const anim = useFadeInUp(delay, 400);
-
-  return (
-    <Animated.View style={anim}>
-      <AnimatedPressable
-        style={[styles.gradeCard, shadows.sm, selected && styles.gradeCardSelected]}
-        onPress={onSelect}
-        scaleDown={0.97}
-      >
-        <Text style={[styles.gradeLabel, selected && styles.gradeLabelSelected]}>
-          {grade.label}
-        </Text>
-        <Text style={[styles.gradeRange, selected && styles.gradeRangeSelected]}>
-          {grade.range}
-        </Text>
-        {selected && (
-          <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-        )}
-      </AnimatedPressable>
-    </Animated.View>
-  );
-}
-
-/* ── Step 4: Credentials ──────────────────────────────────── */
+/* ── Step 3: Credentials ──────────────────────────────────── */
 
 function CredentialsStep({ name, email, onEmailChange, password, onPasswordChange, showPassword, onTogglePassword, loading, error, onSubmit, onBack, onSwitch, stepNumber }: {
   name: string;
@@ -736,36 +593,16 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   error: { color: colors.error, fontSize: 14 },
 
-  // Age picker
-  agePickerWrap: {
-    flexDirection: "row",
+  // Age picker (slider)
+  ageDisplayWrap: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xxl,
-    paddingVertical: spacing.xl,
-  },
-  ageStepperBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryBg,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  ageStepperBtnDisabled: {
-    opacity: 0.3,
-  },
-  ageDisplay: {
-    alignItems: "center",
-    minWidth: 110,
+    paddingVertical: spacing.lg,
   },
   ageNumber: {
-    fontSize: 72,
+    fontSize: 80,
     fontWeight: "800",
-    color: colors.text,
-    lineHeight: 80,
+    color: colors.primary,
+    lineHeight: 88,
   },
   ageUnit: {
     ...typography.body,
@@ -773,50 +610,23 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     fontSize: 14,
     marginTop: spacing.xs,
   },
-  ageBlockCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-    backgroundColor: colors.errorLight,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    marginTop: spacing.lg,
+  sliderWrap: {
+    paddingHorizontal: spacing.sm,
+    marginTop: spacing.md,
   },
-  ageBlockText: {
-    ...typography.body,
-    color: colors.error,
-    fontSize: 13,
-    flex: 1,
-    lineHeight: 18,
+  slider: {
+    width: "100%",
+    height: 40,
   },
-
-  // Grade
-  gradeGrid: { gap: spacing.md },
-  gradeCard: {
+  sliderLabels: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    borderWidth: 2,
-    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    marginTop: -spacing.xs,
   },
-  gradeCardSelected: {
-    backgroundColor: colors.primaryBg,
-    borderColor: colors.primary,
+  sliderLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
   },
-  gradeLabel: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  gradeLabelSelected: { color: colors.primary },
-  gradeRange: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    flex: 1,
-    marginLeft: spacing.lg,
-  },
-  gradeRangeSelected: { color: colors.primaryLight },
 });

@@ -36,7 +36,7 @@ ACCOUNT DELETION
 Available in-app at Account tab (bottom right) → scroll down → "Delete Account" → confirm with password.
 
 AGE GATE
-Veradic enforces a 13+ minimum age at sign-up. The signup flow asks the user's age before grade selection and blocks continuation if under 13. See screen 2 of the registration flow.
+Veradic enforces a 13+ minimum age at sign-up. The signup flow (3 steps: Name → Age → Email/Password) uses an age slider whose minimum value is 13, so users cannot sign up with an age under 13. See screen 2 of the registration flow.
 
 SIGN IN WITH APPLE
 Not applicable — Veradic uses first-party email/password authentication only. No third-party social logins (Google, Facebook, etc.) are offered, so Sign in with Apple is not required per Guideline 4.8.
