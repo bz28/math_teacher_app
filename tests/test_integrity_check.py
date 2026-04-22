@@ -1130,6 +1130,401 @@ async def test_verdict_rejects_invalid_rubric(
         )
 
 
+# ── Inline variant disambiguator ───────────────────────────────────
+
+
+async def test_generate_variant_flips_flag_and_echoes_problem(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Happy path for the disambiguator tool: agent calls
+    generate_variant, pipeline generates a similar problem via
+    practice.generate_similar_questions, flips inline_variant_used,
+    and returns the variant text in the tool_result for the agent to
+    surface on the next turn."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+        assert check.inline_variant_used is False
+
+    variant_text = "Factor 2x^2 + 5x - 3"
+    with patch(
+        "api.core.practice.generate_similar_questions",
+        return_value=[variant_text],
+    ):
+        set_agent_script([
+            [
+                make_tool_use(
+                    "generate_variant",
+                    {"problem_id": problem_id},
+                    use_id="uv1",
+                ),
+            ],
+            # After the tool_result, agent falls back to plain text.
+            [make_text("Here's a similar one — how would you approach it?")],
+        ])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "I don't really know how to explain it."},
+        )
+        assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.inline_variant_used is True
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "tool_result",
+            )
+        )).scalars().all()
+        assert any(variant_text in t.content for t in tool_results)
+
+
+async def test_generate_variant_rejects_second_call(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Enforced once-per-session cap. Second call in the same session
+    returns a tool_result rejection without flipping or regenerating."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    with patch(
+        "api.core.practice.generate_similar_questions",
+        return_value=["Variant text."],
+    ) as gen_mock:
+        # Turn 1: first call succeeds.
+        set_agent_script([
+            [
+                make_tool_use(
+                    "generate_variant",
+                    {"problem_id": problem_id},
+                    use_id="uv1",
+                ),
+            ],
+            [make_text("First variant.")],
+        ])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "I'm not sure how to explain that one."},
+        )
+        assert r.status_code == 200
+
+        # Turn 2: second call in the same session — must be rejected.
+        set_agent_script([
+            [
+                make_tool_use(
+                    "generate_variant",
+                    {"problem_id": problem_id},
+                    use_id="uv2",
+                ),
+            ],
+            [make_text("Moving on.")],
+        ])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "Another response from the student."},
+        )
+        assert r.status_code == 200
+
+    # The regenerator was only invoked once despite two agent calls.
+    assert gen_mock.call_count == 1
+
+    async with get_session_factory()() as s:
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "can only be called once per session" in t.content
+            for t in tool_results
+        )
+
+
+async def test_generate_variant_rejects_before_student_turn(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Agent can't call generate_variant before the student has sent
+    at least one message — same floor as submit_problem_verdict."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    with patch(
+        "api.core.practice.generate_similar_questions",
+        return_value=["Variant text."],
+    ) as gen_mock:
+        # Set the floor to 2 so this first student turn isn't enough.
+        set_agent_script([
+            [
+                make_tool_use(
+                    "generate_variant",
+                    {"problem_id": problem_id},
+                    use_id="uv1",
+                ),
+            ],
+            [make_text("Recovering.")],
+        ])
+        with patch(
+            "api.core.integrity_pipeline.VERDICT_STUDENT_TURN_FLOOR", 2,
+        ):
+            r = await client.post(
+                f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+                headers=_auth(world["student_token"]),
+                json={"message": "A first message from the student."},
+            )
+        assert r.status_code == 200
+
+    # Rejected before the generator was ever called.
+    assert gen_mock.call_count == 0
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.inline_variant_used is False
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "need at least" in t.content and "student turn" in t.content
+            for t in tool_results
+        )
+
+
+async def test_generate_variant_rejects_unknown_problem_id(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """problem_id must belong to the sampled problems for this
+    conversation. Bogus UUIDs get rejected; inline_variant_used stays
+    false."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    bogus = str(uuid.uuid4())
+    with patch(
+        "api.core.practice.generate_similar_questions",
+        return_value=["Variant text."],
+    ) as gen_mock:
+        set_agent_script([
+            [
+                make_tool_use(
+                    "generate_variant",
+                    {"problem_id": bogus},
+                    use_id="uv1",
+                ),
+            ],
+            [make_text("Recovering.")],
+        ])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "Here is a real student message."},
+        )
+        assert r.status_code == 200
+
+    # Generator was never invoked because problem_id failed validation.
+    assert gen_mock.call_count == 0
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.inline_variant_used is False
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any("does not match" in t.content for t in tool_results)
+
+
+async def test_generate_variant_handles_llm_failure_gracefully(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When the similar-question generator raises, the tool_result
+    reports the failure and the flag stays false so the agent can
+    proceed without the variant — not crash the whole loop."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    with patch(
+        "api.core.practice.generate_similar_questions",
+        side_effect=RuntimeError("simulated LLM failure"),
+    ):
+        set_agent_script([
+            [
+                make_tool_use(
+                    "generate_variant",
+                    {"problem_id": problem_id},
+                    use_id="uv1",
+                ),
+            ],
+            [make_text("Moving on without the variant.")],
+        ])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": "I can't explain it very well."},
+        )
+        assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Generator failed → flag stays false so the agent could
+        # legitimately try again in a later session if it wanted.
+        assert check.inline_variant_used is False
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "variant generation failed" in t.content for t in tool_results
+        )
+
+
+async def test_finish_check_rejects_variant_result_without_variant_used(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Anti-spoofing rule: finish_check rejects a concrete
+    inline_variant_result (anything other than not_applicable) when
+    generate_variant was never called in the session. Guards against
+    a model hallucinating a variant outcome."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    # Agent submits a verdict, then tries to finish with a specific
+    # variant_result even though generate_variant was never called.
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
+                    "reasoning": "Explained clearly.",
+                },
+                use_id="uv1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "disposition": "pass",
+                    "summary": "Good.",
+                    "inline_variant_result": "specific_approach",
+                },
+                use_id="uv2",
+            ),
+        ],
+        # After rejection, fall back to plain text.
+        [make_text("Wrapping up.")],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Here is my explanation of the approach."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Rejection should have kept the check non-complete on this turn.
+        assert check.status != "complete"
+        assert check.disposition is None
+        assert check.inline_variant_result is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "generate_variant was never called" in t.content
+            for t in tool_results
+        )
+
+
 # ── Extraction flag ────────────────────────────────────────────────
 
 
