@@ -137,6 +137,10 @@ function InboxRow({
   const dueLabel = row.due_at ? formatDue(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
   const hasOutstanding = row.to_grade + row.dirty + row.flagged > 0;
+  // "to grade" folds fresh-ungraded + dirty-republish into one count.
+  // From the teacher's point of view both states mean "needs a click
+  // before students see it"; the mechanical split doesn't help scan.
+  const toGrade = row.to_grade + row.dirty;
 
   return (
     <Link
@@ -170,13 +174,23 @@ function InboxRow({
           </span>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {row.submitted > 0 ? (
-            <Pill
-              tone={progressTone(row.published, row.submitted)}
-              label={`${row.published}/${row.submitted} grades published to students`}
-            />
-          ) : (
+          {row.submitted === 0 ? (
             <Pill tone="muted" label="No submissions yet" />
+          ) : (
+            <>
+              {toGrade > 0 && (
+                <Pill tone="amber" label={`⦿ ${toGrade} to grade`} />
+              )}
+              {row.flagged > 0 && (
+                <Pill tone="red" label={`⚑ ${row.flagged} flagged`} />
+              )}
+              {row.published > 0 && (
+                <Pill tone="green" label={`✓ ${row.published} published`} />
+              )}
+              {toGrade === 0 && row.flagged === 0 && row.published === 0 && (
+                <Pill tone="muted" label="Waiting on students" />
+              )}
+            </>
           )}
         </div>
       </div>
@@ -246,14 +260,3 @@ function daysOverdue(iso: string): number {
   return days > 0 ? days : 0;
 }
 
-/** Pill tone for the published-progress fraction: red when nothing
- *  has been released yet, amber while in progress, green when every
- *  submission has had its grade released. */
-function progressTone(
-  published: number,
-  submitted: number,
-): "red" | "amber" | "green" {
-  if (published === 0) return "red";
-  if (published >= submitted) return "green";
-  return "amber";
-}
