@@ -1191,7 +1191,7 @@ export const teacher = {
 
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
-  overall_badge: IntegrityBadge | null;
+  disposition: IntegrityDisposition | null;
   problem_count: number;
   complete_count: number;
 }
@@ -1578,7 +1578,25 @@ export interface SchoolChatMessage {
 
 // ── Integrity check types (mirror api/routes/integrity_check.py) ──
 
-export type IntegrityBadge = "likely" | "uncertain" | "unlikely" | "unreadable";
+/**
+ * Session-level disposition emitted by the agent's finish_check.
+ * - pass: understood deeply.
+ * - needs_practice: procedural only — did the work, theory is thin.
+ *   Also covers the mom/tutor/AI-helped gray zone.
+ * - tutor_pivot: got the problem wrong AND couldn't explain it.
+ *   Learning, not cheating.
+ * - flag_for_review: correct work on paper but can't articulate it,
+ *   and/or behavioral red flags. Teacher reviews; agent never accuses.
+ *
+ * Null on the submission when status is extracting / awaiting_student /
+ * in_progress / skipped_unreadable, or when the agent ran out of turns
+ * without a conclusion (teacher-review fallback).
+ */
+export type IntegrityDisposition =
+  | "pass"
+  | "needs_practice"
+  | "tutor_pivot"
+  | "flag_for_review";
 
 export type IntegrityOverallStatus =
   | "no_check"           // HW has integrity checks disabled
@@ -1598,7 +1616,6 @@ export interface IntegrityProblemSummary {
   problem_id: string;
   sample_position: number;
   status: IntegrityProblemStatus;
-  badge: IntegrityBadge | null;
 }
 
 export type IntegrityTurnRole = "agent" | "student";
@@ -1613,7 +1630,7 @@ export interface IntegrityTurn {
 export interface IntegrityStateResponse {
   submission_id: string;
   overall_status: IntegrityOverallStatus;
-  overall_badge: IntegrityBadge | null;
+  disposition: IntegrityDisposition | null;
   student_flagged_extraction: boolean;
   /** Vision extraction of the student's own work. Null when no check
    *  has started yet (pipeline still extracting or integrity disabled). */
@@ -1650,15 +1667,43 @@ export interface IntegrityExtraction {
   confidence: number;
 }
 
+/**
+ * Six-dimension rubric stored per probed problem. Required dimensions
+ * (paraphrase_originality, causal_fluency) always carry a low/mid/high
+ * score. Optional dimensions carry "not_probed" when the agent didn't
+ * ask that follow-up; self_correction carries "not_observed" when
+ * there wasn't enough turn volume to judge.
+ */
+export interface IntegrityRubric {
+  paraphrase_originality: "low" | "mid" | "high";
+  causal_fluency: "low" | "mid" | "high";
+  transfer: "low" | "mid" | "high" | "not_probed";
+  prediction: "low" | "mid" | "high" | "not_probed";
+  authority_resistance: "low" | "mid" | "high" | "not_probed";
+  self_correction: "low" | "mid" | "high" | "not_observed";
+}
+
+export type IntegrityProbeSelectionReason =
+  | "highest_differentiation"
+  | "anomaly_copied"            // v2
+  | "anomaly_wrong_method"      // v2
+  | "skip_all_wrong";           // reserved
+
+export type IntegrityInlineVariantResult =
+  | "specific_approach"
+  | "approach_after_followup"
+  | "blank_or_wrong"
+  | "not_applicable";
+
 export interface TeacherIntegrityProblemRow {
   problem_id: string;
   bank_item_id: string;
   question: string;
   sample_position: number;
   status: IntegrityProblemStatus;
-  badge: IntegrityBadge | null;
-  confidence: number | null;
+  rubric: IntegrityRubric | null;
   ai_reasoning: string | null;
+  selected_reason: IntegrityProbeSelectionReason | null;
   teacher_dismissed: boolean;
   teacher_dismissal_reason: string | null;
   student_work_extraction: IntegrityExtraction | null;
@@ -1667,9 +1712,11 @@ export interface TeacherIntegrityProblemRow {
 export interface TeacherIntegrityDetail {
   submission_id: string;
   overall_status: string;
-  overall_badge: IntegrityBadge | null;
-  overall_confidence: number | null;
+  disposition: IntegrityDisposition | null;
   overall_summary: string | null;
+  probe_selection_reason: IntegrityProbeSelectionReason | null;
+  inline_variant_used: boolean;
+  inline_variant_result: IntegrityInlineVariantResult | null;
   student_flagged_extraction: boolean;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
