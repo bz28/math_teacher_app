@@ -68,7 +68,7 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
-              The AI tutor that teaches instead of telling. Built for schools, loved by teachers.
+              Integrity checks, AI grading, and endless practice. Built for schools, loved by teachers.
             </p>
           </div>
 
