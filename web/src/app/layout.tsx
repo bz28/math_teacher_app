@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s | Veradic AI",
   },
   description:
-    "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step, without ever giving the answer away. Teacher-controlled content, integrity checks, and safe classroom deployment.",
+    "Veradic AI is the classroom AI built for math, physics, and chemistry teachers. Integrity checks measure what students understand, AI grading handles your homework, and endless practice keeps every student moving — all under teacher control.",
   metadataBase: new URL("https://veradicai.com"),
   keywords: [
     "ai tutor for schools",
@@ -95,7 +95,7 @@ export default function RootLayout({
               operatingSystem: "Web, iOS, Android",
               url: "https://veradicai.com",
               description:
-                "Veradic AI is the AI tutor built for classrooms. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
+                "Veradic AI is the classroom AI built for math, physics, and chemistry teachers. Integrity checks, AI grading, and endless student practice — all under teacher control.",
               audience: {
                 "@type": "EducationalAudience",
                 educationalRole: ["teacher", "student", "school administrator"],
