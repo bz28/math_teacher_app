@@ -6,7 +6,7 @@ import { SITE_URL } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "AI Math Tutor for Schools: Algebra to Calculus | Veradic AI",
   description:
-    "Veradic is the AI math tutor built for classrooms. Guides students through algebra, geometry, calculus, and word problems step by step, without ever giving the answer away.",
+    "Veradic is the AI math tutor built for classrooms. Integrity checks, AI grading, and endless practice across algebra, geometry, calculus, and word problems.",
   keywords: [
     "ai math tutor for schools",
     "ai math tutor",
@@ -23,13 +23,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Math Tutor for Schools | Veradic AI",
     description:
-      "Guides students through algebra, geometry, calculus, and word problems step by step, without ever giving the answer away.",
+      "Integrity checks, AI grading, and endless practice across algebra, geometry, calculus, and word problems.",
     url: `${SITE_URL}/subjects/math`,
   },
   twitter: {
     title: "AI Math Tutor for Schools | Veradic AI",
     description:
-      "Guides students through algebra, geometry, calculus, and word problems step by step, without ever giving the answer away.",
+      "Integrity checks, AI grading, and endless practice across algebra, geometry, calculus, and word problems.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/math`,

@@ -6,7 +6,7 @@ import { SITE_URL } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "AI Chemistry Tutor for Schools: Stoichiometry to Organic | Veradic AI",
   description:
-    "Veradic is the AI chemistry tutor built for classrooms. Guides students through stoichiometry, bonding, equilibrium, thermodynamics, and organic step by step, without ever giving the answer away.",
+    "Veradic is the AI chemistry tutor built for classrooms. Integrity checks, AI grading, and endless practice across stoichiometry, bonding, equilibrium, thermodynamics, and organic.",
   keywords: [
     "ai chemistry tutor for schools",
     "ai chemistry tutor",
@@ -24,13 +24,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Chemistry Tutor for Schools | Veradic AI",
     description:
-      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step, without ever giving the answer away.",
+      "Integrity checks, AI grading, and endless practice across stoichiometry, bonding, equilibrium, and organic chemistry.",
     url: `${SITE_URL}/subjects/chemistry`,
   },
   twitter: {
     title: "AI Chemistry Tutor for Schools | Veradic AI",
     description:
-      "Guides students through stoichiometry, bonding, equilibrium, and organic chemistry step by step, without ever giving the answer away.",
+      "Integrity checks, AI grading, and endless practice across stoichiometry, bonding, equilibrium, and organic chemistry.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/chemistry`,
