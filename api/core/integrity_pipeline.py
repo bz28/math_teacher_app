@@ -816,8 +816,8 @@ async def _apply_submit_verdict(
         return "rejected: this problem was skipped as unreadable"
 
     rubric, rubric_err = _validate_rubric(raw_rubric)
-    if rubric_err is not None:
-        return f"rejected: {rubric_err}"
+    if rubric_err is not None or rubric is None:
+        return f"rejected: {rubric_err or 'rubric validation failed'}"
 
     student_turn_count = await count_student_turns(check.id, db)
     if student_turn_count < VERDICT_STUDENT_TURN_FLOOR:
