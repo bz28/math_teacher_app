@@ -338,10 +338,13 @@ export default function HomeworkSectionReviewPage({
         problem_id: problemId,
         score_status: status,
         percent,
-        // Teacher click = manual override; no AI confidence applies.
-        // The AI's confidence lives on `ai_breakdown` and drives the
-        // "Low confidence" badge separately.
-        confidence: null,
+        // Confidence describes the AI's call; a teacher click never
+        // updates it. Preserve whatever was previously stored — the
+        // original AI value if the row came from the pipeline, or
+        // null on a purely-teacher-authored grade. This keeps the row
+        // from going "dirty" post-publish when the teacher re-clicks
+        // a grade that already matches the published snapshot.
+        confidence: existing?.confidence ?? null,
         feedback: existing?.feedback ?? null,
       };
       const nextBreakdown = existing
@@ -1311,7 +1314,11 @@ function ProblemGradeRow({
           Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
         </label>
         <textarea
-          value={feedbackDraft}
+          // When disabled (no grade yet), render empty so the
+          // placeholder "Pick Full/Partial/Zero first..." is visible.
+          // Otherwise the textarea would show AI reasoning as an
+          // uneditable grey block, which hides the actual instruction.
+          value={feedbackDisabled ? "" : feedbackDraft}
           onChange={(e) => setFeedbackBuffer(e.target.value)}
           onBlur={commitFeedback}
           disabled={feedbackDisabled}

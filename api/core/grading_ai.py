@@ -148,7 +148,7 @@ async def grade_submission_with_ai(
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
-                      percent, reasoning}]}
+                      percent, confidence, reasoning}]}
     """
     system = _GRADING_SYSTEM.format(
         rubric_block=_build_rubric_block(rubric),
