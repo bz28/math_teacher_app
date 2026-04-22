@@ -4,6 +4,7 @@ import { Section } from "@/components/landing/section";
 import { Eyebrow } from "@/components/landing/eyebrow";
 import { StepsAnimation } from "@/components/landing/steps-animation";
 import { mathDemo } from "@/components/landing/demos/math-demo";
+import { HomeProblem } from "@/components/landing/home-problem";
 import { HomeSubjects } from "@/components/landing/home-subjects";
 import { HomeTeachers } from "@/components/landing/home-teachers";
 import { CtaBand } from "@/components/landing/cta-band";
@@ -16,7 +17,11 @@ export default function Home() {
       <main>
         <Hero />
 
-        {/* ── Product demo — dark section for visual impact ── */}
+        <HomeProblem />
+
+        <HomeTeachers />
+
+        {/* ── Product demo — proof of what students experience ── */}
         <Section variant="invert" id="demo">
           <div className="mx-auto max-w-3xl text-center">
             <Eyebrow variant="invert">See it in action</Eyebrow>
@@ -33,8 +38,8 @@ export default function Home() {
           </div>
         </Section>
 
-        <HomeTeachers />
         <HomeSubjects />
+
         <CtaBand
           eyebrow="Ready when you are"
           headline="Bring Veradic to your school."
