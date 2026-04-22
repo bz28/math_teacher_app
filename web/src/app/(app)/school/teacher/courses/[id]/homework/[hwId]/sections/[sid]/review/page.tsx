@@ -353,6 +353,32 @@ export default function HomeworkSectionReviewPage({
     [detail, persistBreakdown],
   );
 
+  // Feedback writer — updates the per-problem student-facing feedback
+  // without touching the grade. No-op when the problem has no breakdown
+  // entry yet (textarea is disabled in that case). No-op when the text
+  // equals what's already stored — prevents false-dirty saves from a
+  // teacher just re-focusing the field. When the stored feedback is
+  // null but the text matches the AI's reasoning default, we DO persist
+  // on first save so students see the AI-generated text even if the
+  // teacher didn't edit (plan locks this decision).
+  const setProblemFeedback = useCallback(
+    (problemId: string, text: string) => {
+      if (!detail) return;
+      const prior = detail.breakdown ?? [];
+      const existing = prior.find((b) => b.problem_id === problemId);
+      if (!existing) return;
+      const nextFeedback = text.length === 0 ? null : text;
+      if ((existing.feedback ?? null) === nextFeedback) return;
+      const nextEntry: GradeBreakdownEntry = { ...existing, feedback: nextFeedback };
+      const nextBreakdown = prior.map((b) =>
+        b.problem_id === problemId ? nextEntry : b,
+      );
+      setDetail({ ...detail, breakdown: nextBreakdown });
+      void persistBreakdown(detail.submission_id, nextBreakdown);
+    },
+    [detail, persistBreakdown],
+  );
+
   // Derived counts for the publish button state machine.
   //   pending = graded but never published
   //   dirty   = published, but edited since — republish to update
@@ -545,6 +571,7 @@ export default function HomeworkSectionReviewPage({
                   if (nextStudent) setSelectedStudentId(nextStudent.student_id);
                 }}
                 onGradeProblem={setProblemGrade}
+                onFeedbackChange={setProblemFeedback}
               />
             )}
           </section>
@@ -851,6 +878,7 @@ function SubmissionDetailPanel({
   nextStudent,
   onSelectNext,
   onGradeProblem,
+  onFeedbackChange,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
@@ -860,6 +888,7 @@ function SubmissionDetailPanel({
   nextStudent: RosterEntry | null;
   onSelectNext: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
+  onFeedbackChange: (problemId: string, text: string) => void;
 }) {
   const breakdownByProblem = useMemo(() => {
     const map = new Map<string, GradeBreakdownEntry>();
@@ -977,6 +1006,9 @@ function SubmissionDetailPanel({
               onChange={(status, partialPercent) =>
                 onGradeProblem(p.bank_item_id, status, partialPercent)
               }
+              onFeedbackChange={(text) =>
+                onFeedbackChange(p.bank_item_id, text)
+              }
             />
           ))}
         </div>
@@ -1042,11 +1074,13 @@ function ProblemGradeRow({
   entry,
   aiGrade,
   onChange,
+  onFeedbackChange,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
   aiGrade: AiGradeEntry | null;
   onChange: (status: GradeStatus, partialPercent?: number) => void;
+  onFeedbackChange: (text: string) => void;
 }) {
   const current = entry?.score_status ?? null;
   // Show "AI" badge when the active grade matches the AI suggestion
@@ -1095,6 +1129,27 @@ function ProblemGradeRow({
     const safe = Number.isFinite(n) && n > 0 && n < 100 ? n : 50;
     focusOnMount.current = true;
     onChange("partial", safe);
+  };
+
+  // Student-facing feedback. Default is the AI's reasoning when
+  // present — teachers ship that as-is unless they want to edit. Same
+  // local-buffer pattern as the partial input: `null` means "show the
+  // external value", a string means "user is typing". Persisted on
+  // blur; the parent's setProblemFeedback dedupes no-op saves.
+  const [feedbackBuffer, setFeedbackBuffer] = useState<string | null>(null);
+  const externalFeedback =
+    entry?.feedback ?? aiGrade?.reasoning ?? "";
+  const feedbackDraft = feedbackBuffer ?? externalFeedback;
+  const feedbackDisabled = entry === null;
+
+  const commitFeedback = () => {
+    // Always commit the displayed value — that way an un-edited blur
+    // still saves the AI-reasoning default when the stored feedback is
+    // null. The parent's setProblemFeedback dedupes against what's
+    // already persisted, so no-op blurs don't false-dirty the row.
+    const committed = feedbackBuffer ?? externalFeedback;
+    setFeedbackBuffer(null);
+    onFeedbackChange(committed);
   };
 
   // The teacher has overridden the AI when a grade exists and doesn't
@@ -1247,6 +1302,29 @@ function ProblemGradeRow({
           AI had suggested {aiGradeLabel} · revert
         </button>
       )}
+
+      {/* Per-problem feedback, shown to the student once the grade is
+          published. Defaults to the AI's reasoning so teachers who trust
+          the AI ship rich feedback with one extra click (publish). */}
+      <div className="mt-3">
+        <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
+        </label>
+        <textarea
+          value={feedbackDraft}
+          onChange={(e) => setFeedbackBuffer(e.target.value)}
+          onBlur={commitFeedback}
+          disabled={feedbackDisabled}
+          maxLength={2000}
+          rows={2}
+          placeholder={
+            feedbackDisabled
+              ? "Pick Full / Partial / Zero first — then you can leave feedback."
+              : "Add a sentence the student will see…"
+          }
+          className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
+        />
+      </div>
     </div>
   );
 }
