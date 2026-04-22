@@ -46,11 +46,9 @@ const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
 type ConfigField = "units" | "dueAt" | "latePolicy" | "sections" | "rubric";
 
 /** Collapse a partial rubric into a normalized dict. Drops empty-string
- *  values so the stored shape stays tight — but keeps explicit nulls
- *  on grading_mode since "unset" is a meaningful state. */
+ *  and whitespace-only values so the stored shape stays tight. */
 function normalizeRubric(r: TeacherRubric): TeacherRubric {
   const out: TeacherRubric = {};
-  if (r.grading_mode) out.grading_mode = r.grading_mode;
   const s = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
   if (s(r.full_credit)) out.full_credit = s(r.full_credit);
   if (s(r.partial_credit)) out.partial_credit = s(r.partial_credit);

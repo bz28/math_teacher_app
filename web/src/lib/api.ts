@@ -694,16 +694,16 @@ export interface TeacherAssignment {
 }
 
 /** Structured grading rubric. All fields optional — teachers fill in
- *  what makes sense for the HW. Consumed by the AI grader in a follow-
- *  up PR; in v1 it's a reference panel during manual grading. */
-export type GradingMode =
-  | "answer_only"
-  | "answer_and_work"
-  | "method_focused"
-  | "custom";
-
+ *  what makes sense for the HW. Full credit + Partial credit are
+ *  pre-filled on the HW authoring UI with opinionated defaults; Common
+ *  mistakes and Notes are blank with placeholders. The AI grader reads
+ *  these fields as labeled criteria and cites them by name in its
+ *  per-problem reasoning.
+ *
+ *  Note: the DB row still has a historical `grading_mode` column for
+ *  legacy rows. It is not used by the current UI or the AI grader, so
+ *  it's omitted from this type. */
 export interface TeacherRubric {
-  grading_mode?: GradingMode;
   full_credit?: string;
   partial_credit?: string;
   common_mistakes?: string;
