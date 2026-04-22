@@ -15,7 +15,11 @@ export function Hero() {
             classroom.
           </span>
         </h1>
-        <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
+        <p className="mx-auto mt-6 max-w-2xl text-base font-semibold text-[color:var(--color-text)] md:text-lg">
+          Measures what students understand. Grades their homework. Gives
+          every student endless practice.
+        </p>
+        <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
           Your students are already using AI to do their homework. The
           question isn&rsquo;t whether to bring AI into the classroom.
           It&rsquo;s whether to bring the right one.
