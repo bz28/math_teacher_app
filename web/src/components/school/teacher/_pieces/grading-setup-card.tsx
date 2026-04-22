@@ -87,10 +87,11 @@ export function GradingSetupCard({
     const external = externalFor(field);
     if (committed === external) return;
     setLastEdited(field);
-    // Empty string → undefined so normalizeRubric in the parent drops
-    // the field (unset rather than "" stored).
+    // Whitespace-only → undefined so normalizeRubric in the parent drops
+    // the field (unset rather than a padded string stored). Trimming
+    // here avoids a useless round-trip for an input like "   ".
     onChange({
-      [field]: committed.length > 0 ? committed : undefined,
+      [field]: committed.trim().length > 0 ? committed : undefined,
     } as Partial<TeacherRubric>);
   };
 
@@ -98,6 +99,18 @@ export function GradingSetupCard({
     lastEdited === field ? (
       <InlineSavedHint state={saveState} errorMessage={saveError} />
     ) : null;
+
+  // "Using default" surfaces on a primary field whenever the displayed
+  // text equals the hardcoded default AND the teacher isn't actively
+  // typing — i.e., the backend will fall back to the default because
+  // the teacher either never edited or explicitly cleared their
+  // custom text. Tells them "your delete worked — you're now on the
+  // default" instead of leaving them wondering why the default text
+  // reappeared after they cleared it.
+  const isUsingDefault = (field: "full_credit" | "partial_credit"): boolean => {
+    if (drafts[field] !== null) return false; // teacher is typing
+    return (rubric?.[field] ?? null) === null;
+  };
 
   return (
     <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
@@ -116,6 +129,7 @@ export function GradingSetupCard({
           <PrimaryField
             id="rubric-full-credit"
             label="Full credit"
+            usingDefault={isUsingDefault("full_credit")}
             value={displayed("full_credit")}
             onDraftChange={(v) => handleDraftChange("full_credit", v)}
             onBlur={() => commitField("full_credit")}
@@ -124,6 +138,7 @@ export function GradingSetupCard({
           <PrimaryField
             id="rubric-partial-credit"
             label="Partial credit"
+            usingDefault={isUsingDefault("partial_credit")}
             value={displayed("partial_credit")}
             onDraftChange={(v) => handleDraftChange("partial_credit", v)}
             onBlur={() => commitField("partial_credit")}
@@ -179,6 +194,7 @@ function PrimaryField({
   id,
   label,
   value,
+  usingDefault,
   onDraftChange,
   onBlur,
   rightSlot,
@@ -186,6 +202,7 @@ function PrimaryField({
   id: string;
   label: string;
   value: string;
+  usingDefault: boolean;
   onDraftChange: (text: string) => void;
   onBlur: () => void;
   rightSlot?: React.ReactNode;
@@ -195,9 +212,14 @@ function PrimaryField({
       <div className="flex items-baseline justify-between gap-2">
         <label
           htmlFor={id}
-          className="text-[11px] font-bold uppercase tracking-wider text-text-primary"
+          className="flex items-baseline gap-1.5 text-[11px] font-bold uppercase tracking-wider text-text-primary"
         >
-          {label}
+          <span>{label}</span>
+          {usingDefault && (
+            <span className="font-normal normal-case tracking-normal text-text-muted">
+              · using default
+            </span>
+          )}
         </label>
         {rightSlot}
       </div>

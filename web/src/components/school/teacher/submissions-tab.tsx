@@ -187,9 +187,14 @@ function InboxRow({
               {row.published > 0 && (
                 <Pill tone="green" label={`✓ ${row.published} published`} />
               )}
-              {toGrade === 0 && row.flagged === 0 && row.published === 0 && (
-                <Pill tone="muted" label="Waiting on students" />
-              )}
+              {/* If all three counters are zero while submitted > 0,
+                  the background grading + integrity pipelines are
+                  still running on brand-new submissions. Render no
+                  pill in that window — the "N/M submitted" line above
+                  already tells the teacher what's happening, and the
+                  row becomes actionable the moment any counter ticks.
+                  (Misleading "Waiting on students" copy removed — the
+                  teacher is waiting on the pipeline, not students.) */}
             </>
           )}
         </div>

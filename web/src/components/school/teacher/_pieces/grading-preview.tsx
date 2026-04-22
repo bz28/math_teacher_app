@@ -86,7 +86,9 @@ function PreviewLine({
       <span aria-hidden className={`shrink-0 ${iconClassName}`}>
         {icon}
       </span>
-      <p className={muted ? "text-text-secondary" : undefined}>
+      <p
+        className={`min-w-0 break-words${muted ? " text-text-secondary" : ""}`}
+      >
         <span className="font-semibold">{heading}:</span> {body}
       </p>
     </div>
