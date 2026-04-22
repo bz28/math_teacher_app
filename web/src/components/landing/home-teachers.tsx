@@ -86,7 +86,7 @@ export function HomeTeachers() {
   return (
     <Section variant="default">
       <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>For teachers</Eyebrow>
+        <Eyebrow>What you get back</Eyebrow>
         <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           Reclaim your evenings.
         </h2>

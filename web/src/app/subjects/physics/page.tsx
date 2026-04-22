@@ -6,7 +6,7 @@ import { SITE_URL } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "AI Physics Tutor for Schools: Mechanics to Modern Physics | Veradic AI",
   description:
-    "Veradic is the AI physics tutor built for classrooms. Guides students through kinematics, forces, energy, electricity, and waves step by step, without ever giving the answer away.",
+    "Veradic is the AI physics tutor built for classrooms. Integrity checks, AI grading, and endless practice across kinematics, forces, energy, electricity, and waves.",
   keywords: [
     "ai physics tutor for schools",
     "ai physics tutor",
@@ -23,13 +23,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Physics Tutor for Schools | Veradic AI",
     description:
-      "Guides students through kinematics, forces, energy, electricity, and waves step by step, without ever giving the answer away.",
+      "Integrity checks, AI grading, and endless practice across kinematics, forces, energy, electricity, and waves.",
     url: `${SITE_URL}/subjects/physics`,
   },
   twitter: {
     title: "AI Physics Tutor for Schools | Veradic AI",
     description:
-      "Guides students through kinematics, forces, energy, electricity, and waves step by step, without ever giving the answer away.",
+      "Integrity checks, AI grading, and endless practice across kinematics, forces, energy, electricity, and waves.",
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/physics`,

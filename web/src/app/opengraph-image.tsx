@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const alt =
-  "Veradic AI — Your AI tutor that breaks any problem into steps you actually understand.";
+  "Veradic AI — Measures understanding, grades homework, and gives every student endless practice.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -103,17 +103,17 @@ export default function OpenGraphImage() {
               flexDirection: "column",
             }}
           >
-            <span>Snap. Learn. Master.</span>
+            <span>Built for your classroom.</span>
           </div>
           <div
             style={{
               fontSize: 28,
               color: "#9B95C5",
               lineHeight: 1.5,
-              maxWidth: 700,
+              maxWidth: 900,
             }}
           >
-            Your AI tutor that breaks any math or science problem into steps you actually understand.
+            Measures what students understand. Grades their homework. Gives every student endless practice.
           </div>
         </div>
 
@@ -127,7 +127,7 @@ export default function OpenGraphImage() {
         >
           <span style={{ color: "#6C5CE7", fontSize: 20, fontWeight: 600 }}>veradicai.com</span>
           <div style={{ display: "flex", gap: 12 }}>
-            {["Step-by-Step Learning", "AI Work Diagnosis", "Unlimited Practice"].map((tag) => (
+            {["Integrity Checks", "AI Grading", "Endless Practice"].map((tag) => (
               <div
                 key={tag}
                 style={{
