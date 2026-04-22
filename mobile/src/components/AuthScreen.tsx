@@ -28,14 +28,17 @@ interface AuthScreenProps {
 }
 
 const GRADES = [
-  { label: "K-2", range: "Kindergarten - 2nd", value: 2 },
-  { label: "3-5", range: "3rd - 5th", value: 5 },
   { label: "6-8", range: "6th - 8th", value: 8 },
   { label: "9-12", range: "9th - 12th", value: 12 },
   { label: "College", range: "Undergraduate", value: 16 },
 ];
 
-type RegisterStep = "name" | "grade" | "credentials";
+const MIN_AGE = 13;
+const MAX_AGE = 25;
+const DEFAULT_AGE = 13;
+const TOTAL_STEPS = 4;
+
+type RegisterStep = "name" | "age" | "grade" | "credentials";
 
 export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
@@ -43,6 +46,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   // Form state
   const [name, setName] = useState("");
+  const [age, setAge] = useState<number>(DEFAULT_AGE);
   const [selectedGrade, setSelectedGrade] = useState<typeof GRADES[number] | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +56,13 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   const handleNameNext = () => {
     if (!name.trim()) return;
+    setError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRegisterStep("age");
+  };
+
+  const handleAgeNext = () => {
+    if (age < MIN_AGE) return;
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRegisterStep("grade");
@@ -96,7 +107,10 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setError(null);
   };
 
-  const stepNumber = registerStep === "name" ? 1 : registerStep === "grade" ? 2 : 3;
+  const stepNumber =
+    registerStep === "name" ? 1 :
+    registerStep === "age" ? 2 :
+    registerStep === "grade" ? 3 : 4;
 
   // ── Login ──────────────────────────────────────────────
   if (isLogin) {
@@ -114,19 +128,31 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     />;
   }
 
-  // ── Register Step 2: Grade ─────────────────────────────
+  // ── Register Step 2: Age ───────────────────────────────
+  if (registerStep === "age") {
+    return <AgeStep
+      name={name}
+      age={age}
+      onAgeChange={setAge}
+      onNext={handleAgeNext}
+      onBack={() => setRegisterStep("name")}
+      stepNumber={stepNumber}
+    />;
+  }
+
+  // ── Register Step 3: Grade ─────────────────────────────
   if (registerStep === "grade") {
     return <GradeStep
       name={name}
       selectedGrade={selectedGrade}
       onGradeSelect={setSelectedGrade}
       onNext={handleGradeNext}
-      onBack={() => setRegisterStep("name")}
+      onBack={() => setRegisterStep("age")}
       stepNumber={stepNumber}
     />;
   }
 
-  // ── Register Step 3: Credentials ───────────────────────
+  // ── Register Step 4: Credentials ───────────────────────
   return <CredentialsStep
     name={name}
     email={email}
@@ -168,7 +194,7 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
         <Animated.View style={[styles.header, headerAnim]}>
           <Text style={styles.titleEmoji}>👋</Text>
           <Text style={styles.title}>What should we{"\n"}call you?</Text>
-          <StepIndicator current={stepNumber} total={3} />
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.form, inputAnim]}>
@@ -221,7 +247,110 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
   );
 }
 
-/* ── Step 2: Grade ────────────────────────────────────────── */
+/* ── Step 2: Age ─────────────────────────────────────────── */
+
+function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
+  name: string;
+  age: number;
+  onAgeChange: (n: number) => void;
+  onNext: () => void;
+  onBack: () => void;
+  stepNumber: number;
+}) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const headerAnim = useFadeInUp(0, 400);
+  const pickerAnim = useFadeInUp(150, 400);
+  const buttonAnim = useFadeInUp(300, 400);
+
+  const underAge = age < MIN_AGE;
+
+  const decrement = () => {
+    if (age > MIN_AGE - 5) {
+      onAgeChange(age - 1);
+      Haptics.selectionAsync();
+    }
+  };
+  const increment = () => {
+    if (age < MAX_AGE) {
+      onAgeChange(age + 1);
+      Haptics.selectionAsync();
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <AnimatedPressable onPress={onBack} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={20} color={colors.primary} />
+          <Text style={styles.backText}>Back</Text>
+        </AnimatedPressable>
+
+        <Animated.View style={[styles.header, headerAnim]}>
+          <Text style={styles.title}>How old are you,{"\n"}{name.trim()}?</Text>
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
+        </Animated.View>
+
+        <Animated.View style={[styles.agePickerWrap, pickerAnim]}>
+          <AnimatedPressable
+            onPress={decrement}
+            disabled={age <= MIN_AGE - 5}
+            scaleDown={0.9}
+            style={[styles.ageStepperBtn, age <= MIN_AGE - 5 && styles.ageStepperBtnDisabled]}
+          >
+            <Ionicons name="remove" size={28} color={colors.primary} />
+          </AnimatedPressable>
+
+          <View style={styles.ageDisplay}>
+            <Text style={styles.ageNumber}>{age}</Text>
+            <Text style={styles.ageUnit}>years old</Text>
+          </View>
+
+          <AnimatedPressable
+            onPress={increment}
+            disabled={age >= MAX_AGE}
+            scaleDown={0.9}
+            style={[styles.ageStepperBtn, age >= MAX_AGE && styles.ageStepperBtnDisabled]}
+          >
+            <Ionicons name="add" size={28} color={colors.primary} />
+          </AnimatedPressable>
+        </Animated.View>
+
+        {underAge && (
+          <View style={styles.ageBlockCard}>
+            <Ionicons name="information-circle" size={20} color={colors.error} />
+            <Text style={styles.ageBlockText}>
+              Veradic is designed for students 13 and older. Please come back when you're 13.
+            </Text>
+          </View>
+        )}
+
+        <Animated.View style={buttonAnim}>
+          <AnimatedPressable
+            style={[{ marginTop: spacing.xxl }, underAge && styles.buttonDisabled]}
+            onPress={onNext}
+            disabled={underAge}
+            scaleDown={0.97}
+          >
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            </LinearGradient>
+          </AnimatedPressable>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+/* ── Step 3: Grade ────────────────────────────────────────── */
 
 function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNumber }: {
   name: string;
@@ -248,7 +377,7 @@ function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNum
 
         <Animated.View style={[styles.header, headerAnim]}>
           <Text style={styles.title}>Nice to meet you,{"\n"}{name.trim()}!</Text>
-          <StepIndicator current={stepNumber} total={3} />
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
           <Text style={styles.subtitle}>
             What grade are you in?
           </Text>
@@ -323,7 +452,7 @@ function GradeCard({ grade, selected, onSelect, delay }: {
   );
 }
 
-/* ── Step 3: Credentials ──────────────────────────────────── */
+/* ── Step 4: Credentials ──────────────────────────────────── */
 
 function CredentialsStep({ name, email, onEmailChange, password, onPasswordChange, showPassword, onTogglePassword, loading, error, onSubmit, onBack, onSwitch, stepNumber }: {
   name: string;
@@ -358,7 +487,7 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
 
         <Animated.View style={[styles.header, headerAnim]}>
           <Text style={styles.title}>Almost there,{"\n"}{name.trim()}!</Text>
-          <StepIndicator current={stepNumber} total={3} />
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.form, formAnim]}>
@@ -606,6 +735,60 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     justifyContent: "center",
   },
   error: { color: colors.error, fontSize: 14 },
+
+  // Age picker
+  agePickerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xxl,
+    paddingVertical: spacing.xl,
+  },
+  ageStepperBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  ageStepperBtnDisabled: {
+    opacity: 0.3,
+  },
+  ageDisplay: {
+    alignItems: "center",
+    minWidth: 110,
+  },
+  ageNumber: {
+    fontSize: 72,
+    fontWeight: "800",
+    color: colors.text,
+    lineHeight: 80,
+  },
+  ageUnit: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginTop: spacing.xs,
+  },
+  ageBlockCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.errorLight,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  ageBlockText: {
+    ...typography.body,
+    color: colors.error,
+    fontSize: 13,
+    flex: 1,
+    lineHeight: 18,
+  },
 
   // Grade
   gradeGrid: { gap: spacing.md },
