@@ -128,24 +128,33 @@ export function GradingSetupCard({
             onBlur={() => commitField("partial_credit")}
             rightSlot={hintFor("partial_credit")}
           />
-          <OptionalField
-            id="rubric-common-mistakes"
-            label="Common mistakes"
-            placeholder={COMMON_MISTAKES_PLACEHOLDER}
-            value={displayed("common_mistakes")}
-            onDraftChange={(v) => handleDraftChange("common_mistakes", v)}
-            onBlur={() => commitField("common_mistakes")}
-            rightSlot={hintFor("common_mistakes")}
-          />
-          <OptionalField
-            id="rubric-notes"
-            label="Notes"
-            placeholder={NOTES_PLACEHOLDER}
-            value={displayed("notes")}
-            onDraftChange={(v) => handleDraftChange("notes", v)}
-            onBlur={() => commitField("notes")}
-            rightSlot={hintFor("notes")}
-          />
+          <OptionalDetails
+            // Open by default when either optional field already has a
+            // stored value — otherwise the teacher would have to dig
+            // to find their own text after reloading.
+            hasContent={
+              Boolean(rubric?.common_mistakes) || Boolean(rubric?.notes)
+            }
+          >
+            <OptionalField
+              id="rubric-common-mistakes"
+              label="Common mistakes"
+              placeholder={COMMON_MISTAKES_PLACEHOLDER}
+              value={displayed("common_mistakes")}
+              onDraftChange={(v) => handleDraftChange("common_mistakes", v)}
+              onBlur={() => commitField("common_mistakes")}
+              rightSlot={hintFor("common_mistakes")}
+            />
+            <OptionalField
+              id="rubric-notes"
+              label="Notes"
+              placeholder={NOTES_PLACEHOLDER}
+              value={displayed("notes")}
+              onDraftChange={(v) => handleDraftChange("notes", v)}
+              onBlur={() => commitField("notes")}
+              rightSlot={hintFor("notes")}
+            />
+          </OptionalDetails>
         </div>
         <GradingPreview
           fullCredit={displayed("full_credit")}
@@ -200,6 +209,45 @@ function PrimaryField({
         className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm leading-relaxed text-text-primary focus:border-primary focus:outline-none"
       />
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Collapsible wrapper for Common mistakes + Notes. Collapsed by default
+// to keep the rubric card scannable — most teachers won't need these,
+// and when they do, one click away is fine. Auto-opens when either
+// field already has saved content so the teacher's own text isn't
+// hidden behind a chevron after reload.
+// ────────────────────────────────────────────────────────────────────
+
+function OptionalDetails({
+  hasContent,
+  children,
+}: {
+  hasContent: boolean;
+  children: React.ReactNode;
+}) {
+  // Auto-open when either optional field already has saved content, so
+  // a teacher's own text isn't hidden behind a chevron on reload. The
+  // chevron reflects open state so the glyph stays honest.
+  const [open, setOpen] = useState(hasContent);
+  return (
+    <details
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+      className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
+    >
+      <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary">
+        <span aria-hidden className="text-xs">{open ? "▾" : "▸"}</span>
+        Optional details
+        <span className="font-normal normal-case tracking-normal text-text-muted/80">
+          · Common mistakes, Notes
+        </span>
+      </summary>
+      <div className="space-y-4 border-t border-border-light p-3">
+        {children}
+      </div>
+    </details>
   );
 }
 
