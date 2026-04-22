@@ -1152,13 +1152,24 @@ function ProblemGradeRow({
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When
           no AI grade is present (pipeline failed / disabled), this
-          block simply doesn't render. */}
+          block simply doesn't render. Low-confidence calls (<0.6) get
+          an amber pill so the teacher knows where to focus attention;
+          historical rows without a confidence value stay neutral. */}
       {aiGrade && aiGradeLabel && (
         <div className="mt-3 rounded-[--radius-md] border border-primary/25 bg-primary-bg px-3 py-2">
-          <p className="text-xs font-bold text-text-primary">
-            <span className="mr-1 text-primary" aria-hidden>🤖</span>
-            <span className="text-primary">AI&apos;s call:</span>{" "}
-            {aiGradeLabel}
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-text-primary">
+            <span className="text-primary" aria-hidden>🤖</span>
+            <span className="text-primary">AI&apos;s call:</span>
+            <span>{aiGradeLabel}</span>
+            {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+                title={`AI reported ${Math.round(aiGrade.confidence * 100)}% confidence — review this one carefully`}
+              >
+                <span aria-hidden>⚠</span>
+                Low confidence
+              </span>
+            )}
           </p>
           {aiGrade.reasoning && (
             <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
