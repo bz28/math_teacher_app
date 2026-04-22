@@ -34,6 +34,7 @@ import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { useOnboardingFlags } from "../stores/onboardingFlags";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
+import { askForReviewIfAvailable } from "../services/ratings";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
@@ -78,6 +79,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const onboardingLoaded = useOnboardingFlags((s) => s.loaded);
   const hasSeenChatCoachmark = useOnboardingFlags((s) => s.hasSeenChatCoachmark);
   const markSeenChatCoachmark = useOnboardingFlags((s) => s.markSeenChatCoachmark);
+  const completedSessionCount = useOnboardingFlags((s) => s.completedSessionCount);
+  const hasRequestedReview = useOnboardingFlags((s) => s.hasRequestedReview);
+  const incrementCompletedSessionCount = useOnboardingFlags((s) => s.incrementCompletedSessionCount);
+  const markRequestedReview = useOnboardingFlags((s) => s.markRequestedReview);
+  const didCountCompletionRef = useRef(false);
   const { show: showUpgrade, promptProps, paywallVisible: chatPaywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
   const isBatchMode = !!practiceBatch;
@@ -100,6 +106,32 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   useEffect(() => {
     if (askMode && !hasSeenChatCoachmark) markSeenChatCoachmark();
   }, [askMode, hasSeenChatCoachmark, markSeenChatCoachmark]);
+
+  // Count learn-mode session completions and ask for an App Store rating
+  // after the 3rd successful completion — a strong positive-moment trigger.
+  // One-time per install (hasRequestedReview gate) plus Apple's OS-level
+  // 3-per-365-day cap handles the rest. didCountCompletionRef guards against
+  // re-firing on the same mount if phase toggles back and forth.
+  useEffect(() => {
+    if (!isCompleted || didCountCompletionRef.current) return;
+    didCountCompletionRef.current = true;
+    incrementCompletedSessionCount();
+    const nextCount = completedSessionCount + 1;
+    if (nextCount >= 3 && !hasRequestedReview) {
+      // Delay so confetti plays and the user isn't interrupted mid-celebration.
+      const t = setTimeout(() => {
+        markRequestedReview();
+        askForReviewIfAvailable();
+      }, 2500);
+      return () => clearTimeout(t);
+    }
+  }, [
+    isCompleted,
+    completedSessionCount,
+    hasRequestedReview,
+    incrementCompletedSessionCount,
+    markRequestedReview,
+  ]);
 
   // Auto-scroll: consolidated trigger for every state change that should
   // re-anchor the scroll view at the bottom. Covers:

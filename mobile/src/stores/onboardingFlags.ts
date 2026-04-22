@@ -6,6 +6,8 @@ const STORAGE_KEY = "veradic_onboarding_flags_v1";
 interface Flags {
   hasCompletedFirstProblem: boolean;
   hasSeenChatCoachmark: boolean;
+  completedSessionCount: number;
+  hasRequestedReview: boolean;
 }
 
 interface OnboardingState extends Flags {
@@ -13,11 +15,15 @@ interface OnboardingState extends Flags {
   initialize: () => Promise<void>;
   markCompletedFirstProblem: () => Promise<void>;
   markSeenChatCoachmark: () => Promise<void>;
+  incrementCompletedSessionCount: () => Promise<void>;
+  markRequestedReview: () => Promise<void>;
 }
 
 const DEFAULTS: Flags = {
   hasCompletedFirstProblem: false,
   hasSeenChatCoachmark: false,
+  completedSessionCount: 0,
+  hasRequestedReview: false,
 };
 
 async function persist(flags: Flags) {
@@ -27,6 +33,15 @@ async function persist(flags: Flags) {
     // SecureStore can fail on simulator edge cases; swallow so the UI
     // keeps working even if the flag doesn't persist across launches.
   }
+}
+
+function snapshot(s: Flags): Flags {
+  return {
+    hasCompletedFirstProblem: s.hasCompletedFirstProblem,
+    hasSeenChatCoachmark: s.hasSeenChatCoachmark,
+    completedSessionCount: s.completedSessionCount,
+    hasRequestedReview: s.hasRequestedReview,
+  };
 }
 
 export const useOnboardingFlags = create<OnboardingState>((set, get) => ({
@@ -49,21 +64,24 @@ export const useOnboardingFlags = create<OnboardingState>((set, get) => ({
 
   markCompletedFirstProblem: async () => {
     if (get().hasCompletedFirstProblem) return;
-    const next = { ...get(), hasCompletedFirstProblem: true };
     set({ hasCompletedFirstProblem: true });
-    await persist({
-      hasCompletedFirstProblem: next.hasCompletedFirstProblem,
-      hasSeenChatCoachmark: next.hasSeenChatCoachmark,
-    });
+    await persist(snapshot(get()));
   },
 
   markSeenChatCoachmark: async () => {
     if (get().hasSeenChatCoachmark) return;
-    const next = { ...get(), hasSeenChatCoachmark: true };
     set({ hasSeenChatCoachmark: true });
-    await persist({
-      hasCompletedFirstProblem: next.hasCompletedFirstProblem,
-      hasSeenChatCoachmark: next.hasSeenChatCoachmark,
-    });
+    await persist(snapshot(get()));
+  },
+
+  incrementCompletedSessionCount: async () => {
+    set({ completedSessionCount: get().completedSessionCount + 1 });
+    await persist(snapshot(get()));
+  },
+
+  markRequestedReview: async () => {
+    if (get().hasRequestedReview) return;
+    set({ hasRequestedReview: true });
+    await persist(snapshot(get()));
   },
 }));
