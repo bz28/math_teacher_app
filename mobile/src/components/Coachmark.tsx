@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -16,7 +16,7 @@ interface Props {
 // the parent. Tap anywhere on the banner to dismiss.
 export function Coachmark({ visible, text, onDismiss, arrow = "none" }: Props) {
   const colors = useColors();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
 
@@ -36,6 +36,11 @@ export function Coachmark({ visible, text, onDismiss, arrow = "none" }: Props) {
           useNativeDriver: true,
         }),
       ]).start();
+    } else {
+      // Reset refs so a subsequent visible=true replays the fade-in instead
+      // of no-op'ing from already-at-target values.
+      opacity.setValue(0);
+      translateY.setValue(10);
     }
   }, [visible, opacity, translateY]);
 

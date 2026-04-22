@@ -33,8 +33,7 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
-        },
-        "ITSAppUsesNonExemptEncryption": false
+        }
       }
     },
     "web": {
