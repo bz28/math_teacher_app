@@ -8,7 +8,6 @@ import {
   teacher,
   type BankItem,
   type BankJob,
-  type GradingMode,
   type TeacherAssignment,
   type TeacherRubric,
 } from "@/lib/api";
@@ -24,6 +23,7 @@ import {
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
+import { GradingSetupCard } from "@/components/school/teacher/_pieces/grading-setup-card";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 
 interface AssignmentProblem {
@@ -41,34 +41,20 @@ const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
   { value: "no_credit", label: "No credit after due" },
 ];
 
-const GRADING_MODE_OPTIONS: { value: GradingMode; label: string; hint: string }[] = [
-  { value: "answer_only", label: "Answer only", hint: "Just grade the final number/expression" },
-  { value: "answer_and_work", label: "Answer + work", hint: "Both matter; partial credit for correct method" },
-  { value: "method_focused", label: "Method-focused", hint: "Approach matters more than the final answer" },
-  { value: "custom", label: "Custom", hint: "I'll describe the criteria below" },
-];
-
 // The five inline-editable config fields. Each has its own SaveState
 // so a saving units field doesn't block a separate due-date edit.
 type ConfigField = "units" | "dueAt" | "latePolicy" | "sections" | "rubric";
 
 /** Collapse a partial rubric into a normalized dict. Drops empty-string
- *  values so the stored shape stays tight — but keeps explicit nulls
- *  on grading_mode since "unset" is a meaningful state. */
+ *  and whitespace-only values so the stored shape stays tight. */
 function normalizeRubric(r: TeacherRubric): TeacherRubric {
   const out: TeacherRubric = {};
-  if (r.grading_mode) out.grading_mode = r.grading_mode;
   const s = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
   if (s(r.full_credit)) out.full_credit = s(r.full_credit);
   if (s(r.partial_credit)) out.partial_credit = s(r.partial_credit);
   if (s(r.common_mistakes)) out.common_mistakes = s(r.common_mistakes);
   if (s(r.notes)) out.notes = s(r.notes);
   return out;
-}
-
-function isRubricEmpty(r: TeacherRubric | null | undefined): boolean {
-  if (!r) return true;
-  return Object.keys(normalizeRubric(r)).length === 0;
 }
 
 /**
@@ -760,12 +746,23 @@ export default function HomeworkDetailPage({
             )}
           </section>
 
+          {/* Grading setup — prominent card right below Problems so
+              teachers see and use it. Placing it here (above
+              Configuration) makes the rubric a first-class step in
+              homework authoring rather than an optional footnote. */}
+          <GradingSetupCard
+            rubric={hw.rubric}
+            saveState={saveStates.rubric}
+            saveError={saveErrors.rubric}
+            onChange={onChangeRubric}
+          />
+
           {/* Configuration — collapsed accordion. Auto-expands on a
               fresh HW with no problems so teachers notice the fields;
               collapses once they're set. */}
-          <div className="mt-4 space-y-3">
+          <div className="mt-4">
             <CollapsibleSection
-              label="Settings"
+              label="Configuration"
               summary={configSummary(hw)}
               defaultOpen={problems.length === 0}
             >
@@ -782,14 +779,6 @@ export default function HomeworkDetailPage({
                 onChangeSections={onChangeSections}
               />
             </CollapsibleSection>
-
-            {/* RubricBlock has its own collapsed-when-empty behavior */}
-            <RubricBlock
-              rubric={hw.rubric}
-              saveState={saveStates.rubric}
-              saveError={saveErrors.rubric}
-              onChange={onChangeRubric}
-            />
           </div>
 
           {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
@@ -1255,162 +1244,6 @@ function ProblemRow({
     >
       {content}
     </button>
-  );
-}
-
-// ── Rubric block ──
-//
-// Collapsible grading rubric editor. Empty rubric → collapsed with a
-// prompt; non-empty rubric → expanded by default. Each text field
-// saves on blur via onChange({field: value}); grading_mode saves
-// immediately on chip click. The parent handler merges the patch into
-// the existing rubric and normalizes (empty string = unset, all empty
-// = clear rubric entirely).
-function RubricBlock({
-  rubric,
-  saveState,
-  saveError,
-  onChange,
-}: {
-  rubric: TeacherRubric | null;
-  saveState: SaveState;
-  saveError: string | null;
-  onChange: (patch: Partial<TeacherRubric>) => void;
-}) {
-  const [expanded, setExpanded] = useState(() => !isRubricEmpty(rubric));
-
-  return (
-    <div className="rounded-[--radius-md] border border-border-light bg-bg-base/30">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
-        aria-expanded={expanded}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Grading rubric
-          </span>
-          <InlineSavedHint state={saveState} errorMessage={saveError} />
-          {!expanded && isRubricEmpty(rubric) && (
-            <span className="text-[11px] text-text-muted">· none yet — click to add</span>
-          )}
-        </div>
-        <span className="text-xs text-text-muted">{expanded ? "▴" : "▾"}</span>
-      </button>
-      {expanded && (
-        <div className="space-y-4 border-t border-border-light p-4">
-          {/* Grading mode chips */}
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-              Grading mode
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {GRADING_MODE_OPTIONS.map((opt) => {
-                const active = rubric?.grading_mode === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() =>
-                      // Click the active chip to unset — `undefined`
-                      // flows through normalizeRubric and drops the
-                      // grading_mode key server-side.
-                      onChange({ grading_mode: active ? undefined : opt.value })
-                    }
-                    title={active ? "Click to unset" : opt.hint}
-                    className={`rounded-[--radius-pill] border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                      active
-                        ? "border-primary bg-primary text-white"
-                        : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
-                    }`}
-                  >
-                    {active && <span className="mr-1">✓</span>}
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <RubricField
-            label="Full credit"
-            placeholder="e.g. Correct answer AND shown work"
-            value={rubric?.full_credit}
-            onCommit={(v) => onChange({ full_credit: v })}
-          />
-          <RubricField
-            label="Partial credit"
-            placeholder="e.g. Right setup, arithmetic error"
-            value={rubric?.partial_credit}
-            onCommit={(v) => onChange({ partial_credit: v })}
-          />
-          <RubricField
-            label="Common mistakes"
-            hint="optional — help the AI grader catch specific errors"
-            placeholder="e.g. Mixing up slope and y-intercept"
-            value={rubric?.common_mistakes}
-            onCommit={(v) => onChange({ common_mistakes: v })}
-          />
-          <RubricField
-            label="Notes"
-            hint="optional — anything else the AI grader should know"
-            placeholder=""
-            value={rubric?.notes}
-            onCommit={(v) => onChange({ notes: v })}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RubricField({
-  label,
-  hint,
-  placeholder,
-  value,
-  onCommit,
-}: {
-  label: string;
-  hint?: string;
-  placeholder: string;
-  value: string | undefined;
-  onCommit: (next: string) => void;
-}) {
-  // Null-sentinel edit buffer: null means "show the external prop";
-  // a string means "user is actively typing." On blur we parse, fire
-  // onCommit if different, then null the buffer so subsequent external
-  // updates (another tab, reload) flow through automatically. This
-  // avoids the setState-in-effect sync pattern.
-  const [editBuffer, setEditBuffer] = useState<string | null>(null);
-  const external = value ?? "";
-  const draft = editBuffer ?? external;
-
-  const handleBlur = () => {
-    if (editBuffer === null) return; // user didn't touch it
-    const committed = editBuffer;
-    setEditBuffer(null);
-    if (committed !== external) onCommit(committed);
-  };
-
-  return (
-    <div>
-      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-        {label}
-        {hint && (
-          <span className="ml-1 font-normal normal-case text-text-muted/70">· {hint}</span>
-        )}
-      </div>
-      <textarea
-        value={draft}
-        onChange={(e) => setEditBuffer(e.target.value)}
-        onBlur={handleBlur}
-        placeholder={placeholder}
-        rows={2}
-        className="mt-1.5 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-      />
-    </div>
   );
 }
 
