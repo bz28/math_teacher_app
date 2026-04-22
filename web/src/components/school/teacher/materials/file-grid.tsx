@@ -3,7 +3,8 @@
 import { memo, type MouseEvent } from "react";
 import type { TeacherDocument } from "@/lib/api";
 import { FileTextIcon, ImageIcon } from "@/components/ui/icons";
-import { fileKind, formatDate, formatSize } from "./types";
+import { formatDate, formatFileSize } from "@/lib/utils";
+import { fileKind } from "./types";
 
 interface FileGridProps {
   docs: TeacherDocument[];
@@ -50,7 +51,7 @@ const KIND_STYLES = {
 
 const FileCard = memo(function FileCard({ doc, selected, onCardClick, onPreview }: FileCardProps) {
   const kind = fileKind(doc);
-  const date = formatDate(doc.created_at);
+  const date = formatDate(doc.created_at, { alwaysYear: true });
   const styles = KIND_STYLES[kind];
 
   return (
@@ -94,7 +95,7 @@ const FileCard = memo(function FileCard({ doc, selected, onCardClick, onPreview 
           {doc.filename}
         </div>
         <div className="mt-1.5 text-[11px] font-medium text-text-muted">
-          {formatSize(doc.file_size)}
+          {formatFileSize(doc.file_size)}
           {date && <span> · {date}</span>}
         </div>
       </div>

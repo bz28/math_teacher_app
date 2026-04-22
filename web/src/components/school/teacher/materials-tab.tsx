@@ -33,7 +33,6 @@ import {
   uniqueName,
 } from "./materials/walk-dropped-folder";
 import {
-  fileToBase64,
   type Collision,
   type Destination,
   type DroppedTree,
@@ -41,6 +40,7 @@ import {
   type RowState,
   type SortMode,
 } from "./materials/types";
+import { fileToBase64 } from "@/lib/utils";
 
 export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: () => void }) {
   const toast = useToast();

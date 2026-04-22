@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import type { BankItem, TeacherUnit } from "@/lib/api";
+import { formatRelativeDate } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 import { DIFFICULTY_STYLE } from "./constants";
 
@@ -58,7 +59,7 @@ export function QuestionRow({
   const unitName = unitLabel(item.unit_id, units);
   const difficulty = DIFFICULTY_STYLE[item.difficulty];
   const sourceLabel = SOURCE_LABEL[item.source] ?? item.source;
-  const date = formatRelative(item.created_at);
+  const date = formatRelativeDate(item.created_at);
 
   const emphasisBorder =
     emphasis === "pending"
@@ -148,17 +149,3 @@ function unitLabel(unitId: string | null, units: TeacherUnit[]): string {
   return parent ? `${parent.name} / ${top.name}` : top.name;
 }
 
-function formatRelative(iso: string): string | null {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const ms = Date.now() - d.getTime();
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}

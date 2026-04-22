@@ -2,7 +2,6 @@
 
 > **Status:** Drafted, awaiting approval
 > **Branch:** `feat/question-bank-redesign` (cut fresh off `main`)
-> **Supersedes:** `plans/question-bank-ux-redesign.md` (keeps its Review Mode bones, replaces the rest)
 > **Scope:** Web only. **Homework only** — Test and Mock Exam flows deferred to a follow-up plan.
 
 ---

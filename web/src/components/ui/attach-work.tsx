@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { fileToBase64 } from "@/lib/utils";
 
 interface AttachWorkProps {
   attached: boolean;
@@ -12,14 +13,9 @@ interface AttachWorkProps {
 export function AttachWork({ attached, onAttach, isPro = true, onUpgradeNeeded }: AttachWorkProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      onAttach(base64);
-    };
-    reader.readAsDataURL(file);
+    onAttach(await fileToBase64(file));
   }
 
   return (

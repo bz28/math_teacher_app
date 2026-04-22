@@ -153,7 +153,6 @@ The FastAPI backend runs on Railway with automatic deploys from `main`.
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Access token lifetime |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime |
 | `CLAUDE_API_KEY` | `sk-ant-...` | Anthropic API key |
-| `OPENAI_API_KEY` | (optional) | OpenAI API key |
 | `APP_ENV` | `production` | Environment name |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `SENTRY_DSN` | (empty) | Sentry DSN, leave empty to disable |

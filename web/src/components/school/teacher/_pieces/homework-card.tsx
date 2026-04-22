@@ -1,6 +1,7 @@
 "use client";
 
 import type { TeacherAssignment } from "@/lib/api";
+import { formatDate, formatDue } from "@/lib/utils";
 import { ProgressBar } from "./progress-bar";
 
 export type HomeworkBucket =
@@ -145,7 +146,7 @@ function CompletedRow({
   unitLabel: string;
   onOpen: () => void;
 }) {
-  const dueLabel = hw.due_at ? formatDueShort(hw.due_at) : "—";
+  const dueLabel = hw.due_at ? (formatDate(hw.due_at) ?? "—") : "—";
 
   return (
     <button
@@ -169,39 +170,6 @@ function CompletedRow({
       )}
     </button>
   );
-}
-
-// ── Date helpers ──
-
-function formatDue(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const date = d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
-  if (!hasTime) return `Due ${date}`;
-  const time = d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `Due ${date}, ${time}`;
-}
-
-/** Shorter format for completed rows: "Apr 11" or "Apr 11, 2025". */
-function formatDueShort(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
 }
 
 /** How many full days past due. Returns 0 if not overdue. */

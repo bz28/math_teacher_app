@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { work as workApi, type DiagnosisResult } from "@/lib/api";
 import { Card, Badge } from "@/components/ui";
 import { statusToBadgeVariant } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, fileToBase64 } from "@/lib/utils";
 
 interface WorkDiagnosisProps {
   problemText: string;
@@ -30,27 +30,23 @@ export function WorkDiagnosis({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = (reader.result as string).split(",")[1];
-      setSubmitting(true);
-      setError(null);
-      try {
-        const res = await workApi.submit({
-          image_base64: base64,
-          problem_text: problemText,
-          user_answer: userAnswer,
-          user_was_correct: userWasCorrect,
-          subject,
-        });
-        setDiagnosis(res.diagnosis);
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setSubmitting(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    setSubmitting(true);
+    setError(null);
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await workApi.submit({
+        image_base64: base64,
+        problem_text: problemText,
+        user_answer: userAnswer,
+        user_was_correct: userWasCorrect,
+        subject,
+      });
+      setDiagnosis(res.diagnosis);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (diagnosis) {

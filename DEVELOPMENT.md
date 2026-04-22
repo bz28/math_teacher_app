@@ -87,8 +87,8 @@ alembic current                                   # Show current
 ## Testing
 
 ```bash
-# All tests (excludes integration)
-pytest tests/ -v
+# Unit tests only (skip integration tests that hit Claude and cost money)
+pytest tests/ -v -m "not integration"
 
 # Integration tests (requires CLAUDE_API_KEY, costs money)
 pytest tests/ -v -m integration
