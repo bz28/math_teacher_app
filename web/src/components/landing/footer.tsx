@@ -3,23 +3,22 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-const productLinks: LinkItem[] = [
+const platformLinks: LinkItem[] = [
   { label: "For Students", href: "/students" },
   { label: "Math", href: "/subjects/math" },
   { label: "Physics", href: "/subjects/physics" },
   { label: "Chemistry", href: "/subjects/chemistry" },
 ];
 
-const companyLinks: LinkItem[] = [
-  { label: "For Teachers", href: "/for-teachers" },
-  { label: "Safety", href: "/safety" },
+const schoolsLinks: LinkItem[] = [
   { label: "Book a demo", href: "/demo" },
+  { label: "Safety", href: "/safety" },
 ];
 
-const resourceLinks: LinkItem[] = [
-  { label: "Support", href: "/support" },
+const accountLinks: LinkItem[] = [
   { label: "Sign in", href: "/login" },
   { label: "Create account", href: "/register" },
+  { label: "Support", href: "/support" },
 ];
 
 const legalLinks: LinkItem[] = [
@@ -73,9 +72,9 @@ export function Footer() {
             </p>
           </div>
 
-          <FooterColumn heading="Product" links={productLinks} />
-          <FooterColumn heading="Company" links={companyLinks} />
-          <FooterColumn heading="Resources" links={resourceLinks} />
+          <FooterColumn heading="Platform" links={platformLinks} />
+          <FooterColumn heading="Schools" links={schoolsLinks} />
+          <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />
         </div>
 
