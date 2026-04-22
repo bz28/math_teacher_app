@@ -505,7 +505,9 @@ async def process_student_turn(
         # Apply tool calls, persisting tool_call + tool_result turns.
         for block in tool_uses:
             await _record_tool_call(check.id, block, db)
-            result_text = await _apply_tool_call(check, block, db)
+            result_text = await _apply_tool_call(
+                check, block, db, user_id=user_id,
+            )
             await _record_tool_result(
                 check.id, getattr(block, "id", ""), result_text, db,
             )
@@ -605,6 +607,8 @@ async def _apply_tool_call(
     check: IntegrityCheckSubmission,
     block: Any,
     db: AsyncSession,
+    *,
+    user_id: str | None = None,
 ) -> str:
     """Validate + apply a single tool call. Returns the tool_result
     text to persist (and echo back to the agent on the next loop)."""
@@ -613,9 +617,105 @@ async def _apply_tool_call(
 
     if tool_name == TOOL_SUBMIT_VERDICT:
         return await _apply_submit_verdict(check, raw_input, db)
+    if tool_name == TOOL_GENERATE_VARIANT:
+        return await _apply_generate_variant(
+            check, raw_input, db, user_id=user_id,
+        )
     if tool_name == TOOL_FINISH_CHECK:
         return await _apply_finish_check(check, raw_input, db)
     return f"rejected: unknown tool '{tool_name}'"
+
+
+async def _apply_generate_variant(
+    check: IntegrityCheckSubmission,
+    raw_input: dict[str, Any],
+    db: AsyncSession,
+    *,
+    user_id: str | None = None,
+) -> str:
+    """Handle the inline-variant disambiguator tool.
+
+    Generates a fresh isomorphic problem for the given sampled problem
+    and returns it as tool_result text. The agent's next turn will
+    paste the variant into the chat and ask for the student's approach.
+
+    Guardrails:
+    - The variant can only be called once per session (flips
+      `inline_variant_used=True` on success; refuses thereafter).
+    - Must reference a sampled problem for this check.
+    - Requires at least one student turn first, same floor as
+      submit_problem_verdict — we're not running the disambiguator
+      before even hearing from the student.
+    - On LLM failure, returns an error tool_result rather than
+      crashing the agent loop.
+    """
+    from api.core.practice import generate_similar_questions
+
+    problem_id_str = raw_input.get("problem_id") or ""
+    try:
+        problem_id = uuid.UUID(str(problem_id_str))
+    except (ValueError, TypeError):
+        return f"rejected: problem_id {problem_id_str!r} is not a valid UUID"
+
+    if check.inline_variant_used:
+        return (
+            "rejected: generate_variant can only be called once per session "
+            "and this check has already used it"
+        )
+
+    problem = (await db.execute(
+        select(IntegrityCheckProblem).where(
+            IntegrityCheckProblem.id == problem_id,
+            IntegrityCheckProblem.integrity_check_submission_id == check.id,
+        )
+    )).scalar_one_or_none()
+    if problem is None:
+        return (
+            "rejected: problem_id does not match any sampled problem for "
+            "this conversation"
+        )
+
+    student_turn_count = await count_student_turns(check.id, db)
+    if student_turn_count < VERDICT_STUDENT_TURN_FLOOR:
+        return (
+            "rejected: need at least "
+            f"{VERDICT_STUDENT_TURN_FLOOR} student turn(s) before "
+            "generating a variant; ask the student a question first"
+        )
+
+    item = (await db.execute(
+        select(QuestionBankItem).where(
+            QuestionBankItem.id == problem.bank_item_id,
+        )
+    )).scalar_one_or_none()
+    if item is None:
+        return "rejected: bank item no longer exists (was it deleted?)"
+
+    try:
+        generated = await generate_similar_questions(
+            [item.question], user_id=user_id, difficulty="same",
+        )
+    except Exception:
+        logger.exception(
+            "generate_variant: similar-question generation failed for "
+            "check %s problem %s", check.id, problem_id,
+        )
+        return (
+            "rejected: variant generation failed — proceed without the "
+            "variant for this session"
+        )
+    if not generated or not generated[0].strip():
+        return (
+            "rejected: variant generation returned empty — proceed "
+            "without the variant for this session"
+        )
+
+    check.inline_variant_used = True
+    await db.flush()
+    return (
+        f"accepted: variant problem (present this to the student and ask "
+        f"how they'd approach it — NOT to solve it): {generated[0].strip()}"
+    )
 
 
 def _validate_rubric(raw: Any) -> tuple[dict[str, str] | None, str | None]:
