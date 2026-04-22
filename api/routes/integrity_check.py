@@ -20,9 +20,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_pipeline import (
-    BADGE_LIKELY,
-    BADGE_UNCERTAIN,
-    BADGE_UNLIKELY,
     MAX_STUDENT_TURNS,
     PROBLEM_STATUS_DISMISSED,
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
@@ -53,11 +50,12 @@ MIN_MESSAGE_CHARS = 5
 # ── Response shapes ─────────────────────────────────────────────────
 
 class ProblemSummary(BaseModel):
-    """Student-facing per-problem status (no extraction, no reasoning)."""
+    """Student-facing per-problem status (no extraction, no reasoning,
+    no rubric). Rubric is teacher-facing; students see status only.
+    """
     problem_id: str
     sample_position: int
     status: str
-    badge: str | None
 
 
 class TurnOut(BaseModel):
@@ -72,7 +70,12 @@ class TurnOut(BaseModel):
 class IntegrityStateResponse(BaseModel):
     submission_id: str
     overall_status: str
-    overall_badge: str | None
+    # One of pass / needs_practice / tutor_pivot / flag_for_review.
+    # Null when status is extracting/awaiting_student/in_progress/
+    # skipped_unreadable, or when the turn cap was hit without a
+    # conclusion. Student-facing UI doesn't distinguish pass vs
+    # flag_for_review — both look the same at the door.
+    disposition: str | None
     student_flagged_extraction: bool
     # Vision-extracted steps from the student's own handwritten work.
     # Surfaced so the confirm screen can show the reader's take before
@@ -170,7 +173,6 @@ def _problem_summaries(
             problem_id=str(p.id),
             sample_position=p.sample_position,
             status=p.status,
-            badge=p.badge,
         )
         for p in problems
     ]
@@ -211,7 +213,7 @@ def _build_state_response(
         return IntegrityStateResponse(
             submission_id=str(submission_id),
             overall_status=fallback_status,
-            overall_badge=None,
+            disposition=None,
             student_flagged_extraction=False,
             extraction=None,
             problems=[],
@@ -220,7 +222,7 @@ def _build_state_response(
     return IntegrityStateResponse(
         submission_id=str(submission_id),
         overall_status=check.status,
-        overall_badge=check.overall_badge,
+        disposition=check.disposition,
         student_flagged_extraction=check.student_flagged_extraction,
         extraction=_first_extraction(problems),
         problems=_problem_summaries(problems),
@@ -381,9 +383,11 @@ class TeacherIntegrityProblemRow(BaseModel):
     question: str
     sample_position: int
     status: str
-    badge: str | None
-    confidence: float | None
+    # Six-dimension rubric dict, or null when the agent hasn't
+    # verdicted this problem yet (e.g. pending or turn-cap-force-finalize).
+    rubric: dict[str, Any] | None
     ai_reasoning: str | None
+    selected_reason: str | None
     teacher_dismissed: bool
     teacher_dismissal_reason: str | None
     student_work_extraction: dict[str, Any] | None
@@ -392,9 +396,14 @@ class TeacherIntegrityProblemRow(BaseModel):
 class TeacherIntegrityDetail(BaseModel):
     submission_id: str
     overall_status: str
-    overall_badge: str | None
-    overall_confidence: float | None
+    # One of pass / needs_practice / tutor_pivot / flag_for_review.
+    # Null when status is skipped_unreadable or when the agent couldn't
+    # conclude (turn cap or no sampled problems).
+    disposition: str | None
     overall_summary: str | None
+    probe_selection_reason: str | None
+    inline_variant_used: bool
+    inline_variant_result: str | None
     student_flagged_extraction: bool
     problems: list[TeacherIntegrityProblemRow]
     transcript: list[TeacherTranscriptTurn]
@@ -421,9 +430,11 @@ async def teacher_get_integrity_detail(
         return TeacherIntegrityDetail(
             submission_id=str(submission_id),
             overall_status="no_check",
-            overall_badge=None,
-            overall_confidence=None,
+            disposition=None,
             overall_summary=None,
+            probe_selection_reason=None,
+            inline_variant_used=False,
+            inline_variant_result=None,
             student_flagged_extraction=False,
             problems=[],
             transcript=[],
@@ -451,9 +462,9 @@ async def teacher_get_integrity_detail(
             question=item.question if item else "(problem text unavailable)",
             sample_position=p.sample_position,
             status=p.status,
-            badge=p.badge,
-            confidence=p.confidence,
+            rubric=p.rubric,
             ai_reasoning=p.ai_reasoning,
+            selected_reason=p.selected_reason,
             teacher_dismissed=p.teacher_dismissed,
             teacher_dismissal_reason=p.teacher_dismissal_reason,
             student_work_extraction=p.student_work_extraction,
@@ -475,37 +486,15 @@ async def teacher_get_integrity_detail(
     return TeacherIntegrityDetail(
         submission_id=str(submission_id),
         overall_status=check.status,
-        overall_badge=check.overall_badge,
-        overall_confidence=check.overall_confidence,
+        disposition=check.disposition,
         overall_summary=check.overall_summary,
+        probe_selection_reason=check.probe_selection_reason,
+        inline_variant_used=check.inline_variant_used,
+        inline_variant_result=check.inline_variant_result,
         student_flagged_extraction=check.student_flagged_extraction,
         problems=problem_rows,
         transcript=transcript_rows,
     )
-
-
-_BADGE_SEVERITY: dict[str, int] = {
-    BADGE_LIKELY: 0,
-    BADGE_UNCERTAIN: 1,
-    BADGE_UNLIKELY: 2,
-}
-
-
-def _recompute_overall_badge(
-    problems: list[IntegrityCheckProblem],
-) -> str | None:
-    """Worst-of across problems the teacher has neither dismissed nor
-    marked unreadable. None when no relevant problems remain."""
-    remaining = [
-        p for p in problems
-        if not p.teacher_dismissed
-        and p.status != PROBLEM_STATUS_SKIPPED_UNREADABLE
-        and p.badge in _BADGE_SEVERITY
-    ]
-    if not remaining:
-        return None
-    worst = max(remaining, key=lambda p: _BADGE_SEVERITY[p.badge or ""])
-    return worst.badge
 
 
 @router.post(
@@ -548,16 +537,10 @@ async def teacher_dismiss_problem(
     if problem.status != PROBLEM_STATUS_SKIPPED_UNREADABLE:
         problem.status = PROBLEM_STATUS_DISMISSED
 
-    # Recompute overall_badge from the surviving problems so the
-    # submission header doesn't keep flagging the student on a verdict
-    # the teacher has overruled. When no flagged problems remain,
-    # clear the agent's confidence + summary too — both described the
-    # now-dismissed verdict and would be misleading otherwise.
-    all_problems = await _load_problems(db, check.id)
-    new_badge = _recompute_overall_badge(all_problems)
-    check.overall_badge = new_badge
-    if new_badge is None:
-        check.overall_confidence = None
-        check.overall_summary = None
+    # Session-level disposition is a holistic judgment from the agent —
+    # it's not a derivative of per-problem verdicts, so we don't
+    # recompute it when a teacher dismisses one problem. The teacher UI
+    # shows the agent's original disposition alongside which problems
+    # were dismissed; teacher interprets.
 
     await db.commit()

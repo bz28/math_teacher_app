@@ -502,18 +502,25 @@ AI_GRADING_SCHEMA: ToolSchema = {
     },
 }
 
-# Agent tool: submit a verdict for a single sampled problem. The
+# Agent tool: submit the rubric for a single sampled problem. The
 # agent calls this as it moves through problems in the conversation.
 # Rejected by the server if zero student turns have been recorded
 # yet (the agent must probe at least once before verdicting).
+#
+# The rubric has six dimensions; paraphrase_originality and
+# causal_fluency are always required because the open walkthrough
+# produces signal on both. transfer / prediction / authority_resistance
+# are optional ("not_probed") because they depend on whether the agent
+# chose to ask that kind of follow-up. self_correction is observed
+# passively and may be "not_observed" when there wasn't enough turn
+# volume to judge.
 INTEGRITY_SUBMIT_VERDICT_SCHEMA: ToolSchema = {
     "name": "submit_problem_verdict",
     "description": (
-        "Record your verdict for ONE of the sampled problems. Call "
-        "this when you have reached strong confidence (positive or "
-        "negative) on whether the student understands their own "
-        "work on this problem. You must have had at least one "
-        "back-and-forth with the student first."
+        "Record the rubric for ONE sampled problem. Call this when "
+        "you have enough signal to score at least paraphrase_originality "
+        "and causal_fluency. You must have had at least one back-and-"
+        "forth with the student first."
     ),
     "input_schema": {
         "type": "object",
@@ -525,57 +532,174 @@ INTEGRITY_SUBMIT_VERDICT_SCHEMA: ToolSchema = {
                     "problem list provided at the start)."
                 ),
             },
-            "badge": {
-                "type": "string",
-                "enum": ["likely", "uncertain", "unlikely"],
+            "rubric": {
+                "type": "object",
                 "description": (
-                    "likely = the student likely did the work and understands it; "
-                    "uncertain = not enough signal either way; "
-                    "unlikely = the student likely did NOT do the work / doesn't understand it."
+                    "Six-dimension rubric. paraphrase_originality and "
+                    "causal_fluency are required. Others can be "
+                    "'not_probed' when you didn't ask that kind of "
+                    "question, or 'not_observed' for self_correction when "
+                    "you haven't seen enough to judge."
                 ),
-            },
-            "confidence": {
-                "type": "number",
-                "description": "Your confidence in this verdict, 0.0 to 1.0.",
+                "properties": {
+                    "paraphrase_originality": {
+                        "type": "string",
+                        "enum": ["low", "mid", "high"],
+                        "description": (
+                            "How original vs textbook-verbatim their "
+                            "phrasing was. low = generic definitions / "
+                            "copy-paste feel. high = clearly their own words."
+                        ),
+                    },
+                    "causal_fluency": {
+                        "type": "string",
+                        "enum": ["low", "mid", "high"],
+                        "description": (
+                            "How smoothly they explained WHY, not just "
+                            "what. low = disconnected facts or 'just because'. "
+                            "high = smooth causal chain linking steps."
+                        ),
+                    },
+                    "transfer": {
+                        "type": "string",
+                        "enum": ["low", "mid", "high", "not_probed"],
+                        "description": (
+                            "If you asked a 'what if X were different?' "
+                            "twist, how well they handled it."
+                        ),
+                    },
+                    "prediction": {
+                        "type": "string",
+                        "enum": ["low", "mid", "high", "not_probed"],
+                        "description": (
+                            "If you asked them to predict the direction "
+                            "of an answer before calculating, how well."
+                        ),
+                    },
+                    "authority_resistance": {
+                        "type": "string",
+                        "enum": ["low", "mid", "high", "not_probed"],
+                        "description": (
+                            "If you floated a plausible-but-wrong premise, "
+                            "did they push back? low = accepted it, "
+                            "high = caught and corrected you."
+                        ),
+                    },
+                    "self_correction": {
+                        "type": "string",
+                        "enum": ["low", "mid", "high", "not_observed"],
+                        "description": (
+                            "Did they catch their own errors mid-explanation? "
+                            "Observed passively — you don't prompt for this."
+                        ),
+                    },
+                },
+                "required": ["paraphrase_originality", "causal_fluency"],
+                "additionalProperties": False,
             },
             "reasoning": {
                 "type": "string",
-                "description": "One sentence, teacher-facing — what swung you to this verdict.",
+                "description": (
+                    "One sentence, teacher-facing — what swung you to "
+                    "these rubric scores."
+                ),
             },
         },
-        "required": ["problem_id", "badge", "confidence", "reasoning"],
+        "required": ["problem_id", "rubric", "reasoning"],
+        "additionalProperties": False,
+    },
+}
+
+# Agent tool: generate a fresh isomorphic problem for the inline
+# ambiguity disambiguator. Used when the student has correct work on
+# paper but cannot articulate any of it AND behavioral signal is clean
+# — could be ESL/anxious/bad-at-verbalizing rather than cheating. The
+# agent presents the variant in-chat and asks for the APPROACH (not a
+# full solution). Call sparingly — once per session max.
+INTEGRITY_GENERATE_VARIANT_SCHEMA: ToolSchema = {
+    "name": "generate_variant",
+    "description": (
+        "Generate a fresh isomorphic problem to disambiguate an "
+        "ambiguous case (correct work on paper, blank verbal, clean "
+        "behavioral). Present it in-chat and ask how the student would "
+        "APPROACH it — not to solve it fully. Call at most once per "
+        "session."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "problem_id": {
+                "type": "string",
+                "description": (
+                    "UUID of the original problem whose structure the "
+                    "variant should mirror."
+                ),
+            },
+        },
+        "required": ["problem_id"],
         "additionalProperties": False,
     },
 }
 
 # Agent tool: finish the whole check. Call only after every sampled
-# problem has a verdict. The server validates coverage and otherwise
+# problem has a rubric. The server validates coverage and otherwise
 # rejects the call.
 INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
     "name": "finish_check",
     "description": (
-        "Finish the integrity check. Call this only after every "
-        "sampled problem has received a submit_problem_verdict call. "
-        "The overall badge is the worst of the per-problem badges."
+        "Finish the integrity check. Emit exactly one of four "
+        "dispositions based on rubrics + behavioral signals. Call only "
+        "after every sampled problem has a submit_problem_verdict."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "overall_badge": {
+            "disposition": {
                 "type": "string",
-                "enum": ["likely", "uncertain", "unlikely"],
-                "description": "Overall verdict for the submission, normally the worst per-problem badge.",
-            },
-            "overall_confidence": {
-                "type": "number",
-                "description": "Your overall confidence, 0.0 to 1.0.",
+                "enum": [
+                    "pass",
+                    "needs_practice",
+                    "tutor_pivot",
+                    "flag_for_review",
+                ],
+                "description": (
+                    "pass = understood deeply (rubric strong, behavioral "
+                    "clean). needs_practice = procedural only (can describe "
+                    "steps but can't say why — did the work, thin theory). "
+                    "tutor_pivot = student got the problem WRONG on paper "
+                    "and is lost (learning, not cheating). flag_for_review = "
+                    "correct work on paper but can't explain any of it, "
+                    "AND/OR behavioral red flags — teacher reviews."
+                ),
             },
             "summary": {
                 "type": "string",
-                "description": "One sentence, teacher-facing, summarising the whole check.",
+                "description": (
+                    "One sentence, teacher-facing, summarising the whole "
+                    "check."
+                ),
+            },
+            "inline_variant_result": {
+                "type": "string",
+                "enum": [
+                    "specific_approach",
+                    "approach_after_followup",
+                    "blank_or_wrong",
+                    "not_applicable",
+                ],
+                "description": (
+                    "If you used generate_variant to disambiguate, report "
+                    "the outcome. specific_approach = student referenced "
+                    "concrete structure in their approach (upgrade to pass). "
+                    "approach_after_followup = needed a 'first step?' "
+                    "follow-up but then gave a reasonable answer (upgrade "
+                    "to pass). blank_or_wrong = couldn't articulate an "
+                    "approach even after follow-up (confirms flag). "
+                    "not_applicable = you didn't use the variant."
+                ),
             },
         },
-        "required": ["overall_badge", "overall_confidence", "summary"],
+        "required": ["disposition", "summary", "inline_variant_result"],
         "additionalProperties": False,
     },
 }

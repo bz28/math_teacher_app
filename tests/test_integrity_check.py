@@ -67,7 +67,7 @@ async def test_submit_creates_check_and_opening_turn(
             .where(IntegrityCheckSubmission.submission_id == submission_id)
         )).scalar_one()
         assert check.status == "awaiting_student"
-        assert check.overall_badge is None
+        assert check.disposition is None
 
         problems = (await s.execute(
             select(IntegrityCheckProblem)
@@ -231,7 +231,10 @@ async def test_unreadable_gate_skips_entire_check(
             .where(IntegrityCheckSubmission.submission_id == submission_id)
         )).scalar_one()
         assert check.status == "skipped_unreadable"
-        assert check.overall_badge == "unreadable"
+        # Unreadable submissions: status carries the meaning; disposition
+        # stays null. Teacher dashboard surfaces skipped-unreadable as a
+        # separate bucket, not as one of the four integrity dispositions.
+        assert check.disposition is None
 
         problems = (await s.execute(
             select(IntegrityCheckProblem)
@@ -239,7 +242,7 @@ async def test_unreadable_gate_skips_entire_check(
         )).scalars().all()
         assert len(problems) == 1
         assert problems[0].status == "skipped_unreadable"
-        assert problems[0].badge == "unreadable"
+        assert problems[0].rubric is None
 
         turns = (await s.execute(
             select(IntegrityConversationTurn)
@@ -411,8 +414,10 @@ async def test_turn_happy_path_verdict_then_finish(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "likely",
-                    "confidence": 0.85,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
                     "reasoning": "Explained factoring with specific numbers.",
                 },
                 use_id="u1",
@@ -422,9 +427,9 @@ async def test_turn_happy_path_verdict_then_finish(
             make_tool_use(
                 "finish_check",
                 {
-                    "overall_badge": "likely",
-                    "overall_confidence": 0.85,
+                    "disposition": "pass",
                     "summary": "Student explained the factoring clearly.",
+                    "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
             ),
@@ -442,7 +447,7 @@ async def test_turn_happy_path_verdict_then_finish(
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["overall_status"] == "complete"
-    assert body["overall_badge"] == "likely"
+    assert body["disposition"] == "pass"
 
     # Transcript visible to the student: opener, their own message,
     # the agent's acknowledgement, and the closing message. Tool call
@@ -458,15 +463,17 @@ async def test_turn_happy_path_verdict_then_finish(
             .where(IntegrityCheckSubmission.submission_id == submission_id)
         )).scalar_one()
         assert check.status == "complete"
+        assert check.disposition == "pass"
         assert check.overall_summary is not None
-        assert check.overall_confidence == 0.85
+        assert check.inline_variant_result == "not_applicable"
         problem = (await s.execute(
             select(IntegrityCheckProblem)
             .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalar_one()
         assert problem.status == "verdict_submitted"
-        assert problem.badge == "likely"
-        assert problem.confidence == 0.85
+        assert problem.rubric is not None
+        assert problem.rubric["paraphrase_originality"] == "high"
+        assert problem.rubric["causal_fluency"] == "high"
 
 
 async def test_turn_finish_before_all_verdicts_rejected(
@@ -484,9 +491,9 @@ async def test_turn_finish_before_all_verdicts_rejected(
             make_tool_use(
                 "finish_check",
                 {
-                    "overall_badge": "likely",
-                    "overall_confidence": 0.9,
+                    "disposition": "pass",
                     "summary": "Trying to finish early.",
+                    "inline_variant_result": "not_applicable",
                 },
                 use_id="u1",
             ),
@@ -503,7 +510,7 @@ async def test_turn_finish_before_all_verdicts_rejected(
     assert r.status_code == 200
     body = r.json()
     assert body["overall_status"] == "in_progress"
-    assert body["overall_badge"] is None
+    assert body["disposition"] is None
 
     # The rejection reason should be recorded on the hidden transcript.
     async with get_session_factory()() as s:
@@ -550,8 +557,10 @@ async def test_turn_verdict_floor_rejects_when_no_student_turn_yet(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "likely",
-                    "confidence": 0.9,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
                     "reasoning": "Premature.",
                 },
                 use_id="u1",
@@ -582,7 +591,7 @@ async def test_turn_verdict_floor_rejects_when_no_student_turn_yet(
             .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalar_one()
         assert problem.status == "pending"
-        assert problem.badge is None
+        assert problem.rubric is None
 
         tool_results = (await s.execute(
             select(IntegrityConversationTurn)
@@ -608,8 +617,10 @@ async def test_turn_verdict_rejects_invalid_problem_id(
                 "submit_problem_verdict",
                 {
                     "problem_id": bogus_id,
-                    "badge": "likely",
-                    "confidence": 0.9,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
                     "reasoning": "bogus",
                 },
                 use_id="u1",
@@ -644,7 +655,8 @@ async def test_turn_hard_cap_force_finalizes(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
     """Send enough student turns to hit MAX_STUDENT_TURNS; the check
-    should force-finalize with `uncertain`."""
+    should force-finalize with a null disposition (teacher reviews —
+    agent ran out of time, we don't pretend to have judged the student)."""
     from api.core.integrity_pipeline import MAX_STUDENT_TURNS
 
     set_agent_script([[make_text("Opener.")]])
@@ -663,7 +675,7 @@ async def test_turn_hard_cap_force_finalizes(
 
     body = r.json()
     assert body["overall_status"] == "complete"
-    assert body["overall_badge"] == "uncertain"
+    assert body["disposition"] is None
 
     # An 11th turn attempt is now rejected.
     r = await client.post(
@@ -699,8 +711,10 @@ async def test_turn_409_when_complete(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "likely",
-                    "confidence": 0.9,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
                     "reasoning": "ok",
                 },
                 use_id="u1",
@@ -710,9 +724,9 @@ async def test_turn_409_when_complete(
             make_tool_use(
                 "finish_check",
                 {
-                    "overall_badge": "likely",
-                    "overall_confidence": 0.9,
+                    "disposition": "pass",
                     "summary": "done",
+                    "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
             ),
@@ -832,11 +846,13 @@ async def test_teacher_dismiss_marks_problem(
     assert detail3["problems"][0]["teacher_dismissal_reason"] == "revised reason"
 
 
-async def test_teacher_dismiss_recomputes_overall_badge(
+async def test_teacher_dismiss_keeps_disposition_frozen(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """When a teacher dismisses the only `unlikely` problem, the
-    overall header badge must stop flagging the student."""
+    """Session-level disposition is the agent's holistic judgment and
+    is NOT recomputed when a teacher dismisses a problem. The teacher
+    sees the original disposition alongside the dismissed-problem
+    indicator and interprets both."""
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
@@ -852,15 +868,17 @@ async def test_teacher_dismiss_recomputes_overall_badge(
         )).scalar_one()
         problem_id = str(problem.id)
 
-    # Run the happy path to completion with an `unlikely` verdict + overall.
+    # Run the happy path to a flag_for_review disposition.
     set_agent_script([
         [
             make_tool_use(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "unlikely",
-                    "confidence": 0.9,
+                    "rubric": {
+                        "paraphrase_originality": "low",
+                        "causal_fluency": "low",
+                    },
                     "reasoning": "Couldn't explain the factoring.",
                 },
                 use_id="u1",
@@ -870,9 +888,9 @@ async def test_teacher_dismiss_recomputes_overall_badge(
             make_tool_use(
                 "finish_check",
                 {
-                    "overall_badge": "unlikely",
-                    "overall_confidence": 0.9,
-                    "summary": "student stuck.",
+                    "disposition": "flag_for_review",
+                    "summary": "Correct work, blank verbal.",
+                    "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
             ),
@@ -888,10 +906,12 @@ async def test_teacher_dismiss_recomputes_overall_badge(
         f"/v1/teacher/integrity/submissions/{submission_id}",
         headers=_auth(world["teacher_token"]),
     )).json()
-    assert detail["overall_badge"] == "unlikely"
+    assert detail["disposition"] == "flag_for_review"
 
-    # Teacher dismisses the only flagged problem. The submission no
-    # longer has an active unlikely verdict → overall_badge is None.
+    # Teacher dismisses the flagged problem. Disposition stays frozen —
+    # it reflects the agent's holistic judgment, not a derivative of
+    # per-problem state. The teacher UI can show "disposition +
+    # dismissed problem" together.
     r = await client.post(
         f"/v1/teacher/integrity/submissions/{submission_id}/dismiss",
         headers=_auth(world["teacher_token"]),
@@ -903,11 +923,9 @@ async def test_teacher_dismiss_recomputes_overall_badge(
         f"/v1/teacher/integrity/submissions/{submission_id}",
         headers=_auth(world["teacher_token"]),
     )).json()
-    assert detail2["overall_badge"] is None
-    # Confidence + summary described the now-dismissed verdict, so
-    # they should also be cleared.
-    assert detail2["overall_confidence"] is None
-    assert detail2["overall_summary"] is None
+    assert detail2["disposition"] == "flag_for_review"
+    assert detail2["overall_summary"] == "Correct work, blank verbal."
+    assert detail2["problems"][0]["teacher_dismissed"] is True
 
 
 async def test_verdict_rejected_on_teacher_dismissed_problem(
@@ -945,8 +963,10 @@ async def test_verdict_rejected_on_teacher_dismissed_problem(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "likely",
-                    "confidence": 0.9,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
                     "reasoning": "late verdict",
                 },
                 use_id="u1",
@@ -1013,7 +1033,8 @@ async def test_turn_force_finalizes_on_agent_failure_at_cap(
         )
     assert r.status_code == 200
     assert r.json()["overall_status"] == "complete"
-    assert r.json()["overall_badge"] == "uncertain"
+    # Turn cap without a conclusion → null disposition (teacher reviews).
+    assert r.json()["disposition"] is None
 
 
 async def test_turn_request_rejects_out_of_range_seconds(
@@ -1051,11 +1072,12 @@ async def test_turn_request_rejects_out_of_range_seconds(
     assert r.status_code == 200, r.text
 
 
-async def test_verdict_rejects_bool_confidence(
+async def test_verdict_rejects_invalid_rubric(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """Booleans are a Python `int` subclass. Confidence=true/false must
-    be rejected by the tool-call validator."""
+    """Rubric validation must reject invalid enum values. Specifically,
+    paraphrase_originality/causal_fluency only accept low/mid/high —
+    not 'not_probed' (which is valid for the optional dimensions)."""
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
@@ -1077,9 +1099,14 @@ async def test_verdict_rejects_bool_confidence(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "likely",
-                    "confidence": True,
-                    "reasoning": "bool",
+                    # 'not_probed' is NOT a valid value for
+                    # paraphrase_originality — that dimension is scored
+                    # from the open walkthrough so it's always observed.
+                    "rubric": {
+                        "paraphrase_originality": "not_probed",
+                        "causal_fluency": "high",
+                    },
+                    "reasoning": "bad enum",
                 },
                 use_id="u1",
             ),
@@ -1098,7 +1125,9 @@ async def test_verdict_rejects_bool_confidence(
             select(IntegrityConversationTurn)
             .where(IntegrityConversationTurn.role == "tool_result")
         )).scalars().all()
-        assert any("confidence must be a number" in t.content for t in tool_results)
+        assert any(
+            "paraphrase_originality" in t.content for t in tool_results
+        )
 
 
 # ── Extraction flag ────────────────────────────────────────────────
@@ -1164,8 +1193,10 @@ async def test_flag_extraction_sets_flag_idempotent_and_terminal_409(
                 "submit_problem_verdict",
                 {
                     "problem_id": problem_id,
-                    "badge": "likely",
-                    "confidence": 0.9,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
                     "reasoning": "ok",
                 },
                 use_id="u1",
@@ -1175,9 +1206,9 @@ async def test_flag_extraction_sets_flag_idempotent_and_terminal_409(
             make_tool_use(
                 "finish_check",
                 {
-                    "overall_badge": "likely",
-                    "overall_confidence": 0.9,
+                    "disposition": "pass",
                     "summary": "done",
+                    "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
             ),

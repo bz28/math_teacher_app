@@ -81,7 +81,14 @@ class TestBuildAgentMessages:
         assert messages[3]["role"] == "assistant"
 
     def test_groups_tool_call_after_agent_text(self) -> None:
-        tool_input = {"problem_id": "p1", "badge": "likely", "confidence": 0.9, "reasoning": "x"}
+        tool_input = {
+            "problem_id": "p1",
+            "rubric": {
+                "paraphrase_originality": "high",
+                "causal_fluency": "high",
+            },
+            "reasoning": "x",
+        }
         turns = [
             _turn(0, "agent", "Hello"),
             _turn(

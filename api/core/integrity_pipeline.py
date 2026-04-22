@@ -67,9 +67,9 @@ VERDICT_STUDENT_TURN_FLOOR = 1
 # emitting invalid calls.
 MAX_AGENT_LOOPS_PER_TURN = 6
 
-# Tool names — must match INTEGRITY_SUBMIT_VERDICT_SCHEMA /
-# INTEGRITY_FINISH_CHECK_SCHEMA in api/core/llm_schemas.py.
+# Tool names — must match schemas in api/core/llm_schemas.py.
 TOOL_SUBMIT_VERDICT = "submit_problem_verdict"
+TOOL_GENERATE_VARIANT = "generate_variant"
 TOOL_FINISH_CHECK = "finish_check"
 
 # Submission-level status state machine.
@@ -91,11 +91,50 @@ PROBLEM_TERMINAL_STATUSES = frozenset({
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
 })
 
-# Badge values surfaced to the teacher.
-BADGE_LIKELY = "likely"
-BADGE_UNCERTAIN = "uncertain"
-BADGE_UNLIKELY = "unlikely"
-BADGE_UNREADABLE = "unreadable"
+# Disposition values surfaced to the teacher. Emitted by the agent
+# via finish_check; None when status=skipped_unreadable or when the
+# turn cap was hit without a conclusion (teacher reviews either way).
+DISPOSITION_PASS = "pass"
+DISPOSITION_NEEDS_PRACTICE = "needs_practice"
+DISPOSITION_TUTOR_PIVOT = "tutor_pivot"
+DISPOSITION_FLAG_FOR_REVIEW = "flag_for_review"
+
+DISPOSITION_VALUES = frozenset({
+    DISPOSITION_PASS,
+    DISPOSITION_NEEDS_PRACTICE,
+    DISPOSITION_TUTOR_PIVOT,
+    DISPOSITION_FLAG_FOR_REVIEW,
+})
+
+# Why the pipeline picked the problem(s) it did (stored on the
+# submission + the per-problem selected_reason). v1 only uses the
+# first two — the anomaly_* values are reserved for a v2 copy-smell
+# detector (see plan section on deferred anomaly detection).
+SELECTION_REASON_HIGHEST_DIFFERENTIATION = "highest_differentiation"
+SELECTION_REASON_SKIP_ALL_WRONG = "skip_all_wrong"
+SELECTION_REASON_ANOMALY_COPIED = "anomaly_copied"           # v2
+SELECTION_REASON_ANOMALY_WRONG_METHOD = "anomaly_wrong_method"  # v2
+
+# Inline variant disambiguator result, set by finish_check when the
+# agent used generate_variant to resolve an ambiguous case.
+VARIANT_RESULT_SPECIFIC_APPROACH = "specific_approach"
+VARIANT_RESULT_APPROACH_AFTER_FOLLOWUP = "approach_after_followup"
+VARIANT_RESULT_BLANK_OR_WRONG = "blank_or_wrong"
+VARIANT_RESULT_NOT_APPLICABLE = "not_applicable"
+
+VARIANT_RESULT_VALUES = frozenset({
+    VARIANT_RESULT_SPECIFIC_APPROACH,
+    VARIANT_RESULT_APPROACH_AFTER_FOLLOWUP,
+    VARIANT_RESULT_BLANK_OR_WRONG,
+    VARIANT_RESULT_NOT_APPLICABLE,
+})
+
+# Rubric enum values, per dimension (see INTEGRITY_SUBMIT_VERDICT_SCHEMA).
+_RUBRIC_CORE_VALUES = frozenset({"low", "mid", "high"})
+_RUBRIC_OPTIONAL_VALUES = frozenset({"low", "mid", "high", "not_probed"})
+_RUBRIC_SELF_CORRECTION_VALUES = frozenset({
+    "low", "mid", "high", "not_observed",
+})
 
 # Turn role labels.
 ROLE_AGENT = "agent"
@@ -211,11 +250,11 @@ async def start_integrity_check(
                 sample_position=sample_position,
                 status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
                 student_work_extraction=extraction,
-                badge=BADGE_UNREADABLE,
             ))
+        # Unreadable submissions: status carries the meaning, disposition
+        # stays null. Teacher dashboard surfaces the skipped-unreadable
+        # bucket separately from the four integrity dispositions.
         check.status = STATUS_SKIPPED_UNREADABLE
-        check.overall_badge = BADGE_UNREADABLE
-        check.overall_confidence = confidence
         check.overall_summary = "Handwriting was unreadable — no questions asked."
         return
 
@@ -238,10 +277,9 @@ async def start_integrity_check(
 
     if not problem_rows:
         # All sampled problems were deleted — mark the check complete
-        # with uncertain so we don't get stuck in extracting.
+        # without a disposition so the teacher dashboard flags it for
+        # manual review rather than inferring any integrity verdict.
         check.status = STATUS_COMPLETE
-        check.overall_badge = BADGE_UNCERTAIN
-        check.overall_confidence = 0.0
         check.overall_summary = "No sampled problems were available to check."
         return
 
@@ -503,14 +541,76 @@ async def _apply_tool_call(
     return f"rejected: unknown tool '{tool_name}'"
 
 
+def _validate_rubric(raw: Any) -> tuple[dict[str, str] | None, str | None]:
+    """Validate a rubric dict submitted by the agent.
+
+    Returns (normalized_rubric, error_message). On success
+    error_message is None; on failure normalized_rubric is None and
+    error_message explains what's wrong.
+
+    The agent is free to omit optional dimensions entirely; we fill in
+    the sentinel values ('not_probed' / 'not_observed') so the stored
+    rubric is always complete. paraphrase_originality and
+    causal_fluency are always required.
+    """
+    if not isinstance(raw, dict):
+        return None, "rubric must be an object"
+
+    paraphrase = raw.get("paraphrase_originality")
+    if paraphrase not in _RUBRIC_CORE_VALUES:
+        return None, (
+            "rubric.paraphrase_originality must be low/mid/high "
+            f"(got {paraphrase!r})"
+        )
+    causal = raw.get("causal_fluency")
+    if causal not in _RUBRIC_CORE_VALUES:
+        return None, (
+            "rubric.causal_fluency must be low/mid/high "
+            f"(got {causal!r})"
+        )
+
+    transfer = raw.get("transfer", "not_probed")
+    if transfer not in _RUBRIC_OPTIONAL_VALUES:
+        return None, (
+            "rubric.transfer must be low/mid/high/not_probed "
+            f"(got {transfer!r})"
+        )
+    prediction = raw.get("prediction", "not_probed")
+    if prediction not in _RUBRIC_OPTIONAL_VALUES:
+        return None, (
+            "rubric.prediction must be low/mid/high/not_probed "
+            f"(got {prediction!r})"
+        )
+    authority = raw.get("authority_resistance", "not_probed")
+    if authority not in _RUBRIC_OPTIONAL_VALUES:
+        return None, (
+            "rubric.authority_resistance must be low/mid/high/not_probed "
+            f"(got {authority!r})"
+        )
+    self_corr = raw.get("self_correction", "not_observed")
+    if self_corr not in _RUBRIC_SELF_CORRECTION_VALUES:
+        return None, (
+            "rubric.self_correction must be low/mid/high/not_observed "
+            f"(got {self_corr!r})"
+        )
+
+    return {
+        "paraphrase_originality": paraphrase,
+        "causal_fluency": causal,
+        "transfer": transfer,
+        "prediction": prediction,
+        "authority_resistance": authority,
+        "self_correction": self_corr,
+    }, None
+
+
 async def _apply_submit_verdict(
     check: IntegrityCheckSubmission,
     raw_input: dict[str, Any],
     db: AsyncSession,
 ) -> str:
     problem_id_str = raw_input.get("problem_id") or ""
-    badge = raw_input.get("badge")
-    confidence = raw_input.get("confidence")
+    raw_rubric = raw_input.get("rubric")
     reasoning = raw_input.get("reasoning") or ""
 
     try:
@@ -538,16 +638,9 @@ async def _apply_submit_verdict(
     if problem.status == PROBLEM_STATUS_SKIPPED_UNREADABLE:
         return "rejected: this problem was skipped as unreadable"
 
-    if badge not in (BADGE_LIKELY, BADGE_UNCERTAIN, BADGE_UNLIKELY):
-        return f"rejected: badge must be one of likely/uncertain/unlikely (got {badge!r})"
-
-    # isinstance(True, int) is True in Python, but bool confidences
-    # are nonsensical here — guard explicitly.
-    if isinstance(confidence, bool) or not isinstance(confidence, int | float):
-        return "rejected: confidence must be a number between 0.0 and 1.0"
-    confidence_f = float(confidence)
-    if confidence_f < 0.0 or confidence_f > 1.0:
-        return "rejected: confidence must be between 0.0 and 1.0"
+    rubric, rubric_err = _validate_rubric(raw_rubric)
+    if rubric_err is not None:
+        return f"rejected: {rubric_err}"
 
     student_turn_count = await count_student_turns(check.id, db)
     if student_turn_count < VERDICT_STUDENT_TURN_FLOOR:
@@ -558,11 +651,13 @@ async def _apply_submit_verdict(
         )
 
     problem.status = PROBLEM_STATUS_VERDICT_SUBMITTED
-    problem.badge = badge
-    problem.confidence = confidence_f
+    problem.rubric = rubric
     problem.ai_reasoning = reasoning
     await db.flush()
-    return f"accepted: recorded {badge} ({confidence_f:.2f}) for this problem"
+    return (
+        f"accepted: rubric recorded (paraphrase={rubric['paraphrase_originality']}, "
+        f"causal={rubric['causal_fluency']})"
+    )
 
 
 async def _apply_finish_check(
@@ -570,23 +665,36 @@ async def _apply_finish_check(
     raw_input: dict[str, Any],
     db: AsyncSession,
 ) -> str:
-    overall_badge = raw_input.get("overall_badge")
-    overall_confidence = raw_input.get("overall_confidence")
+    disposition = raw_input.get("disposition")
     summary = raw_input.get("summary") or ""
+    variant_result = raw_input.get("inline_variant_result")
 
-    if overall_badge not in (BADGE_LIKELY, BADGE_UNCERTAIN, BADGE_UNLIKELY):
+    if disposition not in DISPOSITION_VALUES:
         return (
-            "rejected: overall_badge must be one of likely/uncertain/unlikely "
-            f"(got {overall_badge!r})"
+            "rejected: disposition must be one of "
+            "pass/needs_practice/tutor_pivot/flag_for_review "
+            f"(got {disposition!r})"
         )
+    if variant_result not in VARIANT_RESULT_VALUES:
+        return (
+            "rejected: inline_variant_result must be one of "
+            "specific_approach/approach_after_followup/blank_or_wrong/"
+            f"not_applicable (got {variant_result!r})"
+        )
+    # If the agent says the variant disambiguator actually ran, the
+    # pipeline must have already set inline_variant_used=True when
+    # generate_variant was called. Reject if we see a concrete result
+    # without that state — protects against stale agents reporting a
+    # variant result for a flow that didn't happen.
     if (
-        isinstance(overall_confidence, bool)
-        or not isinstance(overall_confidence, int | float)
+        variant_result != VARIANT_RESULT_NOT_APPLICABLE
+        and not check.inline_variant_used
     ):
-        return "rejected: overall_confidence must be a number between 0.0 and 1.0"
-    conf_f = float(overall_confidence)
-    if conf_f < 0.0 or conf_f > 1.0:
-        return "rejected: overall_confidence must be between 0.0 and 1.0"
+        return (
+            "rejected: inline_variant_result reports a variant outcome but "
+            "generate_variant was never called this session. Use "
+            "'not_applicable' when you didn't run the variant."
+        )
 
     problems = (await db.execute(
         select(IntegrityCheckProblem).where(
@@ -605,17 +713,24 @@ async def _apply_finish_check(
         )
 
     check.status = STATUS_COMPLETE
-    check.overall_badge = overall_badge
-    check.overall_confidence = conf_f
+    check.disposition = disposition
     check.overall_summary = summary
+    check.inline_variant_result = variant_result
     await db.flush()
-    return f"accepted: overall {overall_badge} ({conf_f:.2f}), check complete"
+    return f"accepted: disposition {disposition}, check complete"
 
 
 async def _force_finalize_turn_cap(
     check: IntegrityCheckSubmission, db: AsyncSession,
 ) -> None:
-    """Hard-cap enforcement: 10 student turns without a finish_check."""
+    """Hard-cap enforcement: 10 student turns without a finish_check.
+
+    Emits no disposition (left null) so the teacher dashboard surfaces
+    this as "inconclusive — agent ran out of time" rather than any of
+    the four intent-carrying dispositions. Per-problem rubrics are
+    likewise left null on pending problems; the teacher sees the
+    partial transcript and decides.
+    """
     problems = (await db.execute(
         select(IntegrityCheckProblem).where(
             IntegrityCheckProblem.integrity_check_submission_id == check.id,
@@ -624,13 +739,14 @@ async def _force_finalize_turn_cap(
     for p in problems:
         if p.status == PROBLEM_STATUS_PENDING:
             p.status = PROBLEM_STATUS_VERDICT_SUBMITTED
-            p.badge = BADGE_UNCERTAIN
-            p.confidence = 0.0
-            p.ai_reasoning = "Conversation hit the turn cap before this problem was verdicted."
+            p.ai_reasoning = (
+                "Conversation hit the turn cap before this problem was "
+                "verdicted."
+            )
     check.status = STATUS_COMPLETE
-    check.overall_badge = BADGE_UNCERTAIN
-    check.overall_confidence = 0.0
-    check.overall_summary = "Conversation hit the turn cap — verdict is inconclusive."
+    check.overall_summary = (
+        "Conversation hit the turn cap — inconclusive. Teacher review."
+    )
     await _append_agent_text(
         check.id,
         "Thanks for sticking with this. That's all the time we have — your "
