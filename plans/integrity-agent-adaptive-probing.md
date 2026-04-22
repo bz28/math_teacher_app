@@ -1,20 +1,18 @@
 # Integrity agent — adaptive probing, rubric, and tutor-pivot
 
-## Relationship to the existing plan
+## Overview
 
-This plan layers on top of `plans/integrity-conversational-redesign.md`, which already specifies the core plumbing: real chat UI, extraction-grounded agent, fire-and-forget pipeline, schema (`IntegrityCheckSubmission`, `IntegrityCheckProblem`, `IntegrityConversationTurn`), student/teacher UX, and 3-commit delivery.
+Replaces today's quiz-style integrity checker with a one-conversation-per-submission agent whose job is to reach confidence that the student understood the work and did it themselves. The check is a real chat, not a scripted Q&A, and everything the teacher needs lives in a single transcript.
 
-This plan adds the pieces we now know are needed to make the agent actually *good at measuring understanding*:
+Core design pieces:
 
-1. **Adaptive probe problem selection** — live AI selection based on submission signals, not a fixed 3-problem random sample.
-2. **Structured rubric** — six dimensions of understanding scored per-problem, so the signal is auditable and the threshold for flagging is explicit.
-3. **Behavioral telemetry** — window focus, paste events, typing cadence feed the disposition, because time and answer quality alone aren't enough to separate "slow honest thinker" from "looking it up in another tab."
-4. **Four-way disposition** — PASS / NEEDS_PRACTICE / TUTOR_PIVOT / FLAG_FOR_REVIEW replaces the likely/uncertain/unlikely badge scheme. Distinguishes "understood deeply," "knows procedure but not theory," "didn't get it and owns it," and "correct work but can't explain any of it" (cheating signal).
-5. **Inline variant as disambiguator** — agent can generate a fresh isomorphic problem mid-session to resolve ambiguous cases (e.g. correct work but blank verbal explanation — could be ESL/anxious OR cheating; variant disambiguates).
-6. **Two types of practice handoff** — *inline variant* (agent tool for ambiguity, in-chat, v1) vs *external practice page CTA* (student-initiated, available to all, prominence varies by disposition).
-7. **Time budgeting and accessibility** — soft visible budget, hard inactivity timeout, "need more time" escape hatch, mobile/device flex, so the experience isn't a stopwatch.
-
-Where this plan and the redesign plan disagree, **this plan wins** — it reflects more recent design thinking. The redesign plan's plumbing (schema, endpoints, general flow) still stands.
+1. **Adaptive probe problem selection** — AI picks one problem to discuss based on live submission signals (usually a challenging one the student got right; override to anomaly-flagged wrong answers if any look copied).
+2. **Six-dimension rubric** — paraphrase originality, causal fluency, transfer, prediction, authority resistance, self-correction.
+3. **Behavioral telemetry** — window focus, paste events, typing cadence. Combined with rubric, never flagging alone.
+4. **Four-way disposition** — PASS / NEEDS_PRACTICE / TUTOR_PIVOT / FLAG_FOR_REVIEW.
+5. **Inline variant disambiguator** — for the "correct work but blank verbal" ambiguous case, agent generates a fresh isomorphic problem and asks for the student's approach (not a full solution).
+6. **Two practice handoffs** — *inline variant* (agent-controlled, v1) for ambiguity resolution; *external practice page CTA* (student-controlled, v2) for everyone who wants reinforcement.
+7. **Time budgeting and accessibility** — visible soft budget, silent hard inactivity timeout, "need more time" button, mobile/device flex.
 
 ---
 
@@ -31,7 +29,7 @@ Where this plan and the redesign plan disagree, **this plan wins** — it reflec
 
 ## 1. Adaptive probe problem selection
 
-The redesign plan currently specifies sampling 3 problems randomly. Replace with live AI selection driven by submission signals.
+Live AI selection driven by submission signals, not a fixed random sample.
 
 ### Selection algorithm
 
@@ -63,7 +61,7 @@ At pipeline kickoff, after extraction runs:
 
 Only escalate if the first problem's rubric comes back **mixed** — some dimensions strong, others weak, and behavioral signals are inconclusive. Escalation picks the next-highest-signal problem by the same algorithm.
 
-Hard cap: **3 problems**, matching the existing plan's sample size.
+Hard cap: **3 problems** per session.
 
 ---
 
@@ -140,7 +138,7 @@ Why required: catching a student for tabbing out when we never told them not to 
 
 ## 4. Disposition logic
 
-The agent emits one of **four** dispositions at session end. **Replaces** the likely/uncertain/unlikely badge scheme from the redesign plan.
+The agent emits one of **four** dispositions at session end.
 
 | Disposition | Rubric signature | Behavioral | What it means | What happens |
 |---|---|---|---|---|
@@ -214,11 +212,37 @@ Deferred but called out because it's the single biggest cheat-resistance lever: 
 
 ---
 
-## 6. System prompt additions
-
-The redesign plan has a good system prompt draft. Augment it with the following:
+## 6. System prompt
 
 ```
+You are a math teacher meeting one-on-one with a student who just turned
+in handwritten homework. Your goal is to determine, with strong confidence
+within a few minutes, whether this student genuinely understands the
+material and did the work themselves.
+
+You have the student's extracted work steps for the probe problem(s).
+Confidence is earned when the student explains SPECIFIC things they
+wrote — which numbers they picked, why they applied a particular rule,
+what a symbol in their work represents. Confidence is NOT earned by
+assertion ("I understand it"), by correct final answers ("the answer is
+5"), or by generic textbook definitions.
+
+Probe like a teacher who cares. Start with an open question about what
+they wrote. If the answer is specific and grounded in their steps, move
+on. If it's vague, contradictory, or generic, ask a focused follow-up
+about the specific step. Aim for 1-3 student turns per problem — move
+on as soon as you have real signal.
+
+Red flags: the student's explanation contradicts their own written work;
+they admit they didn't do it; they can't explain any step on a problem
+they got right. Green flags: they reference specific numbers/operations
+from their work; small mistakes in explanation are fine if the reasoning
+is theirs.
+
+Tone: warm, curious, never accusatory. Never use the words "cheat,"
+"honest," or "verify" with the student. The student sees this as a
+quick chat about their work.
+
 PROBE SELECTION:
 You are given one (occasionally two or three) probe problem(s), selected
 by the pipeline based on submission signals. You did not choose them.
@@ -309,7 +333,7 @@ FORBIDDEN:
 
 ## 7. Tool specification
 
-### New tools (beyond the redesign plan's `submit_problem_verdict` and `finish_check`)
+### Tools
 
 #### `select_probe_problem(submission, problems) -> {problem_id, reason}`
 
@@ -351,9 +375,7 @@ Client sends telemetry events to the `/turn` endpoint as part of the student mes
 
 Stored on `IntegrityConversationTurn` (new field: `telemetry` JSON column). Agent has read access to aggregated telemetry when composing its next turn and when emitting the final disposition.
 
-### Modified tool: `submit_problem_verdict`
-
-Extend the redesign plan's version to include the rubric:
+#### `submit_problem_verdict`
 
 ```
 submit_problem_verdict(
@@ -364,9 +386,9 @@ submit_problem_verdict(
 )
 ```
 
-The `badge` field is removed — disposition happens at session-end level, not per-problem.
+Called once per probed problem after enough signal is collected. Per-problem rubric rolls up into the session-level disposition via `finish_check`.
 
-### Modified tool: `finish_check`
+#### `finish_check`
 
 ```
 finish_check(
@@ -377,7 +399,7 @@ finish_check(
 )
 ```
 
-Replaces `overall_badge` and `overall_confidence` with the four-way disposition.
+Called once at session end. Server validates every sampled problem has a verdict before accepting.
 
 ---
 
@@ -390,7 +412,7 @@ Replaces `overall_badge` and `overall_confidence` with the four-way disposition.
 | Accessibility (dyslexia, ADHD, anxiety) | "Need more time" button, teacher-set accommodations profile, never punitive language |
 | Student blanks under pressure | Inactivity nudge at 2 min, simpler fallback opener ("just tell me what the problem was about") |
 | Student forgot details | Offer quick refresher pivot, re-probe after |
-| Session disconnects / network drops | Resumable session tokens (redesign plan already handles this via transcript hydration) |
+| Session disconnects / network drops | Resumable sessions — transcript lives in DB, client re-hydrates on mount. Don't penalize disconnects. |
 | Agent picks an easy problem | Student passes quickly, that's fine — low-hanging PASS is still correct |
 | Student refuses the check | No forced completion. Mark "integrity check pending" for teacher. Policy decides consequences. |
 | Meta-gaming ("trying to sound honest") | Not a real problem. Gaming the rubric requires real understanding, so it's self-defeating. |
@@ -418,42 +440,44 @@ Document these as known limitations. Don't chase them.
 
 ---
 
-## 10. Data model deltas
+## 10. Data model
 
-Deltas on top of the redesign plan's schema:
+Drop and recreate — pre-scale, no real-user data at stake. Three tables:
 
-### `IntegrityCheckSubmission`
+### `IntegrityCheckSubmission` (one per submission with a check)
 
-Add:
-- `probe_selection_reason` (enum: `highest_differentiation`, `anomaly_copied`, `anomaly_wrong_method`, `skip_all_wrong`) — why the pipeline chose these problems.
-- `disposition` (enum: `PASS`, `NEEDS_PRACTICE`, `TUTOR_PIVOT`, `FLAG_FOR_REVIEW`) — replaces `overall_badge` and `overall_confidence`.
-- `inline_variant_used` (bool) — whether the ambiguity-disambiguator variant was presented mid-session.
-- `inline_variant_result` (enum: `specific_approach`, `approach_after_followup`, `blank_or_wrong`, `not_applicable`) — outcome of the variant probe, if used. First two upgrade to PASS; third confirms FLAG.
+- `id`, `submission_id` (FK, unique), `created_at`, `updated_at`
+- `status` (`extracting` | `awaiting_student` | `in_progress` | `complete` | `skipped_unreadable`)
+- `probe_selection_reason` (enum: `highest_differentiation`, `anomaly_copied`, `anomaly_wrong_method`, `skip_all_wrong`)
+- `disposition` (enum: `PASS`, `NEEDS_PRACTICE`, `TUTOR_PIVOT`, `FLAG_FOR_REVIEW`)
+- `summary` (text, one-sentence teacher-facing)
+- `inline_variant_used` (bool)
+- `inline_variant_result` (enum: `specific_approach`, `approach_after_followup`, `blank_or_wrong`, `not_applicable`)
 
-Remove:
-- `overall_badge`
-- `overall_confidence`
+### `IntegrityCheckProblem` (one per probed problem, up to 3 per session)
 
-### `IntegrityCheckProblem`
-
-Add:
+- `id`, `integrity_check_submission_id` (FK), `bank_item_id`, `sample_position`
+- `student_work_extraction` (JSON — extracted steps, LaTeX, extraction confidence)
 - `rubric` (JSON: `{paraphrase_originality, causal_fluency, transfer, prediction, authority_resistance, self_correction}`)
-- `selected_reason` (tag string, for debugging/audit)
+- `selected_reason` (tag string, for audit)
+- `ai_reasoning` (text, one-sentence teacher-facing)
+- `status` (`pending` | `verdict_submitted` | `dismissed` | `skipped_unreadable`)
+- `teacher_dismissed` (bool), `teacher_dismissal_reason` (text)
 
-Remove:
-- `badge`
-- `confidence`
+### `IntegrityConversationTurn` (one per message in the session)
 
-### `IntegrityConversationTurn`
-
-Add:
+- `id`, `integrity_check_submission_id` (FK), `ordinal` (0-based turn number)
+- `role` (`agent` | `student` | `tool_call` | `tool_result`)
+- `content` (text, or JSON for tool calls)
+- `seconds_on_turn` (student turns only)
 - `telemetry` (JSON, student turns only: focus events, paste events, cadence summary, device type, need_more_time_used)
+- `created_at`
 
 ---
 
 ## 11. Phasing
 
-This plan is larger than the redesign plan's 3-commit delivery. Recommend splitting:
+Split into focused PRs, merged sequentially:
 
 ### PR 1 — Selection + Rubric + 4-way Disposition + Inline Variant (backend)
 
@@ -532,7 +556,7 @@ This plan is larger than the redesign plan's 3-commit delivery. Recommend splitt
 
 ## 14. Out of scope
 
-Carried over from the redesign plan plus:
+Explicitly ruled out or deferred:
 
 - Streaming responses.
 - Real-time typing indicators.
