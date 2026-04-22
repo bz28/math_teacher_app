@@ -165,6 +165,16 @@ export function SolveScreen({
     isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
   );
 
+  // When the user engages with any alternative entry path (scan, gallery)
+  // while the onboarding sample is still pre-filled, drop the sample so
+  // their submission doesn't accidentally include both problems. Marking
+  // the flag here also prevents the coachmark from re-appearing.
+  const clearOnboardingSampleIfPresent = () => {
+    if (hasCompletedFirstProblem) return;
+    if (input === SAMPLE_PROBLEM) setInput("");
+    markCompletedFirstProblem();
+  };
+
   const handleConfirmExtraction = () => {
     const items = getSelectedWithImages();
     const remaining = maxQueueSize - problemQueue.length;
@@ -178,6 +188,7 @@ export function SolveScreen({
       setProblemQueue(newQueue);
       useSessionStore.setState({ problemImages: newImages });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      clearOnboardingSampleIfPresent();
     }
     dismissExtraction();
     fetchEntitlements();
