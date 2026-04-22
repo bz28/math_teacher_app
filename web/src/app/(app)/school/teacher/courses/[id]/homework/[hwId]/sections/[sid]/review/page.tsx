@@ -69,6 +69,12 @@ export default function HomeworkSectionReviewPage({
   // AI's grades against their own stated criteria. Null when no rubric
   // was authored (all rubric fields empty or the HW predates rubrics).
   const [rubric, setRubric] = useState<TeacherRubric | null>(null);
+  // Rubric visibility is a session preference, not a per-student one.
+  // Lifting it here means expanding the rubric on student A keeps it
+  // expanded when the teacher hits "Next student" — otherwise
+  // SubmissionDetailPanel unmounts during the switch and local state
+  // inside RubricSection would reset to collapsed every time.
+  const [rubricOpen, setRubricOpen] = useState(false);
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // Last-fetched detail, kept as-is across switches. Staleness for
@@ -567,6 +573,8 @@ export default function HomeworkSectionReviewPage({
                     : null
                 }
                 rubric={rubric}
+                rubricOpen={rubricOpen}
+                onToggleRubric={setRubricOpen}
                 row={selectedEntry.submission}
                 saveError={currentSaveError}
                 nextStudent={nextStudent}
@@ -876,6 +884,8 @@ function SubmissionDetailPanel({
   detail,
   integrity,
   rubric,
+  rubricOpen,
+  onToggleRubric,
   row,
   saveError,
   nextStudent,
@@ -886,6 +896,8 @@ function SubmissionDetailPanel({
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
   rubric: TeacherRubric | null;
+  rubricOpen: boolean;
+  onToggleRubric: (open: boolean) => void;
   row: TeacherSubmissionRow | null;
   saveError: string | null;
   nextStudent: RosterEntry | null;
@@ -997,7 +1009,11 @@ function SubmissionDetailPanel({
           )}
         </div>
         <div className="mt-3">
-          <RubricSection rubric={rubric} />
+          <RubricSection
+            rubric={rubric}
+            open={rubricOpen}
+            onToggle={onToggleRubric}
+          />
         </div>
         <div className="mt-3 space-y-3">
           {detail.problems.map((p) => (
@@ -1029,8 +1045,15 @@ function SubmissionDetailPanel({
 // when no rubric was authored.
 // ────────────────────────────────────────────────────────────────────
 
-function RubricSection({ rubric }: { rubric: TeacherRubric | null }) {
-  const [open, setOpen] = useState(false);
+function RubricSection({
+  rubric,
+  open,
+  onToggle,
+}: {
+  rubric: TeacherRubric | null;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
   const fields: { label: string; text: string }[] = [];
   if (rubric?.full_credit) fields.push({ label: "Full credit", text: rubric.full_credit });
   if (rubric?.partial_credit) fields.push({ label: "Partial credit", text: rubric.partial_credit });
@@ -1040,15 +1063,12 @@ function RubricSection({ rubric }: { rubric: TeacherRubric | null }) {
   return (
     <details
       open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+      onToggle={(e) => onToggle((e.target as HTMLDetailsElement).open)}
       className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
     >
       <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary hover:text-text-primary">
         <span aria-hidden>{open ? "▾" : "▸"}</span>
         Rubric
-        <span className="font-normal normal-case tracking-normal text-text-muted">
-          · click to {open ? "hide" : "show"}
-        </span>
       </summary>
       <div className="space-y-2 border-t border-border-light px-3 py-2.5">
         {fields.map((f) => (
@@ -1056,9 +1076,9 @@ function RubricSection({ rubric }: { rubric: TeacherRubric | null }) {
             <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               {f.label}
             </p>
-            <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-text-primary">
-              {f.text}
-            </p>
+            <div className="mt-0.5 text-xs leading-relaxed text-text-primary">
+              <MathText text={f.text} />
+            </div>
           </div>
         ))}
       </div>
@@ -1144,6 +1164,14 @@ function ProblemGradeRow({
     entry?.feedback ?? aiGrade?.reasoning ?? "";
   const feedbackDraft = feedbackBuffer ?? externalFeedback;
   const feedbackDisabled = entry === null;
+  // True when what the teacher sees in the textarea is still the AI's
+  // reasoning verbatim — so we can flag it as a draft the teacher
+  // should review/accept before publishing. Flips to false the moment
+  // the teacher types anything that diverges.
+  const isAiDraft =
+    !feedbackDisabled
+    && aiGrade?.reasoning != null
+    && feedbackDraft === aiGrade.reasoning;
 
   const commitFeedback = () => {
     // Always commit the displayed value — that way an un-edited blur
@@ -1222,10 +1250,10 @@ function ProblemGradeRow({
             {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
               <span
                 className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-                title={`AI reported ${Math.round(aiGrade.confidence * 100)}% confidence — review this one carefully`}
+                title="AI reported low confidence — review this one carefully"
               >
                 <span aria-hidden>⚠</span>
-                Low confidence
+                Low confidence · {Math.round(aiGrade.confidence * 100)}%
               </span>
             )}
           </p>
@@ -1310,8 +1338,20 @@ function ProblemGradeRow({
           published. Defaults to the AI's reasoning so teachers who trust
           the AI ship rich feedback with one extra click (publish). */}
       <div className="mt-3">
-        <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-          Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
+        <label className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <span>
+            Feedback
+            <span className="font-normal normal-case tracking-normal text-text-muted/80"> · shown to student when published</span>
+          </span>
+          {isAiDraft && (
+            <span
+              className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary"
+              title="The AI drafted this — edit if you want to change what the student sees, or publish as-is."
+            >
+              <span aria-hidden>🤖</span>
+              AI draft
+            </span>
+          )}
         </label>
         <textarea
           // When disabled (no grade yet), render empty so the
@@ -1323,7 +1363,7 @@ function ProblemGradeRow({
           onBlur={commitFeedback}
           disabled={feedbackDisabled}
           maxLength={2000}
-          rows={2}
+          rows={3}
           placeholder={
             feedbackDisabled
               ? "Pick Full / Partial / Zero first — then you can leave feedback."

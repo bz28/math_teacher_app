@@ -92,7 +92,7 @@ def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
     if rubric.get("common_mistakes"):
         parts.append(f'"Common mistakes": {rubric["common_mistakes"]}')
     if rubric.get("notes"):
-        parts.append(f'"Additional notes": {rubric["notes"]}')
+        parts.append(f'"Notes": {rubric["notes"]}')
     return "\n".join(parts) if parts else "No specific criteria. Use your best judgment."
 
 

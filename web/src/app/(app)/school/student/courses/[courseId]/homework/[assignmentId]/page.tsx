@@ -469,6 +469,8 @@ function PublishedGradePanel({ entry }: { entry: StudentProblemFeedback }) {
   const percent = Math.round(entry.percent);
   return (
     <div
+      role="status"
+      aria-label={`${tone.label}, ${percent} percent`}
       className={`mt-4 rounded-[--radius-md] border ${tone.border} ${tone.bg} px-4 py-3`}
     >
       <p className={`flex items-center gap-1.5 text-sm font-bold ${tone.text}`}>
@@ -477,7 +479,7 @@ function PublishedGradePanel({ entry }: { entry: StudentProblemFeedback }) {
         <span className="font-normal text-text-muted">· {percent}%</span>
       </p>
       {entry.feedback && (
-        <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+        <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-text-primary">
           {entry.feedback}
         </p>
       )}
