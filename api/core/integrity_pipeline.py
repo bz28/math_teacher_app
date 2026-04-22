@@ -352,14 +352,6 @@ async def start_integrity_check(
         problem_rows.append(row)
     await db.flush()
 
-    if not problem_rows:
-        # All sampled problems were deleted — mark the check complete
-        # without a disposition so the teacher dashboard flags it for
-        # manual review rather than inferring any integrity verdict.
-        check.status = STATUS_COMPLETE
-        check.overall_summary = "No sampled problems were available to check."
-        return
-
     problems_for_prompt = [
         {
             "problem_id": str(r.id),

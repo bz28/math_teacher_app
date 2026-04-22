@@ -506,10 +506,13 @@ async def teacher_dismiss_problem(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Mark a per-problem verdict as dismissed and refresh the overall
-    badge so the teacher's summary reflects only the verdicts they
-    still stand behind. Idempotent; re-dismissing with a new reason
-    updates the reason."""
+    """Mark a per-problem verdict as dismissed.
+
+    Session-level disposition is the agent's holistic judgment and is
+    NOT recomputed when one problem is dismissed — the teacher UI
+    shows the original disposition alongside dismissed-problem
+    indicators and interprets both together. Idempotent:
+    re-dismissing with a new reason just updates the reason."""
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
