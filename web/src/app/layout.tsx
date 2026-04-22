@@ -43,9 +43,9 @@ export const metadata: Metadata = {
   applicationName: "Veradic AI",
   category: "Education",
   openGraph: {
-    title: "Veradic AI: The AI tutor that teaches, instead of telling",
+    title: "Veradic AI: Built for your classroom",
     description:
-      "Built for schools. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
+      "Measures what students understand. Grades their homework. Gives every student endless practice.",
     url: "https://veradicai.com",
     siteName: "Veradic AI",
     locale: "en_US",
@@ -53,9 +53,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Veradic AI: The AI tutor that teaches, instead of telling",
+    title: "Veradic AI: Built for your classroom",
     description:
-      "Built for schools. Guides students through math, physics, and chemistry step by step, without ever giving the answer away.",
+      "Measures what students understand. Grades their homework. Gives every student endless practice.",
     creator: "@veradicai",
     site: "@veradicai",
   },
