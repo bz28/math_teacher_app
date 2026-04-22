@@ -1,6 +1,6 @@
 # API Reference
 
-Quick reference for all backend endpoints. Base URL: `https://math-teacher-api.up.railway.app/v1`
+Quick reference for all backend endpoints. Base URL: `https://mathteacherapp-production.up.railway.app/v1`
 
 All endpoints except `/auth/login`, `/auth/register`, `/auth/check-email`, and `/health` require a Bearer token in the `Authorization` header.
 

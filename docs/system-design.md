@@ -236,7 +236,7 @@ Claude API calls cost real money. At school scale (hundreds of students), uncont
 
 ### Three Layers of Protection
 
-1. **Per-user daily session cap** — limits how many sessions one user can create (50 free, 500 school).
+1. **Per-user daily session cap** — limits how many sessions one user can create (5/day for free tier; unlimited for Pro subscribers and school-enrolled students).
 2. **Global daily cost limit** — server-wide $50/day cap. Checked before every LLM call.
 3. **Smart model selection** — Haiku ($0.80/1M) for simple tasks, Sonnet ($3/1M) for reasoning. Saves ~75% on classification calls.
 

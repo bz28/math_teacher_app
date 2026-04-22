@@ -39,9 +39,9 @@ How we protect student data, prevent abuse, and keep the system safe. Written so
 ## Authorization
 
 ### Role-Based Access Control
-- Three roles: `student`, `school`, `admin`.
+- Three roles: `student`, `teacher`, `admin`.
 - Admin endpoints (`/v1/admin/*`) require the `admin` role — enforced by a shared dependency (`require_admin`).
-- Daily session caps vary by role (free: 50/day, school: 500/day).
+- Daily session caps are driven by subscription tier, not role (see Rate Limiting below).
 
 ### Session Ownership
 - Every session GET/respond checks that the requesting user owns the session.
@@ -52,7 +52,7 @@ How we protect student data, prevent abuse, and keep the system safe. Written so
 ## Rate Limiting & Cost Control
 
 ### Per-User Daily Session Cap
-- Free users: **50 sessions/day**. School users: **500 sessions/day**.
+- Free users: **5 sessions/day** (`FREE_DAILY_SESSION_LIMIT` in `api/core/entitlements.py`). Pro subscribers and school-enrolled students are unlimited.
 - Checked at session creation. Returns HTTP 429 when exceeded.
 
 ### Global Daily Cost Limit

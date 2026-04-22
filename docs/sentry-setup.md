@@ -34,7 +34,7 @@ Sentry provides error monitoring and performance tracking for both the backend (
    ```
 4. Railway will auto-redeploy with the new variable
 
-The backend code already handles Sentry initialization — see `api/main.py:20-27`. Once the env var is set, it will:
+The backend code already handles Sentry initialization — see the `settings.sentry_dsn` block in `api/main.py`. Once the env var is set, it will:
 - Initialize Sentry on startup
 - Tag errors with `environment` (development/production)
 - Sample 20% of transactions in production (100% in dev)

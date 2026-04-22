@@ -9,7 +9,7 @@ How to deploy, monitor, and troubleshoot the math teacher app. Written so anyone
 | Environment | Backend | Database | How to access |
 |-------------|---------|----------|---------------|
 | **Local** | `uvicorn` or `docker compose up` | Local PostgreSQL 16 (via docker-compose) | `http://localhost:8000/v1/` |
-| **Production** | Railway (Docker) | Railway managed PostgreSQL | `https://math-teacher-api.up.railway.app/v1/` |
+| **Production** | Railway (Docker) | Railway managed PostgreSQL | `https://mathteacherapp-production.up.railway.app/v1/` |
 
 ---
 
