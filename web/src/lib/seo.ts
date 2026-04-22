@@ -3,39 +3,34 @@ export const SITE_URL = "https://veradicai.com";
 /** FAQ data shared between the FAQ component and JSON-LD schema */
 export const faqs = [
   {
-    question: "How does AI tutoring work?",
+    question: "How do you stop students from cheating?",
     answer:
-      "Snap a photo of your homework or type in any math or science problem. Veradic AI breaks it into bite-sized steps and walks you through each one — like having a personal tutor available 24/7. You can ask questions at any step if you get stuck.",
+      "Every homework submission goes through Veradic's conversational integrity agent. After a student submits, the AI asks them follow-up questions about the specific steps in their own work — easy to answer if they did it, hard if they didn't. You see the conversation and an integrity score, and you make the final call. The AI itself is also built to guide rather than answer, so it won't drop solutions on demand even when students push for them.",
   },
   {
-    question: "Can AI help me with my math homework?",
+    question: "Will you meet our district's data privacy requirements?",
     answer:
-      "Absolutely. Veradic AI covers algebra, geometry, calculus, word problems, and more. It doesn't just give you the answer — it teaches you how to solve each step so you actually understand the material and can tackle similar problems on your own.",
+      "Veradic complies with FERPA as a school official acting under your district's direction, and with COPPA via the school consent exception used by all classroom-deployed ed-tech. Student work is treated as an education record, kept under school control, and never used to train AI models. We sign Data Processing Agreements — including the NDPA template most US districts use — and can work through state-specific addenda (NY Ed Law §2-d, CA SOPIPA, IL SOPPA, etc.) on request. Send us your district's paperwork and we'll work through it.",
   },
   {
-    question: "Is Veradic AI free?",
+    question: "How long until my class is up and running?",
     answer:
-      "Yes! Veradic AI has a free tier that gives you daily tutoring sessions and photo scans. If you need unlimited access, affordable weekly and yearly plans are available.",
+      "As fast as you want. Most teachers are running their first homework set within a week — we set up the school account, you organize courses and sections, and students join with a 6-character code (no emails, no paperwork). If you're motivated, you can be live the same day.",
   },
   {
-    question: "What subjects does Veradic AI cover?",
+    question: "How is Veradic different from other AI tools?",
     answer:
-      "Currently, Veradic AI supports Mathematics, Physics, and Chemistry. We're actively working on adding more subjects. Within each subject, the AI can handle problems ranging from middle school to university level.",
+      "Most AI tools are built to give answers fast. Veradic is built around what teachers actually need: an integrity check on every submission so you know who did the work, AI grading that drafts the grade and waits for your override, and a question bank that generates endless practice variations so every student gets unlimited reps. The student-facing tutor is the engine that powers all of it — designed for classrooms from day one, not a consumer chatbot with a school skin on.",
   },
   {
-    question: "How is this different from just getting the answer?",
+    question: "Can I try it with just one class first?",
     answer:
-      "Answer engines give you a result you forget in five minutes. Veradic AI decomposes every problem into guided steps, lets you chat with your AI tutor on each step, and then generates unlimited practice variations so you build real mastery — not just a copy-paste habit.",
+      "Yes — we run pilot trials with single classrooms so you can see if it fits before committing anything wider. Email support@veradicai.com and we'll set you up.",
   },
   {
-    question: "Do I need to create an account?",
+    question: "What can I see about my students?",
     answer:
-      "Yes, a free account is required so Veradic AI can save your session history, track your progress, and let you resume where you left off. Signing up takes less than 30 seconds.",
-  },
-  {
-    question: "Can my teacher see my progress?",
-    answer:
-      "If your school uses Veradic AI, your teacher can view class-level analytics and insights to understand where students need extra help. Individual student data is always kept private and used only to improve your learning experience.",
+      "Per assignment: who completed it, who didn't, an integrity score on every submission, the AI-graded breakdown ready for you to override, and the conversational integrity transcript. Across the class: who's struggling on which concepts, week over week.",
   },
 ];
 
