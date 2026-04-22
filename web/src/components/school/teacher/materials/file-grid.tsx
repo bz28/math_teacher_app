@@ -51,7 +51,7 @@ const KIND_STYLES = {
 
 const FileCard = memo(function FileCard({ doc, selected, onCardClick, onPreview }: FileCardProps) {
   const kind = fileKind(doc);
-  const date = formatDate(doc.created_at);
+  const date = formatDate(doc.created_at, { alwaysYear: true });
   const styles = KIND_STYLES[kind];
 
   return (

@@ -33,16 +33,24 @@ export function formatRelativeDate(date: string | Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** Format an ISO date as "Mar 24" (current year) or "Mar 24, 2023". Returns null for invalid input. */
-export function formatDate(iso: string | undefined | null): string | null {
+/**
+ * Format an ISO date as "Mar 24" (current year) or "Mar 24, 2023".
+ * Pass `alwaysYear: true` to always include the year (useful when
+ * organizing items across years, e.g. uploaded files).
+ * Returns null for invalid input.
+ */
+export function formatDate(
+  iso: string | undefined | null,
+  opts: { alwaysYear?: boolean } = {},
+): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const showYear = opts.alwaysYear || d.getFullYear() !== new Date().getFullYear();
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
+    ...(showYear ? { year: "numeric" } : {}),
   });
 }
 
@@ -72,12 +80,12 @@ export function formatDueShort(iso: string): string {
   return formatted ? `Due ${formatted}` : "No due date";
 }
 
-/** Format bytes as "123 B" / "4.5 KB" / "1.2 MB". Returns "" for invalid input. */
+/** Format bytes as "123 B" / "5 KB" / "1.2 MB". Returns "" for invalid input. */
 export function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
   const mb = kb / 1024;
   return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
 }
