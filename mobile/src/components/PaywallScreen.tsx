@@ -65,8 +65,8 @@ const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
   },
 };
 
-const TERMS_URL = "https://veradic.ai/terms";
-const PRIVACY_URL = "https://veradic.ai/privacy";
+const TERMS_URL = "https://veradicai.com/terms";
+const PRIVACY_URL = "https://veradicai.com/privacy";
 
 export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }: PaywallProps) {
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("annual");
@@ -285,6 +285,16 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 
         {selectedPlanOption?.trialText && (
           <Text style={styles.noChargeNote}>You won't be charged today</Text>
+        )}
+
+        {/* Auto-renewal disclosure (Apple Guideline 3.1.2) */}
+        {!loadingOfferings && selectedPlanOption && (
+          <Text style={styles.renewalDisclosure}>
+            {selectedPlanOption.trialText
+              ? `Free for ${selectedPlanOption.trialText.replace("-day free trial", " days")}, then ${selectedPlanOption.priceText}. `
+              : `${selectedPlanOption.priceText}. `}
+            Subscription auto-renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your App Store account settings.
+          </Text>
         )}
 
         {/* Secondary actions */}
@@ -602,6 +612,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: spacing.sm,
     textAlign: "center",
+  },
+  renewalDisclosure: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
+    paddingHorizontal: spacing.xxl,
+    marginTop: spacing.sm,
   },
 
   // Secondary
