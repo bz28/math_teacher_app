@@ -6,6 +6,7 @@ import {
   InlineSavedHint,
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
+import { GradingPreview } from "@/components/school/teacher/_pieces/grading-preview";
 
 // Default rubric text shown pre-filled in the two primary fields.
 //
@@ -30,6 +31,19 @@ type RubricFieldName =
   | "common_mistakes"
   | "notes";
 
+// Null-sentinel buffer per field: null means "show the external value",
+// a string means "user is actively typing in this field". Lifted into
+// the parent card so the live preview pane can read the same values the
+// teacher sees in the textareas.
+type DraftMap = Record<RubricFieldName, string | null>;
+
+const INITIAL_DRAFTS: DraftMap = {
+  full_credit: null,
+  partial_credit: null,
+  common_mistakes: null,
+  notes: null,
+};
+
 export function GradingSetupCard({
   rubric,
   saveState,
@@ -41,18 +55,42 @@ export function GradingSetupCard({
   saveError: string | null;
   onChange: (patch: Partial<TeacherRubric>) => void;
 }) {
-  // The rubric save state is a single flag for the whole card, but the
-  // teacher is always editing one field at a time. Tracking which field
-  // most recently triggered a save lets us render the "Saving…" / "✓
-  // Saved" hint next to THAT field's label — closer to the teacher's
-  // eye line than a panel-top hint.
+  const [drafts, setDrafts] = useState<DraftMap>(INITIAL_DRAFTS);
+  // The rubric save state is a single flag for the whole card. Tracking
+  // which field most recently triggered a save lets us render the
+  // "Saving…" / "✓ Saved" hint next to THAT field's label — closer to
+  // the teacher's eye line than a panel-top hint.
   const [lastEdited, setLastEdited] = useState<RubricFieldName | null>(null);
 
-  const commitField = (field: RubricFieldName, text: string) => {
+  const externalFor = (field: RubricFieldName): string => {
+    if (field === "full_credit")
+      return rubric?.full_credit ?? GRADING_SETUP_DEFAULTS.full_credit;
+    if (field === "partial_credit")
+      return rubric?.partial_credit ?? GRADING_SETUP_DEFAULTS.partial_credit;
+    if (field === "common_mistakes") return rubric?.common_mistakes ?? "";
+    return rubric?.notes ?? "";
+  };
+
+  const displayed = (field: RubricFieldName): string =>
+    drafts[field] ?? externalFor(field);
+
+  const handleDraftChange = (field: RubricFieldName, text: string) => {
+    setDrafts((d) => ({ ...d, [field]: text }));
+  };
+
+  const commitField = (field: RubricFieldName) => {
+    const draft = drafts[field];
+    if (draft === null) return; // user didn't touch this field
+    const committed = draft;
+    setDrafts((d) => ({ ...d, [field]: null }));
+    const external = externalFor(field);
+    if (committed === external) return;
     setLastEdited(field);
     // Empty string → undefined so normalizeRubric in the parent drops
     // the field (unset rather than "" stored).
-    onChange({ [field]: text.length > 0 ? text : undefined });
+    onChange({
+      [field]: committed.length > 0 ? committed : undefined,
+    } as Partial<TeacherRubric>);
   };
 
   const hintFor = (field: RubricFieldName) =>
@@ -72,38 +110,48 @@ export function GradingSetupCard({
         </p>
       </header>
 
-      <div className="mt-4 space-y-4">
-        <PrimaryField
-          id="rubric-full-credit"
-          label="Full credit"
-          defaultText={GRADING_SETUP_DEFAULTS.full_credit}
-          value={rubric?.full_credit}
-          onCommit={(v) => commitField("full_credit", v)}
-          rightSlot={hintFor("full_credit")}
-        />
-        <PrimaryField
-          id="rubric-partial-credit"
-          label="Partial credit"
-          defaultText={GRADING_SETUP_DEFAULTS.partial_credit}
-          value={rubric?.partial_credit}
-          onCommit={(v) => commitField("partial_credit", v)}
-          rightSlot={hintFor("partial_credit")}
-        />
-        <OptionalField
-          id="rubric-common-mistakes"
-          label="Common mistakes"
-          placeholder={COMMON_MISTAKES_PLACEHOLDER}
-          value={rubric?.common_mistakes}
-          onCommit={(v) => commitField("common_mistakes", v)}
-          rightSlot={hintFor("common_mistakes")}
-        />
-        <OptionalField
-          id="rubric-notes"
-          label="Notes"
-          placeholder={NOTES_PLACEHOLDER}
-          value={rubric?.notes}
-          onCommit={(v) => commitField("notes", v)}
-          rightSlot={hintFor("notes")}
+      <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+        <div className="space-y-4">
+          <PrimaryField
+            id="rubric-full-credit"
+            label="Full credit"
+            value={displayed("full_credit")}
+            onDraftChange={(v) => handleDraftChange("full_credit", v)}
+            onBlur={() => commitField("full_credit")}
+            rightSlot={hintFor("full_credit")}
+          />
+          <PrimaryField
+            id="rubric-partial-credit"
+            label="Partial credit"
+            value={displayed("partial_credit")}
+            onDraftChange={(v) => handleDraftChange("partial_credit", v)}
+            onBlur={() => commitField("partial_credit")}
+            rightSlot={hintFor("partial_credit")}
+          />
+          <OptionalField
+            id="rubric-common-mistakes"
+            label="Common mistakes"
+            placeholder={COMMON_MISTAKES_PLACEHOLDER}
+            value={displayed("common_mistakes")}
+            onDraftChange={(v) => handleDraftChange("common_mistakes", v)}
+            onBlur={() => commitField("common_mistakes")}
+            rightSlot={hintFor("common_mistakes")}
+          />
+          <OptionalField
+            id="rubric-notes"
+            label="Notes"
+            placeholder={NOTES_PLACEHOLDER}
+            value={displayed("notes")}
+            onDraftChange={(v) => handleDraftChange("notes", v)}
+            onBlur={() => commitField("notes")}
+            rightSlot={hintFor("notes")}
+          />
+        </div>
+        <GradingPreview
+          fullCredit={displayed("full_credit")}
+          partialCredit={displayed("partial_credit")}
+          commonMistakes={displayed("common_mistakes")}
+          notes={displayed("notes")}
         />
       </div>
     </section>
@@ -113,40 +161,25 @@ export function GradingSetupCard({
 // ────────────────────────────────────────────────────────────────────
 // Primary field — Full credit / Partial credit. Pre-filled with a
 // default the teacher can accept verbatim or edit. Larger textarea +
-// stronger label weight than OptionalField.
+// stronger label weight than OptionalField. Controlled — parent owns
+// the buffer.
 // ────────────────────────────────────────────────────────────────────
 
 function PrimaryField({
   id,
   label,
-  defaultText,
   value,
-  onCommit,
+  onDraftChange,
+  onBlur,
   rightSlot,
 }: {
   id: string;
   label: string;
-  defaultText: string;
-  value: string | undefined;
-  onCommit: (text: string) => void;
+  value: string;
+  onDraftChange: (text: string) => void;
+  onBlur: () => void;
   rightSlot?: React.ReactNode;
 }) {
-  // Null-sentinel buffer pattern: null means "show the external
-  // value"; a string means "user is actively typing". Same pattern
-  // used by the feedback textarea on the review page.
-  const [editBuffer, setEditBuffer] = useState<string | null>(null);
-  // When value is unset, fall back to defaultText so the teacher sees
-  // the starter copy in the field (not a placeholder-only ghost).
-  const external = value ?? defaultText;
-  const draft = editBuffer ?? external;
-
-  const handleBlur = () => {
-    if (editBuffer === null) return;
-    const committed = editBuffer;
-    setEditBuffer(null);
-    if (committed !== external) onCommit(committed);
-  };
-
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
@@ -160,9 +193,9 @@ function PrimaryField({
       </div>
       <textarea
         id={id}
-        value={draft}
-        onChange={(e) => setEditBuffer(e.target.value)}
-        onBlur={handleBlur}
+        value={value}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onBlur={onBlur}
         rows={3}
         className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm leading-relaxed text-text-primary focus:border-primary focus:outline-none"
       />
@@ -180,27 +213,18 @@ function OptionalField({
   label,
   placeholder,
   value,
-  onCommit,
+  onDraftChange,
+  onBlur,
   rightSlot,
 }: {
   id: string;
   label: string;
   placeholder: string;
-  value: string | undefined;
-  onCommit: (text: string) => void;
+  value: string;
+  onDraftChange: (text: string) => void;
+  onBlur: () => void;
   rightSlot?: React.ReactNode;
 }) {
-  const [editBuffer, setEditBuffer] = useState<string | null>(null);
-  const external = value ?? "";
-  const draft = editBuffer ?? external;
-
-  const handleBlur = () => {
-    if (editBuffer === null) return;
-    const committed = editBuffer;
-    setEditBuffer(null);
-    if (committed !== external) onCommit(committed);
-  };
-
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
@@ -214,9 +238,9 @@ function OptionalField({
       </div>
       <textarea
         id={id}
-        value={draft}
-        onChange={(e) => setEditBuffer(e.target.value)}
-        onBlur={handleBlur}
+        value={value}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         rows={2}
         className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
