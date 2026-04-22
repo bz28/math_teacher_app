@@ -99,7 +99,13 @@ export function ImageUpload({
         return;
       }
 
-      const base64 = await fileToBase64(file);
+      let base64: string;
+      try {
+        base64 = await fileToBase64(file);
+      } catch {
+        setError("Couldn't read that image file. Try a different one.");
+        return;
+      }
       setImageBase64(base64);
       autoExtract(base64);
     },

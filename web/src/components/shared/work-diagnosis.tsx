@@ -30,10 +30,10 @@ export function WorkDiagnosis({
       return;
     }
 
-    const base64 = await fileToBase64(file);
     setSubmitting(true);
     setError(null);
     try {
+      const base64 = await fileToBase64(file);
       const res = await workApi.submit({
         image_base64: base64,
         problem_text: problemText,
