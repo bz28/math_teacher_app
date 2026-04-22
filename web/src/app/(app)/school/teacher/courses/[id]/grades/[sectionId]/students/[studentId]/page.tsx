@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
 
 /**
@@ -239,16 +240,3 @@ function MissingHwRow({ hw }: { hw: StudentGradesResponse["missing_hws"][number]
   );
 }
 
-// ────────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: sameYear ? undefined : "numeric",
-  });
-}

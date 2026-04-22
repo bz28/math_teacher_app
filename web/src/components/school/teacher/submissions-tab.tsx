@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
+import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 
 /**
@@ -134,7 +135,7 @@ function InboxRow({
   courseId: string;
 }) {
   const href = `/school/teacher/courses/${courseId}/homework/${row.assignment_id}/sections/${row.section_id}/review`;
-  const dueLabel = row.due_at ? formatDue(row.due_at) : "No due date";
+  const dueLabel = row.due_at ? formatDueShort(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
   const hasOutstanding = row.to_grade + row.dirty + row.flagged > 0;
 
@@ -225,18 +226,6 @@ function compareRows(a: SubmissionsInboxRow, b: SubmissionsInboxRow): number {
 
 function dueKey(r: SubmissionsInboxRow): number {
   return r.due_at ? new Date(r.due_at).getTime() : Number.MAX_SAFE_INTEGER;
-}
-
-function formatDue(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "No due date";
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return `Due ${d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: sameYear ? undefined : "numeric",
-  })}`;
 }
 
 function daysOverdue(iso: string): number {

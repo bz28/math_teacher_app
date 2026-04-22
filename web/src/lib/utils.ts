@@ -16,11 +16,11 @@ export function renderBold(text: string): React.ReactNode[] {
   );
 }
 
-/** Format a date relative to now (e.g., "2 hours ago", "Mar 24"). */
+/** Format a date relative to now (e.g., "2h ago", "Mar 24"). Returns "" for invalid input. */
 export function formatRelativeDate(date: string | Date): string {
   const d = new Date(date);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
+  if (Number.isNaN(d.getTime())) return "";
+  const diffMs = Date.now() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHr / 24);
@@ -33,10 +33,73 @@ export function formatRelativeDate(date: string | Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/** Format an ISO date as "Mar 24" (current year) or "Mar 24, 2023". Returns null for invalid input. */
+export function formatDate(iso: string | undefined | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+/** "Due Mon, Mar 24" — or with ", 3:00 PM" appended when the time is non-midnight. */
+export function formatDue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "No due date";
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const date = d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+  if (!hasTime) return `Due ${date}`;
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Due ${date}, ${time}`;
+}
+
+/** "Due Mar 24" — compact variant of formatDue without weekday/time. */
+export function formatDueShort(iso: string): string {
+  const formatted = formatDate(iso);
+  return formatted ? `Due ${formatted}` : "No due date";
+}
+
+/** Format bytes as "123 B" / "4.5 KB" / "1.2 MB". Returns "" for invalid input. */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+}
+
+/** Read a File as a data URL and resolve with the raw base64 (comma separator stripped). */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 /** Truncate text to a max length with ellipsis. */
 export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1).trimEnd() + "\u2026";
+  return text.slice(0, maxLength - 1).trimEnd() + "…";
 }
 
 /** Quiz/practice/mock-test result for a single question. */

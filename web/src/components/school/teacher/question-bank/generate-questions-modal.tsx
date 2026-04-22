@@ -9,7 +9,7 @@ import {
 } from "@/lib/api";
 import { subfoldersOf, topUnitIdOf, topUnits } from "@/lib/units";
 import { SelectableChip } from "../_pieces/selectable-chip";
-import { cn } from "@/lib/utils";
+import { cn, formatFileSize } from "@/lib/utils";
 import { QUANTITY_CHIPS } from "./constants";
 
 export function GenerateQuestionsModal({
@@ -565,11 +565,3 @@ function extensionOf(filename: string, fileType: string): string {
   return slash >= 0 ? fileType.slice(slash + 1).toLowerCase() : fileType;
 }
 
-function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
-  const mb = kb / 1024;
-  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
-}

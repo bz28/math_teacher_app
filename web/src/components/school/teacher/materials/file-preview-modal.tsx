@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { teacher, type TeacherDocument } from "@/lib/api";
-import { fileKind, formatSize } from "./types";
+import { formatFileSize } from "@/lib/utils";
+import { fileKind } from "./types";
 
 interface FilePreviewModalProps {
   courseId: string;
@@ -68,7 +69,7 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
               {doc.filename}
             </div>
             <div className="mt-0.5 text-[11px] text-text-muted">
-              {formatSize(doc.file_size)}
+              {formatFileSize(doc.file_size)}
             </div>
           </div>
           <button

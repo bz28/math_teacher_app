@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { image as imageApi, type ImageExtractResponse } from "@/lib/api";
 import { Button, Modal } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import { cn, fileToBase64 } from "@/lib/utils";
 import { cropImage } from "@/lib/crop-image";
 import { EditProblemTextarea } from "./edit-problem-textarea";
 import { MathText } from "./math-text";
@@ -85,7 +85,7 @@ export function ImageUpload({
   );
 
   const processFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       setError(null);
       setManualMode(false);
       setEditingIndex(null);
@@ -99,13 +99,9 @@ export function ImageUpload({
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = (reader.result as string).split(",")[1];
-        setImageBase64(base64);
-        autoExtract(base64);
-      };
-      reader.readAsDataURL(file);
+      const base64 = await fileToBase64(file);
+      setImageBase64(base64);
+      autoExtract(base64);
     },
     [autoExtract],
   );
