@@ -19,31 +19,27 @@ import { cn } from "@/lib/utils";
 
 const DISPOSITION_CONFIG: Record<
   IntegrityDisposition,
-  { label: string; icon: string; cls: string; severity: number }
+  { label: string; icon: string; cls: string }
 > = {
   pass: {
     label: "Pass",
     icon: "✓",
     cls: "bg-green-100 text-green-700 dark:bg-green-500/20",
-    severity: 0,
   },
   needs_practice: {
     label: "Needs practice",
     icon: "↻",
     cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/20",
-    severity: 1,
   },
   tutor_pivot: {
     label: "Tutored",
     icon: "?",
     cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/20",
-    severity: 2,
   },
   flag_for_review: {
     label: "Review",
     icon: "⚑",
     cls: "bg-red-100 text-red-700 dark:bg-red-500/20",
-    severity: 3,
   },
 };
 
