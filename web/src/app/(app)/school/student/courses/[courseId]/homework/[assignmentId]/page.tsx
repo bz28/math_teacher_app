@@ -6,18 +6,10 @@ import Link from "next/link";
 import {
   schoolStudent,
   type StudentHomeworkDetail,
-  type StudentHomeworkProblem,
   type StudentProblemFeedback,
   type StudentSubmission,
-  type VariationPayload,
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
-import { cn } from "@/lib/utils";
-import {
-  PracticeLoopSurface,
-  type LoopState,
-} from "@/components/school/student/practice-loop-surface";
-import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
@@ -29,16 +21,6 @@ import type { IntegrityExtraction } from "@/lib/api";
 
 type Mode =
   | { kind: "homework" }
-  | {
-      kind: "practice";
-      problem: StudentHomeworkProblem;
-      initial: { variation: VariationPayload; consumption_id: string; remaining: number };
-    }
-  | {
-      kind: "learn";
-      problem: StudentHomeworkProblem;
-      initial: { variation: VariationPayload; consumption_id: string; remaining: number };
-    }
   | { kind: "integrity_pending" }
   | { kind: "integrity_pending_timeout" }
   | {
@@ -58,7 +40,6 @@ export default function HomeworkPage() {
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
-  const [loadingProblemId, setLoadingProblemId] = useState<string | null>(null);
   // Client-side flag: the student clicked through the post-extraction
   // confirm screen in this session, so we should not keep shoving it
   // in their face if they come back before sending their first turn.
@@ -171,66 +152,6 @@ export default function HomeworkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  async function pivotToLearnThis(
-    problem: StudentHomeworkProblem,
-    state: LoopState,
-  ) {
-    // Student just finished a Practice attempt and hit "Learn this
-    // problem". Mint a fresh BankConsumption with context='learn' for
-    // the SAME variation — lets history surface the Learn attempt as
-    // its own mode-attempt row, and avoids picking an unseen sibling.
-    if (!assignmentId) return;
-    setLoadingProblemId(problem.bank_item_id);
-    try {
-      const resp = await schoolStudent.learnThisProblem({
-        bank_item_id: state.variation.bank_item_id,
-        assignment_id: assignmentId,
-      });
-      setMode({
-        kind: "learn",
-        problem,
-        initial: {
-          variation: resp.variation,
-          consumption_id: resp.consumption_id,
-          remaining: resp.remaining,
-        },
-      });
-    } catch {
-      setError("Couldn't switch into Learn mode. Please try again.");
-    } finally {
-      setLoadingProblemId(null);
-    }
-  }
-
-  async function startLoop(problem: StudentHomeworkProblem, kind: "practice" | "learn") {
-    if (!assignmentId) return;
-    setLoadingProblemId(problem.bank_item_id);
-    try {
-      const resp = await schoolStudent.nextVariation(assignmentId, problem.bank_item_id, kind);
-      if (resp.status === "served") {
-        setMode({
-          kind,
-          problem,
-          initial: {
-            variation: resp.variation,
-            consumption_id: resp.consumption_id,
-            remaining: resp.remaining,
-          },
-        });
-      } else if (resp.status === "exhausted") {
-        setError(
-          "You've practiced everything available for this problem — ask your teacher for more.",
-        );
-      } else {
-        setError("No practice problems are available for this one yet.");
-      }
-    } catch {
-      setError("Couldn't load a practice problem. Please try again.");
-    } finally {
-      setLoadingProblemId(null);
-    }
-  }
-
   if (error) {
     return (
       <div className="mx-auto max-w-2xl py-12 text-center">
@@ -247,34 +168,6 @@ export default function HomeworkPage() {
 
   if (hw === null) {
     return <div className="mx-auto max-w-2xl py-12 text-center text-text-muted">Loading…</div>;
-  }
-
-  if (mode.kind === "practice") {
-    return (
-      <PracticeLoopSurface
-        assignmentId={hw.assignment_id}
-        anchorBankItemId={mode.problem.bank_item_id}
-        anchorQuestion={mode.problem.question}
-        problemPosition={mode.problem.position}
-        initial={mode.initial}
-        onDone={() => setMode({ kind: "homework" })}
-        onLearnThis={(state) => pivotToLearnThis(mode.problem, state)}
-      />
-    );
-  }
-
-  if (mode.kind === "learn") {
-    return (
-      <LearnLoopSurface
-        assignmentId={hw.assignment_id}
-        anchorBankItemId={mode.problem.bank_item_id}
-        anchorQuestion={mode.problem.question}
-        problemPosition={mode.problem.position}
-        initial={mode.initial}
-        onDone={() => setMode({ kind: "homework" })}
-        onPracticeSimilar={() => startLoop(mode.problem, "practice")}
-      />
-    );
   }
 
   if (mode.kind === "integrity_pending" && hw.submission_id && assignmentId) {
@@ -392,8 +285,6 @@ export default function HomeworkPage() {
 
       <div className="mt-6 space-y-4">
         {hw.problems.map((p) => {
-          const noVariations = p.approved_variation_count === 0;
-          const isLoading = loadingProblemId === p.bank_item_id;
           // Per-problem published grade entry, if the teacher has
           // published grades. Backend only sets `breakdown` once
           // grade_published_at is set, so finding an entry here is a
@@ -410,49 +301,13 @@ export default function HomeworkPage() {
                   {p.position}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 text-base text-text-primary">
-                      <MathText text={p.question} />
-                    </div>
-                    <span
-                      title="This is your homework — practice similar problems below to learn it."
-                      className="shrink-0 text-text-muted"
-                    >
-                      <LockIcon />
-                    </span>
+                  <div className="text-base text-text-primary">
+                    <MathText text={p.question} />
                   </div>
 
                   {gradeEntry !== null && (
                     <PublishedGradePanel entry={gradeEntry} />
                   )}
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => startLoop(p, "practice")}
-                      disabled={noVariations || isLoading}
-                      className={cn(
-                        "rounded-[--radius-sm] bg-primary px-4 py-1.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50",
-                      )}
-                    >
-                      {isLoading ? "Loading…" : "Practice similar"}
-                    </button>
-                    <button
-                      onClick={() => startLoop(p, "learn")}
-                      disabled={noVariations || isLoading}
-                      className={cn(
-                        "rounded-[--radius-sm] border border-border px-4 py-1.5 text-sm font-medium text-text-secondary hover:border-primary hover:text-primary disabled:opacity-50",
-                      )}
-                    >
-                      Learn similar
-                    </button>
-                    <span className="ml-auto text-xs font-medium text-text-muted">
-                      {noVariations
-                        ? "No practice available yet"
-                        : `${p.approved_variation_count} practice ${
-                            p.approved_variation_count === 1 ? "problem" : "problems"
-                          } available`}
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -476,23 +331,6 @@ export default function HomeworkPage() {
         />
       ) : null}
     </div>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0110 0v4" />
-    </svg>
   );
 }
 
