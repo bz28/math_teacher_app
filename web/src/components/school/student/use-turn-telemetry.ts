@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
+import { useDeviceType } from "./use-device-type";
+
 /**
  * Client-captured behavioral signals for a single integrity-check
  * student turn. Mirrors `api/routes/integrity_check.py::TurnTelemetry`.
@@ -84,16 +86,10 @@ export function useTurnTelemetry(): TurnTelemetryApi {
   const edits = useRef<number>(0);
   const needMoreTime = useRef<boolean>(false);
 
-  // Detect mobile from UA at mount — good enough for our "device
-  // hint" signal (teacher evidence, not gating anything).
-  const deviceType = useRef<"desktop" | "mobile" | null>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ua = window.navigator.userAgent || "";
-    deviceType.current = /Mobi|Android|iPhone|iPad/i.test(ua)
-      ? "mobile"
-      : "desktop";
-  }, []);
+  // Device hint for the teacher-facing telemetry field. Shared with
+  // the chat header's mobile time-budget flex — single source of
+  // truth for UA detection lives in useDeviceType.
+  const device = useDeviceType();
 
   // Window-level focus/blur capture. visibilitychange fires on tab
   // switch + minimize + alt-tab (depending on OS). window.blur/focus
@@ -201,9 +197,9 @@ export function useTurnTelemetry(): TurnTelemetryApi {
       paste_events: [...pasteEvents.current],
       typing_cadence: cadence,
       need_more_time_used: needMoreTime.current,
-      device_type: deviceType.current,
+      device_type: device,
     };
-  }, []);
+  }, [device]);
 
   const reset = useCallback(() => {
     focusBlurEvents.current = [];
