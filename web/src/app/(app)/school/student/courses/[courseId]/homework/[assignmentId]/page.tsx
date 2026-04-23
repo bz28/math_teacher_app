@@ -82,47 +82,64 @@ export default function HomeworkPage() {
         ]);
         if (sub) setSubmission(sub);
 
-        // Terminal: student flagged the extraction. Submission is
-        // with the teacher for manual grading; no integrity or
-        // grading ran. Takes precedence over integrity routing
-        // because nothing downstream happened.
+        // Routing precedence (top match wins):
+        //
+        // 1. Flagged   — student said "reader got it wrong". Nothing
+        //                downstream ran; go straight to the terminal.
+        // 2. Extracting — Vision hasn't finished yet. Show the
+        //                preparing spinner + poll.
+        // 3. Awaiting confirm — extraction done, student hasn't
+        //                pressed Confirm/Flag. Integrity + grading
+        //                are gated on that press, so there's no
+        //                IntegrityCheckSubmission row yet and the
+        //                integrity-state endpoint can't tell us
+        //                apart from "extracting". Drive this one off
+        //                the submission row directly.
+        // 4. Integrity state — once the student has confirmed, the
+        //                existing integrity state machine takes
+        //                over (pending → awaiting_student → chat).
         if (sub?.extraction_flagged_at != null) {
           setMode({ kind: "extraction_flagged" });
           return;
         }
+        if (sub && sub.extraction == null) {
+          // Still extracting (or extraction failed — IntegrityPendingView
+          // handles the timeout fallback in that case).
+          setMode({ kind: "integrity_pending" });
+          return;
+        }
+        if (
+          sub &&
+          sub.extraction_confirmed_at == null &&
+          sub.extraction != null &&
+          sub.image_data != null &&
+          !confirmedThisSession
+        ) {
+          setMode({
+            kind: "integrity_confirm",
+            extraction: sub.extraction,
+            imageDataUrl: sub.image_data,
+          });
+          return;
+        }
 
         if (integrity) {
-          // Auto-route based on integrity state:
-          //   "extracting"       → show the preparing screen + poll
-          //   "awaiting_student" → one-time confirm screen (unless the
-          //                         student has already clicked through
-          //                         this session), then chat
-          //   "in_progress"      → open the chat
+          // Student has confirmed — fall through to the integrity
+          // state machine. Auto-route:
+          //   "extracting"       → preparing screen + poll
+          //   "awaiting_student" → chat (we've already shown the
+          //                         submission-level confirm above;
+          //                         the integrity-sampled per-problem
+          //                         confirm was collapsed into that)
+          //   "in_progress"      → chat
           //   "complete" / "skipped_unreadable" / "no_check"
           //                      → stay on homework view
           if (integrity.overall_status === "extracting") {
             setMode({ kind: "integrity_pending" });
-          } else if (integrity.overall_status === "awaiting_student") {
-            // Show the confirm screen only when we have everything
-            // needed to make it meaningful: the full-submission
-            // extraction (persisted on the Submission row, not the
-            // integrity-sampled slice) AND the photo to compare
-            // against. Without either, skip straight to chat — the
-            // student can't verify a reading they can't see.
-            const canConfirm =
-              !confirmedThisSession &&
-              sub?.extraction != null &&
-              sub?.image_data != null;
-            if (canConfirm) {
-              setMode({
-                kind: "integrity_confirm",
-                extraction: sub!.extraction!,
-                imageDataUrl: sub!.image_data!,
-              });
-            } else {
-              setMode({ kind: "integrity_chat" });
-            }
-          } else if (integrity.overall_status === "in_progress") {
+          } else if (
+            integrity.overall_status === "awaiting_student"
+            || integrity.overall_status === "in_progress"
+          ) {
             setMode({ kind: "integrity_chat" });
           }
         }
