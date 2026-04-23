@@ -34,8 +34,10 @@ logger = logging.getLogger(__name__)
 
 _GRADING_SYSTEM = """\
 You are a world-class math professor grading a student's homework submission. \
-You have the student's extracted work (what they wrote on paper, already converted \
-to text by a separate extraction step) and the teacher's answer key.
+You have the student's extracted work — already converted to text and \
+**grouped per problem** by a separate extraction step — plus the teacher's \
+answer key for each problem. Work that couldn't be attributed to a single \
+problem is listed separately under "Other work".
 
 Your job:
 1. For each problem, compare the student's extracted final answer against the \
@@ -63,6 +65,8 @@ judge from the work shown.
 - below 0.4: You are guessing. State "I'm unsure because X" in your reasoning.
 
 Rules:
+- Grade each problem against its own block (question + answer key + student's \
+work steps for that problem + student's final answer).
 - Grade ONLY based on the student's extracted work — do not solve the problem yourself.
 - If the student's answer matches the answer key exactly (or is mathematically equivalent), \
 give full credit.
@@ -119,35 +123,101 @@ def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
     return "\n".join(parts)
 
 
+def _format_step(step: dict[str, Any]) -> str:
+    """Render one extraction step as a single line for the grader's
+    user message. Prefer LaTeX + plain-english side-by-side — the
+    extractor sets either to empty string when only one is meaningful,
+    so we use ` or ` fallthrough to skip empty fields rather than
+    printing bare separators."""
+    latex = step.get("latex") or ""
+    plain = step.get("plain_english") or ""
+    label = f"Step {step.get('step_num', '?')}"
+    if latex and plain:
+        return f"{label}: {latex} — {plain}"
+    return f"{label}: {latex or plain or '(empty step)'}"
+
+
+def _format_final_answer(fa: dict[str, Any]) -> str:
+    """Render one extraction final_answer. Prefer LaTeX; fall back to
+    plain-english when the student wrote prose (extractor emits
+    answer_latex='' in that case). `or` fallthrough handles empty
+    strings — `dict.get(k, default)` returns '' when the key exists,
+    which would silently drop prose answers."""
+    return (
+        fa.get("answer_latex") or fa.get("answer_plain") or "(no answer)"
+    )
+
+
 def _build_user_message(
     extraction: dict[str, Any],
     problems: list[dict[str, Any]],
 ) -> str:
-    lines: list[str] = []
+    """Render the grading user message as per-problem blocks. Each block
+    contains question + answer key + the student's work steps for that
+    problem + the student's final answer — everything the grader needs
+    to grade a problem, co-located. Steps Vision couldn't attribute
+    (problem_position=null) land in a trailing "Other work" block so
+    context isn't lost but isn't mis-graded.
 
-    lines.append("## Student's extracted work\n")
-    final_answers = extraction.get("final_answers", [])
-    if final_answers:
-        for fa in final_answers:
-            lines.append(
-                f"Problem {fa['problem_position']}: "
-                f"{fa.get('answer_latex', fa.get('answer_plain', '(no answer)'))}"
-            )
-    else:
-        lines.append("(No per-problem answers extracted — only work steps available)")
-
+    Relies on the extractor having tagged each step with a
+    `problem_position`; pre-extractor-upgrade data (no positions)
+    falls entirely into "Other work" and the grader still gets the
+    per-problem questions + final answers, just without step-level
+    attribution — same behavior as before the upgrade."""
     steps = extraction.get("steps", [])
-    if steps:
-        lines.append("\n## Work steps (for context)\n")
-        for s in steps:
-            lines.append(f"Step {s['step_num']}: {s.get('latex', '')} — {s.get('plain_english', '')}")
+    final_answers = extraction.get("final_answers", [])
 
-    lines.append("\n## Problems + Answer Key\n")
+    # Bucket steps + final answers by problem_position. Integer keys
+    # only — None goes into the trailing "Other work" list.
+    steps_by_pos: dict[int, list[dict[str, Any]]] = {}
+    unattributed_steps: list[dict[str, Any]] = []
+    for s in steps:
+        pos = s.get("problem_position")
+        if isinstance(pos, int):
+            steps_by_pos.setdefault(pos, []).append(s)
+        else:
+            unattributed_steps.append(s)
+
+    final_answer_by_pos: dict[int, dict[str, Any]] = {}
+    for fa in final_answers:
+        pos = fa.get("problem_position")
+        if isinstance(pos, int):
+            final_answer_by_pos[pos] = fa
+
+    lines: list[str] = []
     for p in problems:
+        position = p["position"]
+        lines.append(f"## Problem {position}")
+        lines.append(f"Question: {p['question']}")
         lines.append(
-            f"Problem {p['position']}: {p['question']}\n"
-            f"  Answer key: {p.get('final_answer', '(no answer key)')}"
+            f"Answer key: {p.get('final_answer') or '(no answer key)'}"
         )
+
+        problem_steps = steps_by_pos.get(position, [])
+        lines.append("Student's work:")
+        if problem_steps:
+            for s in problem_steps:
+                lines.append(f"  {_format_step(s)}")
+        else:
+            lines.append("  (no work shown for this problem)")
+
+        fa = final_answer_by_pos.get(position)
+        if fa is not None:
+            lines.append(f"Student's final answer: {_format_final_answer(fa)}")
+        else:
+            lines.append("Student's final answer: (no final answer shown)")
+
+        lines.append("")  # blank line between problem blocks
+
+    if unattributed_steps:
+        lines.append("## Other work (not attributed to a specific problem)")
+        lines.append(
+            "These steps couldn't be tied to one problem. Use them as "
+            "context only — they don't change a problem's grade on "
+            "their own."
+        )
+        for s in unattributed_steps:
+            lines.append(f"  {_format_step(s)}")
 
     return "\n".join(lines)
 
