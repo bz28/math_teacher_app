@@ -21,7 +21,7 @@ import { LearnLoopSurface } from "@/components/school/student/learn-loop-surface
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
-import { IntegrityConfirmView } from "@/components/school/student/integrity-confirm-view";
+import { SubmissionExtractionConfirmView } from "@/components/school/student/submission-extraction-confirm-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
 import { AssignmentTimeline } from "@/components/school/student/assignment-timeline";
 import type { IntegrityExtraction } from "@/lib/api";
@@ -89,18 +89,19 @@ export default function HomeworkPage() {
             setMode({ kind: "integrity_pending" });
           } else if (integrity.overall_status === "awaiting_student") {
             // Show the confirm screen only when we have everything
-            // needed to make it meaningful: the extraction steps AND
-            // the photo to compare them against. Without the photo
-            // the student would be asked to confirm a reading they
-            // can't verify — skip straight to chat instead.
+            // needed to make it meaningful: the full-submission
+            // extraction (persisted on the Submission row, not the
+            // integrity-sampled slice) AND the photo to compare
+            // against. Without either, skip straight to chat — the
+            // student can't verify a reading they can't see.
             const canConfirm =
               !confirmedThisSession &&
-              integrity.extraction !== null &&
+              sub?.extraction != null &&
               sub?.image_data != null;
             if (canConfirm) {
               setMode({
                 kind: "integrity_confirm",
-                extraction: integrity.extraction!,
+                extraction: sub!.extraction!,
                 imageDataUrl: sub!.image_data!,
               });
             } else {
@@ -274,7 +275,7 @@ export default function HomeworkPage() {
   if (mode.kind === "integrity_confirm" && hw.submission_id) {
     const submissionId = hw.submission_id;
     return (
-      <IntegrityConfirmView
+      <SubmissionExtractionConfirmView
         submissionId={submissionId}
         submittedImageDataUrl={mode.imageDataUrl}
         extraction={mode.extraction}
