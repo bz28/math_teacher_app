@@ -411,6 +411,35 @@ export const extractProblemsFromImage = (imageBase64: string, subject: string = 
     subject,
   }, LLM_TIMEOUT_MS);
 
+export const extractObjectivesFromImage = (imageBase64: string, subject: string = "math") =>
+  apiPost<{ topics: string[]; confidence: string }>("/image/extract-objectives", {
+    image_base64: imageBase64,
+    subject,
+  }, LLM_TIMEOUT_MS);
+
+export type ObjectivesLevel = "middle" | "hs" | "college" | "other";
+
+export interface GenerateFromObjectivesArgs {
+  topics: string[];
+  count: number;
+  level?: ObjectivesLevel;
+  courseName?: string;
+  subject?: string;
+}
+
+export const generateProblemsFromObjectives = (args: GenerateFromObjectivesArgs) =>
+  apiPost<{ problems: PracticeProblem[] }>(
+    "/practice/generate-from-objectives",
+    {
+      topics: args.topics,
+      count: args.count,
+      level: args.level ?? null,
+      course_name: args.courseName ?? null,
+      subject: args.subject ?? "math",
+    },
+    LLM_TIMEOUT_MS,
+  );
+
 // Work submission API
 export interface WorkDiagnosisStep {
   step_description: string;
