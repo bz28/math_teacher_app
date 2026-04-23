@@ -176,6 +176,7 @@ _EMPTY_STATS: dict[str, Any] = {
     "total_students": 0,
     "submitted": 0,
     "graded": 0,
+    "to_review": 0,
     "avg_score": None,
 }
 
@@ -246,7 +247,41 @@ async def bulk_assignment_stats(
     )).all()
     graded = {r.assignment_id: r.c for r in graded_rows}
 
-    # 4. Average final_score per assignment (ignores nulls).
+    # 4. "To review" per assignment — mirrors the Submissions inbox
+    # definition so the HW card's "N to review" matches the count a
+    # teacher sees clicking into the inbox. A submission counts as
+    # to-review when it's graded AND either never published or
+    # published-then-edited (content diff, not timestamp — so flipping
+    # a grade back to its original value is not counted).
+    to_review_rows = (await db.execute(
+        select(
+            Submission.assignment_id,
+            func.count(Submission.id.distinct()).label("c"),
+        )
+        .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .join(User, User.id == Submission.student_id)
+        .where(
+            Submission.assignment_id.in_(assignment_ids),
+            User.is_preview.is_(False),
+            SubmissionGrade.final_score.is_not(None),
+            or_(
+                SubmissionGrade.grade_published_at.is_(None),
+                SubmissionGrade.final_score.is_distinct_from(
+                    SubmissionGrade.published_final_score,
+                ),
+                SubmissionGrade.teacher_notes.is_distinct_from(
+                    SubmissionGrade.published_teacher_notes,
+                ),
+                SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+                    SubmissionGrade.published_breakdown.cast(JSONB),
+                ),
+            ),
+        )
+        .group_by(Submission.assignment_id)
+    )).all()
+    to_review = {r.assignment_id: r.c for r in to_review_rows}
+
+    # 5. Average final_score per assignment (ignores nulls).
     avg_rows = (await db.execute(
         select(Submission.assignment_id, func.avg(SubmissionGrade.final_score).label("avg"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
@@ -266,6 +301,7 @@ async def bulk_assignment_stats(
             "total_students": totals.get(aid, 0),
             "submitted": submitted.get(aid, 0),
             "graded": graded.get(aid, 0),
+            "to_review": to_review.get(aid, 0),
             "avg_score": round(avgs[aid], 1) if aid in avgs and avgs[aid] is not None else None,
         }
     return out
@@ -312,6 +348,7 @@ def assignment_to_dict(
         "total_students": stats["total_students"],
         "submitted": stats["submitted"],
         "graded": stats["graded"],
+        "to_review": stats["to_review"],
         "avg_score": stats["avg_score"],
         "created_at": a.created_at.isoformat(),
     }

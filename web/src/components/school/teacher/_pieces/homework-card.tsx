@@ -102,13 +102,21 @@ export function HomeworkCard({
       </div>
 
       {/* Problem count + optional draft-only variation warnings / avg
-          score. One line, not three — submissions live on the other tab. */}
+          score + "to review" count. One line — submission progress is
+          on the other tab, but the to-review count is an action
+          signal ("this HW is asking for something from me") so it
+          earns its spot here. */}
       <div className="mt-1 text-[11px] text-text-muted">
         {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
         {isDraft && needsVariationsCount !== null && needsVariationsCount > 0 && (
           <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
             · {needsVariationsCount} need variation
             {needsVariationsCount === 1 ? "" : "s"}
+          </span>
+        )}
+        {!isDraft && hw.to_review > 0 && (
+          <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
+            · {hw.to_review} to review
           </span>
         )}
         {bucket === "needsGrading" && hw.avg_score !== null && (
