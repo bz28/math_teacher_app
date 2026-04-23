@@ -6,6 +6,7 @@ import {
   type IntegrityStateResponse,
   type IntegrityTurn,
 } from "@/lib/api";
+import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
 import { useTurnTelemetry } from "./use-turn-telemetry";
@@ -381,8 +382,13 @@ function TurnBubble({ turn }: { turn: IntegrityTurn }) {
           <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-primary">
             Quick practice
           </div>
-          <div className="whitespace-pre-wrap text-sm text-text-primary">
-            {turn.content}
+          <div className="text-sm text-text-primary">
+            {/* Variant problems may contain LaTeX / SVG / chem
+                diagrams like every other problem surface in the app.
+                MathText renders inline + display math, svg blocks,
+                and bolded text; falls back to plain text on parse
+                failure so malformed output never breaks the card. */}
+            <MathText text={turn.content} />
           </div>
         </div>
       </div>
