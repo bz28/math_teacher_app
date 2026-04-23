@@ -25,6 +25,7 @@ approved variation content.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from collections.abc import Coroutine
@@ -53,6 +54,36 @@ from api.services.bank import problem_ids_in_content
 # ~6.7 MB base64; we round up so PNG screenshots from a phone aren't
 # rejected. Real abuse protection lives at the rate-limit / S3 layer.
 MAX_IMAGE_BASE64_LEN = 7_000_000
+
+
+def _validate_submission_image(image_base64: str) -> None:
+    """Reject empty / oversized / non-PNG-JPEG images.
+
+    Shared between the initial submit and the retake endpoints so
+    both code paths enforce the same guarantees — a tampered client
+    can't sneak arbitrary binary through `/retake` after the real
+    validation happened only on submit. Raises HTTPException on any
+    violation (400 / 413) so the caller doesn't need a wrapper.
+    """
+    if not image_base64:
+        raise HTTPException(
+            status_code=400, detail="An image of your work is required",
+        )
+    if len(image_base64) > MAX_IMAGE_BASE64_LEN:
+        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
+    # Accept PNG or JPEG only — both as raw base64 magic bytes or as
+    # an explicit data URL. Tighter than `data:image/*` to keep SVG
+    # (and any other image type that might land later) out of the
+    # storage path.
+    head = image_base64[:32]
+    if not (
+        head.startswith("data:image/png;base64,")
+        or head.startswith("data:image/jpeg;base64,")
+        or head.startswith("data:image/jpg;base64,")
+        or head.startswith("iVBOR")  # PNG raw
+        or head.startswith("/9j/")    # JPEG raw
+    ):
+        raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
 
 logger = logging.getLogger(__name__)
 
@@ -1025,25 +1056,9 @@ async def submit_homework(
 
     # The image is required and is the source of truth — the work is
     # what the teacher reviews and what the integrity checker will
-    # eventually read for per-problem answer extraction.
-    if not body.image_base64:
-        raise HTTPException(status_code=400, detail="An image of your work is required")
-    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
-        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
-    # Accept PNG or JPEG only — both as raw base64 magic bytes or as
-    # an explicit data URL. Tighter than `data:image/*` to keep SVG
-    # (and any other image type that might land later) out of the
-    # storage path. The frontend file picker filters to these two
-    # types but a tampered client could bypass that.
-    head = body.image_base64[:32]
-    if not (
-        head.startswith("data:image/png;base64,")
-        or head.startswith("data:image/jpeg;base64,")
-        or head.startswith("data:image/jpg;base64,")
-        or head.startswith("iVBOR")  # PNG raw
-        or head.startswith("/9j/")    # JPEG raw
-    ):
-        raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
+    # eventually read for per-problem answer extraction. Shared helper
+    # enforces the same empty/size/MIME rules on retake.
+    _validate_submission_image(body.image_base64)
 
     # Find which section this student is enrolled in for this assignment.
     # We need a section_id on the row; the existing schema requires it.
@@ -1165,6 +1180,15 @@ async def get_extraction_status(
     )
 
 
+# Cap on the confirmed_extraction JSON body. 256 KB leaves generous
+# room for per-problem edit buffers (a 20-problem HW with ~10 KB of
+# text each) while keeping a single malicious / buggy client from
+# storing megabytes on the submission row. Enforced by both the
+# Pydantic model-level validator (cheap fast-path) and a byte check
+# after serialization (the authoritative limit).
+MAX_CONFIRM_EXTRACTION_BYTES = 256 * 1024
+
+
 class ConfirmExtractionRequest(BaseModel):
     """Student's approval of Vision's extraction, with optional edits.
 
@@ -1172,8 +1196,31 @@ class ConfirmExtractionRequest(BaseModel):
     confirmed_extraction column. Sending it unchanged (same object
     Vision produced) is the "confirm as-is" path; sending a modified
     copy is the "I fixed a misread" path.
+
+    Validated at two levels:
+      • Shape: `steps` / `final_answers` (when present) must be lists
+        of objects. Loose enough to accept any Vision output shape
+        (extra fields are allowed), tight enough to reject obviously
+        broken payloads like `{steps: "hello"}`.
+      • Size: serialized JSON under MAX_CONFIRM_EXTRACTION_BYTES.
     """
     edited_extraction: dict[str, Any]
+
+    @classmethod
+    def _ensure_list_of_dicts(cls, key: str, value: Any) -> None:
+        if value is None:
+            return
+        if not isinstance(value, list):
+            raise ValueError(f"`{key}` must be an array")
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ValueError(f"`{key}[{i}]` must be an object")
+
+    def model_post_init(self, _: Any) -> None:
+        self._ensure_list_of_dicts("steps", self.edited_extraction.get("steps"))
+        self._ensure_list_of_dicts(
+            "final_answers", self.edited_extraction.get("final_answers"),
+        )
 
 
 @router.post("/submissions/{submission_id}/confirm-extraction")
@@ -1187,6 +1234,16 @@ async def confirm_extraction(
     Flips status to `confirmed` and spawns integrity + grading.
     Only valid from `awaiting_confirmation` — 409 in any other state
     so a stale client tab can't re-trigger grading."""
+    # Size cap — measure the serialized form we're about to store,
+    # not the raw request bytes (which could be padded or differ in
+    # whitespace).
+    serialized_len = len(json.dumps(body.edited_extraction))
+    if serialized_len > MAX_CONFIRM_EXTRACTION_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Confirmation body too large (max {MAX_CONFIRM_EXTRACTION_BYTES} bytes)",
+        )
+
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -1240,10 +1297,7 @@ async def retake_submission(
             status_code=409,
             detail="Retake limit reached — submission sent to teacher",
         )
-    if not body.image_base64:
-        raise HTTPException(status_code=400, detail="Image required")
-    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
-        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
+    _validate_submission_image(body.image_base64)
 
     sub.image_data = body.image_base64
     await db.commit()

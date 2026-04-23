@@ -15,11 +15,26 @@ import {
  * un-mounts once the student has confirmed (or hit the terminal
  * unreadable state, where grading won't run anyway).
  *
- * Polling stops as soon as status leaves `pending` OR we hit a
- * terminal state. No WebSockets — 2s polling is plenty for a
- * once-per-submission flow and keeps the server surface small.
+ * Polling runs whenever server-side extraction might be in flight:
+ *   • Initial submit: status=pending, attempts=0 → poll until it moves.
+ *   • After retake: we snapshot the attempts counter at click-time;
+ *     poll until the server has completed a NEW pass (counter
+ *     increments past the snapshot) or the status flips off `pending`.
+ * Poll also covers the stuck-awaiting-retake-click case as a cheap
+ * freshness check (2s DB read); that's a tiny write-protection margin
+ * with no cost worth optimizing.
+ *
+ * After a max-poll budget is exhausted without any change, we surface
+ * a generic "something went wrong" error so the student isn't stuck
+ * on the preparing spinner forever if the background task crashed.
  */
 const POLL_INTERVAL_MS = 2000;
+// After ~90s of the initial/retake extraction never completing, bail
+// out. Vision calls typically finish in 5–15s; 90s catches background
+// crashes or DB-unreachable situations (the bg task exception handler
+// logs-and-moves-on, leaving the submission in pending). One-shot —
+// the student refreshes to retry from scratch.
+const STUCK_POLL_BUDGET = 45; // 45 polls × 2s = 90s
 
 export function ExtractionFlowContainer({
   submissionId,
@@ -35,6 +50,17 @@ export function ExtractionFlowContainer({
   const [state, setState] = useState<ExtractionStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
+  // Attempts count the server had when the student last kicked off an
+  // extraction (initial submit or retake). Polling continues until
+  // we see the server's counter tick past this — that's our signal
+  // the background task finished the new pass. Null when no
+  // extraction is currently in flight from the client's POV.
+  const [waitingSinceAttempts, setWaitingSinceAttempts] = useState<number | null>(
+    0, // initial submit: server starts at attempts=0, we wait for the first increment
+  );
+  // Monotonic counter of polls where nothing useful changed; breaks a
+  // stuck loop if the background task crashed.
+  const [stuckPolls, setStuckPolls] = useState(0);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
 
@@ -49,10 +75,16 @@ export function ExtractionFlowContainer({
     }
   }, [submissionId]);
 
-  // Polling loop: re-check status every 2s while extraction is
-  // actively running (pending + attempts=0, OR just clicked retake
-  // which we track via `mutating`). Stops once the server returns
-  // anything else.
+  // A new extraction pass is "in flight" whenever the server's attempts
+  // counter hasn't advanced past the point the client last kicked
+  // something off. Once the counter moves, we stop waiting — the new
+  // state (awaiting_confirmation / pending / unreadable_final) tells
+  // us what screen to render.
+  const extractionInFlight =
+    waitingSinceAttempts !== null &&
+    (!state || state.extraction_attempts <= waitingSinceAttempts);
+
+  // Initial fetch + cleanup on unmount.
   useEffect(() => {
     mounted.current = true;
     void fetchStatus();
@@ -62,19 +94,41 @@ export function ExtractionFlowContainer({
     };
   }, [fetchStatus]);
 
+  // Polling loop. Re-check every 2s while an extraction could still
+  // be in flight. Separately: bump a stuck-polls counter so we can
+  // surface a graceful error if nothing moves for too long.
   useEffect(() => {
-    const shouldPoll =
-      state !== null &&
-      state.extraction_status === "pending" &&
-      state.extraction_attempts === 0;
-    if (!shouldPoll) return;
+    if (!extractionInFlight) {
+      setStuckPolls(0);
+      return;
+    }
+    if (stuckPolls >= STUCK_POLL_BUDGET) {
+      setError(
+        "We couldn't finish reading your work — refresh the page to try again.",
+      );
+      return;
+    }
     pollTimer.current = setTimeout(() => {
       void fetchStatus();
+      setStuckPolls((n) => n + 1);
     }, POLL_INTERVAL_MS);
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-  }, [state, fetchStatus]);
+  }, [state, extractionInFlight, stuckPolls, fetchStatus]);
+
+  // When the server's counter ticks past the snapshot, the in-flight
+  // extraction finished — clear the waiting flag so subsequent
+  // renders / UI decisions use the normal "resting" semantics.
+  useEffect(() => {
+    if (
+      waitingSinceAttempts !== null &&
+      state !== null &&
+      state.extraction_attempts > waitingSinceAttempts
+    ) {
+      setWaitingSinceAttempts(null);
+    }
+  }, [state, waitingSinceAttempts]);
 
   async function handleConfirm(edited: SubmissionExtraction) {
     setMutating(true);
@@ -93,24 +147,12 @@ export function ExtractionFlowContainer({
     setError(null);
     try {
       await schoolStudent.retakeSubmission(submissionId, imageBase64);
-      // Optimistically flip local state into "polling" mode — server
-      // has kicked off a new extraction, status stays `pending` but
-      // attempts_remaining has ticked down. Re-poll immediately.
-      setState((s) =>
-        s
-          ? {
-              ...s,
-              extraction_status: "pending",
-              extraction_attempts: s.extraction_attempts,
-              // attempts_remaining doesn't change until the new
-              // extraction increments attempts_attempts counter
-              // server-side; leave it alone and rely on the next poll.
-            }
-          : s,
-      );
-      // Reset attempts to 0 locally so the "preparing" poll loop kicks
-      // in. Next poll will bring the real numbers back.
-      setState((s) => (s ? { ...s, extraction_attempts: 0 } : s));
+      // Snapshot the attempts count so the poll loop knows when the
+      // new extraction has completed (counter strictly increases).
+      if (state) {
+        setWaitingSinceAttempts(state.extraction_attempts);
+        setStuckPolls(0);
+      }
       await fetchStatus();
     } catch {
       setError("Couldn't upload. Please try again.");
@@ -119,15 +161,12 @@ export function ExtractionFlowContainer({
     }
   }
 
-  if (!state) {
-    return <PreparingScreen />;
-  }
+  // ── Rendering ────────────────────────────────────────────────────
 
-  if (
-    state.extraction_status === "pending" &&
-    state.extraction_attempts === 0
-  ) {
-    return <PreparingScreen />;
+  // Preparing spinner: initial load, or the client is waiting on a
+  // fresh extraction pass to complete (submit or retake).
+  if (!state || extractionInFlight) {
+    return <PreparingScreen error={error} />;
   }
 
   if (state.extraction_status === "pending") {
@@ -162,7 +201,7 @@ export function ExtractionFlowContainer({
   return null;
 }
 
-function PreparingScreen() {
+function PreparingScreen({ error }: { error: string | null }) {
   return (
     <div className="mx-auto max-w-xl px-4 py-16 text-center">
       <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -172,6 +211,11 @@ function PreparingScreen() {
       <p className="mt-2 text-sm text-text-muted">
         Give us a moment — this usually takes under a minute.
       </p>
+      {error && (
+        <p className="mt-4 text-sm font-semibold text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

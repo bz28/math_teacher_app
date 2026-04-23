@@ -291,6 +291,16 @@ async def test_unreadable_three_strikes_locks_to_unreadable_final(
         )).scalars().all()
         assert checks == []
 
+        # AI grading also should not have run. Confirm flow never
+        # fires for unreadable_final so the grader has no hook to be
+        # called from; guarding against a regression that adds one.
+        from api.models.assignment import SubmissionGrade as _SubmissionGrade
+        grades = (await s.execute(
+            select(_SubmissionGrade)
+            .where(_SubmissionGrade.submission_id == submission_id)
+        )).scalars().all()
+        assert grades == []
+
 
 async def test_pipeline_idempotent_on_direct_re_call(
     client: AsyncClient, world: dict[str, Any]

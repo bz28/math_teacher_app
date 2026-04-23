@@ -1158,10 +1158,13 @@ async def regrade_submission(
     until the teacher republishes, so students keep seeing the old
     grade until then.
 
-    Re-runs extraction (one Vision call) rather than reading a cache:
-    the extraction snapshot lives on the integrity-check rows only for
-    probed problems; using the same code path as the submission
-    pipeline keeps behavior consistent.
+    Reuses the confirmed extraction already on the submission when
+    present — the student edited that text on the post-submit confirm
+    screen and it's the canonical "what they said they wrote". Re-
+    running Vision would throw those edits away AND burn a Vision
+    call for no reason. Falls back to a fresh extraction only when
+    no confirmed extraction exists (legacy submissions from before
+    the confirm flow).
     """
     from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
@@ -1187,7 +1190,10 @@ async def regrade_submission(
     # the admin dashboard can distinguish student-submission grades
     # from teacher-triggered regrades and spot any over-use.
     actor_id = str(current_user.user_id)
-    extraction = await extract_student_work(sub.id, db, user_id=actor_id)
+    if sub.confirmed_extraction is not None:
+        extraction = sub.confirmed_extraction
+    else:
+        extraction = await extract_student_work(sub.id, db, user_id=actor_id)
     await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )
