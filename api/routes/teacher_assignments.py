@@ -445,10 +445,14 @@ async def clone_homework_as_practice(
         )
 
     # Pull the source items to copy unit_id + source_doc_ids per job.
-    # snapshot_bank_items already enforces approved+primary for
-    # anything written to assignment.content, so no extra status filter.
+    # snapshot_bank_items already enforces approved+primary+course_id
+    # at write time; the course_id filter here is defense in depth
+    # against any historical rows that escaped that invariant.
     items = (await db.execute(
-        select(QuestionBankItem).where(QuestionBankItem.id.in_(source_item_ids))
+        select(QuestionBankItem).where(
+            QuestionBankItem.id.in_(source_item_ids),
+            QuestionBankItem.course_id == course_id,
+        )
     )).scalars().all()
     item_by_id: dict[uuid.UUID, QuestionBankItem] = {i.id: i for i in items}
 
@@ -467,6 +471,8 @@ async def clone_homework_as_practice(
     db.add(practice)
     await db.flush()
 
+    # Collect job rows; QuestionBankGenerationJob.id has a Python-side
+    # uuid4 default so we can read job.id without an intermediate flush.
     job_ids: list[uuid.UUID] = []
     for item_id in source_item_ids:
         parent = item_by_id.get(item_id)
@@ -487,11 +493,9 @@ async def clone_homework_as_practice(
             parent_question_id=parent.id,
         )
         db.add(job)
-        await db.flush()
         job_ids.append(job.id)
 
     await db.commit()
-    await db.refresh(practice)
 
     # Fire after commit so rows are durable before any background task
     # attempts to read them.
@@ -502,7 +506,7 @@ async def clone_homework_as_practice(
         "id": str(practice.id),
         "title": practice.title,
         "status": practice.status,
-        "source_homework_id": str(practice.source_homework_id),
+        "source_homework_id": str(practice.source_homework_id) if practice.source_homework_id else None,
         "job_ids": [str(j) for j in job_ids],
     }
 

@@ -1,7 +1,7 @@
 """add source_homework_id to assignments for practice-from-HW cloning
 
-Revision ID: az1000043
-Revises: ay1000042
+Revision ID: bb1000045
+Revises: ba1000044
 Create Date: 2026-04-23 22:00:00.000000
 
 Adds `assignments.source_homework_id`: nullable self-referential FK that
@@ -21,8 +21,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "az1000043"
-down_revision: str | None = "ay1000042"
+revision: str = "bb1000045"
+down_revision: str | None = "ba1000044"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
