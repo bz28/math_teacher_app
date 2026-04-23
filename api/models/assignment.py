@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -111,6 +111,35 @@ class Submission(Base):
     final_answers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Extraction-confirmation lifecycle. New submissions start `pending`;
+    # extraction runs inline during submit and flips the status to
+    # `awaiting_confirmation` (student sees the confirm screen) or
+    # `unreadable_final` (Vision failed 3 times — teacher grades manually,
+    # no AI calls run). Student confirm flips to `confirmed`, which is
+    # what gates the integrity + grading background pipeline.
+    extraction_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending",
+    )
+    # Count of Vision attempts. Capped at 3 by the retake endpoint;
+    # hitting the cap with low confidence flips status to
+    # `unreadable_final`.
+    extraction_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0,
+    )
+    # What Vision actually read on the latest successful pass. Immutable
+    # once set — the teacher can always see the OCR ground-truth even
+    # if the student edited the text on confirm. Null when extraction
+    # has never succeeded (retakes still pending, or unreadable_final
+    # without any readable attempt).
+    raw_extraction: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True,
+    )
+    # What the student approved. Seeded equal to `raw_extraction` on the
+    # confirm screen; may diverge if the student edited misreads. This
+    # is what AI grading and integrity actually see.
+    confirmed_extraction: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True,
+    )
 
 
 class SubmissionGrade(Base):
