@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -330,6 +330,15 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
   const formAnim = useFadeInUp(200, 400);
+  const emailRef = useRef<TextInput>(null);
+
+  // Defer keyboard popup until the fade-in/bounce settles. Without this,
+  // the header bounces in (Easing.back) at the same time KeyboardAvoidingView
+  // shoves it upward as the keyboard rises — looks janky on iOS.
+  useEffect(() => {
+    const t = setTimeout(() => emailRef.current?.focus(), 500);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -351,12 +360,12 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
           <View style={styles.inputWrap}>
             <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
             <TextInput
+              ref={emailRef}
               style={styles.input}
               value={email}
               onChangeText={onEmailChange}
               placeholder="Email"
               autoCapitalize="none"
-              autoFocus
               keyboardType="email-address"
               placeholderTextColor={colors.textMuted}
             />
@@ -529,8 +538,17 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   input: {
     flex: 1,
-    padding: 14,
-    ...typography.body,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    fontWeight: "400",
+    // typography.body declares lineHeight: 24 which makes iOS TextInput
+    // render the glyph low inside the line box, so the text looks shifted
+    // down relative to the leading icon. Tightening lineHeight + disabling
+    // includeFontPadding centres the glyph cleanly.
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: "center",
     color: colors.text,
   },
   eyeButton: {
