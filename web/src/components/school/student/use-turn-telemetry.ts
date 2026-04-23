@@ -71,7 +71,6 @@ export function useTurnTelemetry(): TurnTelemetryApi {
   const pasteEvents = useRef<Array<{ at: string; byte_count: number }>>([]);
   const blurStart = useRef<number | null>(null);
 
-  const turnStart = useRef<number>(Date.now());
   const firstKeystroke = useRef<number | null>(null);
   const lastKeystroke = useRef<number | null>(null);
   const pausesOver3s = useRef<number>(0);
@@ -197,7 +196,6 @@ export function useTurnTelemetry(): TurnTelemetryApi {
     pausesOver3s.current = 0;
     edits.current = 0;
     needMoreTime.current = false;
-    turnStart.current = Date.now();
 
     return payload;
   }, []);

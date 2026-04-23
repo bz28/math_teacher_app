@@ -1531,7 +1531,14 @@ export const schoolStudent = {
   },
   postIntegrityTurn(
     submissionId: string,
-    body: { message: string; seconds_on_turn?: number },
+    body: {
+      message: string;
+      seconds_on_turn?: number;
+      /** Client-captured behavioral signals — teacher-facing evidence
+       *  only, never surfaced back to the student. Shape mirrors the
+       *  backend TurnTelemetry model. */
+      telemetry?: IntegrityTurnTelemetry;
+    },
   ) {
     return apiFetch<IntegrityStateResponse>(
       `/school/student/integrity/submissions/${submissionId}/turn`,
@@ -1625,6 +1632,24 @@ export interface IntegrityTurn {
   role: IntegrityTurnRole;
   content: string;
   created_at: string;
+}
+
+/**
+ * Behavioral signals the student client captures during a turn.
+ * Shape mirrors api/routes/integrity_check.py::TurnTelemetry. Sent
+ * on POST /turn as `body.telemetry`; persisted on the student turn
+ * row; never returned to the student in the state response.
+ */
+export interface IntegrityTurnTelemetry {
+  focus_blur_events: Array<{ at: string; duration_ms: number }>;
+  paste_events: Array<{ at: string; byte_count: number }>;
+  typing_cadence: {
+    total_ms: number;
+    pauses_over_3s: number;
+    edits: number;
+  } | null;
+  need_more_time_used: boolean;
+  device_type: "desktop" | "mobile" | null;
 }
 
 export interface IntegrityStateResponse {
