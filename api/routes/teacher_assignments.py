@@ -18,6 +18,7 @@ from api.core.integrity_pipeline import (
 from api.core.integrity_pipeline import (
     STATUS_SKIPPED_UNREADABLE as INTEGRITY_SKIPPED,
 )
+from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -25,7 +26,7 @@ from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
 )
-from api.models.question_bank import QuestionBankItem
+from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
@@ -45,7 +46,7 @@ router = APIRouter()
 
 class CreateAssignmentRequest(BaseModel):
     title: str
-    type: str  # homework | quiz | test
+    type: str  # homework | quiz | test | practice
     source_type: str | None = None
     due_at: str | None = None  # ISO datetime
     late_policy: str = "none"
@@ -78,8 +79,8 @@ class CreateAssignmentRequest(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_type(cls, v: str) -> str:
-        if v not in ("homework", "quiz", "test"):
-            raise ValueError("Type must be homework, quiz, or test")
+        if v not in ("homework", "quiz", "test", "practice"):
+            raise ValueError("Type must be homework, quiz, test, or practice")
         return v
 
     @field_validator("unit_ids")
@@ -327,6 +328,7 @@ def assignment_to_dict(
         "due_at": a.due_at.isoformat() if a.due_at else None,
         "late_policy": a.late_policy,
         "document_ids": a.document_ids,
+        "source_homework_id": str(a.source_homework_id) if a.source_homework_id else None,
         "section_ids": [str(sid) for sid, _ in sections],
         "section_names": [name for _, name in sections],
         # Cheap from-content count so the list view can show "5 problems"
@@ -397,6 +399,112 @@ async def create_assignment(
     await db.commit()
     await db.refresh(assignment)
     return {"id": str(assignment.id), "title": assignment.title, "status": assignment.status}
+
+
+@router.post(
+    "/courses/{course_id}/assignments/{hw_id}/clone-as-practice",
+    status_code=status.HTTP_201_CREATED,
+)
+async def clone_homework_as_practice(
+    course_id: uuid.UUID, hw_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Clone a homework's problem list into a new Practice assignment.
+    Each source problem spawns a single 1:1 variation job via the
+    existing `parent_question_id` path in question_bank_generation —
+    items land in the teacher's review queue as each job completes.
+    The practice set starts as a draft with no content; the teacher
+    publishes it explicitly after reviewing.
+    """
+    await get_teacher_course(db, course_id, current_user.user_id)
+    source = await get_teacher_assignment(db, hw_id, current_user.user_id)
+    # Cross-course clone would leak one course's content into another.
+    if source.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found in this course",
+        )
+    if source.type != "homework":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only homeworks can be cloned as practice",
+        )
+    source_item_ids: list[uuid.UUID] = []
+    for raw in problem_ids_in_content(source.content):
+        try:
+            source_item_ids.append(uuid.UUID(raw))
+        except (ValueError, TypeError):
+            # Corrupted content should never reach here, but skip
+            # rather than 500 if it does.
+            continue
+    if not source_item_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source homework has no problems to clone",
+        )
+
+    # Pull the source items to copy unit_id + source_doc_ids per job.
+    # snapshot_bank_items already enforces approved+primary for
+    # anything written to assignment.content, so no extra status filter.
+    items = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id.in_(source_item_ids))
+    )).scalars().all()
+    item_by_id: dict[uuid.UUID, QuestionBankItem] = {i.id: i for i in items}
+
+    practice = Assignment(
+        course_id=course_id,
+        teacher_id=current_user.user_id,
+        title=source.title,
+        type="practice",
+        unit_ids=list(source.unit_ids or []),
+        source_homework_id=source.id,
+        # Teacher publishes explicitly after reviewing — same lifecycle
+        # as HW. Content fills in as generation jobs complete and the
+        # teacher approves their output.
+        status="draft",
+    )
+    db.add(practice)
+    await db.flush()
+
+    job_ids: list[uuid.UUID] = []
+    for item_id in source_item_ids:
+        parent = item_by_id.get(item_id)
+        if parent is None:
+            # Source item was deleted between content snapshot and this
+            # query. Skip — teacher ends with a partial practice set
+            # and can retry missing slots via "Generate more".
+            continue
+        job = QuestionBankGenerationJob(
+            course_id=course_id,
+            unit_id=parent.unit_id,
+            originating_assignment_id=practice.id,
+            created_by_id=current_user.user_id,
+            status="queued",
+            requested_count=1,
+            difficulty=parent.difficulty,
+            source_doc_ids=parent.source_doc_ids,
+            parent_question_id=parent.id,
+        )
+        db.add(job)
+        await db.flush()
+        job_ids.append(job.id)
+
+    await db.commit()
+    await db.refresh(practice)
+
+    # Fire after commit so rows are durable before any background task
+    # attempts to read them.
+    for jid in job_ids:
+        schedule_generation_job(jid)
+
+    return {
+        "id": str(practice.id),
+        "title": practice.title,
+        "status": practice.status,
+        "source_homework_id": str(practice.source_homework_id),
+        "job_ids": [str(j) for j in job_ids],
+    }
 
 
 async def _serialize_assignment_list(
