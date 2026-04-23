@@ -106,9 +106,14 @@ function ProblemCard({ problem }: { problem: StudentPracticeProblem }) {
           {problem.position}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-base text-text-primary">
-            <MathText text={problem.question} />
-          </div>
+          {/* MCQCard re-renders the question when Answer is expanded,
+              so suppress it here in that mode to avoid rendering the
+              same question twice. */}
+          {mode !== "answer" && (
+            <div className="text-base text-text-primary">
+              <MathText text={problem.question} />
+            </div>
+          )}
 
           {mode === "idle" && (
             <div className="mt-4 flex flex-wrap gap-2">

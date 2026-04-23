@@ -1125,8 +1125,9 @@ async def practice_detail(
     Problems are the approved bank items whose originating_assignment_id
     points at this practice — the current clone + approve flow attaches
     items via originating_assignment_id rather than content. Ordered by
-    created_at so positions track the order the teacher-fired jobs
-    completed (which roughly follows the source HW's problem order)."""
+    created_at; clone jobs run concurrently so positions reflect the
+    order each job's AI output persisted, NOT strictly the source HW's
+    problem order. Close enough for v1; revisit when clustering lands."""
     assignment = await _load_assignment_for_student(
         db, assignment_id, user.id, expected_type="practice",
     )
