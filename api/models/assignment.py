@@ -109,6 +109,12 @@ class Submission(Base):
     # per problem; the image is the source of truth, the typed
     # answers are a quick-scan view for the teacher.
     final_answers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Full Vision extraction output (all steps + final_answers + confidence)
+    # persisted after the pipeline's extraction call succeeds. Drives the
+    # post-submit "does this match what you wrote?" confirm screen that
+    # groups steps by problem_position. Null when extraction hasn't run
+    # or failed.
+    extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

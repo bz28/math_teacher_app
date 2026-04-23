@@ -133,6 +133,14 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                 )
                 return
 
+            # Persist the full extraction on the submission row so the
+            # student-side confirm screen can render it grouped by
+            # problem. Committed BEFORE integrity + grading fire so a
+            # crash in those later phases doesn't lose the extraction
+            # the student paid a Vision call for.
+            sub.extraction = extraction
+            await db.commit()
+
             # ── Integrity check (uses shared extraction) ─────────
             if run_integrity:
                 try:
@@ -296,6 +304,11 @@ class StudentSubmissionDetail(BaseModel):
     is_late: bool
     image_data: str | None
     final_answers: dict[str, str]
+    # Full Vision extraction (steps + final_answers + confidence).
+    # Null when extraction hasn't run yet, failed, or the HW has both
+    # integrity and AI grading disabled (no extraction to run). The
+    # student confirm screen groups this by problem_position.
+    extraction: dict[str, Any] | None
 
 
 # ── Dashboard / grades shapes ──
@@ -1059,6 +1072,7 @@ async def get_my_submission(
         is_late=sub.is_late,
         image_data=sub.image_data,
         final_answers=dict(sub.final_answers or {}),
+        extraction=sub.extraction,
     )
 
 
