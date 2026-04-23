@@ -101,10 +101,17 @@ export function HomeworkCard({
         </span>
       </div>
 
-      {/* Problem count + optional draft-only variation warnings / avg
-          score. One line, not three — submissions live on the other tab. */}
+      {/* Problem count + optional nudges. "N need approval" mirrors
+          the amber banner on the HW detail page — a pre-publish action
+          the teacher owes the HW. Variation warnings and avg score
+          stay one-liners so the card doesn't balloon. */}
       <div className="mt-1 text-[11px] text-text-muted">
         {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
+        {hw.pending_review > 0 && (
+          <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
+            · {hw.pending_review} need{hw.pending_review === 1 ? "s" : ""} your approval
+          </span>
+        )}
         {isDraft && needsVariationsCount !== null && needsVariationsCount > 0 && (
           <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
             · {needsVariationsCount} need variation

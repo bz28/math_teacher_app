@@ -689,6 +689,13 @@ export interface TeacherAssignment {
   total_students: number;
   submitted: number;
   graded: number;
+  /** AI-generated problems originated by this HW that are still
+   *  awaiting the teacher's approve/reject decision before they can
+   *  join the problem list. Mirrors the "N problems need your review"
+   *  banner count on the HW detail page — surfacing it on the list
+   *  card lets the teacher spot drafts with work waiting on them
+   *  without opening each one. */
+  pending_review: number;
   avg_score: number | null;
   created_at: string;
 }
