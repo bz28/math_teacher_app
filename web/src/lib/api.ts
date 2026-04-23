@@ -1446,6 +1446,54 @@ export interface SubmitHomeworkResponse {
   is_late: boolean;
 }
 
+/** One step Vision extracted from the student's handwritten work.
+ *  Includes a `problem_position` hint so the confirm UI can group by
+ *  problem (1, 2, 3…) — the key organizing unit of the screen. */
+export interface ExtractionStep {
+  step_num?: number;
+  problem_position?: number;
+  latex?: string;
+  plain_english?: string;
+}
+
+/** One final-answer row Vision pulled for a specific problem. */
+export interface ExtractionFinalAnswer {
+  problem_position: number;
+  answer_latex?: string;
+  answer_plain?: string;
+}
+
+/** The extraction the student is asked to confirm (or edit). Mirrors
+ *  the JSON shape `api/core/integrity_ai.extract_student_work`
+ *  returns. The confirm screen groups `steps` by `problem_position`
+ *  and surfaces one textarea per problem; the student's edits are
+ *  sent back as the full object. */
+export interface SubmissionExtraction {
+  steps?: ExtractionStep[];
+  final_answers?: ExtractionFinalAnswer[];
+  confidence?: number;
+  [k: string]: unknown;
+}
+
+/** Lifecycle status for the post-submit extraction flow. Drives which
+ *  screen the student sees after submit. */
+export type ExtractionStatus =
+  | "pending"               // extraction running, or last attempt failed → retake available
+  | "awaiting_confirmation" // student should see the confirm screen
+  | "confirmed"             // grading in flight or done
+  | "unreadable_final";     // 3 strikes; teacher grades manually
+
+export interface ExtractionStatusResponse {
+  submission_id: string;
+  extraction_status: ExtractionStatus;
+  extraction_attempts: number;
+  /** Retake budget left (0–3). 0 + status=pending means extraction
+   *  is still running from the initial submit; 0 + status=unreadable_final
+   *  means the 3 strikes were used. */
+  attempts_remaining: number;
+  extraction: SubmissionExtraction | null;
+}
+
 export interface VariationPayload {
   bank_item_id: string;
   question: string;
@@ -1552,6 +1600,35 @@ export const schoolStudent = {
   },
   getMySubmission(assignmentId: string) {
     return apiFetch<StudentSubmission>(`/school/student/homework/${assignmentId}/submission`);
+  },
+  /** Poll for extraction state. Called every ~2s from the post-submit
+   *  page until status moves off `pending`. Cheap DB read — no LLM. */
+  getExtractionStatus(submissionId: string) {
+    return apiFetch<ExtractionStatusResponse>(
+      `/school/student/submissions/${submissionId}/extraction-status`,
+    );
+  },
+  /** Student approves (or edits) Vision's extraction. Server flips to
+   *  `confirmed` and spawns the integrity + grading background. */
+  confirmExtraction(submissionId: string, extraction: SubmissionExtraction) {
+    return apiFetch<{ status: string }>(
+      `/school/student/submissions/${submissionId}/confirm-extraction`,
+      {
+        method: "POST",
+        body: JSON.stringify({ edited_extraction: extraction }),
+      },
+    );
+  },
+  /** Replace the submission's image and re-run extraction. Valid only
+   *  when extraction_status=pending with attempts < 3; 409 otherwise. */
+  retakeSubmission(submissionId: string, imageBase64: string) {
+    return apiFetch<{ status: string }>(
+      `/school/student/submissions/${submissionId}/retake`,
+      {
+        method: "POST",
+        body: JSON.stringify({ image_base64: imageBase64 }),
+      },
+    );
   },
   // ── Integrity check ──
   // The conversational understanding-check. A single /turn endpoint
