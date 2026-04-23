@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Client-captured behavioral signals for a single integrity-check
- * student turn. Mirrors `api/routes/integrity_check.py::TurnTelemetry`
- * — kept loose so new fields can be added without a schema change.
+ * student turn. Mirrors `api/routes/integrity_check.py::TurnTelemetry`.
  *
  * Teacher-facing evidence only. The chat never surfaces any of this
  * to the student.
@@ -30,23 +29,28 @@ export interface TurnTelemetry {
 const CADENCE_PAUSE_MS = 3000;
 
 /**
- * Per-blur event caps to stop a tampered client from landing absurd
- * numbers in the teacher transcript. 24h matches the seconds_on_turn
- * bound on the server.
+ * Caps the hook enforces at the source so an honest client never
+ * submits values the server will reject. 24h and 1 MB match the
+ * server-side TurnTelemetry validation.
  */
 const MAX_BLUR_DURATION_MS = 86_400_000;
+const MAX_PASTE_BYTE_COUNT = 1_000_000;
+const MAX_EVENTS_PER_TURN = 256;
 
 type TurnTelemetryApi = {
-  /** Record a paste event on the chat input. */
+  /** Record a paste event on the chat input. Size is capped at the
+   *  server's per-event limit; arrays are capped at the server's
+   *  per-turn limit so an honest client never trips validation. */
   recordPaste: (byteCount: number) => void;
-  /** Record any keystroke — includes backspace/delete via flagging. */
+  /** Record a keystroke. `isEdit` = true for backspace/delete so
+   *  cadence distinguishes corrections from new typing. */
   recordKeystroke: (isEdit?: boolean) => void;
-  /** Snapshot the accumulated telemetry for the just-sent turn, then
-   *  reset internal state for the next turn. */
-  snapshotAndReset: () => TurnTelemetry;
-  /** Signal that the student tapped "need more time" during this
-   *  turn. Non-punitive; just noted for teacher context. */
-  markNeedMoreTime: () => void;
+  /** Return a snapshot of the accumulated telemetry for the turn
+   *  without touching internal state. Caller decides when to reset. */
+  snapshot: () => TurnTelemetry;
+  /** Clear accumulated state. Call after a successful /turn POST so
+   *  a failed send doesn't lose the original signals on retry. */
+  reset: () => void;
 };
 
 /**
@@ -75,7 +79,6 @@ export function useTurnTelemetry(): TurnTelemetryApi {
   const lastKeystroke = useRef<number | null>(null);
   const pausesOver3s = useRef<number>(0);
   const edits = useRef<number>(0);
-  const needMoreTime = useRef<boolean>(false);
 
   // Detect mobile from UA at mount — good enough for our "device
   // hint" signal (teacher evidence, not gating anything).
@@ -129,9 +132,10 @@ export function useTurnTelemetry(): TurnTelemetryApi {
   }, []);
 
   const recordPaste = useCallback((byteCount: number) => {
+    if (pasteEvents.current.length >= MAX_EVENTS_PER_TURN) return;
     pasteEvents.current.push({
       at: new Date().toISOString(),
-      byte_count: byteCount,
+      byte_count: Math.min(Math.max(byteCount, 0), MAX_PASTE_BYTE_COUNT),
     });
   }, []);
 
@@ -150,25 +154,23 @@ export function useTurnTelemetry(): TurnTelemetryApi {
     if (isEdit) edits.current += 1;
   }, []);
 
-  const markNeedMoreTime = useCallback(() => {
-    needMoreTime.current = true;
-  }, []);
-
-  const snapshotAndReset = useCallback((): TurnTelemetry => {
+  const snapshot = useCallback((): TurnTelemetry => {
     // Close out any in-flight blur — otherwise a student who's still
     // away when they send would drop that blur interval. Shouldn't
     // happen (they can't send while the tab is hidden) but defensive.
-    if (blurStart.current != null) {
-      const duration = Math.min(
-        Date.now() - blurStart.current,
-        MAX_BLUR_DURATION_MS,
-      );
-      focusBlurEvents.current.push({
-        at: new Date(blurStart.current).toISOString(),
-        duration_ms: duration,
-      });
-      blurStart.current = null;
-    }
+    // Doesn't mutate blurStart; reset() clears it on success.
+    const inflightBlurEvent =
+      blurStart.current != null
+        ? [
+            {
+              at: new Date(blurStart.current).toISOString(),
+              duration_ms: Math.min(
+                Date.now() - blurStart.current,
+                MAX_BLUR_DURATION_MS,
+              ),
+            },
+          ]
+        : [];
 
     const cadence =
       firstKeystroke.current != null && lastKeystroke.current != null
@@ -179,31 +181,36 @@ export function useTurnTelemetry(): TurnTelemetryApi {
           }
         : null;
 
-    const payload: TurnTelemetry = {
-      focus_blur_events: [...focusBlurEvents.current],
+    // Cap the focus-blur array at the server's per-turn limit so an
+    // honest client with unusual signal never trips validation.
+    const focusBlurWithInflight = [
+      ...focusBlurEvents.current,
+      ...inflightBlurEvent,
+    ].slice(0, MAX_EVENTS_PER_TURN);
+
+    return {
+      focus_blur_events: focusBlurWithInflight,
       paste_events: [...pasteEvents.current],
       typing_cadence: cadence,
-      need_more_time_used: needMoreTime.current,
+      need_more_time_used: false,
       device_type: deviceType.current,
     };
+  }, []);
 
-    // Reset for the next turn. We keep the hook mounted across turns
-    // so window-level listeners stay attached.
+  const reset = useCallback(() => {
     focusBlurEvents.current = [];
     pasteEvents.current = [];
+    blurStart.current = null;
     firstKeystroke.current = null;
     lastKeystroke.current = null;
     pausesOver3s.current = 0;
     edits.current = 0;
-    needMoreTime.current = false;
-
-    return payload;
   }, []);
 
   return {
     recordPaste,
     recordKeystroke,
-    snapshotAndReset,
-    markNeedMoreTime,
+    snapshot,
+    reset,
   };
 }

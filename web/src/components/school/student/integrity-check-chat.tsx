@@ -107,12 +107,15 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         0,
         Math.round((Date.now() - turnStartedAt) / 1000),
       );
-      const telemetryPayload = telemetry.snapshotAndReset();
+      const telemetryPayload = telemetry.snapshot();
       const next = await schoolStudent.postIntegrityTurn(submissionId, {
         message: trimmed,
         seconds_on_turn: seconds,
         telemetry: telemetryPayload,
       });
+      // Only reset telemetry after the turn is persisted on the
+      // server; a failed POST keeps the signals intact for retry.
+      telemetry.reset();
       setState(next);
       setPendingStudentMessage(null);
       setTurnStartedAt(Date.now());
@@ -211,15 +214,28 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
               onKeyDown={(e) => {
                 // Typing-cadence tracking: Backspace/Delete count as
                 // "edits", everything else as a normal keystroke.
-                // Modifier-only keys (shift, ctrl, etc.) skip — they
-                // don't move the cursor in text entry.
+                // Skip when it's not really text entry:
+                //   - Modifier-only keys (shift/ctrl/alt/meta) don't
+                //     produce characters.
+                //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
+                //     ⌘A select-all) — the paste gesture is counted
+                //     separately via onPaste; logging the "v" keystroke
+                //     too would double-count a single user action.
+                //   - IME composition (Chinese/Japanese/Korean input)
+                //     fires many intermediate keydowns per character;
+                //     counting them inflates cadence for i18n users.
                 const isEdit = e.key === "Backspace" || e.key === "Delete";
                 const isModifier =
                   e.key === "Shift" ||
                   e.key === "Control" ||
                   e.key === "Alt" ||
                   e.key === "Meta";
-                if (!isModifier) telemetry.recordKeystroke(isEdit);
+                const isShortcut = e.metaKey || e.ctrlKey;
+                const isComposing =
+                  e.nativeEvent.isComposing || e.keyCode === 229;
+                if (!isModifier && !isShortcut && !isComposing) {
+                  telemetry.recordKeystroke(isEdit);
+                }
 
                 // Cmd/Ctrl + Enter sends so phone typers don't hit it
                 // by accident. Plain Enter just adds a newline.
