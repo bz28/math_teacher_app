@@ -5,10 +5,18 @@ import { schoolStudent } from "@/lib/api";
 
 interface Props {
   submissionId: string;
-  /** Called when the integrity state transitions out of "pending" —
-   *  the parent should re-fetch and decide whether to open the chat
-   *  (in_progress), show the submitted view (complete / no_check),
-   *  or stay on homework. */
+  /** Needed so we can poll the submission row directly. Pre-confirm
+   *  there's no IntegrityCheckSubmission row yet (integrity + grading
+   *  are gated on student confirm), so the integrity-state endpoint
+   *  stays stuck at "extracting" even after Vision writes the
+   *  extraction. We watch `sub.extraction` landing on the submission
+   *  row and fire onReady so the parent can route to the confirm
+   *  screen instead of spinning the full 90s timeout. */
+  assignmentId: string;
+  /** Called when the pipeline has moved past "extracting" OR when
+   *  Vision's extraction has landed on the submission row — whichever
+   *  comes first. The parent re-fetches and decides whether to open
+   *  the confirm screen, the chat, or the submitted view. */
   onReady: () => void;
   /** Called when the pipeline has not finished within the timeout
    *  window. The parent should show an error with a refresh action. */
@@ -30,6 +38,7 @@ const TIMEOUT_MS = 90_000;
  */
 export function IntegrityPendingView({
   submissionId,
+  assignmentId,
   onReady,
   onTimeout,
 }: Props) {
@@ -53,12 +62,23 @@ export function IntegrityPendingView({
     async function poll() {
       if (cancelled) return;
       try {
-        const state = await schoolStudent.getIntegrityState(submissionId);
+        // Poll both in parallel: integrity state catches post-confirm
+        // transitions, submission row catches pre-confirm extraction
+        // arrival (no IntegrityCheckSubmission row exists until the
+        // student confirms, so integrity state is stuck at "extracting"
+        // during that window).
+        const [state, sub] = await Promise.all([
+          schoolStudent.getIntegrityState(submissionId),
+          schoolStudent.getMySubmission(assignmentId).catch(() => null),
+        ]);
         if (cancelled) return;
-        // Any non-extracting state = done waiting. The parent decides
-        // what to do next based on the overall_status it sees when
-        // it re-fetches.
-        if (state.overall_status !== "extracting") {
+        const extractionArrived = sub?.extraction != null;
+        const flagged = sub?.extraction_flagged_at != null;
+        if (
+          state.overall_status !== "extracting"
+          || extractionArrived
+          || flagged
+        ) {
           onReadyRef.current();
           return;
         }
@@ -86,7 +106,7 @@ export function IntegrityPendingView({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [submissionId]);
+  }, [submissionId, assignmentId]);
 
   const seconds = Math.floor(elapsedMs / 1000);
 

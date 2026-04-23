@@ -14,11 +14,13 @@ import uuid
 from typing import Any
 
 from httpx import AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
+from api.models.assignment import Submission
 from api.models.user import User
+from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import TINY_PNG
 from tests.conftest import auth_headers as _auth
 
@@ -580,3 +582,158 @@ async def test_teacher_submission_detail_404_for_missing(
         headers=_auth(world["teacher_token"]),
     )
     assert r.status_code == 404
+
+
+# ── Extraction confirm / flag ──────────────────────────────────────
+#
+# Both endpoints stamp mutually-exclusive timestamps on the Submission
+# row. A DB CHECK constraint plus a conditional UPDATE enforce that
+# only one can win, even under concurrent requests. These tests cover
+# the happy paths + the idempotency / exclusion guards from those two
+# layers.
+
+
+async def _submit_and_extract(
+    client: AsyncClient, world: dict[str, Any]
+) -> str:
+    """Submit + drain so `sub.extraction` is populated and the confirm
+    endpoint can run. Returns the submission_id."""
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    assert r.status_code == 200, r.text
+    await drain_integrity_background_tasks()
+    return r.json()["submission_id"]
+
+
+async def test_confirm_extraction_happy_path(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    # Drain so the spawned integrity + grading pipeline doesn't leak
+    # into the next test's session — matches the pattern in
+    # tests/test_integrity_check.py::_submit.
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_confirmed_at is not None
+        assert sub.extraction_flagged_at is None
+
+
+async def test_confirm_extraction_idempotent(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    r1 = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    await drain_integrity_background_tasks()
+    r2 = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    # Second call is a no-op but still succeeds (doesn't 500 or 409
+    # since the student just refreshed / double-tapped). No drain
+    # needed after — the second call bails before spawning.
+    assert r2.json().get("already_confirmed") is True
+
+
+async def test_flag_extraction_happy_path(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flagged_at is not None
+        assert sub.extraction_confirmed_at is None
+
+
+async def test_flag_after_confirm_409(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    # Drain the pipeline spawned by confirm before the follow-up flag
+    # attempt, so the background task doesn't leak into the next test.
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 409
+
+
+async def test_confirm_after_flag_409(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 409
+
+
+async def test_confirm_before_extraction_409(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Calling confirm before the background Vision call has populated
+    `sub.extraction` returns 409 — there's nothing to confirm yet."""
+    submission_id = await _submit_and_extract(client, world)
+    # Null out extraction AFTER the drain so we're not racing the
+    # background task. Simulates the state the student sees if they
+    # click confirm before extraction finishes.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE submissions SET extraction = NULL WHERE id = :id"),
+            {"id": submission_id},
+        )
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 409
+
+
+async def test_confirm_403_for_other_student(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    # The shared `outsider` fixture is a student not owning this
+    # submission — confirming on it should 403 before any pipeline
+    # spawn, so no drain needed.
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["outsider_token"]),
+    )
+    assert r.status_code == 403

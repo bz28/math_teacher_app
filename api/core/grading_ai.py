@@ -37,7 +37,8 @@ You are a world-class math professor grading a student's homework submission. \
 You have the student's extracted work — already converted to text and \
 **grouped per problem** by a separate extraction step — plus the teacher's \
 answer key for each problem. Work that couldn't be attributed to a single \
-problem is listed separately under "Other work".
+problem — or that Vision attributed to a problem that isn't on this \
+assignment — is listed under "Other work" when present.
 
 Your job:
 1. For each problem, compare the student's extracted final answer against the \
@@ -156,8 +157,15 @@ def _build_user_message(
     contains question + answer key + the student's work steps for that
     problem + the student's final answer — everything the grader needs
     to grade a problem, co-located. Steps Vision couldn't attribute
-    (problem_position=null) land in a trailing "Other work" block so
-    context isn't lost but isn't mis-graded.
+    (problem_position=null) OR attributed to a position that isn't on
+    this assignment (e.g. a hallucinated position, or a bank item
+    deleted between extract and grade) land in a trailing "Other work"
+    block so context isn't lost but isn't mis-graded.
+
+    Duplicate final_answers for the same position (schema doesn't
+    enforce uniqueness) are all rendered — the grader sees every
+    candidate final answer Vision pulled for a problem rather than
+    silently losing all but the last.
 
     Relies on the extractor having tagged each step with a
     `problem_position`; pre-extractor-upgrade data (no positions)
@@ -166,23 +174,28 @@ def _build_user_message(
     attribution — same behavior as before the upgrade."""
     steps = extraction.get("steps", [])
     final_answers = extraction.get("final_answers", [])
+    valid_positions = {p["position"] for p in problems}
 
     # Bucket steps + final answers by problem_position. Integer keys
-    # only — None goes into the trailing "Other work" list.
+    # matching a problem on this assignment go per-problem; everything
+    # else (None, hallucinated positions) falls into "Other work".
     steps_by_pos: dict[int, list[dict[str, Any]]] = {}
     unattributed_steps: list[dict[str, Any]] = []
     for s in steps:
         pos = s.get("problem_position")
-        if isinstance(pos, int):
+        if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
             steps_by_pos.setdefault(pos, []).append(s)
         else:
             unattributed_steps.append(s)
 
-    final_answer_by_pos: dict[int, dict[str, Any]] = {}
+    finals_by_pos: dict[int, list[dict[str, Any]]] = {}
+    unattributed_finals: list[dict[str, Any]] = []
     for fa in final_answers:
         pos = fa.get("problem_position")
-        if isinstance(pos, int):
-            final_answer_by_pos[pos] = fa
+        if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
+            finals_by_pos.setdefault(pos, []).append(fa)
+        else:
+            unattributed_finals.append(fa)
 
     lines: list[str] = []
     for p in problems:
@@ -201,23 +214,31 @@ def _build_user_message(
         else:
             lines.append("  (no work shown for this problem)")
 
-        fa = final_answer_by_pos.get(position)
-        if fa is not None:
-            lines.append(f"Student's final answer: {_format_final_answer(fa)}")
-        else:
+        problem_finals = finals_by_pos.get(position, [])
+        if not problem_finals:
             lines.append("Student's final answer: (no final answer shown)")
+        elif len(problem_finals) == 1:
+            lines.append(
+                f"Student's final answer: {_format_final_answer(problem_finals[0])}"
+            )
+        else:
+            lines.append("Student's final answer (multiple extracted):")
+            for fa in problem_finals:
+                lines.append(f"  - {_format_final_answer(fa)}")
 
         lines.append("")  # blank line between problem blocks
 
-    if unattributed_steps:
+    if unattributed_steps or unattributed_finals:
         lines.append("## Other work (not attributed to a specific problem)")
         lines.append(
-            "These steps couldn't be tied to one problem. Use them as "
-            "context only — they don't change a problem's grade on "
-            "their own."
+            "These entries couldn't be tied to one problem on this "
+            "assignment. Use them as context only — they don't change "
+            "a problem's grade on their own."
         )
         for s in unattributed_steps:
             lines.append(f"  {_format_step(s)}")
+        for fa in unattributed_finals:
+            lines.append(f"  Final answer: {_format_final_answer(fa)}")
 
     return "\n".join(lines)
 
@@ -302,6 +323,20 @@ async def run_ai_grading_for_submission(
     )).scalar_one_or_none()
     if not sub:
         return
+
+    # Idempotency: if this submission is already AI-graded (final_score
+    # set) and the caller isn't a teacher-initiated regrade, skip the
+    # LLM call. Guards against a concurrent spawn (e.g. confirm called
+    # twice in quick succession) re-running grading and racing writers
+    # on the same SubmissionGrade row.
+    if not force:
+        existing = (await db.execute(
+            select(SubmissionGrade.final_score).where(
+                SubmissionGrade.submission_id == submission_id,
+            )
+        )).scalar_one_or_none()
+        if existing is not None:
+            return
 
     assignment = (await db.execute(
         select(Assignment).where(Assignment.id == sub.assignment_id)

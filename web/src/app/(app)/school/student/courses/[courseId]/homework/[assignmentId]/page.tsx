@@ -103,6 +103,18 @@ export default function HomeworkPage() {
           return;
         }
         if (sub && sub.extraction == null) {
+          // Extraction only runs when either integrity or AI grading
+          // is on — if both are off, `sub.extraction` stays null
+          // forever and a 90s spinner waiting for it is a bug, not a
+          // wait. Fall through to the homework view and let the
+          // submitted state render as normal.
+          if (
+            !sub.integrity_check_enabled &&
+            !sub.ai_grading_enabled
+          ) {
+            setMode({ kind: "homework" });
+            return;
+          }
           // Still extracting (or extraction failed — IntegrityPendingView
           // handles the timeout fallback in that case).
           setMode({ kind: "integrity_pending" });
@@ -265,14 +277,15 @@ export default function HomeworkPage() {
     );
   }
 
-  if (mode.kind === "integrity_pending" && hw.submission_id) {
+  if (mode.kind === "integrity_pending" && hw.submission_id && assignmentId) {
     return (
       <IntegrityPendingView
         submissionId={hw.submission_id}
+        assignmentId={assignmentId}
         onReady={async () => {
           // Re-fetch state and let loadAll decide where to route
           // next (chat, submitted view, etc.).
-          if (assignmentId) await loadAll(assignmentId);
+          await loadAll(assignmentId);
         }}
         onTimeout={() => setMode({ kind: "integrity_pending_timeout" })}
       />
@@ -311,15 +324,28 @@ export default function HomeworkPage() {
         submissionId={submissionId}
         submittedImageDataUrl={mode.imageDataUrl}
         extraction={mode.extraction}
-        onContinue={() => {
+        onContinue={async () => {
           setConfirmedThisSession(true);
-          setMode({ kind: "integrity_chat" });
+          // Re-fetch + reroute from server truth. Handles the 409
+          // recovery case where the confirm endpoint bailed because
+          // the submission was flagged in another tab: loadAll sees
+          // extraction_flagged_at and routes to the terminal screen
+          // instead of dropping the student into an empty chat.
+          if (assignmentId) {
+            await loadAll(assignmentId);
+          } else {
+            setMode({ kind: "integrity_chat" });
+          }
         }}
-        onFlagged={() => {
-          // Flag skips grading + integrity. Submission's already in
-          // the teacher's inbox for manual grading — show the
-          // terminal screen and leave the student there.
-          setMode({ kind: "extraction_flagged" });
+        onFlagged={async () => {
+          // Flag skips grading + integrity. Re-fetch in case the
+          // server had already moved on (e.g. someone confirmed in
+          // another tab) so the student lands on the right terminal.
+          if (assignmentId) {
+            await loadAll(assignmentId);
+          } else {
+            setMode({ kind: "extraction_flagged" });
+          }
         }}
       />
     );

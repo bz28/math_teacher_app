@@ -33,7 +33,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -349,6 +349,12 @@ class StudentSubmissionDetail(BaseModel):
     #                manually, no AI calls run.
     extraction_confirmed_at: datetime | None
     extraction_flagged_at: datetime | None
+    # Assignment-level pipeline toggles. Submit-time background
+    # extraction fires only when at least one is true; the frontend
+    # uses this to avoid sending students to a "Preparing your check"
+    # spinner when no pipeline will ever populate `extraction`.
+    integrity_check_enabled: bool
+    ai_grading_enabled: bool
 
 
 # ── Dashboard / grades shapes ──
@@ -1087,7 +1093,7 @@ async def confirm_extraction(
     submission_id: uuid.UUID,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Student signs off on Vision's reading. Stamps
     `extraction_confirmed_at` and spawns the integrity + grading
     background pipeline. Idempotent: a repeated call on an already-
@@ -1097,13 +1103,14 @@ async def confirm_extraction(
       • 404 if the submission doesn't exist.
       • 403 if it belongs to another student.
       • 409 if extraction hasn't finished (nothing to confirm yet).
+      • 409 if the submission was already flagged via
+        /flag-extraction — mutually exclusive terminal states.
 
     This is the single choke-point that gates grading on student
-    confirmation. Called from both "Looks right" and "Reader got
-    something wrong" on the confirm screen — the flag fires its own
-    flag endpoint separately; grading still runs on a flagged
-    submission in this commit (flag-skips-grading lands in the
-    follow-up commit).
+    confirmation. Called from "Looks right — continue" on the confirm
+    screen; "Reader got something wrong" calls /flag-extraction
+    instead, which stamps extraction_flagged_at and deliberately does
+    NOT spawn grading.
     """
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
@@ -1125,13 +1132,34 @@ async def confirm_extraction(
     if sub.extraction_confirmed_at is not None:
         # Idempotent: duplicate click (double-tap, refresh mid-request)
         # is a no-op so we don't double-spawn grading.
-        return {"status": "ok", "already_confirmed": "true"}
+        return {"status": "ok", "already_confirmed": True}
 
-    sub.extraction_confirmed_at = datetime.now(UTC)
+    # Atomic conditional update: only stamp confirm if flag hasn't been
+    # set and confirm hasn't been set. Guards against a concurrent flag
+    # landing between the SELECT above and the UPDATE — without this
+    # window both endpoints could pass their checks on the same row and
+    # both stamp their timestamps, which the DB-level CHECK constraint
+    # would then reject (500). rowcount==0 here means someone else won
+    # the race; treat that as a 409.
+    result = await db.execute(
+        update(Submission)
+        .where(
+            Submission.id == submission_id,
+            Submission.extraction_confirmed_at.is_(None),
+            Submission.extraction_flagged_at.is_(None),
+        )
+        .values(extraction_confirmed_at=datetime.now(UTC))
+    )
+    if result.rowcount == 0:  # type: ignore[attr-defined]
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Submission state changed — reload and try again",
+        )
     await db.commit()
 
     _spawn_background_task(
-        _run_integrity_and_grading_background(sub.id),
+        _run_integrity_and_grading_background(submission_id),
     )
     return {"status": "ok"}
 
@@ -1141,7 +1169,7 @@ async def flag_extraction_submission(
     submission_id: uuid.UUID,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Student said "Reader got something wrong" on the confirm screen.
 
     Stamps `extraction_flagged_at` and sends the submission straight
@@ -1175,12 +1203,27 @@ async def flag_extraction_submission(
             detail="Submission already confirmed — can't flag now",
         )
     if sub.extraction_flagged_at is not None:
-        return {"status": "ok", "already_flagged": "true"}
+        return {"status": "ok", "already_flagged": True}
 
-    sub.extraction_flagged_at = datetime.now(UTC)
+    # Atomic conditional update — see notes on confirm_extraction for
+    # the race this closes. Intentionally NO _spawn_background_task —
+    # flagging is the "skip AI, teacher handles it" path.
+    result = await db.execute(
+        update(Submission)
+        .where(
+            Submission.id == submission_id,
+            Submission.extraction_confirmed_at.is_(None),
+            Submission.extraction_flagged_at.is_(None),
+        )
+        .values(extraction_flagged_at=datetime.now(UTC))
+    )
+    if result.rowcount == 0:  # type: ignore[attr-defined]
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Submission state changed — reload and try again",
+        )
     await db.commit()
-    # Intentionally NO _spawn_background_task — flagging is the
-    # "skip AI, teacher handles it" path.
     return {"status": "ok"}
 
 
@@ -1208,6 +1251,18 @@ async def get_my_submission(
     if sub is None:
         raise HTTPException(status_code=404, detail="No submission yet")
 
+    # Pipeline-toggle lookup on the assignment so the student-side
+    # router can tell the difference between "extraction still running"
+    # and "extraction will never run, don't wait on a spinner."
+    toggles = (await db.execute(
+        select(
+            Assignment.integrity_check_enabled,
+            Assignment.ai_grading_enabled,
+        ).where(Assignment.id == sub.assignment_id)
+    )).one_or_none()
+    integrity_on = bool(toggles.integrity_check_enabled) if toggles else False
+    grading_on = bool(toggles.ai_grading_enabled) if toggles else False
+
     return StudentSubmissionDetail(
         submission_id=str(sub.id),
         submitted_at=sub.submitted_at,
@@ -1217,6 +1272,8 @@ async def get_my_submission(
         extraction=sub.extraction,
         extraction_confirmed_at=sub.extraction_confirmed_at,
         extraction_flagged_at=sub.extraction_flagged_at,
+        integrity_check_enabled=integrity_on,
+        ai_grading_enabled=grading_on,
     )
 
 

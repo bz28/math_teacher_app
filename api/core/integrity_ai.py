@@ -99,7 +99,15 @@ statements, "Name:", "Date:", instructions). Only extract what the student handw
 def _format_problems_briefing(problems: list[dict[str, Any]] | None) -> str:
     """Render the problem list as a numbered briefing Vision can cite by
     position when tagging steps. Empty when no problems are provided —
-    caller falls back to untagged extraction behavior."""
+    caller falls back to untagged extraction behavior.
+
+    Deliberately renders only `position` + `question` — not
+    `final_answer` — even though the shared `load_problems_for_assignment`
+    dict carries the answer key. Vision is reading the student's work,
+    not grading it; leaking the answer key here would let the model
+    "snap" the student's extracted work toward the correct answer
+    instead of transcribing what's actually on the page.
+    """
     if not problems:
         return ""
     lines = ["The homework has these problems (use these positions when tagging):"]
@@ -314,18 +322,27 @@ def build_problems_briefing(
                     f"{s.get('plain_english', '')} "
                     f"[{s.get('latex', '')}]",
                 )
-        # Student's final answer on this problem, when Vision extracted
-        # one. Separated from the step list so the agent can probe it
-        # as a conclusion rather than mistake it for another step.
+        # Student's final answer(s) on this problem, when Vision
+        # extracted one. Separated from the step list so the agent can
+        # probe it as a conclusion rather than mistake it for another
+        # step. The extraction schema doesn't enforce uniqueness on
+        # problem_position, so render every matching entry — the agent
+        # sees every candidate rather than silently losing all but one.
         final_answers = extraction.get("final_answers") or []
         if final_answers:
-            fa = final_answers[0]  # slice is per-problem so ≤1 entry
-            answer = (
-                fa.get("answer_latex")
-                or fa.get("answer_plain")
-                or "(no answer)"
+            label = (
+                "Student's final answer"
+                if len(final_answers) == 1
+                else "Student's final answers (multiple extracted)"
             )
-            lines.append(f"Student's final answer: {answer}")
+            lines.append(f"{label}:")
+            for fa in final_answers:
+                answer = (
+                    fa.get("answer_latex")
+                    or fa.get("answer_plain")
+                    or "(no answer)"
+                )
+                lines.append(f"  {answer}")
         status = p.get("verdict_status", "pending")
         lines.append(f"Current verdict: {status}")
     return "\n".join(lines)

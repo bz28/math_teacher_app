@@ -1455,6 +1455,12 @@ export interface StudentSubmission {
    *  screen. Mutually exclusive with extraction_confirmed_at —
    *  flagged submissions skip AI entirely and wait for the teacher. */
   extraction_flagged_at: string | null;
+  /** Assignment-level pipeline toggles. Extraction only runs when at
+   *  least one is true — the student-side router uses these to skip
+   *  the "Preparing your check" spinner when no pipeline will ever
+   *  populate `extraction`. */
+  integrity_check_enabled: boolean;
+  ai_grading_enabled: boolean;
 }
 
 export interface SubmitHomeworkResponse {
@@ -1594,17 +1600,11 @@ export const schoolStudent = {
       { method: "POST", body: JSON.stringify(body) },
     );
   },
-  flagIntegrityExtraction(submissionId: string) {
-    return apiFetch<IntegrityStateResponse>(
-      `/school/student/integrity/submissions/${submissionId}/flag-extraction`,
-      { method: "POST" },
-    );
-  },
   /** Student signs off on Vision's reading. Server stamps
    *  extraction_confirmed_at and spawns the integrity + grading
    *  background pipeline — neither fires until this is called. */
   confirmExtraction(submissionId: string) {
-    return apiFetch<{ status: string; already_confirmed?: string }>(
+    return apiFetch<{ status: string; already_confirmed?: boolean }>(
       `/school/student/submissions/${submissionId}/confirm-extraction`,
       { method: "POST" },
     );
@@ -1614,7 +1614,7 @@ export const schoolStudent = {
    *  grading. Mutually exclusive with confirmExtraction — the
    *  server 409s if either terminal state is already set. */
   flagExtractionSubmission(submissionId: string) {
-    return apiFetch<{ status: string; already_flagged?: string }>(
+    return apiFetch<{ status: string; already_flagged?: boolean }>(
       `/school/student/submissions/${submissionId}/flag-extraction`,
       { method: "POST" },
     );
@@ -1735,9 +1735,9 @@ export interface IntegrityStateResponse {
   submission_id: string;
   overall_status: IntegrityOverallStatus;
   disposition: IntegrityDisposition | null;
-  student_flagged_extraction: boolean;
-  /** Vision extraction of the student's own work. Null when no check
-   *  has started yet (pipeline still extracting or integrity disabled). */
+  /** Vision extraction of the student's own work for the sampled
+   *  problem. Null when no check has started yet (pipeline still
+   *  extracting or integrity disabled). */
   extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
@@ -1838,7 +1838,6 @@ export interface TeacherIntegrityDetail {
   probe_selection_reason: IntegrityProbeSelectionReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
-  student_flagged_extraction: boolean;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
 }

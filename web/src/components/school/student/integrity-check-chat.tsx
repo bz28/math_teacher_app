@@ -267,9 +267,11 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
           <button
             type="button"
             onClick={() => setReferenceOpen((v) => !v)}
+            aria-expanded={referenceOpen}
+            aria-controls="integrity-chat-reference-panel"
             className="flex w-full items-center gap-2 py-2 text-xs font-semibold text-text-secondary hover:text-primary"
           >
-            <span className="text-[10px]">
+            <span className="text-[10px]" aria-hidden>
               {referenceOpen ? "▼" : "▶"}
             </span>
             {referenceOpen ? "Hide my work" : "View my work"}
@@ -278,9 +280,18 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
             // Cap the panel height so a long extraction can't push
             // the chat off the bottom of the viewport. Student
             // scrolls inside the panel; the chat stays in place
-            // below. ~40vh is enough to show the problem question
-            // plus a few steps before scrolling kicks in.
-            <div className="max-h-[40vh] overflow-y-auto space-y-3 pb-3">
+            // below. ~40dvh (dynamic viewport, matching the outer
+            // container) is enough to show the problem question plus
+            // a few steps before scrolling kicks in. tabIndex + role
+            // give keyboard / screen-reader users a handle on the
+            // scrollable region.
+            <div
+              id="integrity-chat-reference-panel"
+              role="region"
+              aria-label="Your submitted work"
+              tabIndex={0}
+              className="max-h-[40dvh] overflow-y-auto space-y-3 pb-3"
+            >
               {state.problems.map((p) => (
                 <div
                   key={p.problem_id}

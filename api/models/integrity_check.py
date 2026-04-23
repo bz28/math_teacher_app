@@ -89,13 +89,6 @@ class IntegrityCheckSubmission(Base):
         String(32), nullable=True,
     )
 
-    # Student-facing flag raised from the post-extraction confirm
-    # screen when Vision misread their handwritten work. Surfaced to
-    # the teacher so they can weigh the verdict accordingly.
-    student_flagged_extraction: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False,
-    )
-
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  ApiError,
   schoolStudent,
   type IntegrityExtraction,
   type IntegrityExtractionFinalAnswer,
@@ -53,11 +54,15 @@ type ProblemGroup = {
   /** Null = unattributed scratchwork / cross-problem setup. */
   position: number | null;
   steps: IntegrityExtractionStep[];
-  finalAnswer: IntegrityExtractionFinalAnswer | null;
+  /** Every final answer Vision attributed to this problem. The
+   *  schema doesn't enforce uniqueness on problem_position, so two
+   *  entries can share a position — we render all of them rather
+   *  than silently keeping the last. */
+  finalAnswers: IntegrityExtractionFinalAnswer[];
 };
 
 /** Bucket extraction steps by problem_position + attach each
- *  problem's final answer. Unattributed steps (position=null) land
+ *  problem's final answer(s). Unattributed steps (position=null) land
  *  in their own "Other work" group rendered last. */
 function groupByProblem(extraction: IntegrityExtraction): ProblemGroup[] {
   // Use a Map keyed by "number|null" so we can preserve insertion
@@ -70,7 +75,7 @@ function groupByProblem(extraction: IntegrityExtraction): ProblemGroup[] {
       map.set(key, {
         position: step.problem_position,
         steps: [],
-        finalAnswer: null,
+        finalAnswers: [],
       });
     }
     map.get(key)!.steps.push(step);
@@ -84,10 +89,10 @@ function groupByProblem(extraction: IntegrityExtraction): ProblemGroup[] {
       map.set(key, {
         position: fa.problem_position,
         steps: [],
-        finalAnswer: fa,
+        finalAnswers: [fa],
       });
     } else {
-      map.get(key)!.finalAnswer = fa;
+      map.get(key)!.finalAnswers.push(fa);
     }
   }
   return Array.from(map.values()).sort((a, b) => {
@@ -116,12 +121,17 @@ function StepRow({ step }: { step: IntegrityExtractionStep }) {
 }
 
 /** Render a problem's final answer row. Prefer LaTeX; fall back to
- *  plain when the student wrote prose. */
+ *  plain when the student wrote prose. Returns null when both fields
+ *  are empty — the schema allows an empty-string pair (extractor
+ *  bug / misread) and a labeled-but-blank box is worse than nothing. */
 function FinalAnswerRow({ fa }: { fa: IntegrityExtractionFinalAnswer }) {
-  const content = fa.answer_latex ? (
-    <MathText text={`$$${fa.answer_latex}$$`} />
+  const latex = fa.answer_latex?.trim() ?? "";
+  const plain = fa.answer_plain?.trim() ?? "";
+  if (!latex && !plain) return null;
+  const content = latex ? (
+    <MathText text={`$$${latex}$$`} />
   ) : (
-    <span>{fa.answer_plain}</span>
+    <span>{plain}</span>
   );
   return (
     <div className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2">
@@ -156,7 +166,15 @@ export function SubmissionExtractionConfirmView({
     try {
       await schoolStudent.confirmExtraction(submissionId);
       onContinue();
-    } catch {
+    } catch (e) {
+      // 409 means server state moved (someone else flagged in another
+      // tab, or the window raced past our local view). Bail out of
+      // this screen and let the parent re-fetch + route to whatever
+      // terminal matches the server's current truth.
+      if (e instanceof ApiError && e.status === 409) {
+        onContinue();
+        return;
+      }
       setError("Couldn't confirm. Try again.");
       setSubmitting(false);
     }
@@ -168,7 +186,15 @@ export function SubmissionExtractionConfirmView({
     try {
       await schoolStudent.flagExtractionSubmission(submissionId);
       onFlagged();
-    } catch {
+    } catch (e) {
+      // 409 = server already past the confirm/flag decision (student
+      // confirmed in another tab, or the submission was already
+      // flagged). Exit to the terminal and let the parent re-route
+      // rather than looping on "Try again".
+      if (e instanceof ApiError && e.status === 409) {
+        onFlagged();
+        return;
+      }
       setError("Couldn't save your flag. Try again.");
       setSubmitting(false);
     }
@@ -229,9 +255,9 @@ export function SubmissionExtractionConfirmView({
                   key={g.position ?? "other"}
                   className="rounded-[--radius-md] border border-border-light bg-background p-3"
                 >
-                  <h3 className="text-sm font-bold text-text-primary">
+                  <h2 className="text-sm font-bold text-text-primary">
                     {g.position !== null ? `Problem ${g.position}` : "Other work"}
-                  </h3>
+                  </h2>
                   {g.steps.length === 0 ? (
                     <p className="mt-1 text-xs italic text-text-muted">
                       No steps extracted for this problem.
@@ -245,7 +271,9 @@ export function SubmissionExtractionConfirmView({
                       ))}
                     </ol>
                   )}
-                  {g.finalAnswer && <FinalAnswerRow fa={g.finalAnswer} />}
+                  {g.finalAnswers.map((fa, i) => (
+                    <FinalAnswerRow key={`fa-${i}`} fa={fa} />
+                  ))}
                 </section>
               ))}
             </div>
@@ -260,7 +288,7 @@ export function SubmissionExtractionConfirmView({
           type="button"
           onClick={handleFlag}
           disabled={submitting}
-          className="w-full rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:border-amber-500 hover:text-amber-600 disabled:opacity-50 sm:w-auto"
+          className="min-h-[44px] w-full rounded-[--radius-sm] border border-border px-4 py-3 text-sm font-medium text-text-secondary hover:border-amber-500 hover:text-amber-600 disabled:opacity-50 sm:w-auto sm:py-2"
         >
           {submitting ? "Saving…" : "Reader got something wrong"}
         </button>
@@ -268,7 +296,7 @@ export function SubmissionExtractionConfirmView({
           type="button"
           onClick={handleContinue}
           disabled={submitting}
-          className="w-full rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto"
+          className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
         >
           {submitting ? "Saving…" : "Looks right — continue"}
         </button>
