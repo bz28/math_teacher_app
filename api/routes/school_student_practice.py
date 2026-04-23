@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -83,49 +84,132 @@ async def drain_integrity_background_tasks() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
-    """Run extraction → integrity + AI grading for a submission.
+# Extraction lifecycle constants. Mirrors the extraction_status
+# column on Submission. Kept as module-level strings (not an enum) to
+# stay lightweight and match the surrounding plain-string status
+# patterns in this codebase (Submission.status, SubmissionGrade, etc).
+EXTRACTION_PENDING = "pending"
+EXTRACTION_AWAITING_CONFIRMATION = "awaiting_confirmation"
+EXTRACTION_CONFIRMED = "confirmed"
+EXTRACTION_UNREADABLE_FINAL = "unreadable_final"
 
-    Extraction (Vision call) runs once. Its result feeds both the
-    integrity check and the AI grading call sequentially. Each phase
-    commits independently so a grading failure doesn't lose integrity
-    results.
+# Retake cap. Three tries before we give up and hand the submission to
+# the teacher for manual grading with no AI calls downstream. Chosen
+# to balance "give the student a real chance to get a clear photo" vs.
+# "don't burn unbounded Vision calls on hopeless cases."
+MAX_EXTRACTION_ATTEMPTS = 3
 
-    Opens its own DB session — the request session is already closed
-    by the time this runs. Never re-raises: fire-and-forget.
+
+async def _run_extraction_background(submission_id: uuid.UUID) -> None:
+    """Run one Vision extraction pass and update the submission's
+    extraction state.
+
+    Called from submit + retake. Never re-raises: fire-and-forget.
+    Opens its own DB session (the request session is already closed).
+
+    Outcomes:
+      • Success (confidence ≥ threshold): stores raw + confirmed
+        extraction, flips status to `awaiting_confirmation`. Grading
+        is NOT kicked off — it waits for the student's confirm call.
+      • Low confidence, attempts < max: leaves status `pending` so
+        the client surfaces the retake screen. Attempts counter is
+        incremented either way.
+      • Low confidence, attempts == max: flips status to
+        `unreadable_final`. Teacher will see the submission in the
+        inbox with no AI grade + no integrity check; they grade
+        manually.
+      • Vision call raises: increments attempts, same 3-strikes
+        logic. Transient errors and unreadable handwriting share the
+        same retake budget — from the student's POV both mean "try
+        again", and letting transient errors sneak past the cap
+        would burn grader time unpredictably.
     """
-    from api.core.grading_ai import run_ai_grading_for_submission
-    from api.core.integrity_ai import extract_student_work
+    from api.core.integrity_ai import UNREADABLE_THRESHOLD, extract_student_work
 
     try:
         async with get_session_factory()() as db:
-            # ── Load submission + assignment toggles ─────────────
             sub = (await db.execute(
                 select(Submission).where(Submission.id == submission_id)
             )).scalar_one_or_none()
             if not sub:
                 return
-            assignment = (await db.execute(
-                select(Assignment).where(Assignment.id == sub.assignment_id)
-            )).scalar_one_or_none()
-            if not assignment:
-                return
-            user_id = str(sub.student_id)
-            run_integrity = assignment.integrity_check_enabled
-            run_grading = assignment.ai_grading_enabled
 
-            # ── Shared extraction (1 Vision call) ────────────────
+            user_id = str(sub.student_id)
+            sub.extraction_attempts += 1
+            attempts = sub.extraction_attempts
+
+            extraction: dict[str, Any] | None = None
             try:
                 extraction = await extract_student_work(
                     submission_id, db, user_id=user_id,
                 )
             except Exception:
                 logger.exception(
-                    "extraction failed for submission %s", submission_id,
+                    "extraction vision call raised for submission %s",
+                    submission_id,
                 )
+
+            confidence = (extraction or {}).get("confidence", 0.0)
+            readable = (
+                extraction is not None and confidence >= UNREADABLE_THRESHOLD
+            )
+
+            if readable:
+                # Store raw + confirmed (initially identical; the student
+                # may diverge confirmed on the confirm screen).
+                sub.raw_extraction = extraction
+                sub.confirmed_extraction = extraction
+                sub.extraction_status = EXTRACTION_AWAITING_CONFIRMATION
+            elif attempts >= MAX_EXTRACTION_ATTEMPTS:
+                # Three strikes — teacher grades manually.
+                sub.extraction_status = EXTRACTION_UNREADABLE_FINAL
+            else:
+                # Leave status as `pending` so the client knows the
+                # last attempt failed and offers the retake flow.
+                sub.extraction_status = EXTRACTION_PENDING
+
+            await db.commit()
+    except Exception:
+        logger.exception(
+            "extraction background crashed for submission %s",
+            submission_id,
+        )
+
+
+async def _run_grading_background(submission_id: uuid.UUID) -> None:
+    """Run integrity + AI grading using the submission's confirmed
+    extraction. Called from the confirm-extraction endpoint once the
+    student has approved Vision's reading (possibly with edits).
+
+    Each phase commits independently so a grading failure doesn't
+    lose integrity results. Never re-raises.
+    """
+    from api.core.grading_ai import run_ai_grading_for_submission
+
+    try:
+        async with get_session_factory()() as db:
+            sub = (await db.execute(
+                select(Submission).where(Submission.id == submission_id)
+            )).scalar_one_or_none()
+            if not sub or sub.extraction_status != EXTRACTION_CONFIRMED:
+                # Defense in depth — only proceed when the student
+                # has actually confirmed. A racing retake would have
+                # flipped status back.
+                return
+            if sub.confirmed_extraction is None:
                 return
 
-            # ── Integrity check (uses shared extraction) ─────────
+            assignment = (await db.execute(
+                select(Assignment).where(Assignment.id == sub.assignment_id)
+            )).scalar_one_or_none()
+            if not assignment:
+                return
+
+            user_id = str(sub.student_id)
+            extraction = sub.confirmed_extraction
+            run_integrity = assignment.integrity_check_enabled
+            run_grading = assignment.ai_grading_enabled
+
             if run_integrity:
                 try:
                     await start_integrity_check(
@@ -140,7 +224,6 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                     )
                     await db.rollback()
 
-            # ── AI grading (uses same extraction) ────────────────
             if run_grading:
                 try:
                     await run_ai_grading_for_submission(
@@ -156,9 +239,19 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                     await db.rollback()
     except Exception:
         logger.exception(
-            "submission pipeline crashed for submission %s",
+            "grading background crashed for submission %s",
             submission_id,
         )
+
+
+def _spawn_background_task(coro: Coroutine[Any, Any, None]) -> None:
+    """Track-and-release helper for fire-and-forget asyncio tasks.
+    Mirrors the inline pattern used previously on the submit endpoint
+    so any bg work (extraction, grading) keeps a strong reference and
+    isn't GC'd mid-flight."""
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 router = APIRouter(prefix="/school/student", tags=["school-student"])
 
@@ -969,18 +1062,27 @@ async def submit_homework(
         raise HTTPException(status_code=403, detail="Not enrolled in this assignment")
 
     is_late = bool(assignment.due_at and datetime.now(UTC) > assignment.due_at)
+    # Pick the initial extraction_status. If neither integrity nor
+    # grading is enabled on the HW, there's nothing to extract for —
+    # jump straight to 'confirmed' so the rest of the system treats
+    # this submission as done with the confirm flow.
+    needs_extraction = (
+        assignment.integrity_check_enabled or assignment.ai_grading_enabled
+    )
     submission = Submission(
         assignment_id=assignment_id,
         student_id=user.id,
         section_id=section_id,
         status="submitted",
         image_data=body.image_base64,
-        # final_answers is left null on new submissions; the next PR
-        # (integrity checker) populates it from a Vision-extracted
-        # confirm-and-edit step. The column is preserved so legacy
-        # submissions render correctly on the read side.
+        # final_answers is a legacy per-primary typed-answer map. Left
+        # null on new submissions — the confirmed_extraction takes its
+        # role under the new flow.
         final_answers=None,
         is_late=is_late,
+        extraction_status=(
+            EXTRACTION_PENDING if needs_extraction else EXTRACTION_CONFIRMED
+        ),
     )
     db.add(submission)
     try:
@@ -1003,22 +1105,151 @@ async def submit_homework(
     )
     submission_id_for_task = submission.id
 
-    # Spawn the extraction → integrity + grading pipeline as a
-    # background task so the student's submit returns immediately.
-    # The pipeline does Vision + Sonnet calls that take 20–60s —
-    # running inline times out the HTTP response on Railway. The
-    # submission is already committed; a pipeline failure can never
-    # affect it. Runs if EITHER integrity or grading is enabled
-    # (extraction is shared; each downstream phase checks its own
-    # toggle internally).
-    if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
-        task = asyncio.create_task(
-            _run_submission_pipeline_background(submission_id_for_task),
+    # Extraction runs in the background (Vision call ≈ 5–15s; too slow
+    # for inline response). The client polls the submission status
+    # endpoint for the confirm screen once extraction flips the status
+    # to `awaiting_confirmation` (or `unreadable_final` / `pending`
+    # for the retake path).
+    if needs_extraction:
+        _spawn_background_task(
+            _run_extraction_background(submission_id_for_task),
         )
-        _BACKGROUND_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     return response
+
+
+class ExtractionStatusResponse(BaseModel):
+    """Polled by the student client after submit to decide which screen
+    to render. The client sees one of four states:
+      • pending — extraction still running, or last attempt failed and
+        retake is available (`attempts_remaining` tells which).
+      • awaiting_confirmation — show the per-problem confirm screen
+        with `extraction` pre-filled.
+      • confirmed — grading pipeline is running or done.
+      • unreadable_final — teacher will grade manually; terminal state.
+    """
+    submission_id: str
+    extraction_status: str
+    extraction_attempts: int
+    attempts_remaining: int
+    extraction: dict[str, Any] | None
+
+
+@router.get("/submissions/{submission_id}/extraction-status", response_model=ExtractionStatusResponse)
+async def get_extraction_status(
+    submission_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> ExtractionStatusResponse:
+    """Return the current extraction state for a submission the student
+    owns. Student-scoped (403 on anyone else's submission) so we can
+    safely surface the raw extraction text."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    return ExtractionStatusResponse(
+        submission_id=str(sub.id),
+        extraction_status=sub.extraction_status,
+        extraction_attempts=sub.extraction_attempts,
+        attempts_remaining=max(
+            0, MAX_EXTRACTION_ATTEMPTS - sub.extraction_attempts,
+        ),
+        # Prefer confirmed (what the student last approved/edited) if
+        # it's there; otherwise fall back to raw. The confirm screen
+        # renders whichever it gets.
+        extraction=sub.confirmed_extraction or sub.raw_extraction,
+    )
+
+
+class ConfirmExtractionRequest(BaseModel):
+    """Student's approval of Vision's extraction, with optional edits.
+
+    `edited_extraction` is the full replacement body for the
+    confirmed_extraction column. Sending it unchanged (same object
+    Vision produced) is the "confirm as-is" path; sending a modified
+    copy is the "I fixed a misread" path.
+    """
+    edited_extraction: dict[str, Any]
+
+
+@router.post("/submissions/{submission_id}/confirm-extraction")
+async def confirm_extraction(
+    submission_id: uuid.UUID,
+    body: ConfirmExtractionRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Student confirms Vision's extraction (possibly with edits).
+    Flips status to `confirmed` and spawns integrity + grading.
+    Only valid from `awaiting_confirmation` — 409 in any other state
+    so a stale client tab can't re-trigger grading."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    if sub.extraction_status != EXTRACTION_AWAITING_CONFIRMATION:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot confirm from status={sub.extraction_status}",
+        )
+
+    sub.confirmed_extraction = body.edited_extraction
+    sub.extraction_status = EXTRACTION_CONFIRMED
+    await db.commit()
+
+    _spawn_background_task(_run_grading_background(sub.id))
+    return {"status": "ok"}
+
+
+class RetakeRequest(BaseModel):
+    image_base64: str
+
+
+@router.post("/submissions/{submission_id}/retake")
+async def retake_submission(
+    submission_id: uuid.UUID,
+    body: RetakeRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Replace the submission's image and re-run extraction. Only valid
+    when the prior attempt was unreadable (`pending` with attempts > 0)
+    — confirmed or awaiting_confirmation states already have readable
+    text, and unreadable_final is terminal (3 strikes exhausted)."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    if sub.extraction_status != EXTRACTION_PENDING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot retake from status={sub.extraction_status}",
+        )
+    if sub.extraction_attempts >= MAX_EXTRACTION_ATTEMPTS:
+        raise HTTPException(
+            status_code=409,
+            detail="Retake limit reached — submission sent to teacher",
+        )
+    if not body.image_base64:
+        raise HTTPException(status_code=400, detail="Image required")
+    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
+        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
+
+    sub.image_data = body.image_base64
+    await db.commit()
+
+    _spawn_background_task(_run_extraction_background(sub.id))
+    return {"status": "ok"}
 
 
 @router.get("/homework/{assignment_id}/submission")

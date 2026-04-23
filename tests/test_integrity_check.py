@@ -38,13 +38,37 @@ from tests.conftest import (
 
 
 async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
-    """Submit the HW and wait for the background integrity pipeline."""
+    """Submit the HW, auto-confirm the extraction, and wait for the
+    background integrity + grading pipeline. Collapses the post-submit
+    confirm flow — most integrity tests don't care about that screen
+    and just want the pipeline to have run."""
     response = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
         json={"image_base64": TINY_PNG},
     )
+    if response.status_code != 200:
+        return response
+    submission_id = response.json()["submission_id"]
+    # Wait for extraction to finish and flip to awaiting_confirmation.
     await drain_integrity_background_tasks()
+    # Auto-confirm to kick off the grading+integrity pipeline. Load the
+    # extraction off the submission row so tests exercising unreadable
+    # cases don't need to know the extraction shape.
+    async with get_session_factory()() as s:
+        from api.models.assignment import Submission as _Submission
+        sub = (await s.execute(
+            select(_Submission).where(_Submission.id == submission_id)
+        )).scalar_one_or_none()
+        extraction = (sub.confirmed_extraction if sub else None) or {}
+        status = sub.extraction_status if sub else None
+    if status == "awaiting_confirmation":
+        await client.post(
+            f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+            headers=_auth(world["student_token"]),
+            json={"edited_extraction": extraction},
+        )
+        await drain_integrity_background_tasks()
     return response
 
 
@@ -210,45 +234,62 @@ async def test_pipeline_failure_does_not_roll_back_submission(
         assert checks == []
 
 
-async def test_unreadable_gate_skips_entire_check(
+async def test_unreadable_three_strikes_locks_to_unreadable_final(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """When extraction confidence is below the threshold, the whole
-    check is marked skipped_unreadable and no conversation is
-    started."""
+    """Low-confidence Vision extractions now flow through the retake
+    loop. Three consecutive failures lock the submission to
+    `unreadable_final` with NO integrity check run — the teacher
+    grades the image manually from the inbox."""
+    from api.models.assignment import Submission as _Submission
     low_conf = {"steps": [], "confidence": 0.05}
+
     with patch(
         "api.core.integrity_ai.extract_student_work",
         return_value=low_conf,
     ):
-        r = await _submit(client, world)
-    assert r.status_code == 200
-    submission_id = r.json()["submission_id"]
+        r = await client.post(
+            f"/v1/school/student/homework/{world['assignment_id']}/submit",
+            headers=_auth(world["student_token"]),
+            json={"image_base64": TINY_PNG},
+        )
+        assert r.status_code == 200
+        submission_id = r.json()["submission_id"]
+        await drain_integrity_background_tasks()
+
+        # After attempt 1, status should be pending (retake available).
+        async with get_session_factory()() as s:
+            sub = (await s.execute(
+                select(_Submission).where(_Submission.id == submission_id)
+            )).scalar_one()
+            assert sub.extraction_status == "pending"
+            assert sub.extraction_attempts == 1
+
+        # Retake twice more — each still low-conf. The 3rd attempt
+        # should flip status to unreadable_final.
+        for _ in range(2):
+            r2 = await client.post(
+                f"/v1/school/student/submissions/{submission_id}/retake",
+                headers=_auth(world["student_token"]),
+                json={"image_base64": TINY_PNG},
+            )
+            assert r2.status_code == 200, r2.text
+            await drain_integrity_background_tasks()
 
     async with get_session_factory()() as s:
-        check = (await s.execute(
+        sub = (await s.execute(
+            select(_Submission).where(_Submission.id == submission_id)
+        )).scalar_one()
+        assert sub.extraction_status == "unreadable_final"
+        assert sub.extraction_attempts == 3
+
+        # No integrity pipeline should have run — we never spent any
+        # post-extraction LLM calls on this submission.
+        checks = (await s.execute(
             select(IntegrityCheckSubmission)
             .where(IntegrityCheckSubmission.submission_id == submission_id)
-        )).scalar_one()
-        assert check.status == "skipped_unreadable"
-        # Unreadable submissions: status carries the meaning; disposition
-        # stays null. Teacher dashboard surfaces skipped-unreadable as a
-        # separate bucket, not as one of the four integrity dispositions.
-        assert check.disposition is None
-
-        problems = (await s.execute(
-            select(IntegrityCheckProblem)
-            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalars().all()
-        assert len(problems) == 1
-        assert problems[0].status == "skipped_unreadable"
-        assert problems[0].rubric is None
-
-        turns = (await s.execute(
-            select(IntegrityConversationTurn)
-            .where(IntegrityConversationTurn.integrity_check_submission_id == check.id)
-        )).scalars().all()
-        assert turns == []
+        assert checks == []
 
 
 async def test_pipeline_idempotent_on_direct_re_call(
