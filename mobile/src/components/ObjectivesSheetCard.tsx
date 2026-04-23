@@ -69,7 +69,7 @@ export function ObjectivesSheetCard({
       <View style={styles.divider} />
 
       {/* Level */}
-      <View style={styles.field}>
+      <View style={styles.rowInline}>
         <Text style={styles.label}>Level</Text>
         <View style={styles.levelRow}>
           {LEVEL_OPTIONS.map((opt) => {
@@ -185,12 +185,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     backgroundColor: colors.inputBg,
     borderRadius: radii.pill,
     padding: 3,
-    gap: 2,
   },
   levelPill: {
-    flex: 1,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     borderRadius: radii.pill,
     alignItems: "center",
   },

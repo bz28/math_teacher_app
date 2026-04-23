@@ -22,29 +22,22 @@ function PillToggle<T extends string>({
   value,
   onChange,
   themeColor,
-  fullWidth = false,
 }: {
   options: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
   themeColor: string;
-  /** When true, pills flex evenly to fill the parent width (segmented control). */
-  fullWidth?: boolean;
 }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={[styles.pillGroup, fullWidth && styles.pillGroupFull]}>
+    <View style={styles.pillGroup}>
       {options.map((opt) => {
         const active = opt.id === value;
         return (
           <AnimatedPressable
             key={opt.id}
-            style={[
-              styles.pill,
-              fullWidth && styles.pillFlex,
-              active && { backgroundColor: themeColor },
-            ]}
+            style={[styles.pill, active && { backgroundColor: themeColor }]}
             onPress={() => onChange(opt.id)}
             scaleDown={0.95}
             accessibilityRole="tab"
@@ -80,9 +73,8 @@ export function MockTestConfig({
   const resolvedThemeColor = themeColor ?? colors.primary;
   return (
     <View style={[styles.card, shadows.sm]}>
-      {/* Questions — stacked so the 3 pill labels have room to breathe
-          on small screens; keeping them in-row would force ellipsis. */}
-      <View style={styles.stackedRow}>
+      {/* Questions */}
+      <View style={styles.row}>
         <Text style={styles.label}>Questions</Text>
         <PillToggle
           options={[
@@ -93,7 +85,6 @@ export function MockTestConfig({
           value={examType}
           onChange={onExamTypeChange}
           themeColor={resolvedThemeColor}
-          fullWidth
         />
       </View>
 
@@ -171,11 +162,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     justifyContent: "space-between",
     minHeight: 36,
   },
-  stackedRow: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: spacing.sm,
-  },
   rowRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -197,17 +183,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     borderRadius: radii.pill,
     padding: 3,
   },
-  pillGroupFull: {
-    alignSelf: "stretch",
-  },
   pill: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: radii.pill,
-  },
-  pillFlex: {
-    flex: 1,
-    alignItems: "center",
   },
   pillActive: {
     backgroundColor: colors.primary,
