@@ -69,6 +69,15 @@ export function IntegrityConfirmView({
         teacher knows too.
       </p>
 
+      {/* Upfront rules — stated once, before the chat starts. Makes
+          behavioral signals meaningful by setting the expectation,
+          not ambushing the student after. */}
+      <div className="mt-4 rounded-[--radius-sm] border border-border-light bg-bg-subtle px-4 py-3 text-sm text-text-secondary">
+        <span className="font-semibold text-text-primary">Quick check-in:</span>{" "}
+        Stay in this window and answer in your own words. You don&rsquo;t need
+        to look anything up. Takes about 3 minutes.
+      </div>
+
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div>
           <div className="text-xs font-bold uppercase tracking-wide text-text-muted">

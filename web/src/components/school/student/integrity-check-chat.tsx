@@ -7,7 +7,17 @@ import {
   type IntegrityTurn,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useDeviceType } from "./use-device-type";
 import { useTurnTelemetry } from "./use-turn-telemetry";
+
+// Soft time budget we advertise to the student on the chat header.
+// Mobile typing is ~2x slower than desktop, so mobile students see a
+// longer budget — the check doesn't cut anyone off at the displayed
+// number, it's just a "about this long" hint to set expectations.
+const BUDGET_LABEL: Record<"desktop" | "mobile", string> = {
+  desktop: "~3 min",
+  mobile: "~5 min",
+};
 
 interface Props {
   submissionId: string;
@@ -40,6 +50,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const [turnStartedAt, setTurnStartedAt] = useState<number>(Date.now());
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const telemetry = useTurnTelemetry();
+  const device = useDeviceType();
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -156,8 +167,15 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   return (
     <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-2xl flex-col">
       <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
-        <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-          Quick understanding check
+        <div className="flex items-baseline gap-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            Quick understanding check
+          </div>
+          {!isComplete && (
+            <div className="text-[11px] font-medium text-text-muted">
+              · {BUDGET_LABEL[device]}
+            </div>
+          )}
         </div>
         {totalProblems > 0 && (
           <div className="text-xs font-medium text-text-muted">
