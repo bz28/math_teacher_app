@@ -17,14 +17,17 @@ import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
+import { GeneratedQuestionsAudit } from "./GeneratedQuestionsAudit";
 import { ImagePreview } from "./ImagePreview";
 import { MockTestConfig } from "./MockTestConfig";
+import { ObjectivesSheetCard } from "./ObjectivesSheetCard";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
 import { RectangleSelector } from "./RectangleSelector";
 import { useImageExtraction } from "../hooks/useImageExtraction";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
-import { EntitlementError } from "../services/api";
+import { EntitlementError, generateProblemsFromObjectives, type ObjectivesLevel } from "../services/api";
+import { errorMessage } from "../utils/errorMessage";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
@@ -78,6 +81,17 @@ export function SolveScreen({
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
   const [multipleChoice, setMultipleChoice] = useState(true);
 
+  // From-objectives mode — topics the student extracted/typed, plus the
+  // optional course context we pass to the generation prompt. Kept in
+  // component state (not the session store) so they survive pill toggles
+  // without leaking into Learn / Use-mine flows.
+  const [topicQueue, setTopicQueue] = useState<string[]>([]);
+  const [courseName, setCourseName] = useState("");
+  const [level, setLevel] = useState<ObjectivesLevel | null>(null);
+  const [questionCount, setQuestionCount] = useState(10);
+  const [generating, setGenerating] = useState(false);
+  const [generatedQuestions, setGeneratedQuestions] = useState<string[] | null>(null);
+
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
   const problemImages = useSessionStore((s) => s.problemImages);
@@ -110,6 +124,9 @@ export function SolveScreen({
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsLeft);
   const activeSubject = getSubjectMeta(subject);
 
+  const isObjectivesMode = mode === "mock_test" && examType === "from_objectives";
+  const MAX_TOPICS = 30;
+
   const {
     extracting,
     extractionProgress,
@@ -138,16 +155,32 @@ export function SolveScreen({
     finishEdit,
     getSelectedWithImages,
   } = useImageExtraction(
-    problemQueue.length,
-    maxQueueSize,
+    isObjectivesMode ? topicQueue.length : problemQueue.length,
+    isObjectivesMode ? MAX_TOPICS : maxQueueSize,
     setError,
     subject,
     isPro ? undefined : () => scansLeft,
     isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
+    isObjectivesMode ? "objectives" : "problems",
   );
 
   const handleConfirmExtraction = () => {
     const items = getSelectedWithImages();
+    if (isObjectivesMode) {
+      const remaining = MAX_TOPICS - topicQueue.length;
+      const existing = new Set(topicQueue);
+      const toAdd = items
+        .map((p) => p.text)
+        .filter((t) => !existing.has(t))
+        .slice(0, remaining);
+      if (toAdd.length > 0) {
+        setTopicQueue([...topicQueue, ...toAdd]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      dismissExtraction();
+      fetchEntitlements();
+      return;
+    }
     const remaining = maxQueueSize - problemQueue.length;
     const toAdd = items.slice(0, remaining);
     if (toAdd.length > 0) {
@@ -167,6 +200,19 @@ export function SolveScreen({
   const handleAddToQueue = () => {
     const text = input.trim();
     if (!text) return;
+    if (isObjectivesMode) {
+      if (topicQueue.length >= MAX_TOPICS) return;
+      if (topicQueue.includes(text)) {
+        setInput("");
+        return;
+      }
+      setTopicQueue([...topicQueue, text]);
+      setInput("");
+      setError(null);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      inputRef.current?.focus();
+      return;
+    }
     if (!isPro && problemQueue.length >= maxQueueSize) {
       const remaining = sessionsLeft;
       const msg = problemQueue.length > 0
@@ -184,14 +230,22 @@ export function SolveScreen({
   };
 
   const handleRemoveFromQueue = (index: number) => {
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    if (isObjectivesMode) {
+      setTopicQueue(topicQueue.filter((_, i) => i !== index));
+    } else {
+      setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEditFromQueue = (index: number) => {
-    // Match main InputScreen behavior: load text back into input, remove from queue
-    setInput(problemQueue[index]);
-    setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    if (isObjectivesMode) {
+      setInput(topicQueue[index]);
+      setTopicQueue(topicQueue.filter((_, i) => i !== index));
+    } else {
+      setInput(problemQueue[index]);
+      setProblemQueue(problemQueue.filter((_, i) => i !== index));
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
   };
@@ -204,6 +258,10 @@ export function SolveScreen({
   };
 
   const handleSolve = async () => {
+    if (isObjectivesMode) {
+      await handleGenerate();
+      return;
+    }
     const allProblems = collectProblems();
     if (allProblems.length === 0) return;
     setError(null);
@@ -246,6 +304,78 @@ export function SolveScreen({
       setProblemQueue([]);
       setInput("");
     }
+  };
+
+  const handleGenerate = async () => {
+    // Commit any unflushed topic from the type-input before generating so the
+    // student doesn't lose a freshly-typed topic they forgot to "+".
+    const pendingTopic = input.trim();
+    const topics = pendingTopic && !topicQueue.includes(pendingTopic)
+      ? [...topicQueue, pendingTopic]
+      : topicQueue;
+    if (topics.length === 0) return;
+    if (!isPro && sessionsLeft <= 0) {
+      showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
+      return;
+    }
+    setError(null);
+    if (pendingTopic) {
+      setTopicQueue(topics);
+      setInput("");
+    }
+    setGenerating(true);
+    setGeneratedQuestions(null);
+    try {
+      const { problems } = await generateProblemsFromObjectives({
+        topics,
+        count: questionCount,
+        level: level ?? undefined,
+        courseName: courseName.trim() || undefined,
+        subject,
+      });
+      const texts = problems.map((p) => p.question).filter((q) => q && q.trim().length > 0);
+      if (texts.length === 0) throw new Error("No questions came back — try again with more specific topics.");
+      setGeneratedQuestions(texts);
+    } catch (e) {
+      if (e instanceof EntitlementError) {
+        showUpgrade(e.entitlement, "Daily Limit Reached", e.message);
+      } else {
+        setError(errorMessage(e) || "Failed to generate your practice exam. Try again.");
+      }
+      setGeneratedQuestions(null);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleAuditStart = async (finalQuestions: string[]) => {
+    if (finalQuestions.length === 0) return;
+    // Close the audit modal immediately; startMockTest flips the global
+    // phase which unmounts this screen anyway.
+    setGeneratedQuestions(null);
+    onSessionStart();
+    try {
+      const timeLimit = untimed ? null : timeLimitMinutes;
+      await startMockTest(finalQuestions, 0, timeLimit, multipleChoice);
+    } catch (e) {
+      if (e instanceof EntitlementError) {
+        onSessionError();
+        showUpgrade(e.entitlement, "Daily Limit Reached", e.message);
+        return;
+      }
+    }
+    const postPhase = useSessionStore.getState().phase;
+    if (postPhase === "error") {
+      onSessionError();
+    } else {
+      setTopicQueue([]);
+      setInput("");
+    }
+  };
+
+  const handleAuditCancel = () => {
+    setGeneratedQuestions(null);
+    setGenerating(false);
   };
 
   const totalProblems = problemQueue.length + (input.trim() ? 1 : 0);
@@ -292,6 +422,10 @@ export function SolveScreen({
 
   // Queue label adapts to mode + examType
   const queueLabel = (() => {
+    if (isObjectivesMode) {
+      const n = topicQueue.length;
+      return `${n} topic${n !== 1 ? "s" : ""} selected`;
+    }
     const n = problemQueue.length;
     const noun = n === 1 ? "problem" : "problems";
     if (mode === "mock_test") {
@@ -305,10 +439,18 @@ export function SolveScreen({
 
   // Solve button label
   const solveLabel = (() => {
+    if (isObjectivesMode) {
+      if (generating) return "Generating…";
+      return topicQueue.length === 0 ? "Generate Test" : `Generate Test (${questionCount})`;
+    }
     const verb = mode === "mock_test" ? "Test" : "Learn";
     if (totalProblems === 0 || totalProblems === 1) return verb;
     return `${verb} (${totalProblems})`;
   })();
+
+  const solveDisabled = isObjectivesMode
+    ? topicQueue.length === 0 && !input.trim()
+    : totalProblems === 0;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -357,7 +499,9 @@ export function SolveScreen({
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.greetingTitle}>
-            {mode === "mock_test" ? "What do you want to test?" : "What do you want to learn?"}
+            {isObjectivesMode
+              ? "What's on your exam?"
+              : mode === "mock_test" ? "What do you want to test?" : "What do you want to learn?"}
           </Text>
 
           {/* Mock Test config — shown at the TOP when in test mode */}
@@ -378,10 +522,15 @@ export function SolveScreen({
           {/* SNAP — gradient hero card */}
           <AnimatedPressable
             onPress={() => pickImage("camera")}
-            disabled={extracting || problemQueue.length >= maxQueueSize}
+            disabled={
+              extracting ||
+              (isObjectivesMode
+                ? topicQueue.length >= MAX_TOPICS
+                : problemQueue.length >= maxQueueSize)
+            }
             scaleDown={0.97}
             accessibilityRole="button"
-            accessibilityLabel="Snap a photo of a problem"
+            accessibilityLabel={isObjectivesMode ? "Snap a photo of your study guide" : "Snap a photo of a problem"}
           >
             <LinearGradient
               colors={gradients[activeSubject.gradient]}
@@ -393,8 +542,14 @@ export function SolveScreen({
                 <Ionicons name="camera" size={28} color={colors.white} />
               </View>
               <View>
-                <Text style={styles.snapTitle}>Snap a problem</Text>
-                <Text style={styles.snapSubtitle}>Point your camera at any problem</Text>
+                <Text style={styles.snapTitle}>
+                  {isObjectivesMode ? "Snap your study guide" : "Snap a problem"}
+                </Text>
+                <Text style={styles.snapSubtitle}>
+                  {isObjectivesMode
+                    ? "Point your camera at a review sheet or syllabus"
+                    : "Point your camera at any problem"}
+                </Text>
               </View>
             </LinearGradient>
           </AnimatedPressable>
@@ -402,14 +557,21 @@ export function SolveScreen({
           {/* GALLERY — compact row card */}
           <AnimatedPressable
             onPress={() => pickImage("gallery")}
-            disabled={extracting || problemQueue.length >= maxQueueSize}
+            disabled={
+              extracting ||
+              (isObjectivesMode
+                ? topicQueue.length >= MAX_TOPICS
+                : problemQueue.length >= maxQueueSize)
+            }
             scaleDown={0.97}
             accessibilityRole="button"
             accessibilityLabel="Choose a photo from gallery"
           >
             <View style={[styles.compactCard, shadows.sm, extracting && styles.cardDisabled]}>
               <Ionicons name="images-outline" size={22} color={theme.primary} />
-              <Text style={[styles.compactCardText, { color: theme.primary }]}>Choose from gallery</Text>
+              <Text style={[styles.compactCardText, { color: theme.primary }]}>
+                {isObjectivesMode ? "Pick study guide from gallery" : "Choose from gallery"}
+              </Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </View>
           </AnimatedPressable>
@@ -436,14 +598,14 @@ export function SolveScreen({
                 setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
               }}
               onBlur={() => setTyping(false)}
-              placeholder="Or type a problem…"
+              placeholder={isObjectivesMode ? "Or type a topic…" : "Or type a problem…"}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
               multiline
               scrollEnabled={false}
               returnKeyType="default"
-              accessibilityLabel="Type a problem"
+              accessibilityLabel={isObjectivesMode ? "Type a topic" : "Type a problem"}
             />
             {input.trim() && (
               <TouchableOpacity
@@ -460,8 +622,9 @@ export function SolveScreen({
             )}
           </View>
 
-          {/* Inline queue chips — tap to edit */}
-          {problemQueue.length > 0 && (
+          {/* Inline queue chips — tap to edit. In from-objectives mode these
+              are topics (editable); elsewhere they are problems. */}
+          {(isObjectivesMode ? topicQueue : problemQueue).length > 0 && (
             <View style={styles.queueChips}>
               <Text style={[styles.queueChipsLabel, { color: theme.primary }]}>{queueLabel}</Text>
               <ScrollView
@@ -469,7 +632,7 @@ export function SolveScreen({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.queueChipsRow}
               >
-                {problemQueue.map((p, i) => (
+                {(isObjectivesMode ? topicQueue : problemQueue).map((p, i) => (
                   <View
                     key={`${i}-${p}`}
                     style={[styles.queueChip, { backgroundColor: theme.primaryBg }]}
@@ -477,7 +640,7 @@ export function SolveScreen({
                     <TouchableOpacity
                       onPress={() => handleEditFromQueue(i)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Edit problem ${i + 1}`}
+                      accessibilityLabel={isObjectivesMode ? `Edit topic ${i + 1}` : `Edit problem ${i + 1}`}
                       style={styles.queueChipTextWrap}
                     >
                       <Text
@@ -491,7 +654,7 @@ export function SolveScreen({
                       onPress={() => handleRemoveFromQueue(i)}
                       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove problem ${i + 1}`}
+                      accessibilityLabel={isObjectivesMode ? `Remove topic ${i + 1}` : `Remove problem ${i + 1}`}
                     >
                       <Ionicons name="close-circle" size={16} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -501,6 +664,19 @@ export function SolveScreen({
             </View>
           )}
 
+          {/* Objectives Sheet — optional course context for generation. */}
+          {isObjectivesMode && (
+            <ObjectivesSheetCard
+              courseName={courseName}
+              onCourseNameChange={setCourseName}
+              level={level}
+              onLevelChange={setLevel}
+              questionCount={questionCount}
+              onQuestionCountChange={setQuestionCount}
+              themeColor={theme.primary}
+            />
+          )}
+
           {/* Extracting indicator */}
           {extracting && (
             <View style={[styles.extractingCard, shadows.sm]}>
@@ -508,7 +684,7 @@ export function SolveScreen({
               <Text style={styles.extractingText}>
                 {extractionProgress
                   ? `Reading ${progressDone} of ${extractionProgress.total}…`
-                  : "Reading your problem…"}
+                  : isObjectivesMode ? "Reading your study guide…" : "Reading your problem…"}
               </Text>
             </View>
           )}
@@ -562,8 +738,8 @@ export function SolveScreen({
           <GradientButton
             onPress={handleSolve}
             label={solveLabel}
-            loading={isLoading}
-            disabled={totalProblems === 0}
+            loading={isLoading || generating}
+            disabled={solveDisabled}
             gradient={activeSubject.gradient}
             style={styles.solveButton}
           />
@@ -578,7 +754,7 @@ export function SolveScreen({
         canAddMore={canAddMore}
         editingIndex={editingIndex}
         editingText={editingText}
-        maxProblems={maxQueueSize}
+        maxProblems={isObjectivesMode ? MAX_TOPICS : maxQueueSize}
         onToggle={toggleSelected}
         onStartEdit={startEdit}
         onEditText={setEditingText}
@@ -587,6 +763,19 @@ export function SolveScreen({
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
+        itemNoun={isObjectivesMode ? "topic" : "problem"}
+        confirmVerb={isObjectivesMode ? "Use Selected" : "Add Selected"}
+      />
+
+      {/* Generated questions audit — only ever visible in from-objectives mode,
+          either while the generation API call is in flight or after it returns. */}
+      <GeneratedQuestionsAudit
+        questions={generatedQuestions}
+        loading={generating}
+        requestedCount={questionCount}
+        onStart={handleAuditStart}
+        onCancel={handleAuditCancel}
+        onRetry={handleGenerate}
       />
 
       <UpgradePrompt {...promptProps} />
