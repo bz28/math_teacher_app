@@ -23,6 +23,7 @@ import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
 import { IntegrityConfirmView } from "@/components/school/student/integrity-confirm-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
+import { ExtractionFlowContainer } from "@/components/school/student/extraction-flow-container";
 import { AssignmentTimeline } from "@/components/school/student/assignment-timeline";
 import type { IntegrityExtraction } from "@/lib/api";
 
@@ -38,6 +39,11 @@ type Mode =
       problem: StudentHomeworkProblem;
       initial: { variation: VariationPayload; consumption_id: string; remaining: number };
     }
+  // Post-submit extraction flow — runs BEFORE integrity states.
+  // Student sees one of: preparing spinner / confirm screen / retake
+  // prompt / "sent to teacher" terminal. Once confirmed, the extraction
+  // container unmounts and normal integrity routing takes over.
+  | { kind: "extraction_flow" }
   | { kind: "integrity_pending" }
   | { kind: "integrity_pending_timeout" }
   | {
@@ -71,11 +77,29 @@ export default function HomeworkPage() {
       const detail = await schoolStudent.homeworkDetail(aid);
       setHw(detail);
       if (detail.submitted && detail.submission_id) {
-        const [sub, integrity] = await Promise.all([
+        const [sub, integrity, extraction] = await Promise.all([
           schoolStudent.getMySubmission(aid).catch(() => null),
           schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
+          // Extraction status gates everything else post-submit. 404 /
+          // error tolerated — falls through to integrity routing as
+          // before so HWs graded under the old pipeline still work.
+          schoolStudent.getExtractionStatus(detail.submission_id).catch(() => null),
         ]);
         if (sub) setSubmission(sub);
+
+        // If the student still owes a confirm (or is in the retake /
+        // unreadable loop), the ExtractionFlowContainer handles it.
+        // Grading and integrity don't run until extraction_status
+        // reaches `confirmed`, so there's nothing downstream to route
+        // to until then.
+        if (
+          extraction &&
+          extraction.extraction_status !== "confirmed"
+        ) {
+          setMode({ kind: "extraction_flow" });
+          return;
+        }
+
         if (integrity) {
           // Auto-route based on integrity state:
           //   "extracting"       → show the preparing screen + poll
@@ -228,6 +252,22 @@ export default function HomeworkPage() {
         initial={mode.initial}
         onDone={() => setMode({ kind: "homework" })}
         onPracticeSimilar={() => startLoop(mode.problem, "practice")}
+      />
+    );
+  }
+
+  if (mode.kind === "extraction_flow" && hw.submission_id) {
+    return (
+      <ExtractionFlowContainer
+        submissionId={hw.submission_id}
+        imageDataUrl={submission?.image_data ?? null}
+        onConfirmed={async () => {
+          // Student confirmed — re-fetch everything so loadAll can
+          // route into the integrity/submitted/homework view based on
+          // the new status. Integrity pipeline kicks off server-side,
+          // so a brief "integrity_pending" render is expected next.
+          if (assignmentId) await loadAll(assignmentId);
+        }}
       />
     );
   }
