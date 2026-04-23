@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -83,24 +84,22 @@ async def drain_integrity_background_tasks() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
-    """Run extraction → integrity + AI grading for a submission.
+async def _run_extraction_background(submission_id: uuid.UUID) -> None:
+    """Run the Vision extraction for a submission and persist it.
 
-    Extraction (Vision call) runs once. Its result feeds both the
-    integrity check and the AI grading call sequentially. Each phase
-    commits independently so a grading failure doesn't lose integrity
-    results.
+    Stops after extraction — integrity sampling + AI grading are
+    gated on the student pressing Confirm (or Flag) on the post-
+    submit screen. The confirm endpoint spawns
+    `_run_integrity_and_grading_background`.
 
     Opens its own DB session — the request session is already closed
     by the time this runs. Never re-raises: fire-and-forget.
     """
-    from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
     from api.services.bank import load_problems_for_assignment
 
     try:
         async with get_session_factory()() as db:
-            # ── Load submission + assignment toggles ─────────────
             sub = (await db.execute(
                 select(Submission).where(Submission.id == submission_id)
             )).scalar_one_or_none()
@@ -112,16 +111,10 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
             if not assignment:
                 return
             user_id = str(sub.student_id)
-            run_integrity = assignment.integrity_check_enabled
-            run_grading = assignment.ai_grading_enabled
 
-            # ── Shared extraction (1 Vision call) ────────────────
             # Feed Vision the problem list so each step can be tagged
-            # with the problem it belongs to — downstream grading
-            # compares work-per-problem against the answer key, so
-            # attribution at extraction time keeps both the grader
-            # and the teacher's review UI grounded in the same
-            # structure.
+            # with the problem it belongs to. See
+            # load_problems_for_assignment for the returned shape.
             problems = await load_problems_for_assignment(db, assignment)
             try:
                 extraction = await extract_student_work(
@@ -133,15 +126,46 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                 )
                 return
 
-            # Persist the full extraction on the submission row so the
-            # student-side confirm screen can render it grouped by
-            # problem. Committed BEFORE integrity + grading fire so a
-            # crash in those later phases doesn't lose the extraction
-            # the student paid a Vision call for.
             sub.extraction = extraction
             await db.commit()
+    except Exception:
+        logger.exception(
+            "extraction pipeline crashed for submission %s", submission_id,
+        )
 
-            # ── Integrity check (uses shared extraction) ─────────
+
+async def _run_integrity_and_grading_background(
+    submission_id: uuid.UUID,
+) -> None:
+    """Run integrity + AI grading using the already-persisted extraction.
+
+    Called from the confirm-extraction endpoint after the student
+    signs off on Vision's reading. Expects `Submission.extraction` to
+    be populated; bails cleanly if it's null (extraction never ran or
+    was interrupted).
+
+    Each phase commits independently so a grading failure doesn't
+    lose integrity results. Never re-raises.
+    """
+    from api.core.grading_ai import run_ai_grading_for_submission
+
+    try:
+        async with get_session_factory()() as db:
+            sub = (await db.execute(
+                select(Submission).where(Submission.id == submission_id)
+            )).scalar_one_or_none()
+            if not sub or sub.extraction is None:
+                return
+            assignment = (await db.execute(
+                select(Assignment).where(Assignment.id == sub.assignment_id)
+            )).scalar_one_or_none()
+            if not assignment:
+                return
+            user_id = str(sub.student_id)
+            extraction = sub.extraction
+            run_integrity = assignment.integrity_check_enabled
+            run_grading = assignment.ai_grading_enabled
+
             if run_integrity:
                 try:
                     await start_integrity_check(
@@ -156,7 +180,6 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                     )
                     await db.rollback()
 
-            # ── AI grading (uses same extraction) ────────────────
             if run_grading:
                 try:
                     await run_ai_grading_for_submission(
@@ -172,9 +195,19 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
                     await db.rollback()
     except Exception:
         logger.exception(
-            "submission pipeline crashed for submission %s",
-            submission_id,
+            "grading pipeline crashed for submission %s", submission_id,
         )
+
+
+def _spawn_background_task(
+    coro: Coroutine[Any, Any, None],
+) -> None:
+    """Track-and-release helper for fire-and-forget asyncio tasks.
+    Keeps a strong reference to the task so Python's GC doesn't eat
+    it mid-flight. Done-callback removes the task on completion."""
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 router = APIRouter(prefix="/school/student", tags=["school-student"])
 
@@ -1024,22 +1057,71 @@ async def submit_homework(
     )
     submission_id_for_task = submission.id
 
-    # Spawn the extraction → integrity + grading pipeline as a
-    # background task so the student's submit returns immediately.
-    # The pipeline does Vision + Sonnet calls that take 20–60s —
-    # running inline times out the HTTP response on Railway. The
-    # submission is already committed; a pipeline failure can never
-    # affect it. Runs if EITHER integrity or grading is enabled
-    # (extraction is shared; each downstream phase checks its own
-    # toggle internally).
+    # Spawn extraction as a background task so the student's submit
+    # returns immediately. Vision calls take 5–15s — inline would
+    # time out the HTTP response. Extraction runs only when there's
+    # a downstream consumer (integrity or grading toggle on);
+    # otherwise extraction is pure waste.
+    #
+    # Integrity sampling + AI grading are NOT spawned here — they're
+    # gated on the student pressing Confirm on the post-submit
+    # screen, which calls /confirm-extraction to spawn
+    # _run_integrity_and_grading_background.
     if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
-        task = asyncio.create_task(
-            _run_submission_pipeline_background(submission_id_for_task),
+        _spawn_background_task(
+            _run_extraction_background(submission_id_for_task),
         )
-        _BACKGROUND_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     return response
+
+
+@router.post("/submissions/{submission_id}/confirm-extraction")
+async def confirm_extraction(
+    submission_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Student signs off on Vision's reading. Stamps
+    `extraction_confirmed_at` and spawns the integrity + grading
+    background pipeline. Idempotent: a repeated call on an already-
+    confirmed submission is a no-op (returns 200).
+
+    Rejects:
+      • 404 if the submission doesn't exist.
+      • 403 if it belongs to another student.
+      • 409 if extraction hasn't finished (nothing to confirm yet).
+
+    This is the single choke-point that gates grading on student
+    confirmation. Called from both "Looks right" and "Reader got
+    something wrong" on the confirm screen — the flag fires its own
+    flag endpoint separately; grading still runs on a flagged
+    submission in this commit (flag-skips-grading lands in the
+    follow-up commit).
+    """
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    if sub.extraction is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Extraction hasn't finished yet — nothing to confirm",
+        )
+    if sub.extraction_confirmed_at is not None:
+        # Idempotent: duplicate click (double-tap, refresh mid-request)
+        # is a no-op so we don't double-spawn grading.
+        return {"status": "ok", "already_confirmed": "true"}
+
+    sub.extraction_confirmed_at = datetime.now(UTC)
+    await db.commit()
+
+    _spawn_background_task(
+        _run_integrity_and_grading_background(sub.id),
+    )
+    return {"status": "ok"}
 
 
 @router.get("/homework/{assignment_id}/submission")

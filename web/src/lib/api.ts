@@ -1588,6 +1588,15 @@ export const schoolStudent = {
       { method: "POST" },
     );
   },
+  /** Student signs off on Vision's reading. Server stamps
+   *  extraction_confirmed_at and spawns the integrity + grading
+   *  background pipeline — neither fires until this is called. */
+  confirmExtraction(submissionId: string) {
+    return apiFetch<{ status: string; already_confirmed?: string }>(
+      `/school/student/submissions/${submissionId}/confirm-extraction`,
+      { method: "POST" },
+    );
+  },
   // ── Learn-mode chat + Practice→Learn pivot ──
   stepChat(
     bankItemId: string,

@@ -115,6 +115,15 @@ class Submission(Base):
     # groups steps by problem_position. Null when extraction hasn't run
     # or failed.
     extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Stamped when the student hits Confirm (or Flag) on the post-submit
+    # confirm screen. Integrity sampling + the AI grading call are
+    # gated on this — neither fires until the student has explicitly
+    # signed off on the Vision extraction. Null means "not yet
+    # confirmed"; existing pre-gate rows stay null (their grades were
+    # produced under the old auto-grade pipeline).
+    extraction_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
