@@ -1632,6 +1632,12 @@ export interface IntegrityTurn {
   role: IntegrityTurnRole;
   content: string;
   created_at: string;
+  /** True on the agent turn that presents the inline variant problem
+   *  (the one after `generate_variant` runs). Rendered distinctly so
+   *  the student visually registers "this is a fresh problem to
+   *  approach," not normal chat flow. Defaults to false on older
+   *  server responses. */
+  is_variant_probe?: boolean;
 }
 
 /**
