@@ -86,6 +86,68 @@ class IntegrityStateResponse(BaseModel):
     transcript: list[TurnOut]
 
 
+# Per-event and array-length caps. A tampered client can't land
+# arbitrarily large events in the teacher record. 24h = same ceiling
+# as seconds_on_turn. 1 MB paste + 256 events per turn are both
+# generous but finite.
+_MAX_BLUR_DURATION_MS = 86_400_000
+_MAX_PASTE_BYTE_COUNT = 1_000_000
+_MAX_EVENTS_PER_TURN = 256
+_MAX_CADENCE_MS = 86_400_000
+_MAX_CADENCE_COUNTER = 100_000
+
+
+class FocusBlurEvent(BaseModel):
+    """One interval the chat window was backgrounded/unfocused."""
+
+    at: str = Field(max_length=32)  # ISO timestamp
+    duration_ms: int = Field(ge=0, le=_MAX_BLUR_DURATION_MS)
+
+
+class PasteEvent(BaseModel):
+    """One paste event on the chat textarea. Size only — never content."""
+
+    at: str = Field(max_length=32)
+    byte_count: int = Field(ge=0, le=_MAX_PASTE_BYTE_COUNT)
+
+
+class TypingCadence(BaseModel):
+    """Typing-pattern summary for the turn. Distinguishes steady-
+    typing-with-edits from silent-then-bulk-insert."""
+
+    total_ms: int = Field(ge=0, le=_MAX_CADENCE_MS)
+    pauses_over_3s: int = Field(ge=0, le=_MAX_CADENCE_COUNTER)
+    edits: int = Field(ge=0, le=_MAX_CADENCE_COUNTER)
+
+
+class TurnTelemetry(BaseModel):
+    """Client-captured behavioral signals attached to a student turn.
+
+    All teacher-facing evidence; never surfaced to the student. The
+    pipeline stores this as-is on `IntegrityConversationTurn.telemetry`
+    and the teacher dashboard will render it on flag_for_review cases.
+    Nested event models + array caps stop a tampered client from
+    polluting the teacher record with absurd values or unbounded lists.
+    """
+
+    focus_blur_events: list[FocusBlurEvent] = Field(
+        default_factory=list, max_length=_MAX_EVENTS_PER_TURN,
+    )
+    paste_events: list[PasteEvent] = Field(
+        default_factory=list, max_length=_MAX_EVENTS_PER_TURN,
+    )
+    typing_cadence: TypingCadence | None = None
+
+    # Whether the user tapped the "need more time" button at any point
+    # during this turn. Non-punitive — just noted for teacher context.
+    # Wiring for the button itself lands with the student UX PR.
+    need_more_time_used: bool = False
+
+    # Viewport type as reported by the client. Informational; not used
+    # to gate anything.
+    device_type: str | None = Field(default=None, max_length=16)
+
+
 class TurnRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     # Clamped so a tampered client can't land negative/absurd values in
@@ -93,6 +155,9 @@ class TurnRequest(BaseModel):
     # leave the chat open, walk away, and come back much later than an
     # hour to finish — so the cap only filters tampering, not real use.
     seconds_on_turn: int | None = Field(default=None, ge=0, le=86400)
+    # Behavioral signals captured client-side during the turn. Optional
+    # so older clients / mobile (pre-telemetry) keep working.
+    telemetry: TurnTelemetry | None = None
 
 
 class DismissRequest(BaseModel):
@@ -310,9 +375,13 @@ async def post_student_turn(
             status_code=409, detail="Integrity check already complete",
         )
 
+    telemetry = (
+        body.telemetry.model_dump(mode="json") if body.telemetry else None
+    )
     await process_student_turn(
         check, message, body.seconds_on_turn, db,
         user_id=str(user.id),
+        telemetry=telemetry,
     )
     await db.commit()
 
