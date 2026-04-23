@@ -1424,28 +1424,28 @@ const INTEGRITY_STYLE: Record<
   pass: {
     bg: "bg-green-50 dark:bg-green-900/20",
     border: "border-green-200 dark:border-green-900/40",
-    text: "text-green-800 dark:text-green-300",
+    text: "text-green-900 dark:text-green-200",
     icon: "✓",
     label: "Student understood their own work",
   },
   needs_practice: {
     bg: "bg-blue-50 dark:bg-blue-900/20",
     border: "border-blue-200 dark:border-blue-900/40",
-    text: "text-blue-800 dark:text-blue-300",
+    text: "text-blue-900 dark:text-blue-200",
     icon: "↻",
     label: "Procedural knowledge — consider revisiting the concept",
   },
   tutor_pivot: {
     bg: "bg-amber-50 dark:bg-amber-900/20",
     border: "border-amber-200 dark:border-amber-900/40",
-    text: "text-amber-800 dark:text-amber-300",
+    text: "text-amber-900 dark:text-amber-200",
     icon: "?",
     label: "Student was lost — got tutored through it",
   },
   flag_for_review: {
     bg: "bg-red-50 dark:bg-red-900/20",
     border: "border-red-200 dark:border-red-900/40",
-    text: "text-red-800 dark:text-red-300",
+    text: "text-red-900 dark:text-red-200",
     icon: "🚩",
     label: "Review — correct work but couldn't explain it",
   },
@@ -1524,12 +1524,12 @@ function IntegrityBanner({
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className={`text-sm font-bold ${style.text}`}>
+            <p className={`text-base font-bold ${style.text}`}>
               <span className="mr-1.5" aria-hidden>{style.icon}</span>
               {style.label}
             </p>
             {summary && (
-              <p className="mt-1.5 text-xs leading-relaxed text-text-primary">
+              <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
                 {summary}
               </p>
             )}
