@@ -93,25 +93,27 @@ async def extract_problems_from_image(
 _EXTRACT_OBJECTIVES_TEMPLATE = """You are a {professor_role}. This image is a \
 study guide, syllabus excerpt, review sheet, or exam blueprint for a \
 {domain} course. Extract the learning objectives or topics the exam will \
-cover.
+cover, preserving the teacher's original phrasing.
 
 Rules:
-- One topic per list item. Phrase as a concept or skill, not a full sentence.
-  Good: "Related rates"
-  Bad: "Solve related rates problems involving ladders"
-- Merge synonyms and near-duplicates into a single item.
-- Drop administrative text: chapter numbers, due dates, instructor names,
-  point values, grading policies, and instructions like "Show all work".
-- If the sheet has sub-bullets under a broader heading, prefer the specific,
-  student-facing phrasing of the sub-bullets.
-- Use LaTeX with $ delimiters for any math expressions.
-- Keep each topic under ~80 characters.
+- One item per bullet / line / sub-bullet on the sheet. If the sheet has
+  a full sentence like "Solve related rates problems with ladders",
+  keep the full sentence — do NOT condense it to "Related rates".
+- Preserve the teacher's wording. This is extraction, not summarization.
+- If the sheet has sub-bullets under a broader heading, include the
+  sub-bullets (the specific items), not the heading (which is a grouping).
+- Drop administrative text only: chapter numbers, due dates, instructor
+  names, point values, grading policies, and instructions like "Show all
+  work" or "Bring a calculator". Keep everything else verbatim.
+- Use LaTeX with $ delimiters for any math expressions you see.
+- Merge only items that are literally the same line duplicated on the sheet.
 
-If the image is clearly NOT an objectives sheet (e.g., it's a problem set,
-a photo of a person, or unrelated content), return an empty list.
+If the image is clearly NOT an objectives / review / study-guide sheet
+(e.g., it's a worked problem set, a photo of a person, or unrelated
+content), return an empty list.
 
-Return ONLY the topic list — do NOT invent problems, answers, or
-explanations. Do NOT include prefixes like "Topic:" or numbering.
+Return ONLY the items on the sheet — do NOT invent topics, problems,
+answers, or explanations. Do NOT add prefixes like "Topic:" or renumber.
 
 Set confidence to:
 - "high" if the image is clear and you're confident in the extraction
