@@ -252,6 +252,8 @@ export default function HomeworkPage() {
     return (
       <IntegrityCheckChat
         submissionId={hw.submission_id}
+        assignmentId={hw.assignment_id}
+        courseId={courseId}
         onDone={async () => {
           setMode({ kind: "homework" });
           if (assignmentId) await loadAll(assignmentId);
