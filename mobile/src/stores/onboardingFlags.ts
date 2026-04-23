@@ -1,11 +1,8 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
-
-const STORAGE_KEY = "veradic_onboarding_flags_v1";
+import { ONBOARDING_FLAGS_KEY as STORAGE_KEY } from "../constants/storageKeys";
 
 interface Flags {
-  hasCompletedFirstProblem: boolean;
-  hasSeenChatCoachmark: boolean;
   completedSessionCount: number;
   hasRequestedReview: boolean;
 }
@@ -13,8 +10,6 @@ interface Flags {
 interface OnboardingState extends Flags {
   loaded: boolean;
   initialize: () => Promise<void>;
-  markCompletedFirstProblem: () => Promise<void>;
-  markSeenChatCoachmark: () => Promise<void>;
   /**
    * Idempotent per-key: passing the same sessionKey twice is a no-op. Keys
    * are tracked in-memory only so SessionScreen remounts always get a fresh
@@ -26,8 +21,6 @@ interface OnboardingState extends Flags {
 }
 
 const DEFAULTS: Flags = {
-  hasCompletedFirstProblem: false,
-  hasSeenChatCoachmark: false,
   completedSessionCount: 0,
   hasRequestedReview: false,
 };
@@ -43,8 +36,6 @@ async function persist(flags: Flags) {
 
 function snapshot(s: Flags): Flags {
   return {
-    hasCompletedFirstProblem: s.hasCompletedFirstProblem,
-    hasSeenChatCoachmark: s.hasSeenChatCoachmark,
     completedSessionCount: s.completedSessionCount,
     hasRequestedReview: s.hasRequestedReview,
   };
@@ -73,18 +64,6 @@ export const useOnboardingFlags = create<OnboardingState>((set, get) => ({
       // fall through to defaults
     }
     set({ loaded: true });
-  },
-
-  markCompletedFirstProblem: async () => {
-    if (get().hasCompletedFirstProblem) return;
-    set({ hasCompletedFirstProblem: true });
-    await persist(snapshot(get()));
-  },
-
-  markSeenChatCoachmark: async () => {
-    if (get().hasSeenChatCoachmark) return;
-    set({ hasSeenChatCoachmark: true });
-    await persist(snapshot(get()));
   },
 
   incrementCompletedSessionCount: async (sessionKey) => {

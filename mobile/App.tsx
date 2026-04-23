@@ -20,8 +20,7 @@ import { useEntitlementStore } from "./src/stores/entitlements";
 import { useOnboardingFlags } from "./src/stores/onboardingFlags";
 import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
-
-const ONBOARDING_KEY = "onboarding_completed";
+import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
 type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "library";
 

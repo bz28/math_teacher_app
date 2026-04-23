@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,10 +11,11 @@ interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
-/** Gentle continuous pulse */
+const TOTAL_SLIDES = 4;
+
+/** Gentle continuous pulse used by the hero logo */
 function usePulse() {
   const scale = useRef(new Animated.Value(1)).current;
-
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -23,42 +24,42 @@ function usePulse() {
       ]),
     ).start();
   }, []);
-
   return { transform: [{ scale }] };
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [slideIndex, setSlideIndex] = useState(0);
+  const isLast = slideIndex === TOTAL_SLIDES - 1;
 
   const handleNext = () => {
-    if (slideIndex === 1) {
-      onComplete();
-    } else {
-      setSlideIndex(1);
-    }
+    if (isLast) onComplete();
+    else setSlideIndex(slideIndex + 1);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Progress dots */}
       <View style={styles.progressRow}>
-        {[0, 1].map((i) => (
-          <View
-            key={i}
-            style={[styles.dot, i === slideIndex && styles.dotActive]}
-          />
+        {Array.from({ length: TOTAL_SLIDES }).map((_, i) => (
+          <View key={i} style={[styles.dot, i === slideIndex && styles.dotActive]} />
         ))}
       </View>
 
-      <View style={styles.content}>
-        {slideIndex === 0 && <HeroSlide />}
-        {slideIndex === 1 && <FlowSlide />}
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {slideIndex === 0 && <WelcomeSlide />}
+        {slideIndex === 1 && <SnapSlide />}
+        {slideIndex === 2 && <LearnSlide />}
+        {slideIndex === 3 && <PracticeSlide />}
+      </ScrollView>
 
       {/* Navigation */}
       <View style={styles.nav}>
         {slideIndex > 0 ? (
-          <AnimatedPressable onPress={() => setSlideIndex(0)} style={styles.backButton}>
+          <AnimatedPressable onPress={() => setSlideIndex(slideIndex - 1)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={20} color={colors.primary} />
             <Text style={styles.backText}>Back</Text>
           </AnimatedPressable>
@@ -75,9 +76,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             end={{ x: 1, y: 0 }}
             style={styles.nextButton}
           >
-            <Text style={styles.nextText}>
-              {slideIndex === 1 ? "Get Started" : "Continue"}
-            </Text>
+            <Text style={styles.nextText}>{isLast ? "Get Started" : "Continue"}</Text>
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </LinearGradient>
         </AnimatedPressable>
@@ -86,122 +85,215 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   );
 }
 
-/* ── Slide 1: Hero ───────────────────────────────────────── */
+/* ── Slide 1: Welcome ──────────────────────────────────── */
 
-function HeroSlide() {
+function WelcomeSlide() {
   const logoAnim = useFadeInUp(0, 600);
   const pulseAnim = usePulse();
   const taglineAnim = useFadeInUp(200, 500);
   const subtitleAnim = useFadeInUp(400, 500);
   const pillsAnim = useFadeInUp(600, 500);
-  const pill1Anim = useFadeInUp(700, 400);
-  const pill2Anim = useFadeInUp(800, 400);
-  const pill3Anim = useFadeInUp(900, 400);
 
   return (
     <View style={styles.slideCenter}>
-      {/* Animated logo */}
       <Animated.View style={[logoAnim, pulseAnim]}>
         <LinearGradient colors={gradients.primary} style={styles.heroLogo}>
           <Text style={styles.heroLogoText}>V</Text>
         </LinearGradient>
       </Animated.View>
 
-      {/* Tagline */}
       <Animated.Text style={[styles.heroTagline, taglineAnim]}>
-        Snap. Learn. Master.
+        Welcome to Veradic
       </Animated.Text>
 
       <Animated.Text style={[styles.heroSubtitle, subtitleAnim]}>
-        Your AI tutor that breaks any problem{"\n"}into steps you actually understand
+        Your AI tutor for math, science,{"\n"}and chemistry — learn every step.
       </Animated.Text>
 
-      {/* Feature pills */}
       <Animated.View style={[styles.pillRow, pillsAnim]}>
-        <Animated.View style={[styles.pill, shadows.sm, pill1Anim]}>
-          <Ionicons name="camera" size={16} color={colors.primary} />
-          <Text style={styles.pillText}>Snap a photo</Text>
-        </Animated.View>
-        <Animated.View style={[styles.pill, shadows.sm, pill2Anim]}>
-          <Ionicons name="book" size={16} color={colors.primary} />
-          <Text style={styles.pillText}>Learn steps</Text>
-        </Animated.View>
-        <Animated.View style={[styles.pill, shadows.sm, pill3Anim]}>
-          <Ionicons name="infinite" size={16} color={colors.primary} />
+        <View style={[styles.pill, shadows.sm]}>
+          <Ionicons name="camera" size={14} color={colors.primary} />
+          <Text style={styles.pillText}>Snap</Text>
+        </View>
+        <View style={[styles.pill, shadows.sm]}>
+          <Ionicons name="book" size={14} color={colors.primary} />
+          <Text style={styles.pillText}>Learn</Text>
+        </View>
+        <View style={[styles.pill, shadows.sm]}>
+          <Ionicons name="infinite" size={14} color={colors.primary} />
           <Text style={styles.pillText}>Practice</Text>
-        </Animated.View>
+        </View>
       </Animated.View>
     </View>
   );
 }
 
-/* ── Slide 2: The Flow ──────────────────────────────────── */
+/* ── Slide 2: Snap any problem ─────────────────────────── */
 
-function FlowSlide() {
+function SnapSlide() {
   const titleAnim = useFadeInUp(0, 400);
   const subtitleAnim = useFadeInUp(100, 400);
-  const step1Anim = useFadeInUp(200, 400);
-  const conn1Anim = useFadeInUp(350, 300);
-  const step2Anim = useFadeInUp(400, 400);
-  const conn2Anim = useFadeInUp(550, 300);
-  const step3Anim = useFadeInUp(600, 400);
+  const previewAnim = useFadeInUp(200, 500);
 
   return (
     <View style={styles.slideCenter}>
-      <Animated.Text style={[styles.flowTitle, titleAnim]}>
-        How it works
+      <Animated.Text style={[styles.slideTitle, titleAnim]}>
+        Snap any problem
+      </Animated.Text>
+      <Animated.Text style={[styles.slideSubtitle, subtitleAnim]}>
+        Point your camera at a textbook,{"\n"}worksheet, or your handwritten work.
       </Animated.Text>
 
-      <Animated.Text style={[styles.flowSubtitle, subtitleAnim]}>
-        From problem to mastery in minutes
+      {/* Mock viewfinder with a math problem inside */}
+      <Animated.View style={[styles.previewFrame, shadows.lg, previewAnim]}>
+        <View style={[styles.frameCorner, styles.cornerTL]} />
+        <View style={[styles.frameCorner, styles.cornerTR]} />
+        <View style={[styles.frameCorner, styles.cornerBL]} />
+        <View style={[styles.frameCorner, styles.cornerBR]} />
+
+        <View style={styles.previewContent}>
+          <Text style={styles.mockProblemLabel}>PROBLEM 7</Text>
+          <Text style={styles.mockProblem}>Solve for x:{"\n"}3x + 5 = 20</Text>
+        </View>
+
+        <View style={styles.shutterDot}>
+          <Ionicons name="camera" size={20} color={colors.white} />
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+/* ── Slide 3: Step-by-step learning ────────────────────── */
+
+function LearnSlide() {
+  const titleAnim = useFadeInUp(0, 400);
+  const subtitleAnim = useFadeInUp(100, 400);
+  const step1Anim = useFadeInUp(200, 400);
+  const step2Anim = useFadeInUp(350, 400);
+  const step3Anim = useFadeInUp(500, 400);
+  const askAnim = useFadeInUp(700, 400);
+
+  return (
+    <View style={styles.slideCenter}>
+      <Animated.Text style={[styles.slideTitle, titleAnim]}>
+        Learn step by step
+      </Animated.Text>
+      <Animated.Text style={[styles.slideSubtitle, subtitleAnim]}>
+        Veradic breaks every problem into{"\n"}clear, guided steps.
       </Animated.Text>
 
-      <View style={styles.flowSteps}>
-        <Animated.View style={[styles.flowCard, shadows.sm, step1Anim]}>
-          <LinearGradient colors={gradients.primary} style={styles.flowIconWrap}>
-            <Ionicons name="camera" size={20} color={colors.white} />
-          </LinearGradient>
-          <View style={styles.flowTextWrap}>
-            <Text style={styles.flowStepTitle}>Capture</Text>
-            <Text style={styles.flowStepDesc}>Snap a photo or type your problem</Text>
+      <View style={styles.stepStack}>
+        <Animated.View style={[styles.stepRow, step1Anim]}>
+          <View style={styles.stepBadgeDone}>
+            <Ionicons name="checkmark" size={14} color={colors.white} />
+          </View>
+          <View style={styles.stepRowText}>
+            <Text style={styles.stepRowTitle}>Subtract 5 from both sides</Text>
+            <Text style={styles.stepRowSub}>3x = 15</Text>
           </View>
         </Animated.View>
 
-        <Animated.View style={[styles.flowConnector, conn1Anim]}>
-          <View style={styles.flowConnectorLine} />
-          <Ionicons name="chevron-down" size={14} color={colors.primaryLight} />
-        </Animated.View>
-
-        <Animated.View style={[styles.flowCard, shadows.sm, step2Anim]}>
-          <LinearGradient colors={gradients.primary} style={styles.flowIconWrap}>
-            <Ionicons name="book" size={20} color={colors.white} />
-          </LinearGradient>
-          <View style={styles.flowTextWrap}>
-            <Text style={styles.flowStepTitle}>Learn</Text>
-            <Text style={styles.flowStepDesc}>AI breaks it into guided steps</Text>
+        <Animated.View style={[styles.stepRow, step2Anim]}>
+          <View style={styles.stepBadgeActive}>
+            <Text style={styles.stepBadgeNumber}>2</Text>
+          </View>
+          <View style={styles.stepRowText}>
+            <Text style={styles.stepRowTitle}>Divide both sides by 3</Text>
+            <Text style={styles.stepRowSub}>x = ?</Text>
           </View>
         </Animated.View>
 
-        <Animated.View style={[styles.flowConnector, conn2Anim]}>
-          <View style={styles.flowConnectorLine} />
-          <Ionicons name="chevron-down" size={14} color={colors.primaryLight} />
+        <Animated.View style={[styles.stepRow, step3Anim]}>
+          <View style={styles.stepBadgeIdle}>
+            <Text style={styles.stepBadgeNumberIdle}>3</Text>
+          </View>
+          <View style={styles.stepRowText}>
+            <Text style={styles.stepRowTitleIdle}>Check your answer</Text>
+          </View>
+        </Animated.View>
+      </View>
+
+      {/* Ask hint bubble */}
+      <Animated.View style={[styles.askHint, shadows.sm, askAnim]}>
+        <Ionicons name="chatbubble-ellipses" size={14} color={colors.primary} />
+        <Text style={styles.askHintText}>
+          Stuck on a step? Tap <Text style={styles.askHintBold}>Ask</Text> to chat with Veradic.
+        </Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+/* ── Slide 4: Practice & test ──────────────────────────── */
+
+function PracticeSlide() {
+  const titleAnim = useFadeInUp(0, 400);
+  const subtitleAnim = useFadeInUp(100, 400);
+  const card1Anim = useFadeInUp(200, 400);
+  const card2Anim = useFadeInUp(350, 400);
+  const card3Anim = useFadeInUp(500, 400);
+
+  return (
+    <View style={styles.slideCenter}>
+      <Animated.Text style={[styles.slideTitle, titleAnim]}>
+        Practice and test yourself
+      </Animated.Text>
+      <Animated.Text style={[styles.slideSubtitle, subtitleAnim]}>
+        Generate unlimited similar problems{"\n"}or take a timed mock exam.
+      </Animated.Text>
+
+      <View style={styles.modeCardStack}>
+        <Animated.View style={[card1Anim, { width: "100%" }]}>
+          <LinearGradient
+            colors={gradients.primary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.modeCard, shadows.md]}
+          >
+            <Ionicons name="book" size={22} color={colors.white} />
+            <View style={styles.modeCardText}>
+              <Text style={styles.modeCardTitle}>Learn Mode</Text>
+              <Text style={styles.modeCardSub}>Step-by-step guided learning</Text>
+            </View>
+          </LinearGradient>
         </Animated.View>
 
-        <Animated.View style={[styles.flowCard, shadows.sm, step3Anim]}>
-          <LinearGradient colors={gradients.success} style={styles.flowIconWrap}>
-            <Ionicons name="infinite" size={20} color={colors.white} />
+        <Animated.View style={[card2Anim, { width: "100%" }]}>
+          <LinearGradient
+            colors={gradients.warning}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.modeCard, shadows.md]}
+          >
+            <Ionicons name="document-text" size={22} color={colors.white} />
+            <View style={styles.modeCardText}>
+              <Text style={styles.modeCardTitle}>Mock Test</Text>
+              <Text style={styles.modeCardSub}>Practice or generate an exam</Text>
+            </View>
           </LinearGradient>
-          <View style={styles.flowTextWrap}>
-            <Text style={styles.flowStepTitle}>Master</Text>
-            <Text style={styles.flowStepDesc}>Practice similar problems until it clicks</Text>
-          </View>
+        </Animated.View>
+
+        <Animated.View style={[card3Anim, { width: "100%" }]}>
+          <LinearGradient
+            colors={gradients.success}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.modeCard, shadows.md]}
+          >
+            <Ionicons name="infinite" size={22} color={colors.white} />
+            <View style={styles.modeCardText}>
+              <Text style={styles.modeCardTitle}>Unlimited Practice</Text>
+              <Text style={styles.modeCardSub}>More problems like the one you scanned</Text>
+            </View>
+          </LinearGradient>
         </Animated.View>
       </View>
     </View>
   );
 }
 
-/* ── Styles ─────────────────────────────────────────────── */
+/* ── Styles ────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
   container: {
@@ -210,7 +302,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
 
-  // Progress
   progressRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -229,13 +320,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
 
-  // Content
-  content: {
-    flex: 1,
+  scroll: {
+    flexGrow: 1,
     justifyContent: "center",
+    paddingVertical: spacing.lg,
   },
 
-  // Navigation
   nav: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -249,13 +339,8 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   backText: { color: colors.primary, ...typography.bodyBold },
-  skipButton: {
-    padding: spacing.sm,
-  },
-  skipText: {
-    color: colors.textMuted,
-    ...typography.bodyBold,
-  },
+  skipButton: { padding: spacing.sm },
+  skipText: { color: colors.textMuted, ...typography.bodyBold },
   nextButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -266,13 +351,27 @@ const styles = StyleSheet.create({
   },
   nextText: { color: colors.white, ...typography.button },
 
-  // Shared slide
   slideCenter: {
     alignItems: "center",
     paddingHorizontal: spacing.xs,
   },
 
-  // Hero slide
+  // Shared slide title/subtitle
+  slideTitle: {
+    ...typography.title,
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  slideSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: spacing.xxl,
+  },
+
+  // Welcome slide
   heroLogo: {
     width: 96,
     height: 96,
@@ -288,7 +387,7 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   heroTagline: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: "800",
     color: colors.text,
     textAlign: "center",
@@ -323,64 +422,172 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // Flow slide
-  flowTitle: {
-    ...typography.title,
+  // Snap slide — viewfinder mock
+  previewFrame: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  frameCorner: {
+    position: "absolute",
+    width: 28,
+    height: 28,
+    borderColor: colors.primary,
+  },
+  cornerTL: { top: 14, left: 14, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 6 },
+  cornerTR: { top: 14, right: 14, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 6 },
+  cornerBL: { bottom: 14, left: 14, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 6 },
+  cornerBR: { bottom: 14, right: 14, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 6 },
+  previewContent: {
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  mockProblemLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    letterSpacing: 1.5,
+    fontSize: 10,
+  },
+  mockProblem: {
+    fontSize: 22,
+    fontWeight: "700",
     color: colors.text,
     textAlign: "center",
-    marginBottom: spacing.sm,
+    lineHeight: 30,
   },
-  flowSubtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginBottom: spacing.xxl,
-  },
-  flowSteps: {
-    width: "100%",
+  shutterDot: {
+    position: "absolute",
+    bottom: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
     alignItems: "center",
+    borderWidth: 4,
+    borderColor: colors.background,
   },
-  flowCard: {
+
+  // Learn slide — step list mock
+  stepStack: {
+    width: "100%",
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  stepRow: {
     flexDirection: "row",
     alignItems: "center",
-    width: "100%",
+    gap: spacing.md,
     backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: spacing.md,
   },
-  flowIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  stepBadgeDone: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.success,
     justifyContent: "center",
     alignItems: "center",
   },
-  flowTextWrap: {
-    flex: 1,
+  stepBadgeActive: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  flowStepTitle: {
+  stepBadgeIdle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stepBadgeNumber: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  stepBadgeNumberIdle: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  stepRowText: { flex: 1 },
+  stepRowTitle: {
     ...typography.bodyBold,
     color: colors.text,
-    fontSize: 16,
-    marginBottom: 2,
+    fontSize: 14,
   },
-  flowStepDesc: {
+  stepRowTitleIdle: {
+    ...typography.body,
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  stepRowSub: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    marginTop: 2,
   },
-  flowConnector: {
+  askHint: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+    backgroundColor: colors.primaryBg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
   },
-  flowConnectorLine: {
-    width: 2,
-    height: 8,
-    backgroundColor: colors.primaryLight,
-    marginBottom: 2,
+  askHintText: {
+    ...typography.body,
+    color: colors.primary,
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+  askHintBold: {
+    fontWeight: "700",
+  },
+
+  // Practice slide — mode cards
+  modeCardStack: {
+    width: "100%",
+    gap: spacing.sm + 2,
+  },
+  modeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  modeCardText: { flex: 1 },
+  modeCardTitle: {
+    ...typography.bodyBold,
+    color: colors.white,
+    fontSize: 15,
+  },
+  modeCardSub: {
+    ...typography.caption,
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 12,
+    marginTop: 2,
   },
 });

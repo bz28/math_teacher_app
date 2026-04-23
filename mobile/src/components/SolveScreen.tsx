@@ -15,7 +15,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { Coachmark } from "./Coachmark";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
@@ -28,13 +27,11 @@ import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
-import { useOnboardingFlags } from "../stores/onboardingFlags";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 const MAX_PROBLEMS = 10;
 const CHIP_PREVIEW_LIMIT = 30;
-const SAMPLE_PROBLEM = "2x + 5 = 13";
 
 // Queue chips show the problem text inline. Long word problems turn into
 // awkward single-line ellipsis that cuts mid-word; hard-truncating before
@@ -93,12 +90,6 @@ export function SolveScreen({
 
   const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
-  // First-use onboarding: pre-fill a sample problem and show a one-time hint.
-  const onboardingLoaded = useOnboardingFlags((s) => s.loaded);
-  const hasCompletedFirstProblem = useOnboardingFlags((s) => s.hasCompletedFirstProblem);
-  const markCompletedFirstProblem = useOnboardingFlags((s) => s.markCompletedFirstProblem);
-  const didPrefillRef = useRef(false);
-
   // Subscribe to the raw used/limit primitives (NOT the sessionsRemaining /
   // scansRemaining function selectors — those return stable refs that never
   // fire re-renders, leaving the "X of Y left today" copy stale after
@@ -114,16 +105,6 @@ export function SolveScreen({
   const scansLeft = isPro ? Infinity : Math.max(0, dailyScansLimit - dailyScansUsed);
 
   useEffect(() => { setStoreSubject(subject); }, [subject, setStoreSubject]);
-
-  // Pre-fill the sample problem once on first launch when the user has no
-  // existing state. Guarded by didPrefillRef so re-renders don't overwrite
-  // the user if they clear the input.
-  useEffect(() => {
-    if (!onboardingLoaded || hasCompletedFirstProblem || didPrefillRef.current) return;
-    if (input !== "" || problemQueue.length > 0) return;
-    didPrefillRef.current = true;
-    setInput(SAMPLE_PROBLEM);
-  }, [onboardingLoaded, hasCompletedFirstProblem, input, problemQueue.length]);
 
 
   const maxQueueSize = isPro ? MAX_PROBLEMS : Math.min(MAX_PROBLEMS, sessionsLeft);
@@ -165,16 +146,6 @@ export function SolveScreen({
     isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
   );
 
-  // When the user engages with any alternative entry path (scan, gallery)
-  // while the onboarding sample is still pre-filled, drop the sample so
-  // their submission doesn't accidentally include both problems. Marking
-  // the flag here also prevents the coachmark from re-appearing.
-  const clearOnboardingSampleIfPresent = () => {
-    if (hasCompletedFirstProblem) return;
-    if (input === SAMPLE_PROBLEM) setInput("");
-    markCompletedFirstProblem();
-  };
-
   const handleConfirmExtraction = () => {
     const items = getSelectedWithImages();
     const remaining = maxQueueSize - problemQueue.length;
@@ -188,7 +159,6 @@ export function SolveScreen({
       setProblemQueue(newQueue);
       useSessionStore.setState({ problemImages: newImages });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      clearOnboardingSampleIfPresent();
     }
     dismissExtraction();
     fetchEntitlements();
@@ -210,7 +180,6 @@ export function SolveScreen({
     setInput("");
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!hasCompletedFirstProblem) markCompletedFirstProblem();
     inputRef.current?.focus();
   };
 
@@ -250,7 +219,6 @@ export function SolveScreen({
     }
     setQuotaConfirm(false);
 
-    if (!hasCompletedFirstProblem) markCompletedFirstProblem();
     onSessionStart();
 
     try {
@@ -392,16 +360,6 @@ export function SolveScreen({
             {mode === "mock_test" ? "What do you want to test?" : "What do you want to learn?"}
           </Text>
 
-          {/* First-use hint. Dismissed on tap or as soon as the user adds
-              any problem (the mark-completed effect hides it). */}
-          <View style={styles.coachmarkWrap}>
-            <Coachmark
-              visible={onboardingLoaded && !hasCompletedFirstProblem}
-              text="Welcome to Veradic! We added a sample problem — tap the + to add it, then Solve to see how Learn Mode works."
-              onDismiss={() => markCompletedFirstProblem()}
-            />
-          </View>
-
           {/* Mock Test config — shown at the TOP when in test mode */}
           {mode === "mock_test" && (
             <MockTestConfig
@@ -456,9 +414,15 @@ export function SolveScreen({
             </View>
           </AnimatedPressable>
 
-          {/* TYPE — always-visible inline input bar */}
+          {/* TYPE — always-visible inline input bar. Multiline so long word
+              problems wrap inside the box instead of overflowing. */}
           <View style={[styles.typeBar, { borderColor: typing ? theme.primary : colors.border }]}>
-            <Ionicons name="create-outline" size={20} color={typing ? theme.primary : colors.textMuted} />
+            <Ionicons
+              name="create-outline"
+              size={20}
+              color={typing ? theme.primary : colors.textMuted}
+              style={styles.typeBarIcon}
+            />
             <TextInput
               ref={inputRef}
               style={styles.typeBarInput}
@@ -476,11 +440,9 @@ export function SolveScreen({
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              returnKeyType="done"
-              blurOnSubmit
-              onSubmitEditing={() => {
-                if (input.trim()) handleAddToQueue();
-              }}
+              multiline
+              scrollEnabled={false}
+              returnKeyType="default"
               accessibilityLabel="Type a problem"
             />
             {input.trim() && (
@@ -709,9 +671,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     lineHeight: 28,
     marginBottom: spacing.lg,
   },
-  coachmarkWrap: {
-    marginBottom: spacing.md,
-  },
 
   // Snap card — horizontal row with icon + text, larger to fill more page
   snapCard: {
@@ -761,28 +720,33 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     flex: 1,
   },
 
-  // Always-visible type input bar
+  // Always-visible type input bar. Top-aligned items so a multi-line problem
+  // wraps cleanly under the leading icon and beside the send button stays
+  // anchored at the top.
   typeBar: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing.sm,
     backgroundColor: colors.inputBg,
     borderRadius: radii.lg,
     borderWidth: 1.5,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     marginBottom: spacing.md,
-    minHeight: 50,
+  },
+  typeBarIcon: {
+    paddingTop: 8,
   },
   typeBarInput: {
     flex: 1,
     fontSize: 15,
     fontWeight: "400",
     color: colors.text,
-    paddingVertical: 0,
-    height: 40,
+    paddingVertical: 6,
+    minHeight: 28,
+    maxHeight: 140,
     lineHeight: 20,
-    textAlignVertical: "center",
+    textAlignVertical: "top",
     includeFontPadding: false,
   },
   typeBarSend: {
@@ -791,6 +755,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     borderRadius: radii.pill,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 2,
   },
 
   // Queue chips

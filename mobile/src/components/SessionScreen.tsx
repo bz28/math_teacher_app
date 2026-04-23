@@ -15,7 +15,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { Coachmark } from "./Coachmark";
 import { CompletedCard } from "./CompletedCard";
 import { MockTestScreen } from "./MockTestScreen";
 import { MockTestSummary } from "./MockTestSummary";
@@ -83,9 +82,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const chatsRemaining = useEntitlementStore((s) => s.chatsRemaining);
   const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
-  const onboardingLoaded = useOnboardingFlags((s) => s.loaded);
-  const hasSeenChatCoachmark = useOnboardingFlags((s) => s.hasSeenChatCoachmark);
-  const markSeenChatCoachmark = useOnboardingFlags((s) => s.markSeenChatCoachmark);
   const completedSessionCount = useOnboardingFlags((s) => s.completedSessionCount);
   const hasRequestedReview = useOnboardingFlags((s) => s.hasRequestedReview);
   const incrementCompletedSessionCount = useOnboardingFlags((s) => s.incrementCompletedSessionCount);
@@ -107,12 +103,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }, [lastResponse]);
-
-  // Dismiss the chat coachmark the first time the user engages with Ask —
-  // they've discovered the feature, no need to keep pointing.
-  useEffect(() => {
-    if (askMode && !hasSeenChatCoachmark) markSeenChatCoachmark();
-  }, [askMode, hasSeenChatCoachmark, markSeenChatCoachmark]);
 
   // Count learn-mode session completions and ask for an App Store rating
   // after REVIEW_PROMPT_AFTER_SESSIONS successful completions. Belt and
@@ -374,18 +364,6 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       {/* Sticky bottom action area for Learn mode */}
       {!isCompleted && (
         <View style={readerStyles.actionBar}>
-          {/* First-session hint near the Ask button. Dismisses on tap or the
-              first time the user switches into askMode. */}
-          {!askMode && onboardingLoaded && !hasSeenChatCoachmark && (
-            <View style={readerStyles.chatCoachmarkWrap}>
-              <Coachmark
-                visible
-                text="Stuck on a step? Tap Ask to chat with Veradic about it."
-                onDismiss={() => markSeenChatCoachmark()}
-                arrow="down"
-              />
-            </View>
-          )}
           {askMode ? (
             <View style={readerStyles.askInputRow}>
               <TextInput
@@ -587,9 +565,6 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     backgroundColor: colors.white,
-  },
-  chatCoachmarkWrap: {
-    marginBottom: spacing.md,
   },
   actionRow: {
     flexDirection: "row",
