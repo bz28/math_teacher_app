@@ -88,8 +88,14 @@ _DEFAULT_FULL_CREDIT = (
     "doesn't qualify."
 )
 _DEFAULT_PARTIAL_CREDIT = (
-    "Right approach with an arithmetic or sign error — typically "
-    "around 60%. Multiple errors or unfinished work — around 30%."
+    "Anchor partial credit on how much of the correct reasoning is "
+    "intact. Right approach with a small execution error (sign flip, "
+    "arithmetic slip) — around 95%. Right approach with multiple "
+    "errors or stopped mid-solution — around 60%. Right setup but "
+    "substantially incomplete, or a plausible attempt with a wrong "
+    "method — around 30%. Use judgment between these anchors. "
+    "Incoherent attempts that show no sign of the right concept are "
+    "zero, not partial."
 )
 
 
