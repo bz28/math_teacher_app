@@ -311,15 +311,28 @@ export default function HomeworkPage() {
         submissionId={submissionId}
         submittedImageDataUrl={mode.imageDataUrl}
         extraction={mode.extraction}
-        onContinue={() => {
+        onContinue={async () => {
           setConfirmedThisSession(true);
-          setMode({ kind: "integrity_chat" });
+          // Re-fetch + reroute from server truth. Handles the 409
+          // recovery case where the confirm endpoint bailed because
+          // the submission was flagged in another tab: loadAll sees
+          // extraction_flagged_at and routes to the terminal screen
+          // instead of dropping the student into an empty chat.
+          if (assignmentId) {
+            await loadAll(assignmentId);
+          } else {
+            setMode({ kind: "integrity_chat" });
+          }
         }}
-        onFlagged={() => {
-          // Flag skips grading + integrity. Submission's already in
-          // the teacher's inbox for manual grading — show the
-          // terminal screen and leave the student there.
-          setMode({ kind: "extraction_flagged" });
+        onFlagged={async () => {
+          // Flag skips grading + integrity. Re-fetch in case the
+          // server had already moved on (e.g. someone confirmed in
+          // another tab) so the student lands on the right terminal.
+          if (assignmentId) {
+            await loadAll(assignmentId);
+          } else {
+            setMode({ kind: "extraction_flagged" });
+          }
         }}
       />
     );

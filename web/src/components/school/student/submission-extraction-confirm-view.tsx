@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  ApiError,
   schoolStudent,
   type IntegrityExtraction,
   type IntegrityExtractionFinalAnswer,
@@ -156,7 +157,15 @@ export function SubmissionExtractionConfirmView({
     try {
       await schoolStudent.confirmExtraction(submissionId);
       onContinue();
-    } catch {
+    } catch (e) {
+      // 409 means server state moved (someone else flagged in another
+      // tab, or the window raced past our local view). Bail out of
+      // this screen and let the parent re-fetch + route to whatever
+      // terminal matches the server's current truth.
+      if (e instanceof ApiError && e.status === 409) {
+        onContinue();
+        return;
+      }
       setError("Couldn't confirm. Try again.");
       setSubmitting(false);
     }
@@ -168,7 +177,15 @@ export function SubmissionExtractionConfirmView({
     try {
       await schoolStudent.flagExtractionSubmission(submissionId);
       onFlagged();
-    } catch {
+    } catch (e) {
+      // 409 = server already past the confirm/flag decision (student
+      // confirmed in another tab, or the submission was already
+      // flagged). Exit to the terminal and let the parent re-route
+      // rather than looping on "Try again".
+      if (e instanceof ApiError && e.status === 409) {
+        onFlagged();
+        return;
+      }
       setError("Couldn't save your flag. Try again.");
       setSubmitting(false);
     }
