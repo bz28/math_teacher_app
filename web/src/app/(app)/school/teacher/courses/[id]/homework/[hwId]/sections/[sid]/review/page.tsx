@@ -1682,31 +1682,32 @@ function PerProblemVerdict({
   problem: TeacherIntegrityDetail["problems"][number];
 }) {
   // Per-problem display is driven by rubric presence, not a per-problem
-  // disposition (which lives at session level). Absent rubric means
-  // pending / dismissed / skipped — use the neutral "none" style.
-  const style = problem.rubric ? INTEGRITY_STYLE.pass : INTEGRITY_STYLE.none;
-  const label = problem.rubric
-    ? "Verdicted"
+  // disposition (which lives at session level). The card stays neutral
+  // regardless of rubric content — a small status pill carries the
+  // categorical info ("Verdicted" / "Dismissed" / "Skipped" / "Pending")
+  // and the AI reasoning below carries the actual signal. Previously the
+  // card used the pass-disposition green tint on every verdicted problem
+  // which incorrectly implied "good" for shallow rubrics too.
+  const pill = problem.rubric
+    ? { label: "Verdicted", cls: "bg-green-100 text-green-900 dark:bg-green-500/20 dark:text-green-200" }
     : problem.status === "dismissed"
-      ? "Dismissed by teacher"
+      ? { label: "Dismissed by teacher", cls: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-200" }
       : problem.status === "skipped_unreadable"
-        ? "Skipped — unreadable"
-        : "Pending";
+        ? { label: "Skipped — unreadable", cls: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-200" }
+        : { label: "Pending", cls: "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300" };
   return (
-    <div
-      className={`rounded-[--radius-md] border ${style.border} ${style.bg} px-3 py-2`}
-    >
-      <p className="flex items-center gap-1.5 text-xs font-semibold">
-        <span className={style.text}>
-          {style.icon} {label}
-        </span>
-      </p>
-      <p className="mt-1 text-xs text-text-primary">
+    <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2">
+      <span
+        className={`inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[11px] font-bold ${pill.cls}`}
+      >
+        {pill.label}
+      </span>
+      <p className="mt-2 text-sm leading-relaxed text-text-primary">
         <MathText text={problem.question} />
       </p>
       {problem.ai_reasoning && (
-        <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
-          {problem.ai_reasoning}
+        <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+          <MathText text={problem.ai_reasoning} />
         </p>
       )}
     </div>
