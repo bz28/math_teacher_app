@@ -1010,6 +1010,25 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
+  /** Re-run AI grading against the assignment's current rubric.
+   *  Override semantics — replaces the live breakdown even if the
+   *  teacher had manually reviewed. Keeps published_* intact, so
+   *  students don't see the regrade until the teacher republishes.
+   *  The review page only surfaces the trigger when the grade's
+   *  rubric_snapshot differs from the assignment's current rubric. */
+  regradeSubmission(submissionId: string) {
+    return apiFetch<{
+      status: string;
+      final_score: number | null;
+      ai_score: number | null;
+      breakdown: GradeBreakdownEntry[] | null;
+      ai_breakdown: AiGradeEntry[] | null;
+      rubric_snapshot: TeacherRubric | null;
+      graded_at: string | null;
+      grade_published_at: string | null;
+      grade_dirty: boolean;
+    }>(`/teacher/submissions/${submissionId}/regrade`, { method: "POST" });
+  },
   /** Publish every graded submission on this HW to students at once.
    *  Idempotent — already-published grades are skipped, and ungraded
    *  submissions are ignored (teacher can grade + publish more later).
@@ -1214,6 +1233,12 @@ export interface TeacherSubmissionRow {
   /** Per-problem grade breakdown; null until the teacher has saved
    *  grades. Future AI PR pre-fills this too. */
   breakdown: GradeBreakdownEntry[] | null;
+  /** Frozen rubric the AI grader applied to this submission. Compare
+   *  to the assignment's live rubric to detect drift — mismatch is
+   *  what surfaces the "Regrade with current rubric" CTA on the
+   *  review page. Null for pre-snapshot historical rows or when no
+   *  custom rubric was authored at grading time. */
+  rubric_snapshot: TeacherRubric | null;
   grade_published_at: string | null;
   /** True if the grade has been published AND edited since. Students
    *  still see the published snapshot — teacher must republish. */
