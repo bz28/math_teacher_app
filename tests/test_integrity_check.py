@@ -1196,6 +1196,20 @@ async def test_generate_variant_flips_flag_and_echoes_problem(
         )).scalars().all()
         assert any(variant_text in t.content for t in tool_results)
 
+    # Student-facing transcript flags the agent turn that presents the
+    # variant with is_variant_probe=True so the frontend can render it
+    # as a distinguished "quick practice" card. Every other agent turn
+    # is false.
+    state = (await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )).json()
+    agent_turns = [t for t in state["transcript"] if t["role"] == "agent"]
+    # Opener, plus the variant-presenter turn after the tool call.
+    assert len(agent_turns) >= 2
+    assert agent_turns[0]["is_variant_probe"] is False
+    assert agent_turns[1]["is_variant_probe"] is True
+
 
 async def test_generate_variant_rejects_second_call(
     client: AsyncClient, world: dict[str, Any]
@@ -1269,6 +1283,27 @@ async def test_generate_variant_rejects_second_call(
             "can only be called once per session" in t.content
             for t in tool_results
         )
+
+    # is_variant_probe: only the FIRST (successful) variant arms the
+    # flag on the following agent text. The SECOND call was rejected,
+    # so the agent's "Moving on." recovery text must NOT be flagged —
+    # otherwise the student would see an empty "Quick practice" card.
+    state = (await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )).json()
+    agent_texts = [
+        t["content"] for t in state["transcript"]
+        if t["role"] == "agent"
+    ]
+    variant_flags = [
+        t["is_variant_probe"] for t in state["transcript"]
+        if t["role"] == "agent"
+    ]
+    assert "First variant." in agent_texts
+    assert "Moving on." in agent_texts
+    assert variant_flags[agent_texts.index("First variant.")] is True
+    assert variant_flags[agent_texts.index("Moving on.")] is False
 
 
 async def test_generate_variant_rejects_before_student_turn(

@@ -6,6 +6,7 @@ import {
   type IntegrityStateResponse,
   type IntegrityTurn,
 } from "@/lib/api";
+import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
 import { useTurnTelemetry } from "./use-turn-telemetry";
@@ -370,6 +371,29 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
 
 function TurnBubble({ turn }: { turn: IntegrityTurn }) {
   const isStudent = turn.role === "student";
+  // Variant-probe turns are rendered as a distinguished "Quick
+  // practice" card so the student visually registers a fresh problem,
+  // not normal chat flow. Only applies to agent turns; the server
+  // never sets the flag on student turns.
+  if (!isStudent && turn.is_variant_probe) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[90%] rounded-[--radius-md] border-2 border-primary/40 bg-primary-bg/30 px-3 py-2">
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-primary">
+            Quick practice
+          </div>
+          <div className="text-sm text-text-primary">
+            {/* Variant problems may contain LaTeX / SVG / chem
+                diagrams like every other problem surface in the app.
+                MathText renders inline + display math, svg blocks,
+                and bolded text; falls back to plain text on parse
+                failure so malformed output never breaks the card. */}
+            <MathText text={turn.content} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={cn("flex", isStudent ? "justify-end" : "justify-start")}>
       <div

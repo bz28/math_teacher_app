@@ -25,6 +25,7 @@ from api.core.integrity_pipeline import (
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
     STATUS_COMPLETE,
     STATUS_SKIPPED_UNREADABLE,
+    TOOL_GENERATE_VARIANT,
     count_student_turns,
     process_student_turn,
 )
@@ -65,6 +66,13 @@ class TurnOut(BaseModel):
     role: str  # "agent" | "student"
     content: str
     created_at: datetime
+    # True on the agent reply that immediately follows a generate_variant
+    # tool call — i.e., the turn in which the agent presents the fresh
+    # isomorphic problem to the student. Frontend renders this turn as a
+    # distinguished "Quick practice" card so the student visually
+    # registers "this is a fresh problem to approach", not normal chat.
+    # False on every other agent turn.
+    is_variant_probe: bool = False
 
 
 class IntegrityStateResponse(BaseModel):
@@ -216,16 +224,53 @@ def _student_facing_transcript(
 
     Tool-call / tool-result rows are dropped — the student never
     needs to see them, and they would just be confusing in the chat.
+    One derived flag: the first agent turn after a SUCCESSFUL
+    generate_variant call is marked `is_variant_probe=True` so the
+    frontend can render it as a distinguished "quick practice" card.
+
+    Success is determined by pairing tool_call → tool_result via
+    tool_use_id. A tool_call alone isn't enough — a rejected
+    generate_variant (second call in session, bogus problem_id, LLM
+    failure) shouldn't flag the next agent recovery text as a
+    variant probe, because no variant actually got generated.
     """
-    out: list[TurnOut] = []
+    # Build a tool_use_id → tool_name map so we can match tool_results
+    # back to their originating tool_calls.
+    tool_name_by_use_id: dict[str, str] = {}
     for t in turns:
+        if t.role == "tool_call" and t.tool_use_id and t.tool_name:
+            tool_name_by_use_id[t.tool_use_id] = t.tool_name
+
+    out: list[TurnOut] = []
+    pending_variant = False
+    for t in turns:
+        if t.role == "tool_call":
+            continue
+        if t.role == "tool_result":
+            # Only arm on successful generate_variant tool_results.
+            # Handler returns a string starting with "accepted:" on
+            # success; anything else (including "rejected: ...") is
+            # treated as non-variant.
+            if (
+                t.tool_use_id
+                and tool_name_by_use_id.get(t.tool_use_id) == TOOL_GENERATE_VARIANT
+                and t.content.startswith("accepted:")
+            ):
+                pending_variant = True
+            continue
         if t.role not in ("agent", "student"):
             continue
+        is_variant_probe = t.role == "agent" and pending_variant
+        # Consume the flag on the first agent turn after it was armed;
+        # only that one turn renders as the variant probe card.
+        if is_variant_probe:
+            pending_variant = False
         out.append(TurnOut(
             ordinal=t.ordinal,
             role=t.role,
             content=t.content,
             created_at=t.created_at,
+            is_variant_probe=is_variant_probe,
         ))
     return out
 
