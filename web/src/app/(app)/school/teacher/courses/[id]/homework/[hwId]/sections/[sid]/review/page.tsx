@@ -1239,6 +1239,16 @@ function SubmissionDetailPanel({
                 · late
               </span>
             )}
+            {row?.extraction_status === "unreadable_final" && (
+              <span className="ml-1.5 font-semibold text-red-700 dark:text-red-400">
+                · unreadable — grade manually
+              </span>
+            )}
+            {row?.extraction_edited && (
+              <span className="ml-1.5 text-text-muted" title="Student edited Vision's extraction during confirm">
+                · student-edited extraction
+              </span>
+            )}
             <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
             {published && row?.grade_published_at ? (
               detail.grade_dirty ? (

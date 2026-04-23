@@ -1252,6 +1252,14 @@ export interface TeacherSubmissionRow {
   grade_dirty: boolean;
   reviewed_at: string | null;
   integrity_overview: IntegrityOverview | null;
+  /** Extraction-confirm lifecycle from the submissions table. Used
+   *  by the review page to flag "unreadable_final" rows that will
+   *  never get an AI grade and need manual review. */
+  extraction_status: ExtractionStatus;
+  /** True when the student's confirmed extraction differs from the
+   *  raw Vision output — lightweight signal that the grade anchored
+   *  on student-edited text. */
+  extraction_edited: boolean;
 }
 
 export interface TeacherSubmissionDetailProblem {

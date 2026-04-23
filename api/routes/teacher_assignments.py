@@ -834,15 +834,18 @@ async def submissions_inbox(
         ),
     ).cast(Integer).label("published")
     # "Flagged" here = submissions that need teacher attention: agent
-    # emitted flag_for_review, OR extraction was unreadable (teacher
-    # decides what to do), OR the check finalized without a disposition
-    # (turn cap / no sampled problems — teacher reviews inconclusive).
-    # pass / needs_practice / tutor_pivot are all teacher-facing notes
-    # but not "flagged" for attention.
+    # emitted flag_for_review, OR extraction was unreadable (either the
+    # legacy integrity-side `skipped_unreadable` or the new
+    # submission-side `unreadable_final` — both mean "teacher grades
+    # manually, no AI signal to rely on"), OR the check finalized
+    # without a disposition (turn cap / no sampled problems — teacher
+    # reviews inconclusive). pass / needs_practice / tutor_pivot are
+    # all teacher-facing notes but not "flagged" for attention.
     flagged_expr = func.sum(
         case(
             (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
             (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+            (Submission.extraction_status == "unreadable_final", 1),
             (
                 and_(
                     IntegrityCheckSubmission.status == "complete",
@@ -1007,6 +1010,18 @@ async def list_submissions(
             "grade_dirty": _is_grade_dirty(grade),
             "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
             "integrity_overview": integrity_overview,
+            # Extraction-confirm state surfaced to the teacher. Lets the
+            # review page flag "unreadable — manual grade needed" rows
+            # (3 retakes exhausted, no AI grade will ever exist) and
+            # note "student edited extraction" rows so the teacher
+            # knows the grade anchored on student-edited text rather
+            # than raw Vision output.
+            "extraction_status": sub.extraction_status,
+            "extraction_edited": (
+                sub.raw_extraction is not None
+                and sub.confirmed_extraction is not None
+                and sub.raw_extraction != sub.confirmed_extraction
+            ),
         })
 
     return {"submissions": submissions}
