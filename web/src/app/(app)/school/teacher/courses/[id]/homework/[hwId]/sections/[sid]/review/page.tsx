@@ -1255,9 +1255,13 @@ function ProblemGradeRow({
             )}
           </p>
           {aiGrade.reasoning && (
-            <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-              {aiGrade.reasoning}
-            </p>
+            // Grader reasoning regularly references math ($-17$,
+            // $\begin{pmatrix}...$, etc.) — rendering through MathText
+            // matches how the rest of the review page surfaces problem
+            // text and student work.
+            <div className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+              <MathText text={aiGrade.reasoning} />
+            </div>
           )}
         </div>
       )}
@@ -1413,56 +1417,62 @@ function GradeBtn({
 // Visual treatment for each disposition. Paired with both an icon
 // and explicit copy so color-only signal is never the whole story
 // (colorblind-safe by design).
+// Icon badge color (`iconBg`) carries the disposition valence in a
+// solid, high-contrast form. The surrounding card stays on a light
+// tint (`bg`) as soft context, but the TITLE lives in neutral
+// `text-text-primary` so it's always unambiguously readable — we
+// learned from two prior passes that light colored text on tinted
+// bg reads as washed-out regardless of contrast math.
 const INTEGRITY_STYLE: Record<
   IntegrityDisposition | "in_progress" | "needs_review" | "none",
-  { bg: string; border: string; text: string; icon: string; label: string }
+  { bg: string; border: string; iconBg: string; icon: string; label: string }
 > = {
   pass: {
     bg: "bg-green-50 dark:bg-green-900/20",
     border: "border-green-200 dark:border-green-900/40",
-    text: "text-green-800 dark:text-green-300",
+    iconBg: "bg-green-600 text-white",
     icon: "✓",
     label: "Student understood their own work",
   },
   needs_practice: {
     bg: "bg-blue-50 dark:bg-blue-900/20",
     border: "border-blue-200 dark:border-blue-900/40",
-    text: "text-blue-800 dark:text-blue-300",
+    iconBg: "bg-blue-600 text-white",
     icon: "↻",
     label: "Procedural knowledge — consider revisiting the concept",
   },
   tutor_pivot: {
     bg: "bg-amber-50 dark:bg-amber-900/20",
     border: "border-amber-200 dark:border-amber-900/40",
-    text: "text-amber-800 dark:text-amber-300",
+    iconBg: "bg-amber-600 text-white",
     icon: "?",
     label: "Student was lost — got tutored through it",
   },
   flag_for_review: {
     bg: "bg-red-50 dark:bg-red-900/20",
     border: "border-red-200 dark:border-red-900/40",
-    text: "text-red-800 dark:text-red-300",
-    icon: "🚩",
+    iconBg: "bg-red-600 text-white",
+    icon: "⚑",
     label: "Review — correct work but couldn't explain it",
   },
   needs_review: {
     bg: "bg-bg-subtle",
     border: "border-border-light",
-    text: "text-text-muted",
+    iconBg: "bg-gray-400 text-white dark:bg-gray-500",
     icon: "◌",
     label: "Inconclusive — teacher review",
   },
   in_progress: {
     bg: "bg-bg-subtle",
     border: "border-border-light",
-    text: "text-text-muted",
+    iconBg: "bg-gray-400 text-white dark:bg-gray-500",
     icon: "…",
     label: "Integrity check running",
   },
   none: {
     bg: "bg-bg-subtle",
     border: "border-border-light",
-    text: "text-text-muted",
+    iconBg: "bg-gray-400 text-white dark:bg-gray-500",
     icon: "·",
     label: "Couldn't determine",
   },
@@ -1519,22 +1529,29 @@ function IntegrityBanner({
         aria-live="polite"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className={`text-sm font-bold ${style.text}`}>
-              <span className="mr-1.5" aria-hidden>{style.icon}</span>
-              {style.label}
-            </p>
-            {summary && (
-              <p className="mt-1.5 text-xs leading-relaxed text-text-primary">
-                {summary}
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${style.iconBg}`}
+              aria-hidden
+            >
+              {style.icon}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-bold text-text-primary">
+                {style.label}
               </p>
-            )}
-            {inProgress && overviewFallback && (
-              <p className="mt-1.5 text-xs text-text-muted">
-                {overviewFallback.complete_count} of{" "}
-                {overviewFallback.problem_count} sampled problems graded.
-              </p>
-            )}
+              {summary && (
+                <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  {summary}
+                </p>
+              )}
+              {inProgress && overviewFallback && (
+                <p className="mt-1.5 text-xs text-text-muted">
+                  {overviewFallback.complete_count} of{" "}
+                  {overviewFallback.problem_count} sampled problems graded.
+                </p>
+              )}
+            </div>
           </div>
           {hasTranscript && (
             <button
@@ -1678,31 +1695,32 @@ function PerProblemVerdict({
   problem: TeacherIntegrityDetail["problems"][number];
 }) {
   // Per-problem display is driven by rubric presence, not a per-problem
-  // disposition (which lives at session level). Absent rubric means
-  // pending / dismissed / skipped — use the neutral "none" style.
-  const style = problem.rubric ? INTEGRITY_STYLE.pass : INTEGRITY_STYLE.none;
-  const label = problem.rubric
-    ? "Verdicted"
+  // disposition (which lives at session level). The card stays neutral
+  // regardless of rubric content — a small status pill carries the
+  // categorical info ("Verdicted" / "Dismissed" / "Skipped" / "Pending")
+  // and the AI reasoning below carries the actual signal. Previously the
+  // card used the pass-disposition green tint on every verdicted problem
+  // which incorrectly implied "good" for shallow rubrics too.
+  const pill = problem.rubric
+    ? { label: "Verdicted", cls: "bg-green-100 text-green-900 dark:bg-green-500/20 dark:text-green-200" }
     : problem.status === "dismissed"
-      ? "Dismissed by teacher"
+      ? { label: "Dismissed by teacher", cls: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-200" }
       : problem.status === "skipped_unreadable"
-        ? "Skipped — unreadable"
-        : "Pending";
+        ? { label: "Skipped — unreadable", cls: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-200" }
+        : { label: "Pending", cls: "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300" };
   return (
-    <div
-      className={`rounded-[--radius-md] border ${style.border} ${style.bg} px-3 py-2`}
-    >
-      <p className="flex items-center gap-1.5 text-xs font-semibold">
-        <span className={style.text}>
-          {style.icon} {label}
-        </span>
-      </p>
-      <p className="mt-1 text-xs text-text-primary">
+    <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2">
+      <span
+        className={`inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[11px] font-bold ${pill.cls}`}
+      >
+        {pill.label}
+      </span>
+      <p className="mt-2 text-sm leading-relaxed text-text-primary">
         <MathText text={problem.question} />
       </p>
       {problem.ai_reasoning && (
-        <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
-          {problem.ai_reasoning}
+        <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+          <MathText text={problem.ai_reasoning} />
         </p>
       )}
     </div>

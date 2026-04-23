@@ -1560,6 +1560,84 @@ async def test_finish_check_rejects_variant_result_without_variant_used(
         )
 
 
+async def test_finish_check_rejects_when_agent_asked_question_same_turn(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Guard against the "ask a question and finalize in one breath"
+    bug. When the agent's response text ends with "?", finish_check
+    must be rejected so the check doesn't close with an outstanding
+    question the student never got to answer."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    # Agent emits a follow-up question + verdict + finish_check all
+    # in one response. Guard should reject the finalize.
+    set_agent_script([
+        [
+            make_text("And where did the 2 and 12 come from?"),
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
+                    "reasoning": "Good signal.",
+                },
+                use_id="uv1",
+            ),
+            make_tool_use(
+                "finish_check",
+                {
+                    "disposition": "pass",
+                    "summary": "Looked good.",
+                    "inline_variant_result": "not_applicable",
+                },
+                use_id="uf1",
+            ),
+        ],
+        # After rejection, agent falls back to plain text (still
+        # waiting on the student's answer).
+        [make_text("Sorry — take your time.")],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I did 2+12 but not sure why."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Check must NOT be complete — finalize was rejected.
+        assert check.status != "complete"
+        assert check.disposition is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "outstanding question" in t.content for t in tool_results
+        )
+
+
 # ── Telemetry ──────────────────────────────────────────────────────
 
 

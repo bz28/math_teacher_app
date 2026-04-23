@@ -128,6 +128,122 @@ function RubricDisplay({ rubric }: { rubric: IntegrityRubric }) {
   );
 }
 
+// ── Behavioral evidence summary (aggregated telemetry) ──
+
+/** Format milliseconds as "Xm Ys" or "Ys" for short intervals. */
+function formatMs(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s === 0 ? `${m}m` : `${m}m ${s}s`;
+}
+
+/**
+ * Aggregates behavioral telemetry across all student turns into a
+ * compact summary: total tab-outs + away-time, paste count + largest,
+ * cadence anomalies, need-more-time signal, device hint. Hides
+ * entirely when no student turn carries telemetry (older submissions
+ * from pre-telemetry, or checks that completed via skipped_unreadable
+ * / turn cap with no student messages).
+ *
+ * Visual treatment: neutral-styled for non-flag dispositions (signals
+ * are context), amber-tinted border for flag_for_review (signals are
+ * evidence the teacher is there to evaluate).
+ */
+function BehavioralEvidence({
+  transcript,
+  disposition,
+}: {
+  transcript: TeacherIntegrityTranscriptTurn[];
+  disposition: IntegrityDisposition | null;
+}) {
+  const studentTurns = transcript.filter((t) => t.role === "student");
+  const withTelemetry = studentTurns.filter((t) => t.telemetry != null);
+  if (withTelemetry.length === 0) return null;
+
+  // Aggregate across all student turns.
+  let blurCount = 0;
+  let blurTotalMs = 0;
+  let pasteCount = 0;
+  let largestPaste = 0;
+  let cadencePauses = 0;
+  let cadenceEdits = 0;
+  let needMoreTime = false;
+  let device: "desktop" | "mobile" | null = null;
+
+  for (const t of withTelemetry) {
+    const tel = t.telemetry;
+    if (!tel) continue;
+    for (const ev of tel.focus_blur_events) {
+      blurCount += 1;
+      blurTotalMs += ev.duration_ms;
+    }
+    for (const ev of tel.paste_events) {
+      pasteCount += 1;
+      if (ev.byte_count > largestPaste) largestPaste = ev.byte_count;
+    }
+    if (tel.typing_cadence) {
+      cadencePauses += tel.typing_cadence.pauses_over_3s;
+      cadenceEdits += tel.typing_cadence.edits;
+    }
+    if (tel.need_more_time_used) needMoreTime = true;
+    if (tel.device_type) device = tel.device_type;
+  }
+
+  const flagged = disposition === "flag_for_review";
+  return (
+    <div
+      className={cn(
+        "rounded-[--radius-sm] border px-3 py-2 text-xs",
+        flagged
+          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+          : "border-border-light bg-bg-subtle text-text-secondary",
+      )}
+    >
+      <div className="mb-1 text-[11px] font-bold uppercase tracking-wide">
+        Behavioral signals
+      </div>
+      <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5">
+        <dt className="opacity-70">Tabbed away</dt>
+        <dd className="font-medium">
+          {blurCount === 0
+            ? "never"
+            : `${blurCount}× (${formatMs(blurTotalMs)} total)`}
+        </dd>
+
+        <dt className="opacity-70">Paste events</dt>
+        <dd className="font-medium">
+          {pasteCount === 0
+            ? "none"
+            : `${pasteCount} (largest ${largestPaste} chars)`}
+        </dd>
+
+        <dt className="opacity-70">Cadence</dt>
+        <dd className="font-medium">
+          {cadencePauses === 0 && cadenceEdits === 0
+            ? "steady typing"
+            : `${cadencePauses} long pauses, ${cadenceEdits} edits`}
+        </dd>
+
+        {needMoreTime && (
+          <>
+            <dt className="opacity-70">Asked for more time</dt>
+            <dd className="font-medium">yes</dd>
+          </>
+        )}
+
+        {device && (
+          <>
+            <dt className="opacity-70">Device</dt>
+            <dd className="font-medium">{device}</dd>
+          </>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 // ── Integrity detail section (expandable inside submission detail) ──
 
 function IntegritySection({ submissionId }: { submissionId: string }) {
@@ -238,6 +354,11 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
               </span>
             </p>
           )}
+
+          <BehavioralEvidence
+            transcript={data.transcript}
+            disposition={data.disposition}
+          />
 
           {data.problems.map((p) => (
             <ProblemCard

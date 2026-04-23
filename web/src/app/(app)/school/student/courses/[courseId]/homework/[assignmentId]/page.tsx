@@ -479,9 +479,12 @@ function PublishedGradePanel({ entry }: { entry: StudentProblemFeedback }) {
         <span className="font-normal text-text-muted">· {percent}%</span>
       </p>
       {entry.feedback && (
-        <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-text-primary">
-          {entry.feedback}
-        </p>
+        // Published feedback often references specific steps with
+        // math ($-17$, $\begin{pmatrix}...$) — render through MathText
+        // so students see formatted math instead of raw LaTeX.
+        <div className="mt-1.5 break-words text-sm leading-relaxed text-text-primary">
+          <MathText text={entry.feedback} />
+        </div>
       )}
     </div>
   );

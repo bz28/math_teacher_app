@@ -6,6 +6,7 @@ import {
   type IntegrityStateResponse,
   type IntegrityTurn,
 } from "@/lib/api";
+import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
@@ -68,6 +69,10 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const lastActivityRef = useRef<number>(Date.now());
   const [nudgeVisible, setNudgeVisible] = useState(false);
   const [timeoutDoubled, setTimeoutDoubled] = useState(false);
+  // Reference panel: collapsed by default so the chat feels focused.
+  // When the agent is asking about a specific step, the student can
+  // expand to see the original problem + their extracted work.
+  const [referenceOpen, setReferenceOpen] = useState(false);
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -252,6 +257,60 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         </div>
       )}
 
+      {/* Reference panel: the agent is asking about specific steps
+          the student wrote, so give them a way to see the original
+          problem + what the reader extracted. Collapsed by default
+          to keep chat focused; students tap "View my work" to pop
+          it open, tap again to close. */}
+      {state && state.problems.length > 0 && (
+        <div className="border-b border-border-light px-2">
+          <button
+            type="button"
+            onClick={() => setReferenceOpen((v) => !v)}
+            className="flex w-full items-center gap-2 py-2 text-xs font-semibold text-text-secondary hover:text-primary"
+          >
+            <span className="text-[10px]">
+              {referenceOpen ? "▼" : "▶"}
+            </span>
+            {referenceOpen ? "Hide my work" : "View my work"}
+          </button>
+          {referenceOpen && (
+            <div className="space-y-3 pb-3">
+              {state.problems.map((p) => (
+                <div
+                  key={p.problem_id}
+                  className="space-y-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2"
+                >
+                  {p.question && (
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                        Problem {p.sample_position + 1}
+                      </div>
+                      <div className="mt-0.5 text-sm text-text-primary">
+                        <MathText text={p.question} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {state.extraction && (
+                <div className="rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                    Your work (as we read it)
+                  </div>
+                  <div className="mt-1">
+                    <ExtractionView
+                      extraction={state.extraction}
+                      variant="compact"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         ref={scrollRef}
         className="flex-1 space-y-3 overflow-y-auto px-2 py-4"
@@ -259,8 +318,22 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         {visibleTranscript.map((t) => (
           <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
         ))}
-        {sending && pendingStudentMessage === null && (
-          <div className="text-xs text-text-muted">Thinking…</div>
+        {/* Animated "AI is thinking" indicator shown while we're
+            waiting on the /turn round-trip. Appears right after the
+            optimistic student message so the chat flow reads
+            student → thinking → agent reply. Matches the pattern
+            used in the teacher workshop agent. */}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
+              <span className="inline-flex gap-1">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+              </span>
+              AI is thinking…
+            </div>
+          </div>
         )}
       </div>
 
@@ -398,13 +471,25 @@ function TurnBubble({ turn }: { turn: IntegrityTurn }) {
     <div className={cn("flex", isStudent ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[85%] whitespace-pre-wrap rounded-[--radius-md] px-3 py-2 text-sm",
+          "max-w-[85%] rounded-[--radius-md] px-3 py-2 text-sm",
           isStudent
-            ? "bg-primary text-white"
+            ? "whitespace-pre-wrap bg-primary text-white"
             : "border border-border bg-surface text-text-primary",
         )}
       >
-        {turn.content}
+        {isStudent ? (
+          turn.content
+        ) : (
+          // Agent messages routinely contain LaTeX (matrix notation,
+          // fractions), **bold** markdown, and occasionally SVG /
+          // chem diagrams. MathText renders inline + display math,
+          // bolded spans, and svg blocks; falls back to plain text
+          // on parse failure so malformed output never breaks a bubble.
+          // Student messages stay as plain text — typing cadence
+          // matters for the telemetry signal and a Markdown-rendered
+          // student input would be weird.
+          <MathText text={turn.content} />
+        )}
       </div>
     </div>
   );
