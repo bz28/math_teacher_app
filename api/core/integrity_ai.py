@@ -69,25 +69,67 @@ def _strip_data_url_prefix(data: str) -> tuple[str, str]:
 
 _EXTRACT_SYSTEM = """\
 You are a world-class math professor examining a student's handwritten homework submission. \
-Your task is to extract the student's work steps from the image into structured data.
+Your task is to extract the student's work steps from the image into structured data \
+AND attribute each step to the homework problem it belongs to so downstream grading \
+can compare the right work against the right answer key.
 
 Rules:
 - List every distinct step the student wrote, in order from top to bottom.
 - For each step, provide both the LaTeX representation and a plain-English description.
+- **Attribute each step to a problem**: set `problem_position` to the 1-based index of \
+the homework problem the step belongs to (as shown in the problem list in the user \
+message). Use spatial cues (student-written labels like "1.", "Problem 2:", "(a)"; \
+adjacency on the page; visual separation) AND content cues (does the math match the \
+question?). Set `problem_position` to null only when the step genuinely can't be \
+attributed — scratch work, cross-problem setup, notes to themselves. Don't guess \
+when unsure; null is the honest answer.
+- **Extract final answers per problem**: whenever the student wrote something that \
+reads as a concluding answer for a problem (circled, boxed, on the "answer" line, or \
+the last step of that problem's work), include a `final_answers` entry with the \
+problem's position and the answer in LaTeX + plain English. Omit problems that have \
+no discernible final answer.
+- **Ignore printed worksheet text.** Skip anything pre-printed on the page (problem \
+statements, "Name:", "Date:", instructions). Only extract what the student handwrote.
 - If the handwriting is illegible or the image is blurry, set confidence low (below 0.3).
 - If you can read most of it but some parts are unclear, set confidence between 0.3 and 0.7.
 - If everything is clear, set confidence above 0.7.
 - Do NOT solve the problem yourself — only extract what the student actually wrote."""
 
 
+def _format_problems_briefing(problems: list[dict[str, Any]] | None) -> str:
+    """Render the problem list as a numbered briefing Vision can cite by
+    position when tagging steps. Empty when no problems are provided —
+    caller falls back to untagged extraction behavior."""
+    if not problems:
+        return ""
+    lines = ["The homework has these problems (use these positions when tagging):"]
+    for p in problems:
+        pos = p.get("position")
+        question = p.get("question") or "(no question text)"
+        lines.append(f"Problem {pos}: {question}")
+    return "\n".join(lines) + "\n\n"
+
+
 async def extract_student_work(
     submission_id: uuid.UUID,
     db: AsyncSession,
     *,
+    problems: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
 ) -> dict[str, Any]:
-    """Call Claude Vision to extract the student's work steps from
-    their uploaded homework photo.
+    """Call Claude Vision to extract the student's work from their
+    uploaded homework photo, optionally attributing each step to a
+    homework problem.
+
+    When `problems` is provided (list of
+    `{position, question, final_answer, ...}` dicts from
+    `load_problems_for_assignment`), Vision sees them as context and
+    tags each step's `problem_position` + emits a `final_answers`
+    list per problem. When omitted, the result still conforms to the
+    schema but `problem_position` will be null and `final_answers`
+    will be empty — useful for callers that don't have the HW
+    context (e.g. the unreadable-gate fallback before the caller
+    knows which assignment it's dealing with).
 
     `user_id` is forwarded to the cost-tracking logger so the admin
     dashboard can attribute Vision calls to the student instead of
@@ -101,9 +143,17 @@ async def extract_student_work(
         logger.warning(
             "extract_student_work: no image for submission %s", submission_id,
         )
-        return {"steps": [], "confidence": 0.0}
+        return {"steps": [], "final_answers": [], "confidence": 0.0}
 
     base64_data, media_type = _strip_data_url_prefix(image_data)
+
+    briefing = _format_problems_briefing(problems)
+    instruction = (
+        "Extract the student's handwritten work from this homework submission. "
+        "List each step they wrote, in order, and tag each step with the "
+        "problem_position it belongs to. Extract each problem's final answer "
+        "when the student wrote one."
+    )
 
     content: list[dict[str, Any]] = [
         {
@@ -116,10 +166,7 @@ async def extract_student_work(
         },
         {
             "type": "text",
-            "text": (
-                "Extract the student's handwritten work from this homework submission. "
-                "List each step they wrote, in order."
-            ),
+            "text": briefing + instruction if briefing else instruction,
         },
     ]
 

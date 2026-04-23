@@ -315,7 +315,15 @@ async def start_integrity_check(
     user_id = str(submission.student_id)
 
     if extraction is None:
-        extraction = await extract_student_work(submission_id, db, user_id=user_id)
+        # Fallback extraction (caller didn't pre-extract). Build the
+        # problems briefing from the same candidate pool the selection
+        # algorithm just scored so Vision sees the HW's problem list
+        # and tags each step with a problem_position.
+        from api.services.bank import load_problems_for_assignment
+        problems = await load_problems_for_assignment(db, assignment)
+        extraction = await extract_student_work(
+            submission_id, db, problems=problems, user_id=user_id,
+        )
     confidence = extraction.get("confidence", 0.0)
     if confidence < UNREADABLE_THRESHOLD:
         logger.info(

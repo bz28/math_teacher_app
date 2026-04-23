@@ -28,8 +28,7 @@ from api.core.llm_client import (
 )
 from api.core.llm_schemas import AI_GRADING_SCHEMA
 from api.models.assignment import Assignment, Submission, SubmissionGrade
-from api.models.question_bank import QuestionBankItem
-from api.services.bank import problem_ids_in_content
+from api.services.bank import load_problems_for_assignment
 
 logger = logging.getLogger(__name__)
 
@@ -240,35 +239,7 @@ async def run_ai_grading_for_submission(
     if not assignment:
         return
 
-    pid_strs = problem_ids_in_content(assignment.content)
-    if not pid_strs:
-        return
-
-    pid_uuids = []
-    for s in pid_strs:
-        try:
-            pid_uuids.append(uuid.UUID(str(s)))
-        except (ValueError, TypeError):
-            continue
-    if not pid_uuids:
-        return
-
-    items = (await db.execute(
-        select(QuestionBankItem).where(QuestionBankItem.id.in_(pid_uuids))
-    )).scalars().all()
-    items_by_id = {it.id: it for it in items}
-
-    problems = []
-    for pos, pid in enumerate(pid_uuids, 1):
-        item = items_by_id.get(pid)
-        if not item:
-            continue
-        problems.append({
-            "position": pos,
-            "bank_item_id": str(pid),
-            "question": item.question,
-            "final_answer": item.final_answer,
-        })
+    problems = await load_problems_for_assignment(db, assignment)
     if not problems:
         return
 

@@ -1150,6 +1150,7 @@ async def regrade_submission(
     """
     from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
+    from api.services.bank import load_problems_for_assignment
 
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
@@ -1172,7 +1173,13 @@ async def regrade_submission(
     # the admin dashboard can distinguish student-submission grades
     # from teacher-triggered regrades and spot any over-use.
     actor_id = str(current_user.user_id)
-    extraction = await extract_student_work(sub.id, db, user_id=actor_id)
+    # Re-run extraction with the HW's problems as context so Vision
+    # re-tags per-problem attribution against any problem edits the
+    # teacher has made since the original grading run.
+    problems = await load_problems_for_assignment(db, assignment)
+    extraction = await extract_student_work(
+        sub.id, db, problems=problems, user_id=actor_id,
+    )
     await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )

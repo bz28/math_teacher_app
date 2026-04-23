@@ -144,6 +144,48 @@ async def hydrate_assignment_content(
     return {"problems": problems}
 
 
+async def load_problems_for_assignment(
+    db: AsyncSession, assignment: Assignment,
+) -> list[dict[str, Any]]:
+    """Resolve an assignment's problem list into a hydrated
+    `[{position, bank_item_id, question, final_answer}]` in 1-based
+    order, dropping any IDs that no longer reference a bank item.
+
+    Shared by the Vision extraction call (to feed Vision the problems
+    as context so it can attribute each step to a problem) and the
+    AI grader (to build the answer-key section of the user message).
+    Both consumers need identical ordering to keep position references
+    consistent across calls.
+    """
+    pid_strs = problem_ids_in_content(assignment.content)
+    if not pid_strs:
+        return []
+    pid_uuids: list[uuid.UUID] = []
+    for s in pid_strs:
+        try:
+            pid_uuids.append(uuid.UUID(str(s)))
+        except (ValueError, TypeError):
+            continue
+    if not pid_uuids:
+        return []
+    rows = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id.in_(pid_uuids))
+    )).scalars().all()
+    by_id = {it.id: it for it in rows}
+    out: list[dict[str, Any]] = []
+    for pos, pid in enumerate(pid_uuids, 1):
+        item = by_id.get(pid)
+        if not item:
+            continue
+        out.append({
+            "position": pos,
+            "bank_item_id": str(pid),
+            "question": item.question,
+            "final_answer": item.final_answer,
+        })
+    return out
+
+
 def problem_ids_in_content(content: Any) -> list[str]:
     """Extract bank item IDs from an assignment content dict, handling
     both the new and legacy shapes."""
