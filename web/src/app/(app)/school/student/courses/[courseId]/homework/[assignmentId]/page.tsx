@@ -22,6 +22,7 @@ import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
 import { SubmissionExtractionConfirmView } from "@/components/school/student/submission-extraction-confirm-view";
+import { ExtractionFlaggedTerminalView } from "@/components/school/student/extraction-flagged-terminal-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
 import { AssignmentTimeline } from "@/components/school/student/assignment-timeline";
 import type { IntegrityExtraction } from "@/lib/api";
@@ -45,7 +46,11 @@ type Mode =
       extraction: IntegrityExtraction;
       imageDataUrl: string;
     }
-  | { kind: "integrity_chat" };
+  | { kind: "integrity_chat" }
+  /** Student flagged "reader got something wrong" on the confirm
+   *  screen. Submission is routed to the teacher for manual
+   *  grading; no AI calls run. Terminal — nothing else to do. */
+  | { kind: "extraction_flagged" };
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
@@ -76,6 +81,16 @@ export default function HomeworkPage() {
           schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
         ]);
         if (sub) setSubmission(sub);
+
+        // Terminal: student flagged the extraction. Submission is
+        // with the teacher for manual grading; no integrity or
+        // grading ran. Takes precedence over integrity routing
+        // because nothing downstream happened.
+        if (sub?.extraction_flagged_at != null) {
+          setMode({ kind: "extraction_flagged" });
+          return;
+        }
+
         if (integrity) {
           // Auto-route based on integrity state:
           //   "extracting"       → show the preparing screen + poll
@@ -284,11 +299,17 @@ export default function HomeworkPage() {
           setMode({ kind: "integrity_chat" });
         }}
         onFlagged={() => {
-          setConfirmedThisSession(true);
-          setMode({ kind: "integrity_chat" });
+          // Flag skips grading + integrity. Submission's already in
+          // the teacher's inbox for manual grading — show the
+          // terminal screen and leave the student there.
+          setMode({ kind: "extraction_flagged" });
         }}
       />
     );
+  }
+
+  if (mode.kind === "extraction_flagged") {
+    return <ExtractionFlaggedTerminalView />;
   }
 
   if (mode.kind === "integrity_chat" && hw.submission_id) {

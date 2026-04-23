@@ -342,6 +342,13 @@ class StudentSubmissionDetail(BaseModel):
     # integrity and AI grading disabled (no extraction to run). The
     # student confirm screen groups this by problem_position.
     extraction: dict[str, Any] | None
+    # Mutually-exclusive terminal signals from the confirm screen.
+    # Both null = "student still on confirm screen".
+    #   confirmed  → AI grading + integrity kicked off.
+    #   flagged    → student said reader got it wrong; teacher grades
+    #                manually, no AI calls run.
+    extraction_confirmed_at: datetime | None
+    extraction_flagged_at: datetime | None
 
 
 # ── Dashboard / grades shapes ──
@@ -1110,6 +1117,11 @@ async def confirm_extraction(
             status_code=409,
             detail="Extraction hasn't finished yet — nothing to confirm",
         )
+    if sub.extraction_flagged_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission already flagged for manual grading",
+        )
     if sub.extraction_confirmed_at is not None:
         # Idempotent: duplicate click (double-tap, refresh mid-request)
         # is a no-op so we don't double-spawn grading.
@@ -1121,6 +1133,54 @@ async def confirm_extraction(
     _spawn_background_task(
         _run_integrity_and_grading_background(sub.id),
     )
+    return {"status": "ok"}
+
+
+@router.post("/submissions/{submission_id}/flag-extraction")
+async def flag_extraction_submission(
+    submission_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Student said "Reader got something wrong" on the confirm screen.
+
+    Stamps `extraction_flagged_at` and sends the submission straight
+    to the teacher for manual grading — does NOT spawn integrity or
+    AI grading. No further AI calls run on this submission.
+
+    Rejects:
+      • 404 if the submission doesn't exist.
+      • 403 if it belongs to another student.
+      • 409 if extraction hasn't finished (nothing to flag yet).
+      • 409 if the student already confirmed (can't flag after
+        confirm — integrity + grading may have already fired).
+
+    Idempotent on re-flag: duplicate call returns 200 no-op.
+    """
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    if sub.extraction is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Extraction hasn't finished yet — nothing to flag",
+        )
+    if sub.extraction_confirmed_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission already confirmed — can't flag now",
+        )
+    if sub.extraction_flagged_at is not None:
+        return {"status": "ok", "already_flagged": "true"}
+
+    sub.extraction_flagged_at = datetime.now(UTC)
+    await db.commit()
+    # Intentionally NO _spawn_background_task — flagging is the
+    # "skip AI, teacher handles it" path.
     return {"status": "ok"}
 
 
@@ -1155,6 +1215,8 @@ async def get_my_submission(
         image_data=sub.image_data,
         final_answers=dict(sub.final_answers or {}),
         extraction=sub.extraction,
+        extraction_confirmed_at=sub.extraction_confirmed_at,
+        extraction_flagged_at=sub.extraction_flagged_at,
     )
 
 

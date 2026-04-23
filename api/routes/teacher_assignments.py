@@ -833,11 +833,15 @@ async def submissions_inbox(
             else_=0,
         ),
     ).cast(Integer).label("published")
-    # "Flagged" here = submissions that need teacher attention: agent
-    # emitted flag_for_review, OR extraction was unreadable (teacher
-    # decides what to do), OR the check finalized without a disposition
-    # (turn cap / no sampled problems — teacher reviews inconclusive).
-    # pass / needs_practice / tutor_pivot are all teacher-facing notes
+    # "Flagged" here = submissions that need teacher attention:
+    #   • agent emitted flag_for_review
+    #   • extraction was unreadable (teacher decides what to do)
+    #   • the check finalized without a disposition (turn cap / no
+    #     sampled problems — teacher reviews inconclusive)
+    #   • student raised "Reader got something wrong" before confirm,
+    #     routing the submission straight to manual grading with no
+    #     AI calls downstream
+    # pass / needs_practice / tutor_pivot are teacher-facing notes
     # but not "flagged" for attention.
     flagged_expr = func.sum(
         case(
@@ -850,6 +854,7 @@ async def submissions_inbox(
                 ),
                 1,
             ),
+            (Submission.extraction_flagged_at.is_not(None), 1),
             else_=0,
         ),
     ).cast(Integer).label("flagged")
@@ -1007,6 +1012,13 @@ async def list_submissions(
             "grade_dirty": _is_grade_dirty(grade),
             "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
             "integrity_overview": integrity_overview,
+            # Student flagged "reader got something wrong" on the
+            # post-submit confirm screen. When set, no AI grading or
+            # integrity has run — teacher grades manually.
+            "extraction_flagged_at": (
+                sub.extraction_flagged_at.isoformat()
+                if sub.extraction_flagged_at else None
+            ),
         })
 
     return {"submissions": submissions}
