@@ -286,7 +286,8 @@ def build_problems_briefing(
       - problem_id: UUID string (what the agent passes to submit_problem_verdict)
       - sample_position: 0-based index
       - question: bank item question text
-      - extraction: dict with `steps` and `confidence`
+      - extraction: dict with `steps`, `final_answers`, and `confidence`
+        (now pre-sliced to just this problem's work)
       - verdict_status: "pending" | "verdict_submitted"
     """
     lines: list[str] = [
@@ -301,8 +302,9 @@ def build_problems_briefing(
             f"(problem_id: {p['problem_id']}) ---",
         )
         lines.append(f"Question: {p['question']}")
+        extraction = p.get("extraction") or {}
         lines.append("Student's extracted work:")
-        steps = (p.get("extraction") or {}).get("steps") or []
+        steps = extraction.get("steps") or []
         if not steps:
             lines.append("  (no legible steps)")
         else:
@@ -312,6 +314,18 @@ def build_problems_briefing(
                     f"{s.get('plain_english', '')} "
                     f"[{s.get('latex', '')}]",
                 )
+        # Student's final answer on this problem, when Vision extracted
+        # one. Separated from the step list so the agent can probe it
+        # as a conclusion rather than mistake it for another step.
+        final_answers = extraction.get("final_answers") or []
+        if final_answers:
+            fa = final_answers[0]  # slice is per-problem so ≤1 entry
+            answer = (
+                fa.get("answer_latex")
+                or fa.get("answer_plain")
+                or "(no answer)"
+            )
+            lines.append(f"Student's final answer: {answer}")
         status = p.get("verdict_status", "pending")
         lines.append(f"Current verdict: {status}")
     return "\n".join(lines)

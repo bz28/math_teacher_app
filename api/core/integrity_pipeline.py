@@ -211,6 +211,43 @@ def select_probe_problems(
     return ([p.id for p in picked], SELECTION_REASON_HIGHEST_DIFFERENTIATION)
 
 
+def _slice_extraction_for_problem(
+    extraction: dict[str, Any], hw_position: int,
+) -> dict[str, Any]:
+    """Return a new extraction dict filtered down to a single
+    problem's work — the steps Vision attributed to that problem
+    (by problem_position) plus any unattributed scratchwork, and the
+    final answer Vision emitted for that problem.
+
+    Unattributed steps (problem_position=None) are kept as context:
+    cross-problem setup, scratch calculations, and notes the agent
+    might reasonably probe about are still potentially relevant.
+    Steps explicitly attributed to OTHER problems are dropped —
+    including them would mislabel another problem's work as the
+    current problem's work in the agent's briefing.
+
+    Preserves the extraction's top-level shape (steps / final_answers /
+    confidence + any extra fields) so downstream consumers that read
+    the stored blob keep working unchanged.
+    """
+    steps = extraction.get("steps") or []
+    sliced_steps = [
+        s for s in steps
+        if s.get("problem_position") is None
+        or s.get("problem_position") == hw_position
+    ]
+    final_answers = extraction.get("final_answers") or []
+    sliced_finals = [
+        fa for fa in final_answers
+        if fa.get("problem_position") == hw_position
+    ]
+    return {
+        **extraction,
+        "steps": sliced_steps,
+        "final_answers": sliced_finals,
+    }
+
+
 # ── Pipeline start (called from submit_homework's background task) ──
 
 async def start_integrity_check(
@@ -301,6 +338,16 @@ async def start_integrity_check(
         # handle the submission without an integrity trace.
         return
 
+    # Map bank_item_id → 1-based HW position. Position = index in the
+    # assignment's problem_ids list + 1 (matching `problem_position`
+    # on the extraction). Used below to slice the extraction down to
+    # just the sampled problem's work before persisting — the agent
+    # should see only the problem it's probing, not noise from other
+    # problems on the page.
+    hw_position_by_id: dict[uuid.UUID, int] = {
+        cid: idx + 1 for idx, cid in enumerate(candidate_uuids)
+    }
+
     check = IntegrityCheckSubmission(
         submission_id=submission_id,
         status=STATUS_EXTRACTING,
@@ -331,12 +378,19 @@ async def start_integrity_check(
             confidence, submission_id,
         )
         for sample_position, bid in enumerate(picked_ids):
+            # Unreadable path: we still persist the extraction slice
+            # on the row for the teacher's "What the reader got" panel,
+            # but scoped to this problem — matches readable-path
+            # behavior and keeps the teacher view consistent.
+            problem_slice = _slice_extraction_for_problem(
+                extraction, hw_position_by_id.get(bid, sample_position + 1),
+            )
             db.add(IntegrityCheckProblem(
                 integrity_check_submission_id=check.id,
                 bank_item_id=bid,
                 sample_position=sample_position,
                 status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
-                student_work_extraction=extraction,
+                student_work_extraction=problem_slice,
                 selected_reason=selection_reason,
             ))
         # Unreadable submissions: status carries the meaning, disposition
@@ -348,12 +402,21 @@ async def start_integrity_check(
 
     problem_rows: list[IntegrityCheckProblem] = []
     for sample_position, bid in enumerate(picked_ids):
+        # Slice the extraction down to just this problem's work
+        # before persisting. Before slicing, every sampled problem
+        # row stored the full extraction (all problems' steps), so
+        # the agent's briefing fed it work from problems it wasn't
+        # probing. Now the row carries only the sampled problem's
+        # steps + final answer, plus any unattributed scratchwork.
+        problem_slice = _slice_extraction_for_problem(
+            extraction, hw_position_by_id.get(bid, sample_position + 1),
+        )
         row = IntegrityCheckProblem(
             integrity_check_submission_id=check.id,
             bank_item_id=bid,
             sample_position=sample_position,
             status=PROBLEM_STATUS_PENDING,
-            student_work_extraction=extraction,
+            student_work_extraction=problem_slice,
             selected_reason=selection_reason,
         )
         db.add(row)
