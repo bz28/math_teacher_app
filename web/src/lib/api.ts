@@ -1438,6 +1438,11 @@ export interface StudentSubmission {
   is_late: boolean;
   image_data: string | null;
   final_answers: Record<string, string>;
+  /** Full Vision extraction (all steps + per-problem final answers +
+   *  overall confidence). Null when extraction hasn't run, failed,
+   *  or the HW has both integrity and AI grading disabled. Drives
+   *  the post-submit confirm screen grouped by problem_position. */
+  extraction: IntegrityExtraction | null;
 }
 
 export interface SubmitHomeworkResponse {
@@ -1730,12 +1735,25 @@ export interface TeacherIntegrityTranscriptTurn {
 
 export interface IntegrityExtractionStep {
   step_num: number;
+  /** 1-based HW problem position this step belongs to. Null when the
+   *  extractor couldn't confidently attribute the step to a single
+   *  problem (scratchwork, cross-problem setup). */
+  problem_position: number | null;
   latex: string;
   plain_english: string;
 }
 
+/** One final-answer entry per HW problem that had a discernible
+ *  answer on the page. Empty when the student didn't write one. */
+export interface IntegrityExtractionFinalAnswer {
+  problem_position: number;
+  answer_latex: string;
+  answer_plain: string;
+}
+
 export interface IntegrityExtraction {
   steps: IntegrityExtractionStep[];
+  final_answers: IntegrityExtractionFinalAnswer[];
   confidence: number;
 }
 
