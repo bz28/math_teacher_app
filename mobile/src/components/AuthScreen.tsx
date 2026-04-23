@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,28 +13,33 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { LoginForm } from "./LoginForm";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface AuthScreenProps {
   onAuth: () => void;
   defaultToRegister?: boolean;
 }
 
-const GRADES = [
-  { label: "K-2", range: "Kindergarten - 2nd", value: 2 },
-  { label: "3-5", range: "3rd - 5th", value: 5 },
-  { label: "6-8", range: "6th - 8th", value: 8 },
-  { label: "9-12", range: "9th - 12th", value: 12 },
-  { label: "College", range: "Undergraduate", value: 16 },
-];
+const MIN_AGE = 13;
+const MAX_AGE = 99;
+const DEFAULT_AGE = 13;
+const TOTAL_STEPS = 3;
 
-type RegisterStep = "name" | "grade" | "credentials";
+// Derive backend grade_level from age. Three buckets match the old grade picker.
+function ageToGradeLevel(age: number): number {
+  if (age <= 14) return 8;   // middle school (6-8)
+  if (age <= 18) return 12;  // high school (9-12)
+  return 16;                  // college / adult
+}
+
+type RegisterStep = "name" | "age" | "credentials";
 
 export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
@@ -43,7 +47,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   // Form state
   const [name, setName] = useState("");
-  const [selectedGrade, setSelectedGrade] = useState<typeof GRADES[number] | null>(null);
+  const [age, setAge] = useState<number>(DEFAULT_AGE);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -54,11 +58,10 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     if (!name.trim()) return;
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRegisterStep("grade");
+    setRegisterStep("age");
   };
 
-  const handleGradeNext = () => {
-    if (!selectedGrade) return;
+  const handleAgeNext = () => {
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRegisterStep("credentials");
@@ -77,7 +80,8 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     try {
       const normalizedEmail = email.trim().toLowerCase();
       await checkEmail(normalizedEmail);
-      const resp = await register(normalizedEmail, password, name.trim(), selectedGrade!.value);
+      const gradeLevel = ageToGradeLevel(age);
+      const resp = await register(normalizedEmail, password, name.trim(), gradeLevel);
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -96,7 +100,9 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     setError(null);
   };
 
-  const stepNumber = registerStep === "name" ? 1 : registerStep === "grade" ? 2 : 3;
+  const stepNumber =
+    registerStep === "name" ? 1 :
+    registerStep === "age" ? 2 : 3;
 
   // ── Login ──────────────────────────────────────────────
   if (isLogin) {
@@ -114,13 +120,13 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     />;
   }
 
-  // ── Register Step 2: Grade ─────────────────────────────
-  if (registerStep === "grade") {
-    return <GradeStep
+  // ── Register Step 2: Age ───────────────────────────────
+  if (registerStep === "age") {
+    return <AgeStep
       name={name}
-      selectedGrade={selectedGrade}
-      onGradeSelect={setSelectedGrade}
-      onNext={handleGradeNext}
+      age={age}
+      onAgeChange={setAge}
+      onNext={handleAgeNext}
       onBack={() => setRegisterStep("name")}
       stepNumber={stepNumber}
     />;
@@ -138,7 +144,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
     loading={loading}
     error={error}
     onSubmit={handleRegisterSubmit}
-    onBack={() => setRegisterStep("grade")}
+    onBack={() => setRegisterStep("age")}
     onSwitch={switchMode}
     stepNumber={stepNumber}
   />;
@@ -168,7 +174,7 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
         <Animated.View style={[styles.header, headerAnim]}>
           <Text style={styles.titleEmoji}>👋</Text>
           <Text style={styles.title}>What should we{"\n"}call you?</Text>
-          <StepIndicator current={stepNumber} total={3} />
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.form, inputAnim]}>
@@ -221,12 +227,12 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
   );
 }
 
-/* ── Step 2: Grade ────────────────────────────────────────── */
+/* ── Step 2: Age ─────────────────────────────────────────── */
 
-function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNumber }: {
+function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
   name: string;
-  selectedGrade: typeof GRADES[number] | null;
-  onGradeSelect: (g: typeof GRADES[number]) => void;
+  age: number;
+  onAgeChange: (n: number) => void;
   onNext: () => void;
   onBack: () => void;
   stepNumber: number;
@@ -234,12 +240,14 @@ function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNum
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
+  const pickerAnim = useFadeInUp(150, 400);
+  const buttonAnim = useFadeInUp(300, 400);
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <AnimatedPressable onPress={onBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={20} color={colors.primary} />
@@ -247,79 +255,57 @@ function GradeStep({ name, selectedGrade, onGradeSelect, onNext, onBack, stepNum
         </AnimatedPressable>
 
         <Animated.View style={[styles.header, headerAnim]}>
-          <Text style={styles.title}>Nice to meet you,{"\n"}{name.trim()}!</Text>
-          <StepIndicator current={stepNumber} total={3} />
-          <Text style={styles.subtitle}>
-            What grade are you in?
-          </Text>
+          <Text style={styles.title}>How old are you,{"\n"}{name.trim()}?</Text>
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
-        <View style={styles.gradeGrid}>
-          {GRADES.map((g, i) => (
-            <GradeCard
-              key={g.label}
-              grade={g}
-              selected={selectedGrade?.label === g.label}
-              onSelect={() => {
-                onGradeSelect(g);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              delay={100 + i * 80}
-            />
-          ))}
-        </View>
+        <Animated.View style={[styles.ageDisplayWrap, pickerAnim]}>
+          <Text style={styles.ageNumber}>{age}</Text>
+          <Text style={styles.ageUnit}>years old</Text>
+        </Animated.View>
 
-        <AnimatedPressable
-          style={[
-            { marginTop: spacing.xxl },
-            !selectedGrade && styles.buttonDisabled,
-          ]}
-          onPress={onNext}
-          disabled={!selectedGrade}
-          scaleDown={0.97}
-        >
-          <LinearGradient
-            colors={gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.primaryButton}
+        <Animated.View style={[styles.sliderWrap, pickerAnim]}>
+          <Slider
+            style={styles.slider}
+            minimumValue={MIN_AGE}
+            maximumValue={MAX_AGE}
+            step={1}
+            value={age}
+            onValueChange={(v) => {
+              const next = Math.round(v);
+              if (next !== age) {
+                onAgeChange(next);
+                Haptics.selectionAsync();
+              }
+            }}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.border}
+            thumbTintColor={colors.primary}
+          />
+          <View style={styles.sliderLabels}>
+            <Text style={styles.sliderLabel}>{MIN_AGE}</Text>
+            <Text style={styles.sliderLabel}>{MAX_AGE}</Text>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={buttonAnim}>
+          <AnimatedPressable
+            style={{ marginTop: spacing.xxl }}
+            onPress={onNext}
+            scaleDown={0.97}
           >
-            <Text style={styles.primaryButtonText}>Continue</Text>
-          </LinearGradient>
-        </AnimatedPressable>
-      </ScrollView>
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            </LinearGradient>
+          </AnimatedPressable>
+        </Animated.View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-}
-
-function GradeCard({ grade, selected, onSelect, delay }: {
-  grade: typeof GRADES[number];
-  selected: boolean;
-  onSelect: () => void;
-  delay: number;
-}) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const anim = useFadeInUp(delay, 400);
-
-  return (
-    <Animated.View style={anim}>
-      <AnimatedPressable
-        style={[styles.gradeCard, shadows.sm, selected && styles.gradeCardSelected]}
-        onPress={onSelect}
-        scaleDown={0.97}
-      >
-        <Text style={[styles.gradeLabel, selected && styles.gradeLabelSelected]}>
-          {grade.label}
-        </Text>
-        <Text style={[styles.gradeRange, selected && styles.gradeRangeSelected]}>
-          {grade.range}
-        </Text>
-        {selected && (
-          <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-        )}
-      </AnimatedPressable>
-    </Animated.View>
   );
 }
 
@@ -344,6 +330,15 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
   const formAnim = useFadeInUp(200, 400);
+  const emailRef = useRef<TextInput>(null);
+
+  // Defer keyboard popup until the fade-in/bounce settles. Without this,
+  // the header bounces in (Easing.back) at the same time KeyboardAvoidingView
+  // shoves it upward as the keyboard rises — looks janky on iOS.
+  useEffect(() => {
+    const t = setTimeout(() => emailRef.current?.focus(), 500);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -358,19 +353,19 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
 
         <Animated.View style={[styles.header, headerAnim]}>
           <Text style={styles.title}>Almost there,{"\n"}{name.trim()}!</Text>
-          <StepIndicator current={stepNumber} total={3} />
+          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.form, formAnim]}>
           <View style={styles.inputWrap}>
             <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
             <TextInput
+              ref={emailRef}
               style={styles.input}
               value={email}
               onChangeText={onEmailChange}
               placeholder="Email"
               autoCapitalize="none"
-              autoFocus
               keyboardType="email-address"
               placeholderTextColor={colors.textMuted}
             />
@@ -543,8 +538,17 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   input: {
     flex: 1,
-    padding: 14,
-    ...typography.body,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    fontWeight: "400",
+    // typography.body declares lineHeight: 24 which makes iOS TextInput
+    // render the glyph low inside the line box, so the text looks shifted
+    // down relative to the leading icon. Tightening lineHeight + disabling
+    // includeFontPadding centres the glyph cleanly.
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: "center",
     color: colors.text,
   },
   eyeButton: {
@@ -607,33 +611,40 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   error: { color: colors.error, fontSize: 14 },
 
-  // Grade
-  gradeGrid: { gap: spacing.md },
-  gradeCard: {
-    flexDirection: "row",
+  // Age picker (slider)
+  ageDisplayWrap: {
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    borderWidth: 2,
-    borderColor: colors.border,
+    paddingVertical: spacing.lg,
   },
-  gradeCardSelected: {
-    backgroundColor: colors.primaryBg,
-    borderColor: colors.primary,
+  ageNumber: {
+    fontSize: 80,
+    fontWeight: "800",
+    color: colors.primary,
+    lineHeight: 88,
   },
-  gradeLabel: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  gradeLabelSelected: { color: colors.primary },
-  gradeRange: {
-    fontSize: 14,
+  ageUnit: {
+    ...typography.body,
     color: colors.textSecondary,
-    flex: 1,
-    marginLeft: spacing.lg,
+    fontSize: 14,
+    marginTop: spacing.xs,
   },
-  gradeRangeSelected: { color: colors.primaryLight },
+  sliderWrap: {
+    paddingHorizontal: spacing.sm,
+    marginTop: spacing.md,
+  },
+  slider: {
+    width: "100%",
+    height: 40,
+  },
+  sliderLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.sm,
+    marginTop: -spacing.xs,
+  },
+  sliderLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
 });

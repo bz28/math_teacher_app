@@ -31,9 +31,18 @@ import { UpgradePrompt } from "./UpgradePrompt";
 import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { useOnboardingFlags } from "../stores/onboardingFlags";
 import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
+import { askForReviewIfAvailable } from "../services/ratings";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 import { makeSessionScreenStyles } from "./sessionScreenStyles";
+
+// Ask for an App Store rating after the user finishes this many learn-mode
+// sessions. Apple's OS-level cap (3 prompts / 365 days) and the
+// hasRequestedReview flag together ensure we only ever fire once per install.
+const REVIEW_PROMPT_AFTER_SESSIONS = 3;
+// Let confetti play before the rating sheet pops — user is interrupted less.
+const REVIEW_PROMPT_DELAY_MS = 2500;
 
 interface SessionScreenProps {
   onBack: () => void;
@@ -73,6 +82,11 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const chatsRemaining = useEntitlementStore((s) => s.chatsRemaining);
   const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
+  const completedSessionCount = useOnboardingFlags((s) => s.completedSessionCount);
+  const hasRequestedReview = useOnboardingFlags((s) => s.hasRequestedReview);
+  const incrementCompletedSessionCount = useOnboardingFlags((s) => s.incrementCompletedSessionCount);
+  const markRequestedReview = useOnboardingFlags((s) => s.markRequestedReview);
+  const didCountCompletionRef = useRef(false);
   const { show: showUpgrade, promptProps, paywallVisible: chatPaywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
 
   const isBatchMode = !!practiceBatch;
@@ -89,6 +103,35 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }, [lastResponse]);
+
+  // Count learn-mode session completions and ask for an App Store rating
+  // after REVIEW_PROMPT_AFTER_SESSIONS successful completions. Belt and
+  // suspenders:
+  //   - didCountCompletionRef blocks double-count within one mount
+  //   - session.id passed to the store makes the increment idempotent per
+  //     session even if a second caller fires elsewhere
+  //   - hasRequestedReview gates the OS prompt to once per install
+  //   - Apple's OS layer enforces 3 per 365 days on top of all that
+  useEffect(() => {
+    if (!isCompleted || didCountCompletionRef.current) return;
+    didCountCompletionRef.current = true;
+    incrementCompletedSessionCount(session?.id ?? null);
+    const nextCount = completedSessionCount + 1;
+    if (nextCount >= REVIEW_PROMPT_AFTER_SESSIONS && !hasRequestedReview) {
+      const t = setTimeout(() => {
+        markRequestedReview();
+        askForReviewIfAvailable();
+      }, REVIEW_PROMPT_DELAY_MS);
+      return () => clearTimeout(t);
+    }
+  }, [
+    isCompleted,
+    completedSessionCount,
+    hasRequestedReview,
+    incrementCompletedSessionCount,
+    markRequestedReview,
+    session?.id,
+  ]);
 
   // Auto-scroll: consolidated trigger for every state change that should
   // re-anchor the scroll view at the bottom. Covers:

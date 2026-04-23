@@ -17,10 +17,10 @@ import { useColors } from "./src/theme";
 import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
+import { useOnboardingFlags } from "./src/stores/onboardingFlags";
 import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
-
-const ONBOARDING_KEY = "onboarding_completed";
+import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
 type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "library";
 
@@ -52,6 +52,7 @@ function AppRoot() {
   const resumeSession = useSessionStore((s) => s.resumeSession);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
   const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
+  const initializeOnboardingFlags = useOnboardingFlags((s) => s.initialize);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -61,6 +62,9 @@ function AppRoot() {
 
     // Hydrate theme preference from secure storage (best-effort)
     loadThemePref().catch(() => {});
+    // Hydrate first-session onboarding flags so SolveScreen/SessionScreen
+    // know whether to show coachmarks and the sample problem.
+    initializeOnboardingFlags().catch(() => {});
 
     SecureStore.getItemAsync(ONBOARDING_KEY).then(async (done) => {
       if (!done) {
@@ -77,7 +81,7 @@ function AppRoot() {
       }
       setScreen(restored ? "solve" : "auth");
     });
-  }, [fetchEntitlements]);
+  }, [fetchEntitlements, initializeOnboardingFlags]);
 
   if (screen === null) return null;
 

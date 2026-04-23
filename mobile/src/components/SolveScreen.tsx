@@ -31,6 +31,16 @@ import { SubjectPills, getSubjectMeta } from "./SubjectPills";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 const MAX_PROBLEMS = 10;
+const CHIP_PREVIEW_LIMIT = 30;
+
+// Queue chips show the problem text inline. Long word problems turn into
+// awkward single-line ellipsis that cuts mid-word; hard-truncating before
+// render keeps the pill compact and readable.
+function truncateForChip(text: string): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= CHIP_PREVIEW_LIMIT) return oneLine;
+  return oneLine.slice(0, CHIP_PREVIEW_LIMIT).trimEnd() + "…";
+}
 
 type Mode = "learn" | "mock_test";
 
@@ -404,9 +414,15 @@ export function SolveScreen({
             </View>
           </AnimatedPressable>
 
-          {/* TYPE — always-visible inline input bar */}
+          {/* TYPE — always-visible inline input bar. Multiline so long word
+              problems wrap inside the box instead of overflowing. */}
           <View style={[styles.typeBar, { borderColor: typing ? theme.primary : colors.border }]}>
-            <Ionicons name="create-outline" size={20} color={typing ? theme.primary : colors.textMuted} />
+            <Ionicons
+              name="create-outline"
+              size={20}
+              color={typing ? theme.primary : colors.textMuted}
+              style={styles.typeBarIcon}
+            />
             <TextInput
               ref={inputRef}
               style={styles.typeBarInput}
@@ -424,11 +440,9 @@ export function SolveScreen({
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              returnKeyType="done"
-              blurOnSubmit
-              onSubmitEditing={() => {
-                if (input.trim()) handleAddToQueue();
-              }}
+              multiline
+              scrollEnabled={false}
+              returnKeyType="default"
               accessibilityLabel="Type a problem"
             />
             {input.trim() && (
@@ -470,7 +484,7 @@ export function SolveScreen({
                         numberOfLines={1}
                         style={{ ...typography.label, color: theme.primary, fontSize: 13 }}
                       >
-                        {p}
+                        {truncateForChip(p)}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -706,28 +720,33 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     flex: 1,
   },
 
-  // Always-visible type input bar
+  // Always-visible type input bar. Top-aligned items so a multi-line problem
+  // wraps cleanly under the leading icon and beside the send button stays
+  // anchored at the top.
   typeBar: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing.sm,
     backgroundColor: colors.inputBg,
     borderRadius: radii.lg,
     borderWidth: 1.5,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     marginBottom: spacing.md,
-    minHeight: 50,
+  },
+  typeBarIcon: {
+    paddingTop: 8,
   },
   typeBarInput: {
     flex: 1,
     fontSize: 15,
     fontWeight: "400",
     color: colors.text,
-    paddingVertical: 0,
-    height: 40,
+    paddingVertical: 6,
+    minHeight: 28,
+    maxHeight: 140,
     lineHeight: 20,
-    textAlignVertical: "center",
+    textAlignVertical: "top",
     includeFontPadding: false,
   },
   typeBarSend: {
@@ -736,6 +755,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     borderRadius: radii.pill,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 2,
   },
 
   // Queue chips

@@ -15,12 +15,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as SecureStore from "expo-secure-store";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { PaywallScreen } from "./PaywallScreen";
 import { ThemeToggle } from "./ThemeToggle";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
+import { LEGAL_URLS } from "../constants/legal";
+import { ONBOARDING_FLAGS_KEY, ONBOARDING_KEY } from "../constants/storageKeys";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface AccountScreenProps {
@@ -74,6 +77,9 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const shakeAnim = useRef(new RNAnimated.Value(0)).current;
+
+  // About AI disclosure (Apple Guideline 4.1 — visible AI disclosure)
+  const [aboutAiVisible, setAboutAiVisible] = useState(false);
 
   const initial = (name ?? "?")[0].toUpperCase();
 
@@ -218,6 +224,30 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           <ThemeToggle />
         </View>
 
+        {/* About AI */}
+        <AnimatedPressable style={styles.aboutAiRow} onPress={() => setAboutAiVisible(true)} scaleDown={0.98}>
+          <View style={styles.aboutAiLeft}>
+            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+            <Text style={styles.aboutAiLabel}>About Veradic AI</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </AnimatedPressable>
+
+        {/* Legal links */}
+        <View style={styles.legalRow}>
+          <AnimatedPressable onPress={() => Linking.openURL(LEGAL_URLS.privacy)}>
+            <Text style={styles.legalLink}>Privacy Policy</Text>
+          </AnimatedPressable>
+          <Text style={styles.legalDot}>·</Text>
+          <AnimatedPressable onPress={() => Linking.openURL(LEGAL_URLS.terms)}>
+            <Text style={styles.legalLink}>Terms of Service</Text>
+          </AnimatedPressable>
+          <Text style={styles.legalDot}>·</Text>
+          <AnimatedPressable onPress={() => Linking.openURL(LEGAL_URLS.support)}>
+            <Text style={styles.legalLink}>Support</Text>
+          </AnimatedPressable>
+        </View>
+
         {/* Delete Account */}
         <AnimatedPressable style={styles.deleteButton} onPress={handleDeleteAccount} scaleDown={0.97}>
           <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
@@ -229,6 +259,41 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
           <Text style={styles.logoutText}>Log Out</Text>
         </AnimatedPressable>
+
+        {/* Dev-only: reset the onboarding flow so the welcome walkthrough
+            shows again on next launch. Only renders in development builds. */}
+        {__DEV__ && (
+          <AnimatedPressable
+            style={styles.devResetButton}
+            onPress={() => {
+              Alert.alert(
+                "Reset Onboarding (dev)",
+                "Clears the welcome-walkthrough flag so the intro shows on next launch. Close and reopen Expo Go (or press 'r' in Metro) after tapping OK.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Reset",
+                    style: "destructive",
+                    onPress: async () => {
+                      await Promise.all([
+                        SecureStore.deleteItemAsync(ONBOARDING_KEY).catch(() => {}),
+                        SecureStore.deleteItemAsync(ONBOARDING_FLAGS_KEY).catch(() => {}),
+                      ]);
+                      Alert.alert(
+                        "Onboarding reset",
+                        "Reload the app (close + reopen Expo Go, or press 'r' in Metro) to see the intro.",
+                      );
+                    },
+                  },
+                ],
+              );
+            }}
+            scaleDown={0.97}
+          >
+            <Ionicons name="refresh" size={16} color={colors.textMuted} />
+            <Text style={styles.devResetText}>DEV: Reset Onboarding</Text>
+          </AnimatedPressable>
+        )}
       </ScrollView>
 
       <PaywallScreen
@@ -236,6 +301,35 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
         onClose={() => setPaywallVisible(false)}
         onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
       />
+
+      {/* About Veradic AI Modal */}
+      <Modal
+        visible={aboutAiVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAboutAiVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, shadows.lg]}>
+            <View style={[styles.modalAccent, { backgroundColor: colors.primary }]} />
+            <Text style={styles.modalTitle}>About Veradic AI</Text>
+            <Text style={styles.aboutAiBody}>
+              Veradic uses Anthropic's Claude AI to generate step-by-step tutoring, practice problems, and feedback on your handwritten work.
+              {"\n\n"}
+              AI responses can sometimes be wrong or incomplete. Always double-check important answers with your teacher or textbook, especially before a graded assignment or exam.
+              {"\n\n"}
+              Veradic is a supplementary learning tool and is not a substitute for professional instruction.
+            </Text>
+            <AnimatedPressable
+              style={[styles.modalCtaBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setAboutAiVisible(false)}
+              scaleDown={0.97}
+            >
+              <Text style={styles.modalCtaBtnText}>Got it</Text>
+            </AnimatedPressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Delete Account Password Modal */}
       <Modal
@@ -271,7 +365,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
             )}
 
             <AnimatedPressable
-              style={[styles.modalDeleteBtn, deleteLoading && { opacity: 0.6 }]}
+              style={[styles.modalCtaBtn, { backgroundColor: colors.error }, deleteLoading && { opacity: 0.6 }]}
               onPress={handleConfirmDelete}
               scaleDown={0.97}
               disabled={deleteLoading}
@@ -279,7 +373,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
               {deleteLoading ? (
                 <ActivityIndicator color={colors.white} size="small" />
               ) : (
-                <Text style={styles.modalDeleteBtnText}>Delete My Account</Text>
+                <Text style={styles.modalCtaBtnText}>Delete My Account</Text>
               )}
             </AnimatedPressable>
 
@@ -473,6 +567,49 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
   },
+  aboutAiRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  aboutAiLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  aboutAiLabel: {
+    ...typography.body,
+    color: colors.text,
+    fontSize: 14,
+  },
+  aboutAiBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  legalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  legalLink: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textDecorationLine: "underline",
+  },
+  legalDot: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
   deleteButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -498,6 +635,24 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     ...typography.bodyBold,
     color: colors.error,
     fontSize: 14,
+  },
+  devResetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xl,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    borderRadius: radii.md,
+  },
+  devResetText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
 
   // Delete account modal
@@ -561,14 +716,17 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     textAlign: "center",
     marginBottom: spacing.sm,
   },
-  modalDeleteBtn: {
-    backgroundColor: colors.error,
+  // Modal CTA — shared between the delete-confirmation modal (destructive,
+  // passes colors.error inline) and the About AI modal (info, passes
+  // colors.primary inline). Callers own the background color so the style
+  // stays semantically neutral.
+  modalCtaBtn: {
     borderRadius: radii.md,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: spacing.md,
   },
-  modalDeleteBtnText: {
+  modalCtaBtnText: {
     ...typography.button,
     color: colors.white,
   },
