@@ -25,6 +25,22 @@ function imageDataUrl(raw: string): string {
   return `data:${mime};base64,${raw}`;
 }
 
+// Rubric drift — does the grade's frozen rubric snapshot differ from
+// the assignment's current rubric? Normalizes both sides to the same
+// four-field shape with missing fields treated as empty strings, so a
+// null snapshot and a teacher who only set `full_credit` compare
+// honestly. Returns false when both sides agree (no regrade needed)
+// and true on any field-level difference.
+const RUBRIC_FIELDS = ["full_credit", "partial_credit", "common_mistakes", "notes"] as const;
+function rubricChanged(
+  current: TeacherRubric | null,
+  snapshot: TeacherRubric | null,
+): boolean {
+  const a = current ?? {};
+  const b = snapshot ?? {};
+  return RUBRIC_FIELDS.some((f) => (a[f] ?? "") !== (b[f] ?? ""));
+}
+
 /**
  * Grading review workspace: one HW × one section.
  *
@@ -110,6 +126,16 @@ export default function HomeworkSectionReviewPage({
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  // Regrade state — a single slot because only one submission is open
+  // in the detail pane at a time. When populated, the detail panel
+  // shows a spinner on the regrade button and disables grading inputs.
+  // Error is scoped to a submissionId so a failure on student A's
+  // regrade doesn't render on student B's banner.
+  const [regradingSubmissionId, setRegradingSubmissionId] = useState<string | null>(null);
+  const [regradeError, setRegradeError] = useState<
+    { forSubmissionId: string; message: string } | null
+  >(null);
+  const [regradeConfirmOpenFor, setRegradeConfirmOpenFor] = useState<string | null>(null);
 
   // Load HW + section roster + submissions and merge into one list:
   // every enrolled student in this section, with their submission if
@@ -464,6 +490,62 @@ export default function HomeworkSectionReviewPage({
     }
   }, [assignmentId]);
 
+  // Re-run AI grading with the assignment's current rubric. Overrides
+  // any manual edits (this is the teacher's explicit ask) and leaves
+  // the published snapshot untouched so students keep seeing the old
+  // grade until the teacher republishes. Closes the confirm dialog,
+  // mirrors the fresh grade back onto roster + detail so the UI flips
+  // out of the drifted state immediately.
+  const handleRegrade = useCallback(
+    async (submissionId: string) => {
+      setRegradingSubmissionId(submissionId);
+      setRegradeError((prev) =>
+        prev?.forSubmissionId === submissionId ? null : prev,
+      );
+      try {
+        const res = await teacher.regradeSubmission(submissionId);
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) =>
+                e.submission?.id === submissionId
+                  ? {
+                      ...e,
+                      submission: {
+                        ...e.submission,
+                        final_score: res.final_score,
+                        breakdown: res.breakdown,
+                        rubric_snapshot: res.rubric_snapshot,
+                        grade_dirty: res.grade_dirty,
+                      },
+                    }
+                  : e,
+              )
+            : prev,
+        );
+        setDetail((d) =>
+          d && d.submission_id === submissionId
+            ? {
+                ...d,
+                breakdown: res.breakdown,
+                ai_breakdown: res.ai_breakdown,
+                final_score: res.final_score,
+                grade_dirty: res.grade_dirty,
+              }
+            : d,
+        );
+        setRegradeConfirmOpenFor(null);
+      } catch (e) {
+        setRegradeError({
+          forSubmissionId: submissionId,
+          message: e instanceof Error ? e.message : "Failed to regrade",
+        });
+      } finally {
+        setRegradingSubmissionId(null);
+      }
+    },
+    [],
+  );
+
   // Next submitter whose grade isn't released to students yet —
   // either never published or dirty-since-edit. Wraps to the start so
   // a teacher grading out of order still gets auto-advance. Returns
@@ -583,6 +665,15 @@ export default function HomeworkSectionReviewPage({
                 }}
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
+                regrading={regradingSubmissionId === selectedEntry.submission.id}
+                regradeError={
+                  regradeError?.forSubmissionId === selectedEntry.submission.id
+                    ? regradeError.message
+                    : null
+                }
+                onRegradeRequest={() =>
+                  setRegradeConfirmOpenFor(selectedEntry.submission!.id)
+                }
               />
             )}
           </section>
@@ -604,6 +695,35 @@ export default function HomeworkSectionReviewPage({
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
+      />
+
+      <RegradeConfirmDialog
+        submissionId={regradeConfirmOpenFor}
+        // Scope annotations for the confirm body — only read when the
+        // dialog is open, so lazy-lookup is fine.
+        row={
+          regradeConfirmOpenFor
+            ? (roster?.find((e) => e.submission?.id === regradeConfirmOpenFor)
+                ?.submission ?? null)
+            : null
+        }
+        regrading={regradingSubmissionId !== null}
+        // A failed regrade leaves the modal open so the teacher can
+        // retry or cancel. Error is scoped by submissionId so a stale
+        // failure from a different row doesn't leak in when the dialog
+        // opens on a new student.
+        error={
+          regradeConfirmOpenFor &&
+          regradeError?.forSubmissionId === regradeConfirmOpenFor
+            ? regradeError.message
+            : null
+        }
+        onClose={() => {
+          if (regradingSubmissionId === null) setRegradeConfirmOpenFor(null);
+        }}
+        onConfirm={() => {
+          if (regradeConfirmOpenFor) void handleRegrade(regradeConfirmOpenFor);
+        }}
       />
     </div>
   );
@@ -738,6 +858,170 @@ function PublishConfirmDialog({
           className="rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
         >
           {publishing ? "Publishing\u2026" : `${verb} grades`}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Rubric drift banner — surfaces when the assignment's live rubric
+// differs from what the AI grader applied to this submission. Gives
+// the teacher a one-click path to re-run grading with the updated
+// criteria. Collapsible "Rubric at grading time" exposes the old
+// text verbatim so the teacher can eyeball what changed.
+//
+// Hides entirely when the two rubrics match — no noise on unchanged
+// submissions. Also hides when there's no prior snapshot (historical
+// rows or AI grading never ran), since there's nothing to regrade.
+// ────────────────────────────────────────────────────────────────────
+
+function RubricDriftBanner({
+  current,
+  snapshot,
+  regrading,
+  error,
+  onRegrade,
+}: {
+  current: TeacherRubric | null;
+  snapshot: TeacherRubric | null;
+  regrading: boolean;
+  error: string | null;
+  onRegrade: () => void;
+}) {
+  const [showSnapshot, setShowSnapshot] = useState(false);
+  // No snapshot → nothing to regrade against. No drift → no CTA needed.
+  if (snapshot === null) return null;
+  if (!rubricChanged(current, snapshot)) return null;
+
+  const snapshotFields: { label: string; text: string }[] = [];
+  if (snapshot.full_credit)
+    snapshotFields.push({ label: "Full credit", text: snapshot.full_credit });
+  if (snapshot.partial_credit)
+    snapshotFields.push({ label: "Partial credit", text: snapshot.partial_credit });
+  if (snapshot.common_mistakes)
+    snapshotFields.push({ label: "Common mistakes", text: snapshot.common_mistakes });
+  if (snapshot.notes) snapshotFields.push({ label: "Notes", text: snapshot.notes });
+
+  return (
+    <div className="rounded-[--radius-xl] border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+            Rubric edited since this was graded
+          </p>
+          <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+            The AI graded against an earlier version of your rubric.
+            Regrade to apply your current criteria — your edits on this
+            submission will be replaced.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRegrade}
+          disabled={regrading}
+          className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-amber-950"
+        >
+          {regrading ? "Regrading…" : "Regrade"}
+        </button>
+      </div>
+      {snapshotFields.length > 0 && (
+        <details
+          open={showSnapshot}
+          onToggle={(e) =>
+            setShowSnapshot((e.target as HTMLDetailsElement).open)
+          }
+          className="mt-3 text-xs"
+        >
+          <summary className="cursor-pointer font-semibold text-amber-900 hover:text-amber-700 dark:text-amber-200 dark:hover:text-amber-300">
+            {showSnapshot ? "Hide" : "View"} rubric at grading time
+          </summary>
+          <div className="mt-2 space-y-2 rounded-[--radius-md] border border-amber-200/70 bg-white/60 p-3 dark:border-amber-500/20 dark:bg-amber-950/30">
+            {snapshotFields.map((f) => (
+              <div key={f.label}>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-900/70 dark:text-amber-200/70">
+                  {f.label}
+                </p>
+                <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-amber-950 dark:text-amber-100">
+                  {f.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-700 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Regrade confirmation — the regrade is destructive to any manual
+// edits on the submission (override semantics). Confirm dialog
+// spells that out so the teacher doesn't lose work by accident.
+// ────────────────────────────────────────────────────────────────────
+
+function RegradeConfirmDialog({
+  submissionId,
+  row,
+  regrading,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  submissionId: string | null;
+  row: TeacherSubmissionRow | null;
+  regrading: boolean;
+  /** Failure message from the last regrade attempt. Rendered inline
+   *  so the teacher sees it without having to dismiss the modal; the
+   *  drift banner underneath would otherwise be covered by the overlay. */
+  error: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const open = submissionId !== null;
+  const published = !!row?.grade_published_at;
+  return (
+    <Modal open={open} onClose={onClose} dismissible={!regrading}>
+      <h2 className="text-lg font-bold text-text-primary">
+        Regrade with current rubric?
+      </h2>
+      <p className="mt-2 text-sm text-text-secondary">
+        The AI will re-grade this submission using the rubric in your
+        Grading setup. Any manual edits you made on this submission
+        will be replaced.
+      </p>
+      {published && (
+        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
+          This grade is already published. The student will keep seeing
+          the old grade until you republish.
+        </p>
+      )}
+      {error && (
+        <p className="mt-3 rounded-[--radius-md] border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          {error}
+        </p>
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={regrading}
+          className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={regrading}
+          className="rounded-[--radius-md] bg-amber-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-amber-950"
+        >
+          {regrading ? "Regrading…" : "Regrade"}
         </button>
       </div>
     </Modal>
@@ -893,6 +1177,9 @@ function SubmissionDetailPanel({
   onSelectNext,
   onGradeProblem,
   onFeedbackChange,
+  regrading,
+  regradeError,
+  onRegradeRequest,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
@@ -905,6 +1192,9 @@ function SubmissionDetailPanel({
   onSelectNext: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (problemId: string, text: string) => void;
+  regrading: boolean;
+  regradeError: string | null;
+  onRegradeRequest: () => void;
 }) {
   const breakdownByProblem = useMemo(() => {
     const map = new Map<string, GradeBreakdownEntry>();
@@ -996,6 +1286,17 @@ function SubmissionDetailPanel({
       <IntegrityBanner
         integrity={integrity}
         overviewFallback={row?.integrity_overview ?? null}
+      />
+
+      {/* Rubric drift banner — only renders when the assignment's live
+          rubric differs from the one this submission was graded against.
+          Triggers a regrade confirm dialog managed by the page. */}
+      <RubricDriftBanner
+        current={rubric}
+        snapshot={row?.rubric_snapshot ?? null}
+        regrading={regrading}
+        error={regradeError}
+        onRegrade={onRegradeRequest}
       />
 
       {/* Per-problem grading — the main scan-unit. Image thumbnail

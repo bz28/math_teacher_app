@@ -149,6 +149,12 @@ class SubmissionGrade(Base):
     published_final_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     published_breakdown: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     published_teacher_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Frozen copy of the Assignment.rubric the AI grader actually applied
+    # for this submission. Compared to the live rubric to detect drift —
+    # mismatch is what lets the teacher decide to regrade with the current
+    # rubric. Stored as a dict; null for grades created before rubric
+    # versioning or when rubric was null.
+    rubric_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )

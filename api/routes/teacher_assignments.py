@@ -972,6 +972,10 @@ async def list_submissions(
             "teacher_notes": grade.teacher_notes if grade else None,
             "final_score": grade.final_score if grade else None,
             "breakdown": grade.breakdown if grade else None,
+            # Frozen rubric the AI grader applied for this submission.
+            # Frontend compares against the assignment's live rubric to
+            # decide whether to surface the regrade CTA.
+            "rubric_snapshot": grade.rubric_snapshot if grade else None,
             "grade_published_at": (
                 grade.grade_published_at.isoformat()
                 if grade and grade.grade_published_at else None
@@ -1092,6 +1096,97 @@ async def grade_submission(
         "status": "ok",
         "final_score": grade.final_score,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
+        "grade_dirty": _is_grade_dirty(grade),
+    }
+
+
+@router.post("/submissions/{submission_id}/regrade")
+async def regrade_submission(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Re-run AI grading against the assignment's current rubric.
+
+    Intended trigger: teacher edited the rubric after the AI first
+    graded, so `rubric_snapshot` differs from `assignment.rubric` —
+    the review page surfaces a regrade CTA that calls this endpoint.
+
+    Override semantics: we replace the live `breakdown / final_score`
+    even if the teacher had manually reviewed — the regrade is the
+    teacher's explicit ask to throw out their edits and use the fresh
+    AI pass against the updated rubric. `published_*` is untouched
+    until the teacher republishes, so students keep seeing the old
+    grade until then.
+
+    Re-runs extraction (one Vision call) rather than reading a cache:
+    the extraction snapshot lives on the integrity-check rows only for
+    probed problems; using the same code path as the submission
+    pipeline keeps behavior consistent.
+    """
+    from api.core.grading_ai import run_ai_grading_for_submission
+    from api.core.integrity_ai import extract_student_work
+
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found",
+        )
+
+    assignment = await get_teacher_assignment(
+        db, sub.assignment_id, current_user.user_id,
+    )
+    if not assignment.ai_grading_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI grading is not enabled for this homework",
+        )
+
+    # Teacher-initiated regrade — attribute LLM cost to the teacher so
+    # the admin dashboard can distinguish student-submission grades
+    # from teacher-triggered regrades and spot any over-use.
+    actor_id = str(current_user.user_id)
+    extraction = await extract_student_work(sub.id, db, user_id=actor_id)
+    await run_ai_grading_for_submission(
+        sub.id, extraction, db, user_id=actor_id, force=True,
+    )
+    await db.commit()
+
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    if grade is None:
+        # Grader bailed early (e.g. no problems, no extraction). Surface
+        # that honestly so the UI can show "couldn't regrade" instead of
+        # a silent no-op.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not regrade — no gradeable content",
+        )
+    # Unwrap ai_breakdown to match get_submission_detail's shape —
+    # it's stored as the full grader envelope {grades: [...]} but the
+    # TeacherSubmissionDetail type (what the frontend replaces after
+    # regrade) expects the already-flattened array. Shipping the raw
+    # envelope here would desync the detail's ai_breakdown shape on
+    # the review page and break AI-badge rendering until the student
+    # row refetches.
+    ai_breakdown_grades = None
+    if grade.ai_breakdown:
+        ai_breakdown_grades = grade.ai_breakdown.get("grades")
+    return {
+        "status": "ok",
+        "final_score": grade.final_score,
+        "ai_score": grade.ai_score,
+        "breakdown": grade.breakdown,
+        "ai_breakdown": ai_breakdown_grades,
+        "rubric_snapshot": grade.rubric_snapshot,
+        "graded_at": grade.graded_at.isoformat() if grade.graded_at else None,
+        "grade_published_at": (
+            grade.grade_published_at.isoformat()
+            if grade.grade_published_at else None
+        ),
         "grade_dirty": _is_grade_dirty(grade),
     }
 
