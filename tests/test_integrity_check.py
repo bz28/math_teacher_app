@@ -1196,6 +1196,20 @@ async def test_generate_variant_flips_flag_and_echoes_problem(
         )).scalars().all()
         assert any(variant_text in t.content for t in tool_results)
 
+    # Student-facing transcript flags the agent turn that presents the
+    # variant with is_variant_probe=True so the frontend can render it
+    # as a distinguished "quick practice" card. Every other agent turn
+    # is false.
+    state = (await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )).json()
+    agent_turns = [t for t in state["transcript"] if t["role"] == "agent"]
+    # Opener, plus the variant-presenter turn after the tool call.
+    assert len(agent_turns) >= 2
+    assert agent_turns[0]["is_variant_probe"] is False
+    assert agent_turns[1]["is_variant_probe"] is True
+
 
 async def test_generate_variant_rejects_second_call(
     client: AsyncClient, world: dict[str, Any]
