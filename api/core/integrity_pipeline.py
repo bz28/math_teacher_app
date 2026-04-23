@@ -500,10 +500,14 @@ async def process_student_turn(
             break
 
         # Apply tool calls, persisting tool_call + tool_result turns.
+        # Pass text_reply through so finish_check can detect the
+        # "asked a question AND finalized in one response" pattern.
         for block in tool_uses:
             await _record_tool_call(check.id, block, db)
             result_text = await _apply_tool_call(
-                check, block, db, user_id=user_id,
+                check, block, db,
+                user_id=user_id,
+                current_turn_text=text_reply,
             )
             await _record_tool_result(
                 check.id, getattr(block, "id", ""), result_text, db,
@@ -606,9 +610,16 @@ async def _apply_tool_call(
     db: AsyncSession,
     *,
     user_id: str | None = None,
+    current_turn_text: str | None = None,
 ) -> str:
     """Validate + apply a single tool call. Returns the tool_result
-    text to persist (and echo back to the agent on the next loop)."""
+    text to persist (and echo back to the agent on the next loop).
+
+    `current_turn_text` is the text reply the agent emitted alongside
+    this tool call in the same response (None if the response was
+    tool_use-only). Used by finish_check to detect the agent asking
+    a question and finalizing in the same breath.
+    """
     tool_name = getattr(block, "name", "")
     raw_input = getattr(block, "input", {}) or {}
 
@@ -619,7 +630,9 @@ async def _apply_tool_call(
             check, raw_input, db, user_id=user_id,
         )
     if tool_name == TOOL_FINISH_CHECK:
-        return await _apply_finish_check(check, raw_input, db)
+        return await _apply_finish_check(
+            check, raw_input, db, current_turn_text=current_turn_text,
+        )
     return f"rejected: unknown tool '{tool_name}'"
 
 
@@ -838,10 +851,29 @@ async def _apply_finish_check(
     check: IntegrityCheckSubmission,
     raw_input: dict[str, Any],
     db: AsyncSession,
+    *,
+    current_turn_text: str | None = None,
 ) -> str:
     disposition = raw_input.get("disposition")
     summary = raw_input.get("summary") or ""
     variant_result = raw_input.get("inline_variant_result")
+
+    # Guard against the "ask a question AND finalize" bug. If the
+    # agent's text in this same response ends with a question mark,
+    # there's an outstanding question the student hasn't answered —
+    # don't let the agent finalize underneath it. Force the agent to
+    # either drop the question or wait for the reply. The trailing "?"
+    # heuristic is coarse but catches the real failure mode cleanly
+    # (the alternative is an LLM judging whether prose contains a
+    # question, which is overkill for this guard).
+    if current_turn_text and current_turn_text.rstrip().endswith("?"):
+        return (
+            "rejected: you just asked the student a question in this "
+            "same response. finish_check is terminal — don't call it "
+            "while you have an outstanding question. Either wait for "
+            "the student's reply (no finish_check this turn) or drop "
+            "the question from your response before finalizing."
+        )
 
     if disposition not in DISPOSITION_VALUES:
         return (
