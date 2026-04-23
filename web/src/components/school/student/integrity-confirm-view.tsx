@@ -6,6 +6,7 @@ import {
   type IntegrityExtraction,
 } from "@/lib/api";
 import { ExtractionView } from "@/components/school/shared/extraction-view";
+import { useDeviceType } from "./use-device-type";
 
 interface Props {
   submissionId: string;
@@ -36,6 +37,13 @@ interface Props {
  * Read-only — the student can flag but not edit. Editing would let
  * them rewrite their own work to dodge follow-ups.
  */
+// Soft time budget matches the chat header. Mobile typing is ~2x
+// slower, so mobile students see a longer expectation.
+const BUDGET_COPY: Record<"desktop" | "mobile", string> = {
+  desktop: "Takes about 3 minutes.",
+  mobile: "Takes about 5 minutes.",
+};
+
 export function IntegrityConfirmView({
   submissionId,
   submittedImageDataUrl,
@@ -45,6 +53,7 @@ export function IntegrityConfirmView({
 }: Props) {
   const [flagging, setFlagging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const device = useDeviceType();
 
   async function handleFlag() {
     setFlagging(true);
@@ -68,6 +77,15 @@ export function IntegrityConfirmView({
         match what you wrote? If anything&rsquo;s off, let us know so your
         teacher knows too.
       </p>
+
+      {/* Upfront rules — stated once, before the chat starts. Makes
+          behavioral signals meaningful by setting the expectation,
+          not ambushing the student after. */}
+      <div className="mt-4 rounded-[--radius-sm] border border-border-light bg-bg-subtle px-4 py-3 text-sm text-text-secondary">
+        <span className="font-semibold text-text-primary">Quick check-in:</span>{" "}
+        Stay in this window and answer in your own words. You don&rsquo;t need
+        to look anything up. {BUDGET_COPY[device]}
+      </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div>

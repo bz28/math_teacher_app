@@ -7,7 +7,30 @@ import {
   type IntegrityTurn,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useDeviceType } from "./use-device-type";
 import { useTurnTelemetry } from "./use-turn-telemetry";
+
+// Soft time budget we advertise to the student on the chat header.
+// Mobile typing is ~2x slower than desktop, so mobile students see a
+// longer budget — the check doesn't cut anyone off at the displayed
+// number, it's just a "about this long" hint to set expectations.
+const BUDGET_LABEL: Record<"desktop" | "mobile", string> = {
+  desktop: "~3 min",
+  mobile: "~5 min",
+};
+
+// Inactivity thresholds. After this long without typing / pasting /
+// sending, show a gentle "still there?" banner + "I need more time"
+// option. Mobile typers get a longer window. Tapping "I need more
+// time" doubles it for the rest of the session. Never cuts the
+// student off — server-side turn caps are independent of this.
+const INACTIVITY_NUDGE_MS: Record<"desktop" | "mobile", number> = {
+  desktop: 120_000,
+  mobile: 180_000,
+};
+// How often the check runs. Doesn't need to be precise — the nudge
+// just needs to appear "about 2 min" after last activity.
+const INACTIVITY_TICK_MS = 5_000;
 
 interface Props {
   submissionId: string;
@@ -40,6 +63,10 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const [turnStartedAt, setTurnStartedAt] = useState<number>(Date.now());
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const telemetry = useTurnTelemetry();
+  const device = useDeviceType();
+  const lastActivityRef = useRef<number>(Date.now());
+  const [nudgeVisible, setNudgeVisible] = useState(false);
+  const [timeoutDoubled, setTimeoutDoubled] = useState(false);
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -78,6 +105,39 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const isComplete =
     state?.overall_status === "complete" ||
     state?.overall_status === "skipped_unreadable";
+
+  // Inactivity nudge: show a gentle "still there?" + "I need more
+  // time" banner if the student goes quiet. Any activity (keystroke,
+  // paste, send, focus return) resets the timer via markActivity().
+  // Skip while sending (they're waiting, not idle), when the check
+  // is complete, or when the student already tapped "I need more
+  // time" — at that point we've extended their window and trust
+  // them, no more nudges.
+  const nudgeTimeoutMs =
+    INACTIVITY_NUDGE_MS[device] * (timeoutDoubled ? 2 : 1);
+  useEffect(() => {
+    if (isComplete || timeoutDoubled) return;
+    const interval = window.setInterval(() => {
+      if (sending) return;
+      const elapsed = Date.now() - lastActivityRef.current;
+      if (elapsed >= nudgeTimeoutMs) {
+        setNudgeVisible(true);
+      }
+    }, INACTIVITY_TICK_MS);
+    return () => window.clearInterval(interval);
+  }, [isComplete, sending, nudgeTimeoutMs, timeoutDoubled]);
+
+  // Any activity resets the timer and dismisses the nudge if it's up.
+  const markActivity = () => {
+    lastActivityRef.current = Date.now();
+    if (nudgeVisible) setNudgeVisible(false);
+  };
+
+  const handleNeedMoreTime = () => {
+    setTimeoutDoubled(true);
+    telemetry.markNeedMoreTime();
+    markActivity();
+  };
 
   const visibleTranscript: IntegrityTurn[] = useMemo(() => {
     const base = state?.transcript ?? [];
@@ -119,6 +179,10 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
       setState(next);
       setPendingStudentMessage(null);
       setTurnStartedAt(Date.now());
+      // The agent's reply counts as "fresh activity" — resetting
+      // here stops the inactivity nudge from firing immediately on
+      // a turn that finished right at the threshold.
+      lastActivityRef.current = Date.now();
     } catch {
       setError("Couldn't send that — try again.");
       setPendingStudentMessage(null);
@@ -156,8 +220,15 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   return (
     <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-2xl flex-col">
       <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
-        <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-          Quick understanding check
+        <div className="flex items-baseline gap-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            Quick understanding check
+          </div>
+          {!isComplete && (
+            <div className="text-[11px] font-medium text-text-muted">
+              · {BUDGET_LABEL[device]}
+            </div>
+          )}
         </div>
         {totalProblems > 0 && (
           <div className="text-xs font-medium text-text-muted">
@@ -206,15 +277,38 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         </div>
       ) : (
         <div className="border-t border-border-light px-2 py-3">
+          {nudgeVisible && !timeoutDoubled && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+            >
+              <span>Still there? Take your time.</span>
+              <button
+                type="button"
+                onClick={handleNeedMoreTime}
+                className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+              >
+                I need more time
+              </button>
+            </div>
+          )}
           {error && <p className="mb-2 text-xs text-error">{error}</p>}
           <div className="flex items-end gap-2">
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
-                // Typing-cadence tracking: Backspace/Delete count as
-                // "edits", everything else as a normal keystroke.
-                // Skip when it's not really text entry:
+                // Activity resets on ANY keydown — CJK IME composition
+                // keystrokes, Shift+Arrow text selection, and Cmd/Ctrl
+                // shortcuts all count as "student is engaged" even
+                // though they don't count as typing for the cadence
+                // signal.
+                markActivity();
+
+                // Typing-cadence tracking is stricter: Backspace/Delete
+                // count as "edits", everything else as a normal
+                // keystroke. Skip when it's not really text entry:
                 //   - Modifier-only keys (shift/ctrl/alt/meta) don't
                 //     produce characters.
                 //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
@@ -248,6 +342,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
                 // Size only — content is never captured.
                 const pasted = e.clipboardData.getData("text");
                 telemetry.recordPaste(pasted.length);
+                markActivity();
               }}
               placeholder="Type your answer…"
               rows={2}

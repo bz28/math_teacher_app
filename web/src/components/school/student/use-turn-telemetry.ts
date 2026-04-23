@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
+import { useDeviceType } from "./use-device-type";
+
 /**
  * Client-captured behavioral signals for a single integrity-check
  * student turn. Mirrors `api/routes/integrity_check.py::TurnTelemetry`.
@@ -45,6 +47,9 @@ type TurnTelemetryApi = {
   /** Record a keystroke. `isEdit` = true for backspace/delete so
    *  cadence distinguishes corrections from new typing. */
   recordKeystroke: (isEdit?: boolean) => void;
+  /** Signal that the student tapped "I need more time" during this
+   *  turn. Non-punitive — teacher-facing context only. */
+  markNeedMoreTime: () => void;
   /** Return a snapshot of the accumulated telemetry for the turn
    *  without touching internal state. Caller decides when to reset. */
   snapshot: () => TurnTelemetry;
@@ -79,17 +84,12 @@ export function useTurnTelemetry(): TurnTelemetryApi {
   const lastKeystroke = useRef<number | null>(null);
   const pausesOver3s = useRef<number>(0);
   const edits = useRef<number>(0);
+  const needMoreTime = useRef<boolean>(false);
 
-  // Detect mobile from UA at mount — good enough for our "device
-  // hint" signal (teacher evidence, not gating anything).
-  const deviceType = useRef<"desktop" | "mobile" | null>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ua = window.navigator.userAgent || "";
-    deviceType.current = /Mobi|Android|iPhone|iPad/i.test(ua)
-      ? "mobile"
-      : "desktop";
-  }, []);
+  // Device hint for the teacher-facing telemetry field. Shared with
+  // the chat header's mobile time-budget flex — single source of
+  // truth for UA detection lives in useDeviceType.
+  const device = useDeviceType();
 
   // Window-level focus/blur capture. visibilitychange fires on tab
   // switch + minimize + alt-tab (depending on OS). window.blur/focus
@@ -154,6 +154,10 @@ export function useTurnTelemetry(): TurnTelemetryApi {
     if (isEdit) edits.current += 1;
   }, []);
 
+  const markNeedMoreTime = useCallback(() => {
+    needMoreTime.current = true;
+  }, []);
+
   const snapshot = useCallback((): TurnTelemetry => {
     // Close out any in-flight blur — otherwise a student who's still
     // away when they send would drop that blur interval. Shouldn't
@@ -192,10 +196,10 @@ export function useTurnTelemetry(): TurnTelemetryApi {
       focus_blur_events: focusBlurWithInflight,
       paste_events: [...pasteEvents.current],
       typing_cadence: cadence,
-      need_more_time_used: false,
-      device_type: deviceType.current,
+      need_more_time_used: needMoreTime.current,
+      device_type: device,
     };
-  }, []);
+  }, [device]);
 
   const reset = useCallback(() => {
     focusBlurEvents.current = [];
@@ -205,11 +209,13 @@ export function useTurnTelemetry(): TurnTelemetryApi {
     lastKeystroke.current = null;
     pausesOver3s.current = 0;
     edits.current = 0;
+    needMoreTime.current = false;
   }, []);
 
   return {
     recordPaste,
     recordKeystroke,
+    markNeedMoreTime,
     snapshot,
     reset,
   };
