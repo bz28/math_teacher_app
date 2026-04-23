@@ -33,7 +33,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1127,11 +1127,32 @@ async def confirm_extraction(
         # is a no-op so we don't double-spawn grading.
         return {"status": "ok", "already_confirmed": "true"}
 
-    sub.extraction_confirmed_at = datetime.now(UTC)
+    # Atomic conditional update: only stamp confirm if flag hasn't been
+    # set and confirm hasn't been set. Guards against a concurrent flag
+    # landing between the SELECT above and the UPDATE — without this
+    # window both endpoints could pass their checks on the same row and
+    # both stamp their timestamps, which the DB-level CHECK constraint
+    # would then reject (500). rowcount==0 here means someone else won
+    # the race; treat that as a 409.
+    result = await db.execute(
+        update(Submission)
+        .where(
+            Submission.id == submission_id,
+            Submission.extraction_confirmed_at.is_(None),
+            Submission.extraction_flagged_at.is_(None),
+        )
+        .values(extraction_confirmed_at=datetime.now(UTC))
+    )
+    if result.rowcount == 0:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Submission state changed — reload and try again",
+        )
     await db.commit()
 
     _spawn_background_task(
-        _run_integrity_and_grading_background(sub.id),
+        _run_integrity_and_grading_background(submission_id),
     )
     return {"status": "ok"}
 
@@ -1177,10 +1198,25 @@ async def flag_extraction_submission(
     if sub.extraction_flagged_at is not None:
         return {"status": "ok", "already_flagged": "true"}
 
-    sub.extraction_flagged_at = datetime.now(UTC)
+    # Atomic conditional update — see notes on confirm_extraction for
+    # the race this closes. Intentionally NO _spawn_background_task —
+    # flagging is the "skip AI, teacher handles it" path.
+    result = await db.execute(
+        update(Submission)
+        .where(
+            Submission.id == submission_id,
+            Submission.extraction_confirmed_at.is_(None),
+            Submission.extraction_flagged_at.is_(None),
+        )
+        .values(extraction_flagged_at=datetime.now(UTC))
+    )
+    if result.rowcount == 0:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Submission state changed — reload and try again",
+        )
     await db.commit()
-    # Intentionally NO _spawn_background_task — flagging is the
-    # "skip AI, teacher handles it" path.
     return {"status": "ok"}
 
 

@@ -324,6 +324,20 @@ async def run_ai_grading_for_submission(
     if not sub:
         return
 
+    # Idempotency: if this submission is already AI-graded (final_score
+    # set) and the caller isn't a teacher-initiated regrade, skip the
+    # LLM call. Guards against a concurrent spawn (e.g. confirm called
+    # twice in quick succession) re-running grading and racing writers
+    # on the same SubmissionGrade row.
+    if not force:
+        existing = (await db.execute(
+            select(SubmissionGrade.final_score).where(
+                SubmissionGrade.submission_id == submission_id,
+            )
+        )).scalar_one_or_none()
+        if existing is not None:
+            return
+
     assignment = (await db.execute(
         select(Assignment).where(Assignment.id == sub.assignment_id)
     )).scalar_one_or_none()
