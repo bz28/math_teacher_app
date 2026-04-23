@@ -38,11 +38,33 @@ from tests.conftest import (
 
 
 async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
-    """Submit the HW and wait for the background integrity pipeline."""
+    """Submit the HW, auto-confirm the extraction, and wait for the
+    background integrity + grading pipeline.
+
+    Under gating, integrity + grading are spawned from the confirm
+    endpoint instead of fire-and-forget at submit time. Most tests
+    here assume the integrity check has been initialized after
+    `_submit` returns (opening turn exists, etc.), so this helper
+    collapses the submit → wait-for-extraction → confirm → wait-for-
+    integrity dance. Tests that need to inspect the pre-confirm
+    state (no integrity check created yet) should call submit +
+    drain directly instead of using this helper.
+    """
     response = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
         json={"image_base64": TINY_PNG},
+    )
+    if response.status_code != 200:
+        return response
+    submission_id = response.json()["submission_id"]
+    # Wait for extraction background to finish persisting extraction.
+    await drain_integrity_background_tasks()
+    # Fire confirm to spawn integrity + grading. Idempotent if the
+    # test already confirmed via its own path.
+    await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
     )
     await drain_integrity_background_tasks()
     return response

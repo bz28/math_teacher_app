@@ -140,20 +140,40 @@ export function SubmissionExtractionConfirmView({
   onContinue,
   onFlagged,
 }: Props) {
-  const [flagging, setFlagging] = useState(false);
+  // Both handlers hit the same confirm endpoint today — integrity +
+  // grading are gated on confirm, and flagging + continuing both
+  // need to release that gate so the student can progress to the
+  // chat. In a follow-up commit the flag path will split off to a
+  // "sent to teacher" terminal instead of the chat.
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const device = useDeviceType();
   const groups = useMemo(() => groupByProblem(extraction), [extraction]);
 
+  async function handleContinue() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await schoolStudent.confirmExtraction(submissionId);
+      onContinue();
+    } catch {
+      setError("Couldn't confirm. Try again.");
+      setSubmitting(false);
+    }
+  }
+
   async function handleFlag() {
-    setFlagging(true);
+    setSubmitting(true);
     setError(null);
     try {
       await schoolStudent.flagIntegrityExtraction(submissionId);
+      // Flag is a signal, not a gate — grading still runs in this
+      // commit. Follow-up will branch flag off to skip grading.
+      await schoolStudent.confirmExtraction(submissionId);
       onFlagged();
     } catch {
       setError("Couldn't save your flag. Try again.");
-      setFlagging(false);
+      setSubmitting(false);
     }
   }
 
@@ -242,18 +262,18 @@ export function SubmissionExtractionConfirmView({
         <button
           type="button"
           onClick={handleFlag}
-          disabled={flagging}
+          disabled={submitting}
           className="w-full rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:border-amber-500 hover:text-amber-600 disabled:opacity-50 sm:w-auto"
         >
-          {flagging ? "Saving…" : "Reader got something wrong"}
+          {submitting ? "Saving…" : "Reader got something wrong"}
         </button>
         <button
           type="button"
-          onClick={onContinue}
-          disabled={flagging}
+          onClick={handleContinue}
+          disabled={submitting}
           className="w-full rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto"
         >
-          Looks right — continue
+          {submitting ? "Saving…" : "Looks right — continue"}
         </button>
       </div>
     </div>
