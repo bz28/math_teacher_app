@@ -224,6 +224,112 @@ async def generate_similar_questions(
 
 
 # ---------------------------------------------------------------------------
+# Generate question texts from objectives (no seed problems)
+# ---------------------------------------------------------------------------
+
+_LEVEL_LABELS: dict[str, str] = {
+    "middle": "middle school",
+    "hs": "high school",
+    "college": "college",
+    "other": "",
+}
+
+_GENERATE_FROM_OBJECTIVES_TEMPLATE = """You are a {professor_role} writing a \
+{count}-question practice exam.
+
+Course context:
+- Level: {level}
+- Course: {course}
+
+The exam must cover these objectives:
+{topics_block}
+
+Requirements:
+- Produce exactly {count} problems, each solvable on paper.
+- Cover each listed objective at least once when feasible; distribute
+  coverage evenly across the objectives rather than clustering on one.
+- Match the difficulty a student at the given level would face on a real
+  in-class exam in the given course. Do not go easier or harder.
+- Use LaTeX with $ delimiters for ALL math. Describe any required diagram
+  in detail inside brackets [...] appended to the problem text.
+- Progress roughly foundational → challenging across the set.
+- Do NOT repeat or near-duplicate problems within the set.
+
+Return ONLY the problem text for each item — do NOT include answers, step
+breakdowns, explanations, or numbering. The downstream pipeline solves and
+decomposes each problem separately."""
+
+
+async def generate_problems_from_objectives(
+    topics: list[str],
+    count: int,
+    *,
+    level: str | None = None,
+    course_name: str | None = None,
+    user_id: str | None = None,
+    subject: str = Subject.MATH,
+) -> list[str]:
+    """Generate `count` practice problems covering the given topics.
+
+    Topic-driven cold-start generation for Mock Test "From objectives" mode.
+    Returns a list of problem text strings (no answers / decomposition —
+    those run separately via solve_problem, matching the existing
+    generate_similar pipeline).
+    """
+    cfg = get_config(subject)
+    clean_topics = [t.strip() for t in topics if t and t.strip()]
+    if not clean_topics:
+        raise ValueError("At least one non-empty topic is required")
+    if count < 1:
+        raise ValueError("count must be >= 1")
+
+    topics_block = "\n".join(f"- {t}" for t in clean_topics)
+    level_label = _LEVEL_LABELS.get((level or "").lower(), "") or "unspecified"
+    course_label = (course_name or "").strip() or "unspecified"
+
+    system_prompt = _GENERATE_FROM_OBJECTIVES_TEMPLATE.format(
+        professor_role=cfg["professor_role"],
+        count=count,
+        level=level_label,
+        course=course_label,
+        topics_block=topics_block,
+    )
+
+    user_msg = (
+        f"Write {count} practice exam problems covering the objectives above. "
+        f"Return them as a list of exactly {count} items, in order from most "
+        f"foundational to most challenging."
+    )
+
+    try:
+        result = await call_claude_json(
+            system_prompt,
+            user_msg,
+            mode=LLMMode.PRACTICE_GENERATE,
+            tool_schema=PRACTICE_GENERATE_SCHEMA,
+            user_id=user_id,
+            model=MODEL_REASON,
+            max_tokens=min(1024 * max(count, 2), 8192),
+        )
+        raw_problems = result.get("problems")
+        if not isinstance(raw_problems, list) or not raw_problems:
+            raise RuntimeError("No problems generated")
+
+        questions = [
+            str(p).strip() for p in raw_problems
+            if isinstance(p, str) and p.strip()
+        ]
+        if not questions:
+            raise RuntimeError("No valid questions generated")
+
+        # Trim to requested count (Claude occasionally overshoots by 1).
+        return questions[:count]
+    except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
+        logger.exception("Failed to generate problems from objectives")
+        raise RuntimeError("Failed to generate problems from objectives")
+
+
+# ---------------------------------------------------------------------------
 # Answer checking
 # ---------------------------------------------------------------------------
 

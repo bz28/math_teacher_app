@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
-from api.core.practice import check_answer, generate_similar_questions, solve_problem
+from api.core.practice import (
+    check_answer,
+    generate_problems_from_objectives,
+    generate_similar_questions,
+    solve_problem,
+)
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, get_current_user_full
 from api.middleware.rate_limit import limiter
@@ -14,6 +19,7 @@ from api.models.user import User
 from api.schemas.practice import (
     PracticeCheckRequest,
     PracticeCheckResponse,
+    PracticeGenerateFromObjectivesRequest,
     PracticeGenerateRequest,
     PracticeGenerateResponse,
     PracticeProblem,
@@ -73,6 +79,50 @@ async def generate(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate practice problems",
         )
+
+
+@router.post("/generate-from-objectives", response_model=PracticeGenerateResponse)
+@limiter.limit("10/minute")
+async def generate_from_objectives(
+    request: Request,
+    body: PracticeGenerateFromObjectivesRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> PracticeGenerateResponse:
+    """Generate practice exam problems from a list of topic objectives.
+
+    Used by Mock Test "From objectives" mode — the student snapped or typed
+    a study guide, we return question text only, the client audits them
+    and calls the existing solve pipeline per question in the background.
+    """
+    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
+
+    try:
+        question_texts = await generate_problems_from_objectives(
+            body.topics,
+            body.count,
+            level=body.level,
+            course_name=body.course_name,
+            user_id=str(user.id),
+            subject=body.subject,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to generate practice problems",
+        )
+
+    return PracticeGenerateResponse(
+        problems=[
+            PracticeProblem(question=q, answer="", distractors=[])
+            for q in question_texts
+        ]
+    )
 
 
 @router.post("/check", response_model=PracticeCheckResponse)
