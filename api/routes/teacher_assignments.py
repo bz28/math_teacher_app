@@ -25,6 +25,7 @@ from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
 )
+from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
@@ -176,6 +177,7 @@ _EMPTY_STATS: dict[str, Any] = {
     "total_students": 0,
     "submitted": 0,
     "graded": 0,
+    "pending_review": 0,
     "avg_score": None,
 }
 
@@ -246,7 +248,27 @@ async def bulk_assignment_stats(
     )).all()
     graded = {r.assignment_id: r.c for r in graded_rows}
 
-    # 4. Average final_score per assignment (ignores nulls).
+    # 4. Pending-review bank-item count per assignment. These are
+    # AI-generated problems originated by this HW that still need the
+    # teacher's approval before they can join the problem list — same
+    # signal as the amber "N problems need your review" banner on the
+    # HW detail page. Surfaced on the HW list card as a gentle nudge
+    # so the teacher can find drafts with work waiting on them without
+    # opening each one.
+    pending_rows = (await db.execute(
+        select(
+            QuestionBankItem.originating_assignment_id,
+            func.count().label("c"),
+        )
+        .where(
+            QuestionBankItem.originating_assignment_id.in_(assignment_ids),
+            QuestionBankItem.status == "pending",
+        )
+        .group_by(QuestionBankItem.originating_assignment_id)
+    )).all()
+    pending = {r.originating_assignment_id: r.c for r in pending_rows}
+
+    # 5. Average final_score per assignment (ignores nulls).
     avg_rows = (await db.execute(
         select(Submission.assignment_id, func.avg(SubmissionGrade.final_score).label("avg"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
@@ -266,6 +288,7 @@ async def bulk_assignment_stats(
             "total_students": totals.get(aid, 0),
             "submitted": submitted.get(aid, 0),
             "graded": graded.get(aid, 0),
+            "pending_review": pending.get(aid, 0),
             "avg_score": round(avgs[aid], 1) if aid in avgs and avgs[aid] is not None else None,
         }
     return out
@@ -312,6 +335,7 @@ def assignment_to_dict(
         "total_students": stats["total_students"],
         "submitted": stats["submitted"],
         "graded": stats["graded"],
+        "pending_review": stats["pending_review"],
         "avg_score": stats["avg_score"],
         "created_at": a.created_at.isoformat(),
     }
@@ -1368,7 +1392,6 @@ async def get_submission_detail(
     """Full per-submission detail for the teacher view: image + per-
     problem typed answers shown alongside the original problem text
     and the answer key. No grading or annotations in this PR."""
-    from api.models.question_bank import QuestionBankItem
     from api.models.user import User as UserModel
 
     sub = (await db.execute(

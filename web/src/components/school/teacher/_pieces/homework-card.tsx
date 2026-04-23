@@ -2,7 +2,6 @@
 
 import type { TeacherAssignment } from "@/lib/api";
 import { formatDate, formatDue } from "@/lib/utils";
-import { ProgressBar } from "./progress-bar";
 
 export type HomeworkBucket =
   | "needsGrading"
@@ -11,13 +10,20 @@ export type HomeworkBucket =
   | "completed";
 
 /**
- * Lifecycle-aware homework card. Rendering varies by bucket:
+ * Lifecycle-aware homework card. Surfaces two things — publish state
+ * (DRAFT badge vs. no badge) and problem count — on every non-completed
+ * bucket. Submission progress lives on the Submissions tab; AI grading
+ * makes "N graded" track "N submitted" one-for-one, so a graded bar here
+ * is always-100% noise. Avg score still renders on needsGrading /
+ * completed because it's a meaningful quality signal independent of
+ * submission counts.
  *
- * - **upcoming (draft):** Title, DRAFT badge, due date, sections, problem count, variation warnings
- * - **upcoming (published):** Title, unit label, due date, sections, submission + grading bars
- * - **dueThisWeek:** Same as published but more prominent
- * - **needsGrading:** Title, unit, overdue indicator, bars, avg score
- * - **completed:** Dense single line — title, unit, due date, avg score
+ * Variant per bucket:
+ * - **upcoming (draft):** Title, DRAFT badge, due, sections, problem count, variation warnings
+ * - **upcoming (published):** Title, unit, due, sections, problem count
+ * - **dueThisWeek:** Same but with a blue accent border
+ * - **needsGrading:** Title, unit, overdue indicator, problem count, avg score
+ * - **completed:** Dense single line — title, unit, due, avg
  */
 export function HomeworkCard({
   hw,
@@ -95,43 +101,29 @@ export function HomeworkCard({
         </span>
       </div>
 
-      {/* Draft-specific: problem count + variation warnings */}
-      {isDraft && (
-        <div className="mt-1 text-[11px] text-text-muted">
-          {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
-          {needsVariationsCount !== null && needsVariationsCount > 0 && (
-            <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
-              · {needsVariationsCount} need variation
-              {needsVariationsCount === 1 ? "" : "s"}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Published: progress bars */}
-      {!isDraft && hw.total_students > 0 && (
-        <div className="mt-2 space-y-1">
-          <ProgressBar
-            label="Submitted"
-            current={hw.submitted}
-            total={hw.total_students}
-            color="blue"
-          />
-          <ProgressBar
-            label="Graded"
-            current={hw.graded}
-            total={hw.submitted}
-            color="green"
-          />
-        </div>
-      )}
-
-      {/* Needs grading: avg score */}
-      {bucket === "needsGrading" && hw.avg_score !== null && (
-        <div className="mt-1.5 text-[11px] font-semibold text-text-secondary">
-          Avg score: {Math.round(hw.avg_score)}%
-        </div>
-      )}
+      {/* Problem count + optional nudges. "N need approval" mirrors
+          the amber banner on the HW detail page — a pre-publish action
+          the teacher owes the HW. Variation warnings and avg score
+          stay one-liners so the card doesn't balloon. */}
+      <div className="mt-1 text-[11px] text-text-muted">
+        {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
+        {hw.pending_review > 0 && (
+          <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
+            · {hw.pending_review} need{hw.pending_review === 1 ? "s" : ""} your approval
+          </span>
+        )}
+        {isDraft && needsVariationsCount !== null && needsVariationsCount > 0 && (
+          <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
+            · {needsVariationsCount} need variation
+            {needsVariationsCount === 1 ? "" : "s"}
+          </span>
+        )}
+        {bucket === "needsGrading" && hw.avg_score !== null && (
+          <span className="ml-1 font-semibold text-text-secondary">
+            · Avg score {Math.round(hw.avg_score)}%
+          </span>
+        )}
+      </div>
     </button>
   );
 }
