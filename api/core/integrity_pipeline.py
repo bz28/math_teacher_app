@@ -363,13 +363,24 @@ async def start_integrity_check(
 
     if extraction is None:
         # Fallback extraction (caller didn't pre-extract). Build the
-        # problems briefing from the same candidate pool the selection
-        # algorithm just scored so Vision sees the HW's problem list
-        # and tags each step with a problem_position.
-        from api.services.bank import load_problems_for_assignment
-        problems = await load_problems_for_assignment(db, assignment)
+        # problems briefing from the candidate pool the selection
+        # algorithm just scored — same bank items, already hydrated —
+        # so Vision sees the HW's problem list and tags each step with
+        # a problem_position without a second DB round-trip through
+        # load_problems_for_assignment. Position matches the 1-based
+        # index of the bank id in the assignment's primary list, i.e.
+        # hw_position_by_id above.
+        problems_for_briefing = [
+            {
+                "position": hw_position_by_id[cid],
+                "question": items_by_id[cid].question,
+                "final_answer": items_by_id[cid].final_answer,
+            }
+            for cid in candidate_uuids
+            if cid in items_by_id
+        ]
         extraction = await extract_student_work(
-            submission_id, db, problems=problems, user_id=user_id,
+            submission_id, db, problems=problems_for_briefing, user_id=user_id,
         )
     confidence = extraction.get("confidence", 0.0)
     if confidence < UNREADABLE_THRESHOLD:

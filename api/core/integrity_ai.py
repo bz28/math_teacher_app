@@ -99,7 +99,15 @@ statements, "Name:", "Date:", instructions). Only extract what the student handw
 def _format_problems_briefing(problems: list[dict[str, Any]] | None) -> str:
     """Render the problem list as a numbered briefing Vision can cite by
     position when tagging steps. Empty when no problems are provided —
-    caller falls back to untagged extraction behavior."""
+    caller falls back to untagged extraction behavior.
+
+    Deliberately renders only `position` + `question` — not
+    `final_answer` — even though the shared `load_problems_for_assignment`
+    dict carries the answer key. Vision is reading the student's work,
+    not grading it; leaking the answer key here would let the model
+    "snap" the student's extracted work toward the correct answer
+    instead of transcribing what's actually on the page.
+    """
     if not problems:
         return ""
     lines = ["The homework has these problems (use these positions when tagging):"]
