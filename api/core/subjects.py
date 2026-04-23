@@ -37,18 +37,20 @@ SUBJECT_CONFIG: dict[str, dict[str, object]] = {
         },
     },
     Subject.CHEMISTRY: {
+        # LOCAL TEST: chemistry pill points at biology prompts for hands-on
+        # testing of the planned Biology subject. Revert before merging.
         "professor_role": (
-            "worldclass chemistry professor with expertise in breaking down "
-            "chemistry problems into easy to understand, coherent steps, making even the most "
+            "worldclass biology professor with expertise in breaking down "
+            "biology problems into easy to understand, coherent steps, making even the most "
             "complex problems trivial to understand to an elementary student"
         ),
-        "tutor_role": "chemistry tutor",
-        "domain": "chemistry",
-        "problems_noun": "chemistry problems",
-        "equivalence_adjective": "SCIENTIFICALLY",
+        "tutor_role": "biology tutor",
+        "domain": "biology",
+        "problems_noun": "biology problems",
+        "equivalence_adjective": "BIOLOGICALLY",
         "equivalence_examples": (
-            '- "NaCl" does NOT match "Na + Cl" — the compound vs ions matters\n'
-            "- Partial answers or answers missing units/coefficients are WRONG"
+            '- "mitosis" does NOT match "meiosis" — the process matters\n'
+            "- Partial answers or answers missing key terminology are WRONG"
         ),
         "function_names": set(),
     },
