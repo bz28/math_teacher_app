@@ -1093,7 +1093,7 @@ async def confirm_extraction(
     submission_id: uuid.UUID,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Student signs off on Vision's reading. Stamps
     `extraction_confirmed_at` and spawns the integrity + grading
     background pipeline. Idempotent: a repeated call on an already-
@@ -1131,7 +1131,7 @@ async def confirm_extraction(
     if sub.extraction_confirmed_at is not None:
         # Idempotent: duplicate click (double-tap, refresh mid-request)
         # is a no-op so we don't double-spawn grading.
-        return {"status": "ok", "already_confirmed": "true"}
+        return {"status": "ok", "already_confirmed": True}
 
     # Atomic conditional update: only stamp confirm if flag hasn't been
     # set and confirm hasn't been set. Guards against a concurrent flag
@@ -1149,7 +1149,7 @@ async def confirm_extraction(
         )
         .values(extraction_confirmed_at=datetime.now(UTC))
     )
-    if result.rowcount == 0:
+    if result.rowcount == 0:  # type: ignore[attr-defined]
         await db.rollback()
         raise HTTPException(
             status_code=409,
@@ -1168,7 +1168,7 @@ async def flag_extraction_submission(
     submission_id: uuid.UUID,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Student said "Reader got something wrong" on the confirm screen.
 
     Stamps `extraction_flagged_at` and sends the submission straight
@@ -1202,7 +1202,7 @@ async def flag_extraction_submission(
             detail="Submission already confirmed — can't flag now",
         )
     if sub.extraction_flagged_at is not None:
-        return {"status": "ok", "already_flagged": "true"}
+        return {"status": "ok", "already_flagged": True}
 
     # Atomic conditional update — see notes on confirm_extraction for
     # the race this closes. Intentionally NO _spawn_background_task —
@@ -1216,7 +1216,7 @@ async def flag_extraction_submission(
         )
         .values(extraction_flagged_at=datetime.now(UTC))
     )
-    if result.rowcount == 0:
+    if result.rowcount == 0:  # type: ignore[attr-defined]
         await db.rollback()
         raise HTTPException(
             status_code=409,

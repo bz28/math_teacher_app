@@ -1604,7 +1604,7 @@ export const schoolStudent = {
    *  extraction_confirmed_at and spawns the integrity + grading
    *  background pipeline — neither fires until this is called. */
   confirmExtraction(submissionId: string) {
-    return apiFetch<{ status: string; already_confirmed?: string }>(
+    return apiFetch<{ status: string; already_confirmed?: boolean }>(
       `/school/student/submissions/${submissionId}/confirm-extraction`,
       { method: "POST" },
     );
@@ -1614,7 +1614,7 @@ export const schoolStudent = {
    *  grading. Mutually exclusive with confirmExtraction — the
    *  server 409s if either terminal state is already set. */
   flagExtractionSubmission(submissionId: string) {
-    return apiFetch<{ status: string; already_flagged?: string }>(
+    return apiFetch<{ status: string; already_flagged?: boolean }>(
       `/school/student/submissions/${submissionId}/flag-extraction`,
       { method: "POST" },
     );
