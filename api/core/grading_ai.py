@@ -318,6 +318,10 @@ async def run_ai_grading_for_submission(
 
     grade.ai_breakdown = result
     grade.ai_score = ai_score
+    # Freeze the rubric we actually graded against so the review page can
+    # diff against Assignment.rubric later and surface a regrade CTA when
+    # the teacher has edited the rubric since this run.
+    grade.rubric_snapshot = assignment.rubric
 
     if grade.reviewed_by is None:
         grade.breakdown = breakdown
