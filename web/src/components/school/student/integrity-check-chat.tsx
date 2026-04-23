@@ -19,6 +19,19 @@ const BUDGET_LABEL: Record<"desktop" | "mobile", string> = {
   mobile: "~5 min",
 };
 
+// Inactivity thresholds. After this long without typing / pasting /
+// sending, show a gentle "still there?" banner + "I need more time"
+// option. Mobile typers get a longer window. Tapping "I need more
+// time" doubles it for the rest of the session. Never cuts the
+// student off — server-side turn caps are independent of this.
+const INACTIVITY_NUDGE_MS: Record<"desktop" | "mobile", number> = {
+  desktop: 120_000,
+  mobile: 180_000,
+};
+// How often the check runs. Doesn't need to be precise — the nudge
+// just needs to appear "about 2 min" after last activity.
+const INACTIVITY_TICK_MS = 5_000;
+
 interface Props {
   submissionId: string;
   /** Called when the chat reaches the done state OR the kid taps
@@ -51,6 +64,9 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const telemetry = useTurnTelemetry();
   const device = useDeviceType();
+  const lastActivityRef = useRef<number>(Date.now());
+  const [nudgeVisible, setNudgeVisible] = useState(false);
+  const [timeoutDoubled, setTimeoutDoubled] = useState(false);
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -89,6 +105,38 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const isComplete =
     state?.overall_status === "complete" ||
     state?.overall_status === "skipped_unreadable";
+
+  // Inactivity nudge: show a gentle "still there?" + "I need more
+  // time" banner if the student goes quiet. Any activity (keystroke,
+  // paste, send, focus return) resets the timer via
+  // lastActivityRef.current. Skip while sending (they're waiting,
+  // not idle) or when the check is complete.
+  const nudgeTimeoutMs =
+    INACTIVITY_NUDGE_MS[device] * (timeoutDoubled ? 2 : 1);
+  useEffect(() => {
+    if (isComplete) return;
+    const interval = window.setInterval(() => {
+      if (sending) return;
+      const elapsed = Date.now() - lastActivityRef.current;
+      if (elapsed >= nudgeTimeoutMs) {
+        setNudgeVisible(true);
+      }
+    }, INACTIVITY_TICK_MS);
+    return () => window.clearInterval(interval);
+  }, [isComplete, sending, nudgeTimeoutMs]);
+
+  // Any activity resets the timer and dismisses the nudge if it's up.
+  const markActivity = () => {
+    lastActivityRef.current = Date.now();
+    if (nudgeVisible) setNudgeVisible(false);
+  };
+
+  const handleNeedMoreTime = () => {
+    setTimeoutDoubled(true);
+    setNudgeVisible(false);
+    telemetry.markNeedMoreTime();
+    lastActivityRef.current = Date.now();
+  };
 
   const visibleTranscript: IntegrityTurn[] = useMemo(() => {
     const base = state?.transcript ?? [];
@@ -130,6 +178,10 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
       setState(next);
       setPendingStudentMessage(null);
       setTurnStartedAt(Date.now());
+      // The agent's reply counts as "fresh activity" — resetting
+      // here stops the inactivity nudge from firing immediately on
+      // a turn that finished right at the threshold.
+      lastActivityRef.current = Date.now();
     } catch {
       setError("Couldn't send that — try again.");
       setPendingStudentMessage(null);
@@ -224,6 +276,18 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         </div>
       ) : (
         <div className="border-t border-border-light px-2 py-3">
+          {nudgeVisible && !timeoutDoubled && (
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+              <span>Still there? Take your time.</span>
+              <button
+                type="button"
+                onClick={handleNeedMoreTime}
+                className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+              >
+                I need more time
+              </button>
+            </div>
+          )}
           {error && <p className="mb-2 text-xs text-error">{error}</p>}
           <div className="flex items-end gap-2">
             <textarea
@@ -253,6 +317,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
                   e.nativeEvent.isComposing || e.keyCode === 229;
                 if (!isModifier && !isShortcut && !isComposing) {
                   telemetry.recordKeystroke(isEdit);
+                  markActivity();
                 }
 
                 // Cmd/Ctrl + Enter sends so phone typers don't hit it
@@ -266,6 +331,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
                 // Size only — content is never captured.
                 const pasted = e.clipboardData.getData("text");
                 telemetry.recordPaste(pasted.length);
+                markActivity();
               }}
               placeholder="Type your answer…"
               rows={2}
