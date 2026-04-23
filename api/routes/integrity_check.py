@@ -489,6 +489,10 @@ class TeacherTranscriptTurn(BaseModel):
     tool_name: str | None = None
     seconds_on_turn: int | None = None
     created_at: datetime
+    # Client-captured behavioral signals from the student's chat for
+    # this turn. Populated on student rows only; null elsewhere.
+    # Teacher-facing evidence for flag_for_review cases.
+    telemetry: dict[str, Any] | None = None
 
 
 class TeacherIntegrityProblemRow(BaseModel):
@@ -593,6 +597,7 @@ async def teacher_get_integrity_detail(
             tool_name=t.tool_name,
             seconds_on_turn=t.seconds_on_turn,
             created_at=t.created_at,
+            telemetry=t.telemetry,
         )
         for t in turns
     ]

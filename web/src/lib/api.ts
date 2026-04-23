@@ -1685,6 +1685,10 @@ export interface TeacherIntegrityTranscriptTurn {
   tool_name: string | null;
   seconds_on_turn: number | null;
   created_at: string;
+  /** Client-captured behavioral signals for this student turn —
+   *  focus/blur events, paste events, typing cadence. Populated on
+   *  student rows only; null elsewhere. Teacher-facing evidence. */
+  telemetry: IntegrityTurnTelemetry | null;
 }
 
 export interface IntegrityExtractionStep {
