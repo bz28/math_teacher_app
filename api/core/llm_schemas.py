@@ -357,6 +357,35 @@ IMAGE_EXTRACT_SCHEMA: ToolSchema = {
     },
 }
 
+IMAGE_EXTRACT_OBJECTIVES_SCHEMA: ToolSchema = {
+    "name": "return_extracted_objectives",
+    "description": (
+        "Return learning objectives / topics extracted from a study "
+        "guide, syllabus, review sheet, or exam blueprint."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "topics": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "List of topic labels. One concept or skill per item, "
+                    "phrased briefly (not full sentences). Empty list if "
+                    "the image is clearly not an objectives sheet."
+                ),
+            },
+            "confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "description": "Confidence in the extraction quality.",
+            },
+        },
+        "required": ["topics", "confidence"],
+        "additionalProperties": False,
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Work diagnosis
 # ---------------------------------------------------------------------------

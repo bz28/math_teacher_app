@@ -27,3 +27,8 @@ class ImageExtractRequest(BaseModel):
 class ImageExtractResponse(BaseModel):
     problems: list[str] = Field(..., description="Extracted problems")
     confidence: str = Field(..., description="Extraction confidence: high, medium, or low")
+
+
+class ImageExtractObjectivesResponse(BaseModel):
+    topics: list[str] = Field(..., description="Extracted learning objectives / topics")
+    confidence: str = Field(..., description="Extraction confidence: high, medium, or low")

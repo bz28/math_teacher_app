@@ -38,6 +38,7 @@ class LLMMode:
     PRACTICE_GENERATE = "practice_generate"
     PRACTICE_EVAL = "practice_eval"
     IMAGE_EXTRACT = "image_extract"
+    IMAGE_OBJECTIVES_EXTRACT = "image_objectives_extract"
     DIAGNOSE_WORK = "diagnose_work"
     JUDGE = "judge"
     SUGGEST_UNITS = "suggest_units"
