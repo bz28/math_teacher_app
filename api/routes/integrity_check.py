@@ -224,20 +224,38 @@ def _student_facing_transcript(
 
     Tool-call / tool-result rows are dropped — the student never
     needs to see them, and they would just be confusing in the chat.
-    One derived flag: an agent turn whose most recent predecessor
-    tool_call was `generate_variant` is marked `is_variant_probe=True`
-    so the frontend can render it as a distinguished "quick practice"
-    card.
+    One derived flag: the first agent turn after a SUCCESSFUL
+    generate_variant call is marked `is_variant_probe=True` so the
+    frontend can render it as a distinguished "quick practice" card.
+
+    Success is determined by pairing tool_call → tool_result via
+    tool_use_id. A tool_call alone isn't enough — a rejected
+    generate_variant (second call in session, bogus problem_id, LLM
+    failure) shouldn't flag the next agent recovery text as a
+    variant probe, because no variant actually got generated.
     """
+    # Build a tool_use_id → tool_name map so we can match tool_results
+    # back to their originating tool_calls.
+    tool_name_by_use_id: dict[str, str] = {}
+    for t in turns:
+        if t.role == "tool_call" and t.tool_use_id and t.tool_name:
+            tool_name_by_use_id[t.tool_use_id] = t.tool_name
+
     out: list[TurnOut] = []
     pending_variant = False
     for t in turns:
         if t.role == "tool_call":
-            # "Arm" the flag if this tool call is generate_variant;
-            # otherwise leave whatever pending state we had (some
-            # other tool fired, doesn't reset the variant flag — the
-            # next agent turn is still the variant presenter).
-            if t.tool_name == TOOL_GENERATE_VARIANT:
+            continue
+        if t.role == "tool_result":
+            # Only arm on successful generate_variant tool_results.
+            # Handler returns a string starting with "accepted:" on
+            # success; anything else (including "rejected: ...") is
+            # treated as non-variant.
+            if (
+                t.tool_use_id
+                and tool_name_by_use_id.get(t.tool_use_id) == TOOL_GENERATE_VARIANT
+                and t.content.startswith("accepted:")
+            ):
                 pending_variant = True
             continue
         if t.role not in ("agent", "student"):
