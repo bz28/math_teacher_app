@@ -7,6 +7,7 @@ import {
   type IntegrityTurn,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTurnTelemetry } from "./use-turn-telemetry";
 
 interface Props {
   submissionId: string;
@@ -38,6 +39,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [turnStartedAt, setTurnStartedAt] = useState<number>(Date.now());
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const telemetry = useTurnTelemetry();
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -105,9 +107,11 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         0,
         Math.round((Date.now() - turnStartedAt) / 1000),
       );
+      const telemetryPayload = telemetry.snapshotAndReset();
       const next = await schoolStudent.postIntegrityTurn(submissionId, {
         message: trimmed,
         seconds_on_turn: seconds,
+        telemetry: telemetryPayload,
       });
       setState(next);
       setPendingStudentMessage(null);
@@ -205,12 +209,29 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
+                // Typing-cadence tracking: Backspace/Delete count as
+                // "edits", everything else as a normal keystroke.
+                // Modifier-only keys (shift, ctrl, etc.) skip — they
+                // don't move the cursor in text entry.
+                const isEdit = e.key === "Backspace" || e.key === "Delete";
+                const isModifier =
+                  e.key === "Shift" ||
+                  e.key === "Control" ||
+                  e.key === "Alt" ||
+                  e.key === "Meta";
+                if (!isModifier) telemetry.recordKeystroke(isEdit);
+
                 // Cmd/Ctrl + Enter sends so phone typers don't hit it
                 // by accident. Plain Enter just adds a newline.
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
                   void handleSend();
                 }
+              }}
+              onPaste={(e) => {
+                // Size only — content is never captured.
+                const pasted = e.clipboardData.getData("text");
+                telemetry.recordPaste(pasted.length);
               }}
               placeholder="Type your answer…"
               rows={2}
