@@ -314,18 +314,27 @@ def build_problems_briefing(
                     f"{s.get('plain_english', '')} "
                     f"[{s.get('latex', '')}]",
                 )
-        # Student's final answer on this problem, when Vision extracted
-        # one. Separated from the step list so the agent can probe it
-        # as a conclusion rather than mistake it for another step.
+        # Student's final answer(s) on this problem, when Vision
+        # extracted one. Separated from the step list so the agent can
+        # probe it as a conclusion rather than mistake it for another
+        # step. The extraction schema doesn't enforce uniqueness on
+        # problem_position, so render every matching entry — the agent
+        # sees every candidate rather than silently losing all but one.
         final_answers = extraction.get("final_answers") or []
         if final_answers:
-            fa = final_answers[0]  # slice is per-problem so ≤1 entry
-            answer = (
-                fa.get("answer_latex")
-                or fa.get("answer_plain")
-                or "(no answer)"
+            label = (
+                "Student's final answer"
+                if len(final_answers) == 1
+                else "Student's final answers (multiple extracted)"
             )
-            lines.append(f"Student's final answer: {answer}")
+            lines.append(f"{label}:")
+            for fa in final_answers:
+                answer = (
+                    fa.get("answer_latex")
+                    or fa.get("answer_plain")
+                    or "(no answer)"
+                )
+                lines.append(f"  {answer}")
         status = p.get("verdict_status", "pending")
         lines.append(f"Current verdict: {status}")
     return "\n".join(lines)
