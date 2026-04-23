@@ -108,13 +108,15 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
 
   // Inactivity nudge: show a gentle "still there?" + "I need more
   // time" banner if the student goes quiet. Any activity (keystroke,
-  // paste, send, focus return) resets the timer via
-  // lastActivityRef.current. Skip while sending (they're waiting,
-  // not idle) or when the check is complete.
+  // paste, send, focus return) resets the timer via markActivity().
+  // Skip while sending (they're waiting, not idle), when the check
+  // is complete, or when the student already tapped "I need more
+  // time" — at that point we've extended their window and trust
+  // them, no more nudges.
   const nudgeTimeoutMs =
     INACTIVITY_NUDGE_MS[device] * (timeoutDoubled ? 2 : 1);
   useEffect(() => {
-    if (isComplete) return;
+    if (isComplete || timeoutDoubled) return;
     const interval = window.setInterval(() => {
       if (sending) return;
       const elapsed = Date.now() - lastActivityRef.current;
@@ -123,7 +125,7 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
       }
     }, INACTIVITY_TICK_MS);
     return () => window.clearInterval(interval);
-  }, [isComplete, sending, nudgeTimeoutMs]);
+  }, [isComplete, sending, nudgeTimeoutMs, timeoutDoubled]);
 
   // Any activity resets the timer and dismisses the nudge if it's up.
   const markActivity = () => {
@@ -133,9 +135,8 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
 
   const handleNeedMoreTime = () => {
     setTimeoutDoubled(true);
-    setNudgeVisible(false);
     telemetry.markNeedMoreTime();
-    lastActivityRef.current = Date.now();
+    markActivity();
   };
 
   const visibleTranscript: IntegrityTurn[] = useMemo(() => {
@@ -277,7 +278,11 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
       ) : (
         <div className="border-t border-border-light px-2 py-3">
           {nudgeVisible && !timeoutDoubled && (
-            <div className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+            >
               <span>Still there? Take your time.</span>
               <button
                 type="button"
@@ -294,9 +299,16 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
-                // Typing-cadence tracking: Backspace/Delete count as
-                // "edits", everything else as a normal keystroke.
-                // Skip when it's not really text entry:
+                // Activity resets on ANY keydown — CJK IME composition
+                // keystrokes, Shift+Arrow text selection, and Cmd/Ctrl
+                // shortcuts all count as "student is engaged" even
+                // though they don't count as typing for the cadence
+                // signal.
+                markActivity();
+
+                // Typing-cadence tracking is stricter: Backspace/Delete
+                // count as "edits", everything else as a normal
+                // keystroke. Skip when it's not really text entry:
                 //   - Modifier-only keys (shift/ctrl/alt/meta) don't
                 //     produce characters.
                 //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
@@ -317,7 +329,6 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
                   e.nativeEvent.isComposing || e.keyCode === 229;
                 if (!isModifier && !isShortcut && !isComposing) {
                   telemetry.recordKeystroke(isEdit);
-                  markActivity();
                 }
 
                 // Cmd/Ctrl + Enter sends so phone typers don't hit it
