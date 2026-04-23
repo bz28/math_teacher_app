@@ -1103,13 +1103,14 @@ async def confirm_extraction(
       • 404 if the submission doesn't exist.
       • 403 if it belongs to another student.
       • 409 if extraction hasn't finished (nothing to confirm yet).
+      • 409 if the submission was already flagged via
+        /flag-extraction — mutually exclusive terminal states.
 
     This is the single choke-point that gates grading on student
-    confirmation. Called from both "Looks right" and "Reader got
-    something wrong" on the confirm screen — the flag fires its own
-    flag endpoint separately; grading still runs on a flagged
-    submission in this commit (flag-skips-grading lands in the
-    follow-up commit).
+    confirmation. Called from "Looks right — continue" on the confirm
+    screen; "Reader got something wrong" calls /flag-extraction
+    instead, which stamps extraction_flagged_at and deliberately does
+    NOT spawn grading.
     """
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)

@@ -616,6 +616,10 @@ async def test_confirm_extraction_happy_path(
         f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
         headers=_auth(world["student_token"]),
     )
+    # Drain so the spawned integrity + grading pipeline doesn't leak
+    # into the next test's session — matches the pattern in
+    # tests/test_integrity_check.py::_submit.
+    await drain_integrity_background_tasks()
     assert r.status_code == 200
     async with get_session_factory()() as s:
         sub = (await s.execute(
@@ -633,6 +637,7 @@ async def test_confirm_extraction_idempotent(
         f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
         headers=_auth(world["student_token"]),
     )
+    await drain_integrity_background_tasks()
     r2 = await client.post(
         f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
         headers=_auth(world["student_token"]),
@@ -640,7 +645,8 @@ async def test_confirm_extraction_idempotent(
     assert r1.status_code == 200
     assert r2.status_code == 200
     # Second call is a no-op but still succeeds (doesn't 500 or 409
-    # since the student just refreshed / double-tapped).
+    # since the student just refreshed / double-tapped). No drain
+    # needed after — the second call bails before spawning.
     assert r2.json().get("already_confirmed") is True
 
 
@@ -669,6 +675,9 @@ async def test_flag_after_confirm_409(
         f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
         headers=_auth(world["student_token"]),
     )
+    # Drain the pipeline spawned by confirm before the follow-up flag
+    # attempt, so the background task doesn't leak into the next test.
+    await drain_integrity_background_tasks()
     assert r.status_code == 200
     r = await client.post(
         f"/v1/school/student/submissions/{submission_id}/flag-extraction",
@@ -721,7 +730,8 @@ async def test_confirm_403_for_other_student(
 ) -> None:
     submission_id = await _submit_and_extract(client, world)
     # The shared `outsider` fixture is a student not owning this
-    # submission — confirming on it should 403.
+    # submission — confirming on it should 403 before any pipeline
+    # spawn, so no drain needed.
     r = await client.post(
         f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
         headers=_auth(world["outsider_token"]),
