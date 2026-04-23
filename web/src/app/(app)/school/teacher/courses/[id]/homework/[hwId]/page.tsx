@@ -76,13 +76,19 @@ export default function HomeworkDetailPage({
 }) {
   const { id: courseId, hwId: assignmentId } = use(params);
   const router = useRouter();
-  const backHref = `/school/teacher/courses/${courseId}?tab=homework`;
-  const goBack = () => router.push(backHref);
 
   const [hw, setHw] = useState<
     (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
   >(null);
   const [loading, setLoading] = useState(true);
+  // Back link points at whichever tab the assignment came from — HW
+  // for type=homework, Practice for type=practice. Falls back to HW
+  // while the assignment is still loading (matches prior behavior).
+  const backHref =
+    `/school/teacher/courses/${courseId}?tab=${
+      hw?.type === "practice" ? "practice" : "homework"
+    }`;
+  const goBack = () => router.push(backHref);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [editingProblems, setEditingProblems] = useState(false);
@@ -476,7 +482,7 @@ export default function HomeworkDetailPage({
           href={backHref}
           className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
         >
-          ← Back to homework
+          ← Back to {hw?.type === "practice" ? "practice" : "homework"}
         </Link>
       </div>
 

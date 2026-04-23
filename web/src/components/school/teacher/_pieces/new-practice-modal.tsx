@@ -73,6 +73,8 @@ export function NewPracticeModal({
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
 
   // Load available HWs for the clone dropdown on first step-1 mount.
+  // Preselect within the *cloneable* subset (problem_count > 0) so the
+  // dropdown's visible options can't diverge from state.
   useEffect(() => {
     if (hwsLoaded) return;
     teacher
@@ -80,10 +82,16 @@ export function NewPracticeModal({
       .then((r) => {
         const onlyHw = r.assignments.filter((a) => a.type === "homework");
         setHws(onlyHw);
-        // Pre-select the first published HW if any; else the first HW.
-        const firstPublished = onlyHw.find((a) => a.status === "published");
-        const first = firstPublished ?? onlyHw[0] ?? null;
-        if (first) setSelectedHwId(first.id);
+        const pickable = onlyHw.filter((h) => (h.problem_count ?? 0) > 0);
+        const firstPublished = pickable.find((a) => a.status === "published");
+        const first = firstPublished ?? pickable[0] ?? null;
+        if (first) {
+          setSelectedHwId(first.id);
+        } else {
+          // No cloneable HW exists — flip to scratch so the modal
+          // isn't stuck in a disabled clone step on open.
+          setSourceMode("scratch");
+        }
       })
       .catch(() => {
         // Non-fatal — teacher can switch to scratch mode.
