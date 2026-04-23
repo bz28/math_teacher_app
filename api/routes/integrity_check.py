@@ -315,12 +315,18 @@ async def _load_problem_questions(
 def _first_extraction(
     problems: list[IntegrityCheckProblem],
 ) -> dict[str, Any] | None:
-    """All sampled problems share one extraction today (the pipeline
-    writes the same dict to every row in start_integrity_check). Pick
-    any non-null copy. Returns None when no problems exist or none
-    carry an extraction (pathological edge case). If per-problem
-    extractions ever diverge, revisit this — callers expect one
-    extraction per submission.
+    """Return any non-null `student_work_extraction` from the sampled
+    problem rows. Safe today because MAX_SAMPLE=1 — there's only one
+    sampled problem, so "first non-null" is "the one".
+
+    **Read this before bumping MAX_SAMPLE > 1.** Since #303 the
+    pipeline writes a per-problem SLICE of the extraction to each
+    sampled problem row (just that problem's steps + final answer),
+    so different rows now carry different data. Callers that want
+    "all sampled problems' work in one view" would need to merge
+    the slices — currently they get only the first one, silently
+    dropping work from subsequent sampled problems. Revisit this
+    function at the same time you change MAX_SAMPLE.
     """
     for p in problems:
         if p.student_work_extraction:

@@ -275,7 +275,12 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
             {referenceOpen ? "Hide my work" : "View my work"}
           </button>
           {referenceOpen && (
-            <div className="space-y-3 pb-3">
+            // Cap the panel height so a long extraction can't push
+            // the chat off the bottom of the viewport. Student
+            // scrolls inside the panel; the chat stays in place
+            // below. ~40vh is enough to show the problem question
+            // plus a few steps before scrolling kicks in.
+            <div className="max-h-[40vh] overflow-y-auto space-y-3 pb-3">
               {state.problems.map((p) => (
                 <div
                   key={p.problem_id}
