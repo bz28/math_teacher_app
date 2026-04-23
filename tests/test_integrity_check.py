@@ -1525,6 +1525,106 @@ async def test_finish_check_rejects_variant_result_without_variant_used(
         )
 
 
+# ── Telemetry ──────────────────────────────────────────────────────
+
+
+async def test_turn_persists_telemetry_payload(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Client-captured telemetry (focus-blur, paste, cadence) is
+    persisted as-is on the student turn row. Teacher-facing evidence;
+    student never sees it back on the state endpoint."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    telemetry_payload = {
+        "focus_blur_events": [
+            {"at": "2026-04-22T18:00:00Z", "duration_ms": 4200},
+        ],
+        "paste_events": [
+            {"at": "2026-04-22T18:00:05Z", "byte_count": 42},
+        ],
+        "typing_cadence": {
+            "total_ms": 42000,
+            "pauses_over_3s": 2,
+            "edits": 5,
+        },
+        "need_more_time_used": False,
+        "device_type": "desktop",
+    }
+
+    set_agent_script([[make_text("Thanks for explaining.")]])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={
+            "message": "I factored out the 2 first.",
+            "seconds_on_turn": 42,
+            "telemetry": telemetry_payload,
+        },
+    )
+    assert r.status_code == 200
+
+    # Student-facing state must NOT echo telemetry back to the student.
+    body = r.json()
+    assert "telemetry" not in body
+    for t in body["transcript"]:
+        assert "telemetry" not in t
+
+    # Telemetry lands on the student turn row as-is.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        student_turns = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "student",
+            )
+        )).scalars().all()
+        assert len(student_turns) == 1
+        assert student_turns[0].telemetry == telemetry_payload
+
+
+async def test_turn_without_telemetry_still_works(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Telemetry is optional — older clients that don't send it must
+    still complete turns, and the column is left null."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([[make_text("Ok.")]])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={
+            "message": "Here's my first message.",
+            "seconds_on_turn": 10,
+        },
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        student_turns = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "student",
+            )
+        )).scalars().all()
+        assert len(student_turns) == 1
+        assert student_turns[0].telemetry is None
+
+
 # ── Extraction flag ────────────────────────────────────────────────
 
 
