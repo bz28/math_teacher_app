@@ -64,6 +64,60 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
+  // Silent poll while the tab is visible so the per-card
+  // "N need your approval" badge updates as AI generation jobs
+  // complete in the background. A teacher who kicks off a
+  // generation, backs out to the HW list, and waits sees the
+  // badge tick up without a manual refresh.
+  //
+  // Pauses when the browser tab is backgrounded — no point burning
+  // requests the teacher can't see. Resumes on visibilitychange.
+  // Failures swallow silently; the next tick retries.
+  //
+  // 10s is a deliberate middle ground: generation typically takes
+  // 15–60s, so the teacher sees an update within one tick of
+  // completion. Cheap enough (one grouped query on the backend)
+  // that we can narrow later — e.g., only poll while any HW is in
+  // draft/has pending items — without changing the API.
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const refresh = async () => {
+      try {
+        const [assignmentsRes, unitsRes] = await Promise.all([
+          teacher.assignments(courseId),
+          teacher.units(courseId),
+        ]);
+        setHomeworks(
+          assignmentsRes.assignments.filter((a) => a.type === "homework"),
+        );
+        setUnits(unitsRes.units);
+      } catch {
+        // Transient blip — next tick retries.
+      }
+    };
+    const start = () => {
+      if (intervalId === null) {
+        intervalId = setInterval(() => void refresh(), 10_000);
+      }
+    };
+    const stop = () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    if (document.visibilityState === "visible") start();
+    const onVis = () => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      stop();
+    };
+  }, [courseId]);
+
   // ── Derive filter options from all homeworks ──
 
   const allSections = useMemo(() => {
