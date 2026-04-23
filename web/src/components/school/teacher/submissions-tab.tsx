@@ -5,6 +5,7 @@ import Link from "next/link";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
+import { ProgressBar } from "./_pieces/progress-bar";
 
 /**
  * Submissions tab — the teacher's grading inbox.
@@ -138,10 +139,10 @@ function InboxRow({
   const dueLabel = row.due_at ? formatDueShort(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
   const hasOutstanding = row.to_grade + row.dirty + row.flagged > 0;
-  // "to grade" folds fresh-ungraded + dirty-republish into one count.
+  // "to review" folds fresh-ungraded + dirty-republish into one count.
   // From the teacher's point of view both states mean "needs a click
   // before students see it"; the mechanical split doesn't help scan.
-  const toGrade = row.to_grade + row.dirty;
+  const toReview = row.to_grade + row.dirty;
 
   return (
     <Link
@@ -166,66 +167,48 @@ function InboxRow({
               </span>
             </>
           )}
-          <span>·</span>
-          <span>
-            <span className="font-semibold text-text-primary">
-              {row.submitted}
-            </span>{" "}
-            / {row.total_students} submitted
-          </span>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {row.submitted === 0 ? (
-            <Pill tone="muted" label="No submissions yet" />
-          ) : (
+          {row.flagged > 0 && (
             <>
-              {toGrade > 0 && (
-                <Pill tone="amber" label={`⦿ ${toGrade} to grade`} />
-              )}
-              {row.flagged > 0 && (
-                <Pill tone="red" label={`⚑ ${row.flagged} flagged`} />
-              )}
-              {row.published > 0 && (
-                <Pill tone="green" label={`✓ ${row.published} published`} />
-              )}
-              {/* If all three counters are zero while submitted > 0,
-                  the background grading + integrity pipelines are
-                  still running on brand-new submissions. Render no
-                  pill in that window — the "N/M submitted" line above
-                  already tells the teacher what's happening, and the
-                  row becomes actionable the moment any counter ticks.
-                  (Misleading "Waiting on students" copy removed — the
-                  teacher is waiting on the pipeline, not students.) */}
+              <span>·</span>
+              <span className="font-semibold text-red-600 dark:text-red-400">
+                ⚑ {row.flagged} flagged
+              </span>
             </>
           )}
         </div>
+        {row.submitted === 0 ? (
+          // No submissions yet — three empty bars would be visual noise.
+          // One honest line beats three zeroed bars.
+          <p className="mt-2 text-[11px] italic text-text-muted">
+            No work to review yet
+          </p>
+        ) : (
+          <div className="mt-2 space-y-1">
+            <ProgressBar
+              label="Submitted"
+              current={row.submitted}
+              total={row.total_students}
+              color="blue"
+            />
+            <ProgressBar
+              label="To review"
+              current={toReview}
+              total={row.submitted}
+              color="amber"
+            />
+            <ProgressBar
+              label="Published"
+              current={row.published}
+              total={row.submitted}
+              color="green"
+            />
+          </div>
+        )}
       </div>
       <span className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white group-hover:bg-primary-dark">
         Review →
       </span>
     </Link>
-  );
-}
-
-function Pill({
-  tone,
-  label,
-}: {
-  tone: "red" | "amber" | "green" | "muted";
-  label: string;
-}) {
-  const cls = {
-    red: "border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
-    amber: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
-    green: "border-green-200 bg-green-50 text-green-800 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-300",
-    muted: "border-border-light bg-bg-subtle text-text-muted",
-  }[tone];
-  return (
-    <span
-      className={`inline-flex items-center rounded-[--radius-pill] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}
-    >
-      {label}
-    </span>
   );
 }
 
