@@ -1623,6 +1623,11 @@ export interface IntegrityProblemSummary {
   problem_id: string;
   sample_position: number;
   status: IntegrityProblemStatus;
+  /** Question text the student is being asked about — rendered in the
+   *  chat's reference panel so the student can see the original
+   *  prompt alongside the agent's follow-ups. Null when the bank item
+   *  was deleted between publish and state fetch. */
+  question: string | null;
 }
 
 export type IntegrityTurnRole = "agent" | "student";

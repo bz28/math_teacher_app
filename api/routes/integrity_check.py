@@ -51,12 +51,18 @@ MIN_MESSAGE_CHARS = 5
 # ── Response shapes ─────────────────────────────────────────────────
 
 class ProblemSummary(BaseModel):
-    """Student-facing per-problem status (no extraction, no reasoning,
-    no rubric). Rubric is teacher-facing; students see status only.
+    """Student-facing per-problem summary. Carries the question text
+    so the chat can show students what the agent is asking about
+    (they need to reference it while answering). No rubric, no
+    reasoning — those are teacher-only.
     """
     problem_id: str
     sample_position: int
     status: str
+    # Question prompt the student is being asked about. Null as a
+    # fallback when the bank item has been deleted between publish and
+    # the state request (pathological).
+    question: str | None
 
 
 class TurnOut(BaseModel):
@@ -277,15 +283,33 @@ def _student_facing_transcript(
 
 def _problem_summaries(
     problems: list[IntegrityCheckProblem],
+    questions_by_bank_id: dict[uuid.UUID, str],
 ) -> list[ProblemSummary]:
     return [
         ProblemSummary(
             problem_id=str(p.id),
             sample_position=p.sample_position,
             status=p.status,
+            question=questions_by_bank_id.get(p.bank_item_id),
         )
         for p in problems
     ]
+
+
+async def _load_problem_questions(
+    db: AsyncSession, problems: list[IntegrityCheckProblem],
+) -> dict[uuid.UUID, str]:
+    """Batch-fetch the question text for every probed problem. Used
+    to populate the student-facing summary so the chat can show the
+    problem alongside the agent's questions."""
+    if not problems:
+        return {}
+    bank_ids = [p.bank_item_id for p in problems]
+    rows = (await db.execute(
+        select(QuestionBankItem.id, QuestionBankItem.question)
+        .where(QuestionBankItem.id.in_(bank_ids))
+    )).all()
+    return {row.id: row.question for row in rows}
 
 
 def _first_extraction(
@@ -304,11 +328,12 @@ def _first_extraction(
     return None
 
 
-def _build_state_response(
+async def _build_state_response(
     submission_id: uuid.UUID,
     check: IntegrityCheckSubmission | None,
     problems: list[IntegrityCheckProblem],
     turns: list[IntegrityConversationTurn],
+    db: AsyncSession,
     *,
     fallback_status: str,
 ) -> IntegrityStateResponse:
@@ -329,13 +354,14 @@ def _build_state_response(
             problems=[],
             transcript=[],
         )
+    questions = await _load_problem_questions(db, problems)
     return IntegrityStateResponse(
         submission_id=str(submission_id),
         overall_status=check.status,
         disposition=check.disposition,
         student_flagged_extraction=check.student_flagged_extraction,
         extraction=_first_extraction(problems),
-        problems=_problem_summaries(problems),
+        problems=_problem_summaries(problems, questions),
         transcript=_student_facing_transcript(turns),
     )
 
@@ -369,15 +395,15 @@ async def get_my_integrity_state(
             select(Assignment.integrity_check_enabled)
             .where(Assignment.id == submission.assignment_id)
         )).scalar_one_or_none()
-        return _build_state_response(
-            submission_id, None, [], [],
+        return await _build_state_response(
+            submission_id, None, [], [], db,
             fallback_status="extracting" if enabled else "no_check",
         )
 
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
-    return _build_state_response(
-        submission_id, check, problems, turns, fallback_status="no_check",
+    return await _build_state_response(
+        submission_id, check, problems, turns, db, fallback_status="no_check",
     )
 
 
@@ -436,8 +462,8 @@ async def post_student_turn(
     # calls that landed during the agent loop.
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
-    return _build_state_response(
-        submission_id, check, problems, turns, fallback_status="no_check",
+    return await _build_state_response(
+        submission_id, check, problems, turns, db, fallback_status="no_check",
     )
 
 
@@ -475,8 +501,8 @@ async def flag_extraction(
 
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
-    return _build_state_response(
-        submission_id, check, problems, turns, fallback_status="no_check",
+    return await _build_state_response(
+        submission_id, check, problems, turns, db, fallback_status="no_check",
     )
 
 
