@@ -2,12 +2,30 @@ import { useState } from "react";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { requestCameraAccess, requestGalleryAccess } from "./usePermissions";
-import { extractProblemsFromImage } from "../services/api";
+import { extractObjectivesFromImage, extractProblemsFromImage } from "../services/api";
 import { cropImage, type CropRegion } from "../utils/cropImage";
 import { errorMessage } from "../utils/errorMessage";
 import { imageToBase64 } from "../utils/imageToBase64";
 
 export type ExtractionPhase = "idle" | "preview" | "selecting" | "extracting" | "results";
+
+/** What kind of items the extraction is pulling out of the image.
+ *  "problems" — snap a worksheet, get question text (Learn / Mock Test "Use mine").
+ *  "objectives" — snap a study guide, get topic labels (Mock Test "From objectives"). */
+export type ExtractionMode = "problems" | "objectives";
+
+async function extractForMode(
+  mode: ExtractionMode,
+  imageBase64: string,
+  subject: string,
+): Promise<{ items: string[]; confidence: string }> {
+  if (mode === "objectives") {
+    const r = await extractObjectivesFromImage(imageBase64, subject);
+    return { items: r.topics, confidence: r.confidence };
+  }
+  const r = await extractProblemsFromImage(imageBase64, subject);
+  return { items: r.problems, confidence: r.confidence };
+}
 
 export interface ExtractionState {
   phase: ExtractionPhase;
@@ -44,8 +62,10 @@ export function useImageExtraction(
   subject: string = "math",
   scansRemaining?: () => number,
   onScanLimitReached?: () => void,
+  mode: ExtractionMode = "problems",
 ) {
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
+  const noun = mode === "objectives" ? "topic" : "problem";
 
   /** Pick image → show preview with Extract All / Select Areas options. */
   const pickImage = async (source: "camera" | "gallery") => {
@@ -97,10 +117,14 @@ export function useImageExtraction(
 
     try {
       const base64 = await imageToBase64(state.imageUri);
-      const { problems, confidence } = await extractProblemsFromImage(base64, subject);
+      const { items, confidence } = await extractForMode(mode, base64, subject);
 
-      if (problems.length === 0) {
-        setError("No problems found. Try selecting areas manually.");
+      if (items.length === 0) {
+        setError(
+          mode === "objectives"
+            ? "No topics found. Try a clearer photo of your study guide."
+            : "No problems found. Try selecting areas manually.",
+        );
         setState((prev) => ({ ...prev, phase: "preview", extracting: false }));
         return;
       }
@@ -109,9 +133,9 @@ export function useImageExtraction(
         ...prev,
         phase: "results",
         extracting: false,
-        problems,
+        problems: items,
         confidence,
-        selected: problems.map(() => true),
+        selected: items.map(() => true),
         editingIndex: null,
       }));
     } catch (e) {
@@ -119,7 +143,7 @@ export function useImageExtraction(
       if (msg.includes("Network") || msg.includes("fetch")) {
         setError("Network error — check your connection and try again.");
       } else {
-        setError(msg || "Failed to extract problems from image.");
+        setError(msg || `Failed to extract ${noun}s from image.`);
       }
       setState((prev) => ({ ...prev, phase: "preview", extracting: false }));
     }
@@ -156,12 +180,12 @@ export function useImageExtraction(
           batch.map((rect) => cropImage(state.imageUri!, rect)),
         );
         const results = await Promise.allSettled(
-          crops.map((cropped) => extractProblemsFromImage(cropped, subject)),
+          crops.map((cropped) => extractForMode(mode, cropped, subject)),
         );
 
         for (const r of results) {
           if (r.status === "fulfilled") {
-            allProblems.push(...r.value.problems);
+            allProblems.push(...r.value.items);
             if (r.value.confidence === "low") worstConfidence = "low";
             else if (r.value.confidence === "medium" && worstConfidence !== "low")
               worstConfidence = "medium";
@@ -174,7 +198,7 @@ export function useImageExtraction(
       }
 
       if (allProblems.length === 0) {
-        setError("No problems found in the selected areas. Try drawing larger rectangles.");
+        setError(`No ${noun}s found in the selected areas. Try drawing larger rectangles.`);
         setState((prev) => ({ ...prev, phase: "preview", extracting: false, extractionProgress: null }));
         return;
       }
@@ -195,7 +219,7 @@ export function useImageExtraction(
         };
       });
     } catch {
-      setError("Failed to extract problems. Try again.");
+      setError(`Failed to extract ${noun}s. Try again.`);
       setState((prev) => ({ ...prev, phase: "preview", extracting: false, extractionProgress: null }));
     }
   };
@@ -272,6 +296,8 @@ export function useImageExtraction(
 
   return {
     ...state,
+    mode,
+    noun,
     selectedCount,
     canAddMore,
     pickImage,

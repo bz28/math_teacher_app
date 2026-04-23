@@ -32,6 +32,10 @@ interface Props {
   onDismiss: () => void;
   onRetry: () => void;
   onManualSelect?: () => void;
+  /** Singular noun for the items shown (default "problem"). e.g. "topic". */
+  itemNoun?: string;
+  /** Verb used on the confirm button, default "Add Selected". e.g. "Use Selected". */
+  confirmVerb?: string;
 }
 
 export function ExtractionModal({
@@ -51,9 +55,13 @@ export function ExtractionModal({
   onDismiss,
   onRetry,
   onManualSelect,
+  itemNoun = "problem",
+  confirmVerb = "Add Selected",
 }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const count = problems?.length ?? 0;
+  const plural = count === 1 ? itemNoun : `${itemNoun}s`;
   return (
     <Modal
       visible={problems !== null}
@@ -68,7 +76,7 @@ export function ExtractionModal({
         <View style={[styles.content, shadows.lg]}>
           <View style={styles.header}>
             <Text style={styles.title}>
-              Found {problems?.length ?? 0} problem{(problems?.length ?? 0) !== 1 ? "s" : ""}
+              Found {count} {plural}
             </Text>
             <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Ionicons name="close" size={24} color={colors.textSecondary} />
@@ -146,7 +154,7 @@ export function ExtractionModal({
 
           {!canAddMore && (
             <Text style={styles.warning}>
-              Queue is full ({maxProblems} problems max)
+              Queue is full ({maxProblems} {itemNoun}s max)
             </Text>
           )}
 
@@ -172,7 +180,7 @@ export function ExtractionModal({
                 style={styles.addGradient}
               >
                 <Text style={styles.addText}>
-                  Add Selected ({selectedCount})
+                  {confirmVerb} ({selectedCount})
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
