@@ -4,8 +4,7 @@ Revision ID: au1000038
 Revises: at1000037
 Create Date: 2026-04-22 00:00:00.000000
 
-Pre-scale cutover for the adaptive-probing redesign (plan:
-plans/integrity-agent-adaptive-probing.md). Replaces the
+Pre-scale cutover for the adaptive-probing redesign. Replaces the
 likely/uncertain/unlikely badge scheme with a four-way disposition
 (PASS / NEEDS_PRACTICE / TUTOR_PIVOT / FLAG_FOR_REVIEW), adds a
 six-dimension rubric per probed problem, adds behavioral telemetry

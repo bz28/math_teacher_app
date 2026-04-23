@@ -83,7 +83,7 @@ class QuestionBankItem(Base):
 
     # Workshop chat thread. List of {role, text, proposal?, accepted?,
     # discarded?, ts}. Persists across modal close so the conversation
-    # survives. See plans/question-bank-workshop-v2.md.
+    # survives.
     #
     # IMPORTANT: MutableList only tracks LIST-level mutations (append,
     # pop, __setitem__ of the whole element). It does NOT track mutations

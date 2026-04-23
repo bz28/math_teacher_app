@@ -1,6 +1,5 @@
 """Integrity-checker pipeline orchestrator + shared constants.
 
-Conversational redesign (plan: plans/integrity-conversational-redesign.md).
 The feature runs as three phases:
 
 1. On homework submit, `start_integrity_check` kicks off a background

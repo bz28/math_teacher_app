@@ -99,7 +99,7 @@ function PersonalHistory() {
 // ways to close the gap: (a) add an "Ask a problem" button inside
 // /school/student that opens a section-scoped learn page, or (b) change
 // this endpoint to read BankConsumption and render practice history.
-// Neither is in scope for this PR — see plans/school-portal-cleanup-round-2.md.
+// Deferred — neither approach is wired up yet.
 function SchoolHistory() {
   const router = useRouter();
   const [courses, setCourses] = useState<EnrolledCourse[] | null>(null);
