@@ -76,8 +76,8 @@ TODO_APPLE_TEAM_ID         →  10-char Team ID
 
 ## 🟢 GROWTH — not blocking, do before launch if time allows
 
-- [ ] Wire `expo-store-review` to fire after a completed session (not on app open). Cap at system default.
-- [ ] Create a `veradicai.com/students` landing page. Set it as the Marketing URL in ASC.
+- [x] Wire `expo-store-review` to fire after a completed session (not on app open). Cap at system default. *(done — fires after 3rd completed session)*
+- [x] Create a `veradicai.com/students` landing page. Set it as the Marketing URL in ASC. *(done — page live at HTTP 200, marketing URL set in app-store-listing.md)*
 - [ ] Sign up for AppTweak or Sensor Tower free trial and validate keyword volume for all terms in `plans/app-store-listing.md`.
 - [ ] Draft a social media launch post and line up 3-5 testimonials from existing web users.
 - [ ] Set up a Slack / email alert when a 1★ review comes in (Appbot or RevenueCat's built-in).

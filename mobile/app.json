@@ -29,11 +29,6 @@
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
-      },
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
-        }
       }
     },
     "web": {

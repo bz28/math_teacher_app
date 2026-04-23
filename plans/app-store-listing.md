@@ -112,10 +112,10 @@ Snap any math problem and get guided, step-by-step tutoring from an AI that teac
 | Field | URL |
 |---|---|
 | Support URL | `https://veradicai.com/support` |
-| Marketing URL | `https://veradicai.com` |
+| Marketing URL | `https://veradicai.com/students` |
 | Privacy Policy URL | `https://veradicai.com/privacy` |
 
-**Note:** if the homepage still leads with the teacher pitch at launch, conversion from this listing will suffer. Consider pointing Marketing URL to a `/students` landing page once that exists.
+**Note:** Marketing URL points at the dedicated student landing page (verified live, HTTP 200) so App Store visitors see the student value prop instead of the teacher pitch.
 
 ## Age Rating
 
