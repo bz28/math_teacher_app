@@ -349,6 +349,12 @@ class StudentSubmissionDetail(BaseModel):
     #                manually, no AI calls run.
     extraction_confirmed_at: datetime | None
     extraction_flagged_at: datetime | None
+    # Assignment-level pipeline toggles. Submit-time background
+    # extraction fires only when at least one is true; the frontend
+    # uses this to avoid sending students to a "Preparing your check"
+    # spinner when no pipeline will ever populate `extraction`.
+    integrity_check_enabled: bool
+    ai_grading_enabled: bool
 
 
 # ── Dashboard / grades shapes ──
@@ -1244,6 +1250,18 @@ async def get_my_submission(
     if sub is None:
         raise HTTPException(status_code=404, detail="No submission yet")
 
+    # Pipeline-toggle lookup on the assignment so the student-side
+    # router can tell the difference between "extraction still running"
+    # and "extraction will never run, don't wait on a spinner."
+    toggles = (await db.execute(
+        select(
+            Assignment.integrity_check_enabled,
+            Assignment.ai_grading_enabled,
+        ).where(Assignment.id == sub.assignment_id)
+    )).one_or_none()
+    integrity_on = bool(toggles.integrity_check_enabled) if toggles else False
+    grading_on = bool(toggles.ai_grading_enabled) if toggles else False
+
     return StudentSubmissionDetail(
         submission_id=str(sub.id),
         submitted_at=sub.submitted_at,
@@ -1253,6 +1271,8 @@ async def get_my_submission(
         extraction=sub.extraction,
         extraction_confirmed_at=sub.extraction_confirmed_at,
         extraction_flagged_at=sub.extraction_flagged_at,
+        integrity_check_enabled=integrity_on,
+        ai_grading_enabled=grading_on,
     )
 
 

@@ -1455,6 +1455,12 @@ export interface StudentSubmission {
    *  screen. Mutually exclusive with extraction_confirmed_at —
    *  flagged submissions skip AI entirely and wait for the teacher. */
   extraction_flagged_at: string | null;
+  /** Assignment-level pipeline toggles. Extraction only runs when at
+   *  least one is true — the student-side router uses these to skip
+   *  the "Preparing your check" spinner when no pipeline will ever
+   *  populate `extraction`. */
+  integrity_check_enabled: boolean;
+  ai_grading_enabled: boolean;
 }
 
 export interface SubmitHomeworkResponse {

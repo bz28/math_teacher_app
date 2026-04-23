@@ -103,6 +103,18 @@ export default function HomeworkPage() {
           return;
         }
         if (sub && sub.extraction == null) {
+          // Extraction only runs when either integrity or AI grading
+          // is on — if both are off, `sub.extraction` stays null
+          // forever and a 90s spinner waiting for it is a bug, not a
+          // wait. Fall through to the homework view and let the
+          // submitted state render as normal.
+          if (
+            !sub.integrity_check_enabled &&
+            !sub.ai_grading_enabled
+          ) {
+            setMode({ kind: "homework" });
+            return;
+          }
           // Still extracting (or extraction failed — IntegrityPendingView
           // handles the timeout fallback in that case).
           setMode({ kind: "integrity_pending" });
@@ -265,14 +277,15 @@ export default function HomeworkPage() {
     );
   }
 
-  if (mode.kind === "integrity_pending" && hw.submission_id) {
+  if (mode.kind === "integrity_pending" && hw.submission_id && assignmentId) {
     return (
       <IntegrityPendingView
         submissionId={hw.submission_id}
+        assignmentId={assignmentId}
         onReady={async () => {
           // Re-fetch state and let loadAll decide where to route
           // next (chat, submitted view, etc.).
-          if (assignmentId) await loadAll(assignmentId);
+          await loadAll(assignmentId);
         }}
         onTimeout={() => setMode({ kind: "integrity_pending_timeout" })}
       />
