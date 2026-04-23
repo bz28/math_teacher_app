@@ -1165,12 +1165,22 @@ async def regrade_submission(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Could not regrade — no gradeable content",
         )
+    # Unwrap ai_breakdown to match get_submission_detail's shape —
+    # it's stored as the full grader envelope {grades: [...]} but the
+    # TeacherSubmissionDetail type (what the frontend replaces after
+    # regrade) expects the already-flattened array. Shipping the raw
+    # envelope here would desync the detail's ai_breakdown shape on
+    # the review page and break AI-badge rendering until the student
+    # row refetches.
+    ai_breakdown_grades = None
+    if grade.ai_breakdown:
+        ai_breakdown_grades = grade.ai_breakdown.get("grades")
     return {
         "status": "ok",
         "final_score": grade.final_score,
         "ai_score": grade.ai_score,
         "breakdown": grade.breakdown,
-        "ai_breakdown": grade.ai_breakdown,
+        "ai_breakdown": ai_breakdown_grades,
         "rubric_snapshot": grade.rubric_snapshot,
         "graded_at": grade.graded_at.isoformat() if grade.graded_at else None,
         "grade_published_at": (
