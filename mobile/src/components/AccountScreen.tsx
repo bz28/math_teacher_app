@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as SecureStore from "expo-secure-store";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { PaywallScreen } from "./PaywallScreen";
@@ -22,6 +23,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
+import { ONBOARDING_FLAGS_KEY, ONBOARDING_KEY } from "../constants/storageKeys";
 import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface AccountScreenProps {
@@ -257,6 +259,41 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
           <Text style={styles.logoutText}>Log Out</Text>
         </AnimatedPressable>
+
+        {/* Dev-only: reset the onboarding flow so the welcome walkthrough
+            shows again on next launch. Only renders in development builds. */}
+        {__DEV__ && (
+          <AnimatedPressable
+            style={styles.devResetButton}
+            onPress={() => {
+              Alert.alert(
+                "Reset Onboarding (dev)",
+                "Clears the welcome-walkthrough flag so the intro shows on next launch. Close and reopen Expo Go (or press 'r' in Metro) after tapping OK.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Reset",
+                    style: "destructive",
+                    onPress: async () => {
+                      await Promise.all([
+                        SecureStore.deleteItemAsync(ONBOARDING_KEY).catch(() => {}),
+                        SecureStore.deleteItemAsync(ONBOARDING_FLAGS_KEY).catch(() => {}),
+                      ]);
+                      Alert.alert(
+                        "Onboarding reset",
+                        "Reload the app (close + reopen Expo Go, or press 'r' in Metro) to see the intro.",
+                      );
+                    },
+                  },
+                ],
+              );
+            }}
+            scaleDown={0.97}
+          >
+            <Ionicons name="refresh" size={16} color={colors.textMuted} />
+            <Text style={styles.devResetText}>DEV: Reset Onboarding</Text>
+          </AnimatedPressable>
+        )}
       </ScrollView>
 
       <PaywallScreen
@@ -598,6 +635,24 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     ...typography.bodyBold,
     color: colors.error,
     fontSize: 14,
+  },
+  devResetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xl,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    borderRadius: radii.md,
+  },
+  devResetText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
 
   // Delete account modal
