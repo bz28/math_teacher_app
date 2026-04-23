@@ -8,7 +8,7 @@ import {
   teacher,
   type AiGradeEntry,
   type GradeBreakdownEntry,
-  type IntegrityBadge,
+  type IntegrityDisposition,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
   type TeacherRubric,
@@ -819,36 +819,37 @@ function StudentRow({
           {Math.round(sub.final_score)}%
         </span>
       )}
-      {sub?.integrity_overview?.overall_badge === "unlikely" && (
+      {sub?.integrity_overview?.disposition === "flag_for_review" && (
         <span
           className="shrink-0 text-[11px] font-bold text-red-600 dark:text-red-400"
           role="img"
-          aria-label="Integrity flag: unlikely the student did this work"
-          title="Integrity flag: unlikely the student did this work"
+          aria-label="Integrity flag: review needed"
+          title="Integrity flag: review needed"
         >
           🔴
         </span>
       )}
-      {sub?.integrity_overview?.overall_badge === "uncertain" && (
+      {sub?.integrity_overview?.disposition === "tutor_pivot" && (
         <span
           className="shrink-0 text-[11px] font-bold text-amber-600 dark:text-amber-400"
           role="img"
-          aria-label="Integrity flag: uncertain"
-          title="Integrity flag: uncertain"
+          aria-label="Student got tutored through this"
+          title="Student got tutored through this"
         >
           🟡
         </span>
       )}
-      {sub?.integrity_overview?.overall_badge === "unreadable" && (
-        <span
-          className="shrink-0 text-[11px] font-bold text-text-muted"
-          role="img"
-          aria-label="Integrity flag: handwriting unreadable"
-          title="Integrity flag: handwriting unreadable"
-        >
-          📄
-        </span>
-      )}
+      {sub?.integrity_overview?.overall_status === "complete" &&
+        !sub?.integrity_overview?.disposition && (
+          <span
+            className="shrink-0 text-[11px] font-bold text-text-muted"
+            role="img"
+            aria-label="Integrity check inconclusive — review"
+            title="Integrity check inconclusive — review"
+          >
+            📄
+          </span>
+        )}
     </button>
   );
 }
@@ -1409,40 +1410,47 @@ function GradeBtn({
   );
 }
 
-// Visual treatment for each integrity verdict. Paired with both an
-// icon and explicit copy so color-only signal is never the whole
-// story (colorblind-safe by design).
+// Visual treatment for each disposition. Paired with both an icon
+// and explicit copy so color-only signal is never the whole story
+// (colorblind-safe by design).
 const INTEGRITY_STYLE: Record<
-  IntegrityBadge | "in_progress" | "none",
+  IntegrityDisposition | "in_progress" | "needs_review" | "none",
   { bg: string; border: string; text: string; icon: string; label: string }
 > = {
-  likely: {
+  pass: {
     bg: "bg-green-50 dark:bg-green-900/20",
     border: "border-green-200 dark:border-green-900/40",
     text: "text-green-800 dark:text-green-300",
     icon: "✓",
-    label: "Looks like the student's own work",
+    label: "Student understood their own work",
   },
-  uncertain: {
+  needs_practice: {
+    bg: "bg-blue-50 dark:bg-blue-900/20",
+    border: "border-blue-200 dark:border-blue-900/40",
+    text: "text-blue-800 dark:text-blue-300",
+    icon: "↻",
+    label: "Procedural knowledge — consider revisiting the concept",
+  },
+  tutor_pivot: {
     bg: "bg-amber-50 dark:bg-amber-900/20",
     border: "border-amber-200 dark:border-amber-900/40",
     text: "text-amber-800 dark:text-amber-300",
-    icon: "⚠",
-    label: "Some concerns — the AI couldn't verify everything",
+    icon: "?",
+    label: "Student was lost — got tutored through it",
   },
-  unlikely: {
+  flag_for_review: {
     bg: "bg-red-50 dark:bg-red-900/20",
     border: "border-red-200 dark:border-red-900/40",
     text: "text-red-800 dark:text-red-300",
     icon: "🚩",
-    label: "Likely not the student's own work",
+    label: "Review — correct work but couldn't explain it",
   },
-  unreadable: {
+  needs_review: {
     bg: "bg-bg-subtle",
     border: "border-border-light",
     text: "text-text-muted",
     icon: "◌",
-    label: "Handwriting unreadable — couldn't run the check",
+    label: "Inconclusive — teacher review",
   },
   in_progress: {
     bg: "bg-bg-subtle",
@@ -1478,20 +1486,28 @@ function IntegrityBanner({
   const [open, setOpen] = useState(false);
 
   // Prefer full detail. If it's missing (fetch pending / 404), use
-  // the overview so the "in progress" and overall-badge signals still
+  // the overview so the "in progress" and disposition signals still
   // surface without waiting for a second round-trip.
-  const badge = integrity?.overall_badge ?? overviewFallback?.overall_badge ?? null;
+  const disposition =
+    integrity?.disposition ?? overviewFallback?.disposition ?? null;
   const inProgress =
     !integrity && overviewFallback?.overall_status === "in_progress";
   const summary = integrity?.overall_summary ?? null;
+  // Terminal-but-no-disposition = unreadable or turn-cap fallback —
+  // teacher needs to take a look but it's not a verdict.
+  const needsReview =
+    !!integrity && !disposition && integrity.overall_status === "complete";
 
   // Nothing to show: no integrity data and not in progress. Bail so
   // the layout doesn't reserve a phantom row.
-  if (!badge && !inProgress && !integrity) return null;
+  if (!disposition && !inProgress && !needsReview && !integrity) return null;
 
-  const key: IntegrityBadge | "in_progress" | "none" = inProgress
-    ? "in_progress"
-    : (badge ?? "none");
+  const key: IntegrityDisposition | "in_progress" | "needs_review" | "none" =
+    inProgress
+      ? "in_progress"
+      : needsReview
+        ? "needs_review"
+        : (disposition ?? "none");
   const style = INTEGRITY_STYLE[key];
   const hasTranscript = !!integrity && integrity.transcript.length > 0;
 
@@ -1661,20 +1677,25 @@ function PerProblemVerdict({
 }: {
   problem: TeacherIntegrityDetail["problems"][number];
 }) {
-  const style = INTEGRITY_STYLE[problem.badge ?? "none"];
+  // Per-problem display is driven by rubric presence, not a per-problem
+  // disposition (which lives at session level). Absent rubric means
+  // pending / dismissed / skipped — use the neutral "none" style.
+  const style = problem.rubric ? INTEGRITY_STYLE.pass : INTEGRITY_STYLE.none;
+  const label = problem.rubric
+    ? "Verdicted"
+    : problem.status === "dismissed"
+      ? "Dismissed by teacher"
+      : problem.status === "skipped_unreadable"
+        ? "Skipped — unreadable"
+        : "Pending";
   return (
     <div
       className={`rounded-[--radius-md] border ${style.border} ${style.bg} px-3 py-2`}
     >
       <p className="flex items-center gap-1.5 text-xs font-semibold">
         <span className={style.text}>
-          {style.icon} {style.label}
+          {style.icon} {label}
         </span>
-        {problem.confidence != null && (
-          <span className="text-text-muted">
-            · {Math.round(problem.confidence * 100)}% conf
-          </span>
-        )}
       </p>
       <p className="mt-1 text-xs text-text-primary">
         <MathText text={problem.question} />

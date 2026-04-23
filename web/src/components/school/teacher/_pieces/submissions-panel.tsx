@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   teacher,
-  type IntegrityBadge,
+  type IntegrityDisposition,
   type IntegrityOverview,
+  type IntegrityRubric,
   type TeacherIntegrityDetail,
   type TeacherIntegrityProblemRow,
   type TeacherIntegrityTranscriptTurn,
@@ -14,42 +15,42 @@ import {
 import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { cn } from "@/lib/utils";
 
-// ── Integrity badge pill ──
+// ── Disposition badge ──
 
-const BADGE_CONFIG: Record<
-  IntegrityBadge,
+const DISPOSITION_CONFIG: Record<
+  IntegrityDisposition,
   { label: string; icon: string; cls: string }
 > = {
-  likely: {
-    label: "Likely",
+  pass: {
+    label: "Pass",
     icon: "✓",
     cls: "bg-green-100 text-green-700 dark:bg-green-500/20",
   },
-  uncertain: {
-    label: "Uncertain",
-    icon: "⚠",
+  needs_practice: {
+    label: "Needs practice",
+    icon: "↻",
+    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/20",
+  },
+  tutor_pivot: {
+    label: "Tutored",
+    icon: "?",
     cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/20",
   },
-  unlikely: {
-    label: "Unlikely",
-    icon: "✗",
+  flag_for_review: {
+    label: "Review",
+    icon: "⚑",
     cls: "bg-red-100 text-red-700 dark:bg-red-500/20",
-  },
-  unreadable: {
-    label: "Unreadable",
-    icon: "？",
-    cls: "bg-gray-100 text-gray-600 dark:bg-gray-500/20",
   },
 };
 
-function IntegrityBadgePill({
-  badge,
+function DispositionPill({
+  disposition,
   subtle,
 }: {
-  badge: IntegrityBadge;
+  disposition: IntegrityDisposition;
   subtle?: boolean;
 }) {
-  const cfg = BADGE_CONFIG[badge];
+  const cfg = DISPOSITION_CONFIG[disposition];
   return (
     <span
       className={cn(
@@ -62,9 +63,19 @@ function IntegrityBadgePill({
   );
 }
 
-function IntegrityBadge({ overview }: { overview: IntegrityOverview | null }) {
+function OverviewBadge({ overview }: { overview: IntegrityOverview | null }) {
   if (!overview) return null;
-  if (overview.overall_status !== "complete" || !overview.overall_badge) {
+  // Unreadable / complete-but-no-disposition (turn-cap fallback) is a
+  // teacher-review situation — surface it distinctly rather than as
+  // an empty completed state.
+  if (overview.overall_status === "complete" && !overview.disposition) {
+    return (
+      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-500/20">
+        Needs review
+      </span>
+    );
+  }
+  if (overview.overall_status !== "complete" || !overview.disposition) {
     const progress = `${overview.complete_count}/${overview.problem_count}`;
     return (
       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-500 dark:bg-gray-500/20">
@@ -72,7 +83,49 @@ function IntegrityBadge({ overview }: { overview: IntegrityOverview | null }) {
       </span>
     );
   }
-  return <IntegrityBadgePill badge={overview.overall_badge} />;
+  return <DispositionPill disposition={overview.disposition} />;
+}
+
+// ── Rubric display ──
+
+const RUBRIC_DIM_LABELS: Record<keyof IntegrityRubric, string> = {
+  paraphrase_originality: "Own words vs textbook",
+  causal_fluency: "Why, not just what",
+  transfer: "Flex to a twist",
+  prediction: "Predict before computing",
+  authority_resistance: "Push back on wrong premise",
+  self_correction: "Catches own errors",
+};
+
+const RUBRIC_SCORE_STYLES: Record<string, string> = {
+  low: "text-red-600 dark:text-red-400",
+  mid: "text-amber-600 dark:text-amber-400",
+  high: "text-green-600 dark:text-green-400",
+  not_probed: "text-text-muted italic",
+  not_observed: "text-text-muted italic",
+};
+
+function RubricDisplay({ rubric }: { rubric: IntegrityRubric }) {
+  const rows: { key: keyof IntegrityRubric; score: string }[] = (
+    Object.keys(RUBRIC_DIM_LABELS) as (keyof IntegrityRubric)[]
+  ).map((key) => ({ key, score: rubric[key] }));
+  return (
+    <dl className="mt-1 grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-xs">
+      {rows.map(({ key, score }) => (
+        <div key={key} className="contents">
+          <dt className="text-text-muted">{RUBRIC_DIM_LABELS[key]}</dt>
+          <dd
+            className={cn(
+              "font-medium",
+              RUBRIC_SCORE_STYLES[score] ?? "text-text-muted",
+            )}
+          >
+            {score.replace(/_/g, " ")}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 // ── Integrity detail section (expandable inside submission detail) ──
@@ -132,12 +185,16 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
       >
         <span className="text-xs">{open ? "▼" : "▶"}</span>
         Understanding Check
-        {data && data.overall_badge && (
-          <OverallHeaderBadge
-            badge={data.overall_badge}
-            confidence={data.overall_confidence}
-          />
+        {data && data.disposition && (
+          <OverallHeaderBadge disposition={data.disposition} />
         )}
+        {data &&
+          !data.disposition &&
+          data.overall_status === "complete" && (
+            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-500/20">
+              Needs review
+            </span>
+          )}
       </button>
 
       {open && loading && <p className="text-xs text-text-muted">Loading…</p>}
@@ -170,6 +227,15 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
           {data.overall_summary && (
             <p className="text-sm italic text-text-secondary">
               {data.overall_summary}
+            </p>
+          )}
+
+          {data.inline_variant_used && data.inline_variant_result && (
+            <p className="text-xs text-text-muted">
+              Variant probe:{" "}
+              <span className="font-medium text-text-secondary">
+                {data.inline_variant_result.replace(/_/g, " ")}
+              </span>
             </p>
           )}
 
@@ -211,23 +277,19 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
 }
 
 function OverallHeaderBadge({
-  badge,
-  confidence,
+  disposition,
 }: {
-  badge: IntegrityBadge;
-  confidence: number | null;
+  disposition: IntegrityDisposition;
 }) {
-  const cfg = BADGE_CONFIG[badge];
+  const cfg = DISPOSITION_CONFIG[disposition];
   return (
     <span
-      className={cn("ml-auto rounded-full px-2 py-0.5 text-xs font-bold", cfg.cls)}
+      className={cn(
+        "ml-auto rounded-full px-2 py-0.5 text-xs font-bold",
+        cfg.cls,
+      )}
     >
       {cfg.icon} {cfg.label}
-      {confidence != null && (
-        <span className="ml-1 font-normal">
-          · {Math.round(confidence * 100)}%
-        </span>
-      )}
     </span>
   );
 }
@@ -253,6 +315,7 @@ function ProblemCard({
 }) {
   const isDismissed = p.teacher_dismissed;
   const [sawOpen, setSawOpen] = useState(false);
+  const [rubricOpen, setRubricOpen] = useState(false);
 
   return (
     <div
@@ -271,12 +334,9 @@ function ProblemCard({
               Dismissed
             </span>
           )}
-          {p.badge && !isDismissed && (
-            <IntegrityBadgePill badge={p.badge} />
-          )}
-          {p.confidence !== null && !isDismissed && (
-            <span className="text-xs text-text-muted">
-              {Math.round(p.confidence * 100)}%
+          {p.status === "skipped_unreadable" && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-500/20">
+              Unreadable
             </span>
           )}
         </div>
@@ -290,6 +350,20 @@ function ProblemCard({
         <p className="text-xs text-text-muted">
           Reason: {p.teacher_dismissal_reason}
         </p>
+      )}
+
+      {/* Rubric — collapsible, collapsed by default */}
+      {p.rubric && !isDismissed && (
+        <div>
+          <button
+            onClick={() => setRubricOpen((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-text-muted hover:text-primary"
+          >
+            <span className="text-[10px]">{rubricOpen ? "▼" : "▶"}</span>
+            Rubric
+          </button>
+          {rubricOpen && <RubricDisplay rubric={p.rubric} />}
+        </div>
       )}
 
       {/* What the agent saw — collapsible, collapsed by default */}
@@ -517,7 +591,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                         LATE
                       </span>
                     )}
-                    <IntegrityBadge overview={r.integrity_overview} />
+                    <OverviewBadge overview={r.integrity_overview} />
                     {r.submitted_at && (
                       <span>{new Date(r.submitted_at).toLocaleDateString()}</span>
                     )}
