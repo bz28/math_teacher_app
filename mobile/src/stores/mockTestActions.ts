@@ -59,7 +59,13 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
         return;
       }
 
-      // "Use as exam" mode — show questions immediately, resolve answers in background
+      // "Use as exam" mode — show questions immediately, resolve answers in
+      // background. Free-response renders the question text + text input
+      // without needing the solve result; MC falls back to the existing
+      // "Loading choices…" placeholder (MockTestScreen.tsx:256) until
+      // distractors arrive. submitMockTest already waits for pending
+      // solves to complete before grading (mockTestActions.ts:147), so no
+      // blocking handshake is needed here.
       const questions: PracticeProblem[] = problems.map((p) => ({ question: p, answer: "" }));
 
       set({
@@ -79,10 +85,13 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           workSubmissions: new Array(questions.length).fill(null),
           multipleChoice,
         },
-        phase: "loading",
+        phase: "mock_test_active",
       });
 
-      // Fire all API calls in parallel, update each question as it resolves
+      // Fire all solve calls in parallel and let each question hydrate
+      // asynchronously. Failures per-question are swallowed so one bad
+      // problem doesn't poison the exam; the student just won't be able
+      // to submit until it eventually resolves (submitMockTest waits).
       const promises = problems.map((p, i) =>
         generatePracticeProblems(p, 0, subject).then((res) => {
           if (res.problems[0]) {
@@ -94,13 +103,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           }
         }),
       );
-
-      // Wait for the first question before showing the exam
-      try { await promises[0]; } catch { /* first question failed, continue */ }
-      set({ phase: "mock_test_active" });
-
-      // Remaining questions continue resolving in background
-      Promise.allSettled(promises.slice(1)).catch(() => {});
+      Promise.allSettled(promises).catch(() => {});
 
       // Fire-and-forget: track session for analytics
       const allQuestions = questions.map((q) => q.question);
