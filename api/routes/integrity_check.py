@@ -90,11 +90,10 @@ class IntegrityStateResponse(BaseModel):
     # conclusion. Student-facing UI doesn't distinguish pass vs
     # flag_for_review — both look the same at the door.
     disposition: str | None
-    student_flagged_extraction: bool
-    # Vision-extracted steps from the student's own handwritten work.
-    # Surfaced so the confirm screen can show the reader's take before
-    # the chat starts. All sampled problems share one extraction, so
-    # this lives on the response root rather than per-problem.
+    # Vision-extracted work for the sampled problem. Each probe row
+    # now carries its own slice (see #303), so this is just a
+    # convenience mirror of the first problem's slice used by the
+    # student's in-chat "View my work" reference panel.
     extraction: dict[str, Any] | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
@@ -355,7 +354,6 @@ async def _build_state_response(
             submission_id=str(submission_id),
             overall_status=fallback_status,
             disposition=None,
-            student_flagged_extraction=False,
             extraction=None,
             problems=[],
             transcript=[],
@@ -365,7 +363,6 @@ async def _build_state_response(
         submission_id=str(submission_id),
         overall_status=check.status,
         disposition=check.disposition,
-        student_flagged_extraction=check.student_flagged_extraction,
         extraction=_first_extraction(problems),
         problems=_problem_summaries(problems, questions),
         transcript=_student_facing_transcript(turns),
@@ -473,45 +470,6 @@ async def post_student_turn(
     )
 
 
-@router.post(
-    "/school/student/integrity/submissions/{submission_id}/flag-extraction"
-)
-async def flag_extraction(
-    submission_id: uuid.UUID,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> IntegrityStateResponse:
-    """Student-raised flag: the Vision reader got my work wrong.
-
-    Idempotent — re-flagging is a no-op. Un-flagging is not supported:
-    once raised, the teacher sees the flag as an audit signal. 409s if
-    the check is already complete (too late to influence the agent's
-    judgment — the flag is meant to weigh the verdict as it's being
-    formed).
-    """
-    await _load_my_submission(db, submission_id, user.id)
-    check = await _load_check_for_submission(db, submission_id)
-    if check is None:
-        raise HTTPException(
-            status_code=404, detail="No integrity check for this submission",
-        )
-    if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
-        raise HTTPException(
-            status_code=409,
-            detail="Integrity check already finalized",
-        )
-
-    if not check.student_flagged_extraction:
-        check.student_flagged_extraction = True
-        await db.commit()
-
-    problems = await _load_problems(db, check.id)
-    turns = await _load_transcript(db, check.id)
-    return await _build_state_response(
-        submission_id, check, problems, turns, db, fallback_status="no_check",
-    )
-
-
 # ── Teacher endpoints ───────────────────────────────────────────────
 
 class TeacherTranscriptTurn(BaseModel):
@@ -554,7 +512,6 @@ class TeacherIntegrityDetail(BaseModel):
     probe_selection_reason: str | None
     inline_variant_used: bool
     inline_variant_result: str | None
-    student_flagged_extraction: bool
     problems: list[TeacherIntegrityProblemRow]
     transcript: list[TeacherTranscriptTurn]
 
@@ -585,7 +542,6 @@ async def teacher_get_integrity_detail(
             probe_selection_reason=None,
             inline_variant_used=False,
             inline_variant_result=None,
-            student_flagged_extraction=False,
             problems=[],
             transcript=[],
         )
@@ -642,7 +598,6 @@ async def teacher_get_integrity_detail(
         probe_selection_reason=check.probe_selection_reason,
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,
-        student_flagged_extraction=check.student_flagged_extraction,
         problems=problem_rows,
         transcript=transcript_rows,
     )

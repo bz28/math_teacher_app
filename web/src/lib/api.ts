@@ -1600,12 +1600,6 @@ export const schoolStudent = {
       { method: "POST", body: JSON.stringify(body) },
     );
   },
-  flagIntegrityExtraction(submissionId: string) {
-    return apiFetch<IntegrityStateResponse>(
-      `/school/student/integrity/submissions/${submissionId}/flag-extraction`,
-      { method: "POST" },
-    );
-  },
   /** Student signs off on Vision's reading. Server stamps
    *  extraction_confirmed_at and spawns the integrity + grading
    *  background pipeline — neither fires until this is called. */
@@ -1741,9 +1735,9 @@ export interface IntegrityStateResponse {
   submission_id: string;
   overall_status: IntegrityOverallStatus;
   disposition: IntegrityDisposition | null;
-  student_flagged_extraction: boolean;
-  /** Vision extraction of the student's own work. Null when no check
-   *  has started yet (pipeline still extracting or integrity disabled). */
+  /** Vision extraction of the student's own work for the sampled
+   *  problem. Null when no check has started yet (pipeline still
+   *  extracting or integrity disabled). */
   extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
@@ -1844,7 +1838,6 @@ export interface TeacherIntegrityDetail {
   probe_selection_reason: IntegrityProbeSelectionReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
-  student_flagged_extraction: boolean;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
 }
