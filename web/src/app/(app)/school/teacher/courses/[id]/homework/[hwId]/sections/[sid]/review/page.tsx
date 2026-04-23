@@ -1239,6 +1239,14 @@ function SubmissionDetailPanel({
                 · late
               </span>
             )}
+            {row?.extraction_flagged_at && (
+              <span
+                className="ml-1.5 font-semibold text-red-700 dark:text-red-400"
+                title="Student flagged: 'Reader got something wrong' — no AI grading ran"
+              >
+                · student-flagged reading · grade manually
+              </span>
+            )}
             <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
             {published && row?.grade_published_at ? (
               detail.grade_dirty ? (

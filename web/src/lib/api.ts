@@ -1252,6 +1252,11 @@ export interface TeacherSubmissionRow {
   grade_dirty: boolean;
   reviewed_at: string | null;
   integrity_overview: IntegrityOverview | null;
+  /** Student explicitly said "Reader got something wrong" on the
+   *  post-submit confirm screen. Non-null = no AI grading or
+   *  integrity ran — teacher grades manually. Folded into the
+   *  Submissions-inbox flagged count. */
+  extraction_flagged_at: string | null;
 }
 
 export interface TeacherSubmissionDetailProblem {
@@ -1443,6 +1448,13 @@ export interface StudentSubmission {
    *  or the HW has both integrity and AI grading disabled. Drives
    *  the post-submit confirm screen grouped by problem_position. */
   extraction: IntegrityExtraction | null;
+  /** Student signed off on the reading. Non-null = integrity +
+   *  grading have been kicked off (or already finished). */
+  extraction_confirmed_at: string | null;
+  /** Student said "Reader got something wrong" on the confirm
+   *  screen. Mutually exclusive with extraction_confirmed_at —
+   *  flagged submissions skip AI entirely and wait for the teacher. */
+  extraction_flagged_at: string | null;
 }
 
 export interface SubmitHomeworkResponse {
@@ -1594,6 +1606,16 @@ export const schoolStudent = {
   confirmExtraction(submissionId: string) {
     return apiFetch<{ status: string; already_confirmed?: string }>(
       `/school/student/submissions/${submissionId}/confirm-extraction`,
+      { method: "POST" },
+    );
+  },
+  /** Student said "Reader got something wrong" — routes submission
+   *  to teacher for manual grading. Does NOT spawn integrity or
+   *  grading. Mutually exclusive with confirmExtraction — the
+   *  server 409s if either terminal state is already set. */
+  flagExtractionSubmission(submissionId: string) {
+    return apiFetch<{ status: string; already_flagged?: string }>(
+      `/school/student/submissions/${submissionId}/flag-extraction`,
       { method: "POST" },
     );
   },

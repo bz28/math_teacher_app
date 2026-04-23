@@ -140,11 +140,11 @@ export function SubmissionExtractionConfirmView({
   onContinue,
   onFlagged,
 }: Props) {
-  // Both handlers hit the same confirm endpoint today — integrity +
-  // grading are gated on confirm, and flagging + continuing both
-  // need to release that gate so the student can progress to the
-  // chat. In a follow-up commit the flag path will split off to a
-  // "sent to teacher" terminal instead of the chat.
+  // Two mutually-exclusive terminal actions on the confirm screen:
+  //   Continue → server stamps extraction_confirmed_at, spawns
+  //              integrity + AI grading.
+  //   Flag     → server stamps extraction_flagged_at, submission goes
+  //              to the teacher for manual grading. No AI calls run.
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const device = useDeviceType();
@@ -166,10 +166,7 @@ export function SubmissionExtractionConfirmView({
     setSubmitting(true);
     setError(null);
     try {
-      await schoolStudent.flagIntegrityExtraction(submissionId);
-      // Flag is a signal, not a gate — grading still runs in this
-      // commit. Follow-up will branch flag off to skip grading.
-      await schoolStudent.confirmExtraction(submissionId);
+      await schoolStudent.flagExtractionSubmission(submissionId);
       onFlagged();
     } catch {
       setError("Couldn't save your flag. Try again.");

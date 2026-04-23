@@ -124,6 +124,14 @@ class Submission(Base):
     extraction_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    # Stamped when the student hits "Reader got something wrong" on
+    # the confirm screen. Mutually exclusive with
+    # extraction_confirmed_at — a submission is either confirmed
+    # (grading ran) or flagged (teacher grades manually, no AI calls
+    # downstream). Null means "neither, still on the confirm screen".
+    extraction_flagged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
