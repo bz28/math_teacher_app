@@ -259,8 +259,22 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
         {visibleTranscript.map((t) => (
           <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
         ))}
-        {sending && pendingStudentMessage === null && (
-          <div className="text-xs text-text-muted">Thinking…</div>
+        {/* Animated "AI is thinking" indicator shown while we're
+            waiting on the /turn round-trip. Appears right after the
+            optimistic student message so the chat flow reads
+            student → thinking → agent reply. Matches the pattern
+            used in the teacher workshop agent. */}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
+              <span className="inline-flex gap-1">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+              </span>
+              AI is thinking…
+            </div>
+          </div>
         )}
       </div>
 
@@ -398,13 +412,25 @@ function TurnBubble({ turn }: { turn: IntegrityTurn }) {
     <div className={cn("flex", isStudent ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[85%] whitespace-pre-wrap rounded-[--radius-md] px-3 py-2 text-sm",
+          "max-w-[85%] rounded-[--radius-md] px-3 py-2 text-sm",
           isStudent
-            ? "bg-primary text-white"
+            ? "whitespace-pre-wrap bg-primary text-white"
             : "border border-border bg-surface text-text-primary",
         )}
       >
-        {turn.content}
+        {isStudent ? (
+          turn.content
+        ) : (
+          // Agent messages routinely contain LaTeX (matrix notation,
+          // fractions), **bold** markdown, and occasionally SVG /
+          // chem diagrams. MathText renders inline + display math,
+          // bolded spans, and svg blocks; falls back to plain text
+          // on parse failure so malformed output never breaks a bubble.
+          // Student messages stay as plain text — typing cadence
+          // matters for the telemetry signal and a Markdown-rendered
+          // student input would be weird.
+          <MathText text={turn.content} />
+        )}
       </div>
     </div>
   );
