@@ -50,8 +50,8 @@ class PracticeGenerateFromObjectivesRequest(BaseModel):
         if not cleaned:
             raise ValueError("At least one non-empty topic is required")
         for t in cleaned:
-            if len(t) > 200:
-                raise ValueError("Each topic must be 200 characters or fewer")
+            if len(t) > 400:
+                raise ValueError("Each topic must be 400 characters or fewer")
         return cleaned
 
     @field_validator("level")
