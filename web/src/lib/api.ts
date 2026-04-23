@@ -689,11 +689,6 @@ export interface TeacherAssignment {
   total_students: number;
   submitted: number;
   graded: number;
-  /** Submissions awaiting teacher action — graded but not yet
-   *  published, OR published then edited-since. Matches the
-   *  Submissions-inbox definition so the HW-card count lines up
-   *  with the row-level state the teacher sees on the other tab. */
-  to_review: number;
   avg_score: number | null;
   created_at: string;
 }
