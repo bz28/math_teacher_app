@@ -207,18 +207,26 @@ async def run_ai_grading_for_submission(
     db: AsyncSession,
     *,
     user_id: str | None = None,
+    force: bool = False,
 ) -> None:
     """Load the HW context, call the AI grader, and persist results.
 
     Writes to SubmissionGrade:
     - ai_breakdown: raw AI output (reasoning preserved for teacher)
     - ai_score: average of per-problem percents
+    - rubric_snapshot: the rubric this run applied, for drift detection
     - breakdown: actionable grades (same shape the teacher writes to)
     - final_score: same as ai_score until teacher overrides
 
-    If a teacher has already manually graded (reviewed_by set),
-    only ai_breakdown and ai_score are written — breakdown and
-    final_score are left untouched so we don't clobber their work.
+    Default (pipeline path): if a teacher has already manually graded
+    (reviewed_by set), only ai_breakdown/ai_score/rubric_snapshot are
+    written so we don't clobber their edits.
+
+    `force=True` (teacher-initiated regrade): overrides any prior
+    teacher edits. Breakdown/final_score/graded_at are rewritten and
+    reviewed_by/reviewed_at are cleared — the teacher has explicitly
+    asked to replace their review with a fresh AI pass against the
+    current rubric.
     """
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
@@ -323,7 +331,15 @@ async def run_ai_grading_for_submission(
     # the teacher has edited the rubric since this run.
     grade.rubric_snapshot = assignment.rubric
 
-    if grade.reviewed_by is None:
+    if force or grade.reviewed_by is None:
         grade.breakdown = breakdown
         grade.final_score = ai_score
         grade.graded_at = datetime.now(UTC)
+        if force:
+            # Regrade wipes the manual-review marker so the row once
+            # again reflects "last touched by AI." If the grade was
+            # published, `grade_published_at` stays set and the live
+            # draft is dirty vs the published snapshot — the teacher
+            # republishes when ready.
+            grade.reviewed_by = None
+            grade.reviewed_at = None
