@@ -24,7 +24,6 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
@@ -59,14 +58,36 @@ class IntegrityCheckSubmission(Base):
 
     # status: extracting / awaiting_student / in_progress / complete /
     # skipped_unreadable. The agent's finish_check flips the row to
-    # `complete` and populates overall_* fields.
+    # `complete` and populates disposition + summary.
     status: Mapped[str] = mapped_column(String(32), nullable=False)
 
     # Filled in by finish_check (or by the server-side force-finalize
-    # when the turn cap is hit).
-    overall_badge: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    overall_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # when the turn cap is hit). One of:
+    #   pass / needs_practice / tutor_pivot / flag_for_review
+    # Null when status is `extracting`, `awaiting_student`,
+    # `in_progress`, or `skipped_unreadable` (the last carries meaning
+    # via status alone).
+    disposition: Mapped[str | None] = mapped_column(String(32), nullable=True)
     overall_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Why the pipeline picked the problem(s) it did — one of
+    # highest_differentiation / anomaly_copied / anomaly_wrong_method /
+    # skip_all_wrong. For audit.
+    probe_selection_reason: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+    )
+
+    # Whether the agent used the inline variant disambiguator
+    # mid-session (the "solve this similar one" escalation path).
+    inline_variant_used: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+    # Outcome of the variant probe if it ran:
+    #   specific_approach / approach_after_followup / blank_or_wrong /
+    #   not_applicable
+    inline_variant_result: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+    )
 
     # Student-facing flag raised from the post-extraction confirm
     # screen when Vision misread their handwritten work. Surfaced to
@@ -123,10 +144,18 @@ class IntegrityCheckProblem(Base):
         JSON, nullable=True,
     )
 
-    # Filled in by submit_problem_verdict.
-    badge: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Filled in by submit_problem_verdict. Six dimensions scored
+    # low / mid / high (paraphrase + causal always; transfer,
+    # prediction, authority_resistance, self_correction may be
+    # not_probed / not_observed).
+    rubric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ai_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Why this problem was selected as a probe target. One of
+    # highest_differentiation / anomaly_copied / anomaly_wrong_method.
+    selected_reason: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+    )
 
     teacher_dismissed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False,
@@ -185,6 +214,19 @@ class IntegrityConversationTurn(Base):
     tool_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tool_use_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     seconds_on_turn: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Behavioral telemetry from the student client: focus/blur events,
+    # paste events, typing cadence summary, device type,
+    # need_more_time_used. Student turns only. Teacher-facing evidence
+    # only — never surfaced to the student. Shape:
+    #   {
+    #     "focus_blur_events": [{"at": ISO, "duration_ms": int}, ...],
+    #     "paste_events": [{"at": ISO, "byte_count": int}, ...],
+    #     "typing_cadence": {"total_ms": int, "pauses_over_3s": int, "edits": int},
+    #     "device_type": "desktop" | "mobile",
+    #     "need_more_time_used": bool
+    #   }
+    telemetry: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,

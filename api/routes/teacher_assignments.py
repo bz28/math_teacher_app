@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Integer, case, func, or_, select
+from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -809,11 +809,20 @@ async def submissions_inbox(
             else_=0,
         ),
     ).cast(Integer).label("published")
+    # "Flagged" here = submissions that need teacher attention: agent
+    # emitted flag_for_review, OR extraction was unreadable (teacher
+    # decides what to do), OR the check finalized without a disposition
+    # (turn cap / no sampled problems — teacher reviews inconclusive).
+    # pass / needs_practice / tutor_pivot are all teacher-facing notes
+    # but not "flagged" for attention.
     flagged_expr = func.sum(
         case(
+            (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
+            (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
             (
-                IntegrityCheckSubmission.overall_badge.in_(
-                    ("uncertain", "unlikely", "unreadable"),
+                and_(
+                    IntegrityCheckSubmission.status == "complete",
+                    IntegrityCheckSubmission.disposition.is_(None),
                 ),
                 1,
             ),
@@ -895,9 +904,8 @@ async def list_submissions(
     )).all()
 
     # Batch-load integrity checks for all submissions in one query so
-    # the list page doesn't N+1. With the conversational redesign the
-    # submission row itself carries overall_badge + overall_status so
-    # no second query is needed.
+    # the list page doesn't N+1. The submission row itself carries
+    # disposition + overall_status so no second query is needed.
     sub_ids = [sub.id for sub, *_ in rows]
     check_rows = (await db.execute(
         select(IntegrityCheckSubmission)
@@ -910,11 +918,12 @@ async def list_submissions(
 
     # For in-progress checks, we also want to show progress — how
     # many sampled problems have received a verdict. One grouped
-    # query gives us that.
+    # query gives us that. A problem has a verdict when its rubric is
+    # populated (or it's been dismissed/skipped — any terminal status).
     problem_count_by_check: dict[uuid.UUID, tuple[int, int]] = {}
     if check_rows:
         done_expr = func.sum(
-            case((IntegrityCheckProblem.badge.isnot(None), 1), else_=0),
+            case((IntegrityCheckProblem.rubric.isnot(None), 1), else_=0),
         ).cast(Integer)
         counts = (await db.execute(
             select(
@@ -942,7 +951,7 @@ async def list_submissions(
             terminal = check.status in (INTEGRITY_COMPLETE, INTEGRITY_SKIPPED)
             integrity_overview = {
                 "overall_status": "complete" if terminal else "in_progress",
-                "overall_badge": check.overall_badge if terminal else None,
+                "disposition": check.disposition if terminal else None,
                 "problem_count": total,
                 "complete_count": done,
             }

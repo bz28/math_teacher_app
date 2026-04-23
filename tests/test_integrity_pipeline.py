@@ -3,17 +3,35 @@
 Pipeline-with-DB tests live in test_integrity_check.py since they
 need the seeded world fixture. This file exercises the pure helpers
 — problem briefing, transcript-to-messages folding, tool-input
-validation — so regressions in the prompt shape are caught fast.
+validation, probe selection — so regressions in the prompt shape
+or selection algorithm are caught fast.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
+from typing import Any
 
 from api.core.integrity_ai import build_problems_briefing
-from api.core.integrity_pipeline import _build_agent_messages
+from api.core.integrity_pipeline import (
+    SELECTION_REASON_HIGHEST_DIFFERENTIATION,
+    _build_agent_messages,
+    _validate_rubric,
+    select_probe_problems,
+)
 from api.models.integrity_check import IntegrityConversationTurn
+
+
+@dataclass
+class _FakeItem:
+    """Stand-in for QuestionBankItem that carries just the fields
+    select_probe_problems looks at. Spares these tests from the full
+    ORM + DB setup."""
+    id: uuid.UUID
+    difficulty: str | None
+    solution_steps: list[Any] | None
 
 
 def _turn(ordinal: int, role: str, content: str, **kw: str) -> IntegrityConversationTurn:
@@ -81,7 +99,14 @@ class TestBuildAgentMessages:
         assert messages[3]["role"] == "assistant"
 
     def test_groups_tool_call_after_agent_text(self) -> None:
-        tool_input = {"problem_id": "p1", "badge": "likely", "confidence": 0.9, "reasoning": "x"}
+        tool_input = {
+            "problem_id": "p1",
+            "rubric": {
+                "paraphrase_originality": "high",
+                "causal_fluency": "high",
+            },
+            "reasoning": "x",
+        }
         turns = [
             _turn(0, "agent", "Hello"),
             _turn(
@@ -117,3 +142,136 @@ class TestBuildAgentMessages:
         messages = _build_agent_messages("B", turns)
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"][0]["type"] == "tool_use"
+
+
+class TestSelectProbeProblems:
+    def _item(
+        self, difficulty: str | None = "medium", steps: int = 3,
+    ) -> _FakeItem:
+        return _FakeItem(
+            id=uuid.uuid4(),
+            difficulty=difficulty,
+            solution_steps=[{"step_num": i + 1} for i in range(steps)],
+        )
+
+    def test_picks_highest_difficulty(self) -> None:
+        easy = self._item(difficulty="easy", steps=10)
+        medium = self._item(difficulty="medium", steps=5)
+        hard = self._item(difficulty="hard", steps=2)
+        items_by_id = {easy.id: easy, medium.id: medium, hard.id: hard}
+
+        picked, reason = select_probe_problems(
+            items_by_id, [easy.id, medium.id, hard.id], max_picks=1,
+        )
+        assert picked == [hard.id]
+        assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+
+    def test_tiebreak_on_solution_step_count(self) -> None:
+        # Both hard — tiebreak wins on more steps.
+        short_hard = self._item(difficulty="hard", steps=2)
+        long_hard = self._item(difficulty="hard", steps=7)
+        items_by_id = {short_hard.id: short_hard, long_hard.id: long_hard}
+
+        picked, _ = select_probe_problems(
+            items_by_id, [short_hard.id, long_hard.id], max_picks=1,
+        )
+        assert picked == [long_hard.id]
+
+    def test_unknown_difficulty_treated_as_medium(self) -> None:
+        # Stray string or null doesn't crash selection.
+        unknown = self._item(difficulty="impossible", steps=10)
+        medium = self._item(difficulty="medium", steps=1)
+        items_by_id = {unknown.id: unknown, medium.id: medium}
+
+        picked, _ = select_probe_problems(
+            items_by_id, [unknown.id, medium.id], max_picks=1,
+        )
+        # Both rank as "medium" in difficulty → step count breaks the tie.
+        assert picked == [unknown.id]
+
+    def test_drops_missing_items(self) -> None:
+        present = self._item(difficulty="hard", steps=4)
+        missing = uuid.uuid4()  # not in items_by_id
+        items_by_id = {present.id: present}
+
+        picked, reason = select_probe_problems(
+            items_by_id, [missing, present.id], max_picks=1,
+        )
+        assert picked == [present.id]
+        assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+
+    def test_empty_input_returns_empty_picks(self) -> None:
+        picked, reason = select_probe_problems({}, [], max_picks=1)
+        assert picked == []
+        assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+
+
+class TestValidateRubric:
+    def test_accepts_minimal_rubric(self) -> None:
+        rubric, err = _validate_rubric({
+            "paraphrase_originality": "high",
+            "causal_fluency": "high",
+        })
+        assert err is None
+        assert rubric is not None
+        # Missing optional dimensions default to the right sentinel.
+        assert rubric["transfer"] == "not_probed"
+        assert rubric["prediction"] == "not_probed"
+        assert rubric["authority_resistance"] == "not_probed"
+        assert rubric["self_correction"] == "not_observed"
+
+    def test_accepts_full_rubric(self) -> None:
+        rubric, err = _validate_rubric({
+            "paraphrase_originality": "mid",
+            "causal_fluency": "low",
+            "transfer": "high",
+            "prediction": "mid",
+            "authority_resistance": "low",
+            "self_correction": "mid",
+        })
+        assert err is None
+        assert rubric == {
+            "paraphrase_originality": "mid",
+            "causal_fluency": "low",
+            "transfer": "high",
+            "prediction": "mid",
+            "authority_resistance": "low",
+            "self_correction": "mid",
+        }
+
+    def test_rejects_non_dict(self) -> None:
+        rubric, err = _validate_rubric("not a dict")
+        assert rubric is None
+        assert err is not None
+        assert "object" in err
+
+    def test_rejects_not_probed_on_required_dimension(self) -> None:
+        # paraphrase_originality / causal_fluency come from the open
+        # walkthrough — always observed, so "not_probed" is invalid.
+        rubric, err = _validate_rubric({
+            "paraphrase_originality": "not_probed",
+            "causal_fluency": "high",
+        })
+        assert rubric is None
+        assert err is not None
+        assert "paraphrase_originality" in err
+
+    def test_rejects_low_mid_high_on_self_correction_is_ok(self) -> None:
+        # self_correction accepts low/mid/high OR not_observed.
+        rubric, err = _validate_rubric({
+            "paraphrase_originality": "high",
+            "causal_fluency": "high",
+            "self_correction": "not_observed",
+        })
+        assert err is None
+        assert rubric is not None
+        assert rubric["self_correction"] == "not_observed"
+
+    def test_rejects_garbage_enum_value(self) -> None:
+        rubric, err = _validate_rubric({
+            "paraphrase_originality": "high",
+            "causal_fluency": "excellent",  # not in low/mid/high
+        })
+        assert rubric is None
+        assert err is not None
+        assert "causal_fluency" in err
