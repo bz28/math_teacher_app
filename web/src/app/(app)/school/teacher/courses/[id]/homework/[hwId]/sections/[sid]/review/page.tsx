@@ -1255,9 +1255,13 @@ function ProblemGradeRow({
             )}
           </p>
           {aiGrade.reasoning && (
-            <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-              {aiGrade.reasoning}
-            </p>
+            // Grader reasoning regularly references math ($-17$,
+            // $\begin{pmatrix}...$, etc.) — rendering through MathText
+            // matches how the rest of the review page surfaces problem
+            // text and student work.
+            <div className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+              <MathText text={aiGrade.reasoning} />
+            </div>
           )}
         </div>
       )}
