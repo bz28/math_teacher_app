@@ -73,7 +73,7 @@ export function SolveScreen({
   const [mode, setMode] = useState<Mode>("learn");
 
   // Mock test config
-  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
+  const [examType, setExamType] = useState<"use_as_exam" | "generate_similar" | "from_objectives">("use_as_exam");
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
   const [multipleChoice, setMultipleChoice] = useState(true);

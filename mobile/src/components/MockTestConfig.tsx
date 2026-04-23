@@ -5,8 +5,8 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
 interface MockTestConfigProps {
-  examType: "use_as_exam" | "generate_similar";
-  onExamTypeChange: (type: "use_as_exam" | "generate_similar") => void;
+  examType: "use_as_exam" | "generate_similar" | "from_objectives";
+  onExamTypeChange: (type: "use_as_exam" | "generate_similar" | "from_objectives") => void;
   untimed: boolean;
   onUntimedChange: (untimed: boolean) => void;
   timeLimitMinutes: number;
@@ -22,26 +22,39 @@ function PillToggle<T extends string>({
   value,
   onChange,
   themeColor,
+  fullWidth = false,
 }: {
   options: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
   themeColor: string;
+  /** When true, pills flex evenly to fill the parent width (segmented control). */
+  fullWidth?: boolean;
 }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={styles.pillGroup}>
+    <View style={[styles.pillGroup, fullWidth && styles.pillGroupFull]}>
       {options.map((opt) => {
         const active = opt.id === value;
         return (
           <AnimatedPressable
             key={opt.id}
-            style={[styles.pill, active && { backgroundColor: themeColor }]}
+            style={[
+              styles.pill,
+              fullWidth && styles.pillFlex,
+              active && { backgroundColor: themeColor },
+            ]}
             onPress={() => onChange(opt.id)}
             scaleDown={0.95}
+            accessibilityRole="tab"
+            accessibilityLabel={opt.label}
+            accessibilityState={{ selected: active }}
           >
-            <Text style={[styles.pillText, active && styles.pillTextActive]}>
+            <Text
+              style={[styles.pillText, active && styles.pillTextActive]}
+              numberOfLines={1}
+            >
               {opt.label}
             </Text>
           </AnimatedPressable>
@@ -67,17 +80,20 @@ export function MockTestConfig({
   const resolvedThemeColor = themeColor ?? colors.primary;
   return (
     <View style={[styles.card, shadows.sm]}>
-      {/* Questions */}
-      <View style={styles.row}>
+      {/* Questions — stacked so the 3 pill labels have room to breathe
+          on small screens; keeping them in-row would force ellipsis. */}
+      <View style={styles.stackedRow}>
         <Text style={styles.label}>Questions</Text>
         <PillToggle
           options={[
             { id: "use_as_exam" as const, label: "Use mine" },
             { id: "generate_similar" as const, label: "Generate" },
+            { id: "from_objectives" as const, label: "Objectives" },
           ]}
           value={examType}
           onChange={onExamTypeChange}
           themeColor={resolvedThemeColor}
+          fullWidth
         />
       </View>
 
@@ -155,6 +171,11 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     justifyContent: "space-between",
     minHeight: 36,
   },
+  stackedRow: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: spacing.sm,
+  },
   rowRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -176,10 +197,17 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     borderRadius: radii.pill,
     padding: 3,
   },
+  pillGroupFull: {
+    alignSelf: "stretch",
+  },
   pill: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: radii.pill,
+  },
+  pillFlex: {
+    flex: 1,
+    alignItems: "center",
   },
   pillActive: {
     backgroundColor: colors.primary,

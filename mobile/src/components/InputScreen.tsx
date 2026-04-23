@@ -51,7 +51,7 @@ export function InputScreen({
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Mock test config state
-  const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
+  const [mockExamType, setMockExamType] = useState<"use_as_exam" | "generate_similar" | "from_objectives">("use_as_exam");
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(true);
   const [mockMultipleChoice, setMockMultipleChoice] = useState(true);
