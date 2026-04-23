@@ -86,6 +86,44 @@ class IntegrityStateResponse(BaseModel):
     transcript: list[TurnOut]
 
 
+class TurnTelemetry(BaseModel):
+    """Client-captured behavioral signals attached to a student turn.
+
+    All teacher-facing evidence; never surfaced to the student. The
+    pipeline stores this as-is on `IntegrityConversationTurn.telemetry`
+    and the teacher dashboard will render it on flag_for_review cases.
+    Shape intentionally loose — new fields can be added client-side
+    without a migration.
+    """
+
+    # Each entry is an interval of time the student had the chat window
+    # backgrounded or unfocused (tab switch, alt-tab, minimize). `at`
+    # is the ISO timestamp when the blur started; `duration_ms` is how
+    # long they were away. Capped per-event so tampering can't push
+    # absurd values into the record.
+    focus_blur_events: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Paste events fired on the chat textarea during this turn. `at`
+    # is the ISO timestamp; `byte_count` is the length of the clipboard
+    # text. Content is NOT captured — only size + timestamp.
+    paste_events: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Summary of typing pattern for this turn. total_ms = wall-clock
+    # time from first keystroke to send; pauses_over_3s = count of
+    # pauses >= 3 seconds between keystrokes; edits = count of
+    # backspace/delete events. Distinguishes "typed naturally with
+    # edits" from "silent then bulk insert".
+    typing_cadence: dict[str, Any] | None = None
+
+    # Whether the user tapped the "need more time" button at any point
+    # during this turn. Non-punitive — just noted for teacher context.
+    need_more_time_used: bool = False
+
+    # Viewport type as reported by the client. Informational; not used
+    # to gate anything.
+    device_type: str | None = Field(default=None, max_length=16)
+
+
 class TurnRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     # Clamped so a tampered client can't land negative/absurd values in
@@ -93,6 +131,9 @@ class TurnRequest(BaseModel):
     # leave the chat open, walk away, and come back much later than an
     # hour to finish — so the cap only filters tampering, not real use.
     seconds_on_turn: int | None = Field(default=None, ge=0, le=86400)
+    # Behavioral signals captured client-side during the turn. Optional
+    # so older clients / mobile (pre-telemetry) keep working.
+    telemetry: TurnTelemetry | None = None
 
 
 class DismissRequest(BaseModel):
@@ -310,9 +351,13 @@ async def post_student_turn(
             status_code=409, detail="Integrity check already complete",
         )
 
+    telemetry = (
+        body.telemetry.model_dump(mode="json") if body.telemetry else None
+    )
     await process_student_turn(
         check, message, body.seconds_on_turn, db,
         user_id=str(user.id),
+        telemetry=telemetry,
     )
     await db.commit()
 

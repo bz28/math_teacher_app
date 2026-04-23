@@ -410,13 +410,17 @@ async def process_student_turn(
     db: AsyncSession,
     *,
     user_id: str | None = None,
+    telemetry: dict[str, Any] | None = None,
 ) -> None:
     """Append a student turn, run the agent loop, and update in-place.
 
     Mutates `check` + writes new rows. Caller commits. `user_id` is
     forwarded to every agent LLM call so cost tracking / the admin
     dashboard attribute the spend to the actual student instead of
-    "Deleted User".
+    "Deleted User". `telemetry` is the client-captured behavioral
+    payload (focus-blur events, paste events, typing cadence); it's
+    persisted on the student turn row as-is and only surfaced to
+    teachers — never to the student.
 
     The agent loop:
       1. Call Claude with the current transcript.
@@ -426,7 +430,7 @@ async def process_student_turn(
       3. Exit when the response has text with no tool_use, or when
          MAX_AGENT_LOOPS_PER_TURN is reached.
       4. If MAX_STUDENT_TURNS is reached after this turn, force-
-         finalize with overall `uncertain`.
+         finalize with a null disposition (teacher reviews).
     """
     if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
         return
@@ -444,6 +448,7 @@ async def process_student_turn(
         role=ROLE_STUDENT,
         content=student_message,
         seconds_on_turn=seconds_on_turn,
+        telemetry=telemetry,
     ))
     check.status = STATUS_IN_PROGRESS
     await db.flush()
