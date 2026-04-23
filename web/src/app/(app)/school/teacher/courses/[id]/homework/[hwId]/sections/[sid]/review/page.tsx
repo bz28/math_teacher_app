@@ -708,6 +708,16 @@ export default function HomeworkSectionReviewPage({
             : null
         }
         regrading={regradingSubmissionId !== null}
+        // A failed regrade leaves the modal open so the teacher can
+        // retry or cancel. Error is scoped by submissionId so a stale
+        // failure from a different row doesn't leak in when the dialog
+        // opens on a new student.
+        error={
+          regradeConfirmOpenFor &&
+          regradeError?.forSubmissionId === regradeConfirmOpenFor
+            ? regradeError.message
+            : null
+        }
         onClose={() => {
           if (regradingSubmissionId === null) setRegradeConfirmOpenFor(null);
         }}
@@ -959,12 +969,17 @@ function RegradeConfirmDialog({
   submissionId,
   row,
   regrading,
+  error,
   onClose,
   onConfirm,
 }: {
   submissionId: string | null;
   row: TeacherSubmissionRow | null;
   regrading: boolean;
+  /** Failure message from the last regrade attempt. Rendered inline
+   *  so the teacher sees it without having to dismiss the modal; the
+   *  drift banner underneath would otherwise be covered by the overlay. */
+  error: string | null;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -984,6 +999,11 @@ function RegradeConfirmDialog({
         <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
           This grade is already published. The student will keep seeing
           the old grade until you republish.
+        </p>
+      )}
+      {error && (
+        <p className="mt-3 rounded-[--radius-md] border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          {error}
         </p>
       )}
       <div className="mt-5 flex justify-end gap-2">
