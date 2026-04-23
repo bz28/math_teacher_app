@@ -17,7 +17,7 @@ export function ProgressBar({
   label: string;
   current: number;
   total: number;
-  color?: "blue" | "green";
+  color?: "blue" | "green" | "amber";
 }) {
   if (total === 0) return null;
 
@@ -25,7 +25,9 @@ export function ProgressBar({
   const fillClass =
     color === "green"
       ? "bg-green-500 dark:bg-green-400"
-      : "bg-blue-500 dark:bg-blue-400";
+      : color === "amber"
+        ? "bg-amber-500 dark:bg-amber-400"
+        : "bg-blue-500 dark:bg-blue-400";
 
   return (
     <div className="flex items-center gap-2">
