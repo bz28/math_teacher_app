@@ -57,6 +57,11 @@ export function ObjectivesSheetCard({
           placeholderTextColor={colors.textMuted}
           maxLength={80}
           returnKeyType="done"
+          // Course names are proper nouns ("AP Calc BC", "Alg 2 Honors");
+          // autocorrect would mangle abbreviations and sentence-case would
+          // rewrite "AP" to "Ap".
+          autoCorrect={false}
+          autoCapitalize="words"
           accessibilityLabel="Course name"
         />
       </View>

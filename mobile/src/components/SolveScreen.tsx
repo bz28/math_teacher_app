@@ -164,6 +164,17 @@ export function SolveScreen({
     isObjectivesMode ? "objectives" : "problems",
   );
 
+  // Drop any in-flight extraction state when the Questions pill changes.
+  // The hook's internal state persists across re-renders; without this,
+  // toggling mid-modal would leave the ExtractionModal up with the previous
+  // mode's items but the new mode's labels and confirm handler — clicking
+  // "Use Selected" would then commit to the wrong queue.
+  useEffect(() => {
+    dismissExtraction();
+    // dismissExtraction identity is stable; re-run only on examType change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examType]);
+
   const handleConfirmExtraction = () => {
     const items = getSelectedWithImages();
     if (isObjectivesMode) {

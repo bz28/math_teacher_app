@@ -166,9 +166,23 @@ async def extract_objectives_from_image(
     if not isinstance(topics, list):
         raise ValueError("Invalid objectives extraction result format")
 
-    # Coerce to clean list[str], strip blanks, enforce a reasonable cap.
-    topics = [str(t).strip() for t in topics if isinstance(t, str) and t.strip()]
-    topics = topics[:50]
+    # Coerce to clean list[str], strip blanks, dedupe case-insensitively
+    # (Claude sometimes emits "Related rates" + "related rates" despite the
+    # merge-synonyms instruction), then cap at 50.
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for t in topics:
+        if not isinstance(t, str):
+            continue
+        stripped = t.strip()
+        if not stripped:
+            continue
+        key = stripped.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(stripped)
+    topics = cleaned[:50]
 
     if confidence not in ("high", "medium", "low"):
         confidence = "medium"

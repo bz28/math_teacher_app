@@ -308,7 +308,9 @@ async def generate_problems_from_objectives(
             mode=LLMMode.PRACTICE_GENERATE,
             tool_schema=PRACTICE_GENERATE_SCHEMA,
             user_id=user_id,
-            model=MODEL_REASON,
+            # Match generate_similar_questions: Haiku for text-only generation.
+            # Topic inputs never carry diagrams, so no Sonnet escalation needed.
+            model=MODEL_HAIKU,
             max_tokens=min(1024 * max(count, 2), 8192),
         )
         raw_problems = result.get("problems")
