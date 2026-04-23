@@ -29,10 +29,20 @@ class Assignment(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)  # homework | quiz | test
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # homework | quiz | test | practice
     source_type: Mapped[str | None] = mapped_column(
         String(20), nullable=True,
     )  # upload | ai_generated | library | manual
+    # When a practice set was cloned from a homework, this is the source
+    # HW's id. Null for scratch-built practice and for any non-practice
+    # assignment. ON DELETE SET NULL keeps the practice set alive if the
+    # source HW is removed — it just loses its "Cloned from" label.
+    source_homework_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assignments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     late_policy: Mapped[str] = mapped_column(String(30), nullable=False, default="none")
