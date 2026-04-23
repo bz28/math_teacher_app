@@ -80,9 +80,12 @@ partial credit.
 # grades against them — so what the teacher sees is what the AI
 # applies. If you update one side, update the other.
 _DEFAULT_FULL_CREDIT = (
-    "Correct final answer. Mathematically equivalent forms "
-    "(e.g. 1/2 and 0.5) count as correct. Work shown when the "
-    "problem asks for it."
+    "Correct final answer (mathematically equivalent forms like 1/2 "
+    "and 0.5 both count). Enough work shown that the reasoning is "
+    "followable — students can skip routine or mental steps as long "
+    "as the path from set-up to answer is unambiguous to the grader, "
+    "with no non-obvious leaps. A bare final answer with no set-up "
+    "doesn't qualify."
 )
 _DEFAULT_PARTIAL_CREDIT = (
     "Right approach with an arithmetic or sign error — typically "
