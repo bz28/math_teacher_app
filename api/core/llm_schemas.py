@@ -409,16 +409,66 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                     "type": "object",
                     "properties": {
                         "step_num": {"type": "integer"},
+                        "problem_position": {
+                            "type": ["integer", "null"],
+                            "description": (
+                                "1-based position of the problem this step "
+                                "belongs to, matching the problem list "
+                                "provided in the user message. Null when "
+                                "the step can't be confidently attributed "
+                                "to any one problem (scratch work, notes, "
+                                "work spanning multiple problems)."
+                            ),
+                        },
                         "latex": {"type": "string", "description": "LaTeX representation of this step."},
                         "plain_english": {
                             "type": "string",
                             "description": "Plain-language description of what the student did.",
                         },
                     },
-                    "required": ["step_num", "latex", "plain_english"],
+                    "required": [
+                        "step_num", "problem_position", "latex", "plain_english",
+                    ],
                     "additionalProperties": False,
                 },
                 "description": "Ordered list of work steps the student wrote, from top to bottom of the page.",
+            },
+            "final_answers": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "problem_position": {
+                            "type": "integer",
+                            "description": "1-based position of the problem this answer is for.",
+                        },
+                        "answer_latex": {
+                            "type": "string",
+                            "description": (
+                                "LaTeX representation of the final answer "
+                                "(empty string if the student wrote prose)."
+                            ),
+                        },
+                        "answer_plain": {
+                            "type": "string",
+                            "description": (
+                                "Plain-language version of the final answer. "
+                                "Empty string if only LaTeX is meaningful."
+                            ),
+                        },
+                    },
+                    "required": [
+                        "problem_position", "answer_latex", "answer_plain",
+                    ],
+                    "additionalProperties": False,
+                },
+                "description": (
+                    "One entry per problem that has a discernible final "
+                    "answer on the page, in problem order. Omit problems "
+                    "the student didn't answer (or where the final answer "
+                    "wasn't separable from the work). The grader reads "
+                    "these as the authoritative per-problem answers."
+                ),
             },
             "confidence": {
                 "type": "number",
@@ -428,7 +478,7 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                 ),
             },
         },
-        "required": ["steps", "confidence"],
+        "required": ["steps", "final_answers", "confidence"],
         "additionalProperties": False,
     },
 }

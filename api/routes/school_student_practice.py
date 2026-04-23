@@ -96,6 +96,7 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
     """
     from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
+    from api.services.bank import load_problems_for_assignment
 
     try:
         async with get_session_factory()() as db:
@@ -115,9 +116,16 @@ async def _run_submission_pipeline_background(submission_id: uuid.UUID) -> None:
             run_grading = assignment.ai_grading_enabled
 
             # ── Shared extraction (1 Vision call) ────────────────
+            # Feed Vision the problem list so each step can be tagged
+            # with the problem it belongs to — downstream grading
+            # compares work-per-problem against the answer key, so
+            # attribution at extraction time keeps both the grader
+            # and the teacher's review UI grounded in the same
+            # structure.
+            problems = await load_problems_for_assignment(db, assignment)
             try:
                 extraction = await extract_student_work(
-                    submission_id, db, user_id=user_id,
+                    submission_id, db, problems=problems, user_id=user_id,
                 )
             except Exception:
                 logger.exception(
