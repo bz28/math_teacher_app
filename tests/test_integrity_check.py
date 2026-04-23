@@ -1589,6 +1589,52 @@ async def test_turn_persists_telemetry_payload(
         assert student_turns[0].telemetry == telemetry_payload
 
 
+async def test_turn_rejects_oversized_telemetry(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Validation caps keep a tampered client from landing absurd
+    values in the teacher record: oversized per-event values and
+    oversized arrays both get rejected at the endpoint."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # duration_ms above 24h → rejected.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={
+            "message": "Real message here.",
+            "telemetry": {
+                "focus_blur_events": [
+                    {"at": "2026-04-22T18:00:00Z", "duration_ms": 999_999_999_999},
+                ],
+                "paste_events": [],
+                "need_more_time_used": False,
+            },
+        },
+    )
+    assert r.status_code == 422
+
+    # >256 focus_blur_events in a single turn → rejected.
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={
+            "message": "Another real message.",
+            "telemetry": {
+                "focus_blur_events": [
+                    {"at": "2026-04-22T18:00:00Z", "duration_ms": 100}
+                    for _ in range(300)
+                ],
+                "paste_events": [],
+                "need_more_time_used": False,
+            },
+        },
+    )
+    assert r.status_code == 422
+
+
 async def test_turn_without_telemetry_still_works(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:

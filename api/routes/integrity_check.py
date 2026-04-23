@@ -86,37 +86,61 @@ class IntegrityStateResponse(BaseModel):
     transcript: list[TurnOut]
 
 
+# Per-event and array-length caps. A tampered client can't land
+# arbitrarily large events in the teacher record. 24h = same ceiling
+# as seconds_on_turn. 1 MB paste + 256 events per turn are both
+# generous but finite.
+_MAX_BLUR_DURATION_MS = 86_400_000
+_MAX_PASTE_BYTE_COUNT = 1_000_000
+_MAX_EVENTS_PER_TURN = 256
+_MAX_CADENCE_MS = 86_400_000
+_MAX_CADENCE_COUNTER = 100_000
+
+
+class FocusBlurEvent(BaseModel):
+    """One interval the chat window was backgrounded/unfocused."""
+
+    at: str = Field(max_length=32)  # ISO timestamp
+    duration_ms: int = Field(ge=0, le=_MAX_BLUR_DURATION_MS)
+
+
+class PasteEvent(BaseModel):
+    """One paste event on the chat textarea. Size only — never content."""
+
+    at: str = Field(max_length=32)
+    byte_count: int = Field(ge=0, le=_MAX_PASTE_BYTE_COUNT)
+
+
+class TypingCadence(BaseModel):
+    """Typing-pattern summary for the turn. Distinguishes steady-
+    typing-with-edits from silent-then-bulk-insert."""
+
+    total_ms: int = Field(ge=0, le=_MAX_CADENCE_MS)
+    pauses_over_3s: int = Field(ge=0, le=_MAX_CADENCE_COUNTER)
+    edits: int = Field(ge=0, le=_MAX_CADENCE_COUNTER)
+
+
 class TurnTelemetry(BaseModel):
     """Client-captured behavioral signals attached to a student turn.
 
     All teacher-facing evidence; never surfaced to the student. The
     pipeline stores this as-is on `IntegrityConversationTurn.telemetry`
     and the teacher dashboard will render it on flag_for_review cases.
-    Shape intentionally loose — new fields can be added client-side
-    without a migration.
+    Nested event models + array caps stop a tampered client from
+    polluting the teacher record with absurd values or unbounded lists.
     """
 
-    # Each entry is an interval of time the student had the chat window
-    # backgrounded or unfocused (tab switch, alt-tab, minimize). `at`
-    # is the ISO timestamp when the blur started; `duration_ms` is how
-    # long they were away. Capped per-event so tampering can't push
-    # absurd values into the record.
-    focus_blur_events: list[dict[str, Any]] = Field(default_factory=list)
-
-    # Paste events fired on the chat textarea during this turn. `at`
-    # is the ISO timestamp; `byte_count` is the length of the clipboard
-    # text. Content is NOT captured — only size + timestamp.
-    paste_events: list[dict[str, Any]] = Field(default_factory=list)
-
-    # Summary of typing pattern for this turn. total_ms = wall-clock
-    # time from first keystroke to send; pauses_over_3s = count of
-    # pauses >= 3 seconds between keystrokes; edits = count of
-    # backspace/delete events. Distinguishes "typed naturally with
-    # edits" from "silent then bulk insert".
-    typing_cadence: dict[str, Any] | None = None
+    focus_blur_events: list[FocusBlurEvent] = Field(
+        default_factory=list, max_length=_MAX_EVENTS_PER_TURN,
+    )
+    paste_events: list[PasteEvent] = Field(
+        default_factory=list, max_length=_MAX_EVENTS_PER_TURN,
+    )
+    typing_cadence: TypingCadence | None = None
 
     # Whether the user tapped the "need more time" button at any point
     # during this turn. Non-punitive — just noted for teacher context.
+    # Wiring for the button itself lands with the student UX PR.
     need_more_time_used: bool = False
 
     # Viewport type as reported by the client. Informational; not used
