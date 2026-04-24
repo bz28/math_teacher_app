@@ -46,6 +46,14 @@ export default function HomeworkReviewPage({
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [hwTitle, setHwTitle] = useState<string>("");
+  // Type of the assignment being reviewed. Drives the variation
+  // filter: homework primaries have parent_question_id=null, so we
+  // filter out anything with a parent (those are "generate similar"
+  // practice scaffolding attached to a specific primary). Practice
+  // assignments cloned from a HW are the INVERSE case — every item
+  // is a variation of a source HW primary, so the filter would eat
+  // all of them. Hydrated from the initial assignment fetch.
+  const [assignmentType, setAssignmentType] = useState<string | null>(null);
   // Ref so the polling effect's async callbacks can check the freshest
   // phase without re-subscribing when phase changes mid-poll. Sync the
   // ref from an effect — writing to refs during render is disallowed
@@ -62,16 +70,39 @@ export default function HomeworkReviewPage({
       status: "pending",
       assignment_id: assignmentId,
     });
+    // Practice items are variations by design (clone-from-HW parents
+    // each one on a source HW primary), so skip the variation filter
+    // for practice — otherwise we'd drop every item produced. For HW
+    // review, the filter still matters: it hides "generate similar"
+    // scaffolding attached to an existing primary.
+    if (assignmentType === "practice") {
+      return res.items;
+    }
     return res.items.filter((i) => i.parent_question_id === null);
-  }, [courseId, assignmentId]);
+  }, [courseId, assignmentId, assignmentType]);
 
-  // Initial load — fetch HW title + first pending snapshot.
+  // Initial load — fetch HW title/type + first pending snapshot.
+  // We fetch the assignment first so the pending query knows which
+  // filter to apply; otherwise a practice clone would get an empty
+  // list on first load (fetchPending's closure would see type=null
+  // and drop every variation item).
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPending(), teacher.assignment(assignmentId)])
-      .then(([items, a]) => {
+    teacher
+      .assignment(assignmentId)
+      .then(async (a) => {
         if (cancelled) return;
         setHwTitle(a.title);
+        setAssignmentType(a.type);
+        const res = await teacher.bank(courseId, {
+          status: "pending",
+          assignment_id: assignmentId,
+        });
+        const items =
+          a.type === "practice"
+            ? res.items
+            : res.items.filter((i) => i.parent_question_id === null);
+        if (cancelled) return;
         if (items.length > 0) {
           setPhase({ kind: "ready", items });
         } else {
@@ -91,7 +122,7 @@ export default function HomeworkReviewPage({
     return () => {
       cancelled = true;
     };
-  }, [fetchPending, assignmentId]);
+  }, [courseId, assignmentId]);
 
   // Poll while waiting.
   useEffect(() => {
