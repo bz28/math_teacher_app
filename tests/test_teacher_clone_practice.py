@@ -88,8 +88,9 @@ async def test_clone_creates_draft_practice_with_source_link(
         assert practice.type == "practice"
         assert practice.status == "draft"
         assert practice.source_homework_id == world["assignment_id"]
-        # Inherits source HW's title.
-        assert practice.title == "HW 1"
+        # Inherits source HW's title prefixed with "[Practice]" so
+        # cross-type surfaces can distinguish the two at a glance.
+        assert practice.title == "[Practice] HW 1"
 
         # One generation job with parent_question_id pointing at the
         # source HW's primary and requested_count=1.
