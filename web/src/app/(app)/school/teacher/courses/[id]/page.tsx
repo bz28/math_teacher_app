@@ -13,6 +13,7 @@ import {
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
+import { PracticeTab } from "@/components/school/teacher/practice-tab";
 import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
 import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
@@ -21,7 +22,7 @@ type TabKey =
   | "sections"
   | "materials"
   | "homework"
-  | "tests"
+  | "practice"
   | "submissions"
   | "grades"
   | "settings";
@@ -32,7 +33,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "sections", label: "Sections" },
   { key: "materials", label: "Materials" },
   { key: "homework", label: "HW" },
-  { key: "tests", label: "Tests" },
+  { key: "practice", label: "Practice" },
   { key: "submissions", label: "Submissions" },
   { key: "grades", label: "Grades" },
 ];
@@ -262,8 +263,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
               {t.label}
               {/* Pulsing dot when generation is in flight — visible
                   from any tab so the teacher knows problems are still
-                  being generated for one of their HWs. */}
-              {t.key === "homework" && jobInFlight && (
+                  being generated. Shows on HW and Practice tabs; the
+                  lifted activeJob doesn't know which it belongs to,
+                  so we surface it on both to avoid false-negatives. */}
+              {(t.key === "homework" || t.key === "practice") && jobInFlight && (
                 <span className="relative flex h-2 w-2" aria-label="Generation in progress">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
@@ -281,20 +284,11 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "homework" && <HomeworkTab courseId={course.id} />}
-        {tab === "tests" && <ComingSoon name="Tests" phase="Phase 5" />}
+        {tab === "practice" && <PracticeTab courseId={course.id} />}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
       </div>
-    </div>
-  );
-}
-
-function ComingSoon({ name, phase }: { name: string; phase: string }) {
-  return (
-    <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-12 text-center">
-      <p className="text-sm font-bold text-text-primary">{name}</p>
-      <p className="mt-1 text-xs text-text-muted">Coming in {phase}.</p>
     </div>
   );
 }

@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { teacher, type TeacherDocument } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
-import { UnitMultiSelect } from "./unit-multi-select";
-import { SectionMultiSelect } from "./section-multi-select";
+import {
+  AssignmentDetailsStep,
+  AssignmentProblemsStep,
+} from "./assignment-wizard-steps";
 
 /**
  * Two-step wizard for creating a draft homework.
@@ -22,14 +24,6 @@ import { SectionMultiSelect } from "./section-multi-select";
  * queue banner + per-HW generation UX lands in Feature 6 on the HW
  * detail page.
  */
-
-const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "penalty_per_day", label: "10% per day" },
-  { value: "no_credit", label: "No credit after due" },
-];
-
-const QUANTITY_CHIPS = [5, 10, 15, 20] as const;
 
 type Step = 1 | 2;
 
@@ -192,7 +186,7 @@ export function NewHomeworkModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {step === 1 ? (
-            <Step1
+            <AssignmentDetailsStep
               title={title}
               onTitleChange={setTitle}
               courseId={courseId}
@@ -205,9 +199,11 @@ export function NewHomeworkModal({
               sectionIds={sectionIds}
               onSectionIdsChange={setSectionIds}
               disabled={busy}
+              titlePlaceholder="e.g. Quadratics HW #1"
+              sectionsHint="You can add these later. Publishing requires at least one section."
             />
           ) : (
-            <Step2
+            <AssignmentProblemsStep
               count={count}
               onCountChange={setCount}
               topicHint={topicHint}
@@ -224,6 +220,7 @@ export function NewHomeworkModal({
                 })
               }
               disabled={busy}
+              helperText="Tell the AI how many problems and any context from your uploaded materials. Skip to create an empty draft you can fill in later."
             />
           )}
 
@@ -283,263 +280,3 @@ export function NewHomeworkModal({
   );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Step 1 — Details
-// ────────────────────────────────────────────────────────────────────
-
-function Step1({
-  title,
-  onTitleChange,
-  courseId,
-  unitIds,
-  onUnitIdsChange,
-  dueAt,
-  onDueAtChange,
-  latePolicy,
-  onLatePolicyChange,
-  sectionIds,
-  onSectionIdsChange,
-  disabled,
-}: {
-  title: string;
-  onTitleChange: (v: string) => void;
-  courseId: string;
-  unitIds: string[];
-  onUnitIdsChange: (v: string[]) => void;
-  dueAt: string;
-  onDueAtChange: (v: string) => void;
-  latePolicy: string;
-  onLatePolicyChange: (v: string) => void;
-  sectionIds: string[];
-  onSectionIdsChange: (v: string[]) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <label className="block text-sm font-bold text-text-primary">Title</label>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => onTitleChange(e.target.value)}
-          autoFocus
-          maxLength={300}
-          placeholder="e.g. Quadratics HW #1"
-          disabled={disabled}
-          className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-bold text-text-primary">
-          Units <span className="font-normal text-text-muted">· required</span>
-        </label>
-        <p className="mt-1 text-[11px] text-text-muted">
-          Pick one. Multi-select for midterms or review HWs that span topics.
-        </p>
-        <div className="mt-2">
-          <UnitMultiSelect
-            courseId={courseId}
-            selected={unitIds}
-            onChange={onUnitIdsChange}
-            disabled={disabled}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label className="block text-sm font-bold text-text-primary">
-            Due date <span className="font-normal text-text-muted">· optional</span>
-          </label>
-          <input
-            type="datetime-local"
-            value={dueAt}
-            onChange={(e) => onDueAtChange(e.target.value)}
-            disabled={disabled}
-            className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-bold text-text-primary">Late policy</label>
-          <select
-            value={latePolicy}
-            onChange={(e) => onLatePolicyChange(e.target.value)}
-            disabled={disabled}
-            className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-          >
-            {LATE_POLICY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-bold text-text-primary">
-          Sections <span className="font-normal text-text-muted">· optional</span>
-        </label>
-        <p className="mt-1 text-[11px] text-text-muted">
-          You can add these later. Publishing requires at least one section.
-        </p>
-        <div className="mt-2">
-          <SectionMultiSelect
-            courseId={courseId}
-            selected={sectionIds}
-            onChange={onSectionIdsChange}
-            disabled={disabled}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Step 2 — Problems
-// ────────────────────────────────────────────────────────────────────
-
-function Step2({
-  count,
-  onCountChange,
-  topicHint,
-  onTopicHintChange,
-  docs,
-  docsLoaded,
-  selectedDocs,
-  onToggleDoc,
-  disabled,
-}: {
-  count: number;
-  onCountChange: (v: number) => void;
-  topicHint: string;
-  onTopicHintChange: (v: string) => void;
-  docs: TeacherDocument[];
-  docsLoaded: boolean;
-  selectedDocs: Set<string>;
-  onToggleDoc: (id: string) => void;
-  disabled: boolean;
-}) {
-  // Local draft for the count input so the teacher can transiently
-  // clear the field (e.g. to delete "5" and type "12") without the
-  // controlled `value={count}` snapping back to 5 mid-edit. We commit
-  // to the parent whenever the draft parses to a valid number, and
-  // fall back to the last committed count on blur if the field is
-  // left empty.
-  const [countDraft, setCountDraft] = useState(String(count));
-  useEffect(() => {
-    setCountDraft(String(count));
-  }, [count]);
-
-  const clamp = (v: number) => Math.min(50, Math.max(1, Math.round(v)));
-
-  const handleCountChange = (raw: string) => {
-    setCountDraft(raw);
-    const v = parseInt(raw, 10);
-    if (!Number.isNaN(v)) {
-      onCountChange(clamp(v));
-    }
-  };
-
-  const handleCountBlur = () => {
-    const v = parseInt(countDraft, 10);
-    if (Number.isNaN(v)) {
-      setCountDraft(String(count));
-    } else {
-      setCountDraft(String(clamp(v)));
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <p className="text-xs text-text-muted">
-          Tell the AI how many problems and any context from your uploaded
-          materials. Skip to create an empty draft you can fill in later.
-        </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-bold text-text-primary">How many problems?</label>
-        <div className="mt-2 flex items-center gap-2">
-          {QUANTITY_CHIPS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onCountChange(n)}
-              disabled={disabled}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                count === n
-                  ? "bg-primary text-white"
-                  : "bg-bg-subtle text-text-primary hover:bg-bg-base"
-              } disabled:opacity-50`}
-            >
-              {n}
-            </button>
-          ))}
-          <input
-            type="number"
-            value={countDraft}
-            min={1}
-            max={50}
-            onChange={(e) => handleCountChange(e.target.value)}
-            onBlur={handleCountBlur}
-            disabled={disabled}
-            className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-bold text-text-primary">
-          Topic hint <span className="font-normal text-text-muted">· optional</span>
-        </label>
-        <input
-          type="text"
-          value={topicHint}
-          onChange={(e) => onTopicHintChange(e.target.value)}
-          placeholder="e.g. Focus on word problems with real-world contexts"
-          disabled={disabled}
-          className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-bold text-text-primary">
-          Source material <span className="font-normal text-text-muted">· optional</span>
-        </label>
-        {!docsLoaded ? (
-          <p className="mt-2 text-[11px] text-text-muted">Loading…</p>
-        ) : docs.length === 0 ? (
-          <p className="mt-2 text-[11px] text-text-muted">
-            No documents in this course. Upload images in the Materials tab to
-            ground generated problems in your own content.
-          </p>
-        ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {docs.map((d) => {
-              const on = selectedDocs.has(d.id);
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => onToggleDoc(d.id)}
-                  disabled={disabled}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                    on
-                      ? "bg-primary text-white"
-                      : "bg-bg-subtle text-text-primary hover:bg-bg-base"
-                  } disabled:opacity-50`}
-                >
-                  {d.filename}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

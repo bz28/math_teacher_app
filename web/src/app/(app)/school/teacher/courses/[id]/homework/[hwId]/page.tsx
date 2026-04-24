@@ -76,13 +76,19 @@ export default function HomeworkDetailPage({
 }) {
   const { id: courseId, hwId: assignmentId } = use(params);
   const router = useRouter();
-  const backHref = `/school/teacher/courses/${courseId}?tab=homework`;
-  const goBack = () => router.push(backHref);
 
   const [hw, setHw] = useState<
     (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
   >(null);
   const [loading, setLoading] = useState(true);
+  // Back link points at whichever tab the assignment came from — HW
+  // for type=homework, Practice for type=practice. Falls back to HW
+  // while the assignment is still loading (matches prior behavior).
+  const backHref =
+    `/school/teacher/courses/${courseId}?tab=${
+      hw?.type === "practice" ? "practice" : "homework"
+    }`;
+  const goBack = () => router.push(backHref);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [editingProblems, setEditingProblems] = useState(false);
@@ -476,7 +482,7 @@ export default function HomeworkDetailPage({
           href={backHref}
           className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
         >
-          ← Back to homework
+          ← Back to {hw?.type === "practice" ? "practice" : "homework"}
         </Link>
       </div>
 
@@ -484,15 +490,22 @@ export default function HomeworkDetailPage({
       <header className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 flex-1">
           {hw && (
-            <span
-              className={`inline-block rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                isPublished
-                  ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
-                  : "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-300"
-              }`}
-            >
-              {hw.status}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  isPublished
+                    ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
+                    : "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-300"
+                }`}
+              >
+                {hw.status}
+              </span>
+              {hw.type === "practice" && (
+                <span className="inline-block rounded-[--radius-pill] bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                  Practice
+                </span>
+              )}
+            </div>
           )}
           <div className="mt-2">
             {editingTitle ? (
@@ -749,17 +762,23 @@ export default function HomeworkDetailPage({
           {/* Grading setup — prominent card right below Problems so
               teachers see and use it. Placing it here (above
               Configuration) makes the rubric a first-class step in
-              homework authoring rather than an optional footnote. */}
-          <GradingSetupCard
-            rubric={hw.rubric}
-            saveState={saveStates.rubric}
-            saveError={saveErrors.rubric}
-            onChange={onChangeRubric}
-          />
+              homework authoring rather than an optional footnote.
+              Hidden for practice: practice is ungraded, no rubric
+              feeds the (non-running) grader. */}
+          {hw.type !== "practice" && (
+            <GradingSetupCard
+              rubric={hw.rubric}
+              saveState={saveStates.rubric}
+              saveError={saveErrors.rubric}
+              onChange={onChangeRubric}
+            />
+          )}
 
           {/* Configuration — collapsed accordion. Auto-expands on a
               fresh HW with no problems so teachers notice the fields;
-              collapses once they're set. */}
+              collapses once they're set. For practice we hide the
+              due date + late policy inputs (neither applies) but keep
+              units + sections since they still drive visibility. */}
           <div className="mt-4">
             <CollapsibleSection
               label="Configuration"
@@ -837,13 +856,17 @@ export default function HomeworkDetailPage({
 function configSummary(hw: TeacherAssignment): string {
   const parts: string[] = [];
   parts.push(`${hw.unit_ids.length} unit${hw.unit_ids.length === 1 ? "" : "s"}`);
-  if (hw.due_at) {
-    const d = new Date(hw.due_at);
-    parts.push(
-      `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
-    );
-  } else {
-    parts.push("No due date");
+  // Practice has no deadline concept — skip the due-date part
+  // entirely rather than show "No due date" on every practice card.
+  if (hw.type !== "practice") {
+    if (hw.due_at) {
+      const d = new Date(hw.due_at);
+      parts.push(
+        `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+      );
+    } else {
+      parts.push("No due date");
+    }
   }
   parts.push(
     hw.section_ids.length === 0
@@ -1028,48 +1051,54 @@ function ConfigBlock({
         />
       </Field>
 
-      {/* Due date */}
-      <Field
-        label="Due date"
-        saveState={saveStates.dueAt}
-        saveError={saveErrors.dueAt}
-      >
-        <DueDatePicker
-          value={hw.due_at}
-          onChange={onChangeDueAt}
-          disabled={disabled}
-          inputRef={dueDateInputRef}
-        />
-      </Field>
+      {/* Due date — hidden for practice: practice is ungraded and
+          has no deadline concept. */}
+      {hw.type !== "practice" && (
+        <Field
+          label="Due date"
+          saveState={saveStates.dueAt}
+          saveError={saveErrors.dueAt}
+        >
+          <DueDatePicker
+            value={hw.due_at}
+            onChange={onChangeDueAt}
+            disabled={disabled}
+            inputRef={dueDateInputRef}
+          />
+        </Field>
+      )}
 
-      {/* Late policy */}
-      <Field
-        label="Late policy"
-        saveState={saveStates.latePolicy}
-        saveError={saveErrors.latePolicy}
-      >
-        <div className="flex flex-wrap gap-1.5">
-          {LATE_POLICY_OPTIONS.map((opt) => {
-            const active = hw.late_policy === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => onChangeLatePolicy(opt.value)}
-                disabled={disabled}
-                className={`rounded-[--radius-pill] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
-                  active
-                    ? "border-primary bg-primary text-white"
-                    : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
-                }`}
-              >
-                {active && <span className="mr-1">✓</span>}
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </Field>
+      {/* Late policy — hidden for practice: nothing can be late
+          when there's no due date. */}
+      {hw.type !== "practice" && (
+        <Field
+          label="Late policy"
+          saveState={saveStates.latePolicy}
+          saveError={saveErrors.latePolicy}
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {LATE_POLICY_OPTIONS.map((opt) => {
+              const active = hw.late_policy === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onChangeLatePolicy(opt.value)}
+                  disabled={disabled}
+                  className={`rounded-[--radius-pill] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    active
+                      ? "border-primary bg-primary text-white"
+                      : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
+                  }`}
+                >
+                  {active && <span className="mr-1">✓</span>}
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+      )}
 
       {/* Sections */}
       <Field

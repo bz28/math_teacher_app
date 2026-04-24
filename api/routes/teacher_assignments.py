@@ -179,6 +179,7 @@ _EMPTY_STATS: dict[str, Any] = {
     "submitted": 0,
     "graded": 0,
     "pending_review": 0,
+    "approved_count": 0,
     "avg_score": None,
 }
 
@@ -269,6 +270,25 @@ async def bulk_assignment_stats(
     )).all()
     pending = {r.originating_assignment_id: r.c for r in pending_rows}
 
+    # 4b. Approved bank-item count per assignment. Used as the
+    # problem_count for practice assignments, which attach their
+    # items via originating_assignment_id rather than
+    # content.problem_ids (the approve path gates on parent_question_id
+    # is NULL, which rejects all practice variations). HW rows keep
+    # using the content-based count; practice rows use this instead.
+    approved_rows = (await db.execute(
+        select(
+            QuestionBankItem.originating_assignment_id,
+            func.count().label("c"),
+        )
+        .where(
+            QuestionBankItem.originating_assignment_id.in_(assignment_ids),
+            QuestionBankItem.status == "approved",
+        )
+        .group_by(QuestionBankItem.originating_assignment_id)
+    )).all()
+    approved = {r.originating_assignment_id: r.c for r in approved_rows}
+
     # 5. Average final_score per assignment (ignores nulls).
     avg_rows = (await db.execute(
         select(Submission.assignment_id, func.avg(SubmissionGrade.final_score).label("avg"))
@@ -290,6 +310,7 @@ async def bulk_assignment_stats(
             "submitted": submitted.get(aid, 0),
             "graded": graded.get(aid, 0),
             "pending_review": pending.get(aid, 0),
+            "approved_count": approved.get(aid, 0),
             "avg_score": round(avgs[aid], 1) if aid in avgs and avgs[aid] is not None else None,
         }
     return out
@@ -331,9 +352,15 @@ def assignment_to_dict(
         "source_homework_id": str(a.source_homework_id) if a.source_homework_id else None,
         "section_ids": [str(sid) for sid, _ in sections],
         "section_names": [name for _, name in sections],
-        # Cheap from-content count so the list view can show "5 problems"
-        # without round-tripping each assignment's detail.
-        "problem_count": len(problem_ids_in_content(a.content)),
+        # HW: count from content.problem_ids (cheap, no round-trip).
+        # Practice: content is empty by design (the approve path can't
+        # snapshot variations), so count approved bank items bucketed
+        # by originating_assignment_id in the stats bulk query.
+        "problem_count": (
+            stats.get("approved_count", 0)
+            if a.type == "practice"
+            else len(problem_ids_in_content(a.content))
+        ),
         "total_students": stats["total_students"],
         "submitted": stats["submitted"],
         "graded": stats["graded"],
@@ -470,6 +497,21 @@ async def clone_homework_as_practice(
     )
     db.add(practice)
     await db.flush()
+
+    # Copy the source HW's section assignments so the practice is
+    # visible to the same students once it publishes. The teacher
+    # can still edit the section picker on the practice detail page
+    # if they want to narrow or widen the audience.
+    source_section_ids = (await db.execute(
+        select(AssignmentSection.section_id).where(
+            AssignmentSection.assignment_id == source.id,
+        )
+    )).scalars().all()
+    for sid in source_section_ids:
+        db.add(AssignmentSection(
+            assignment_id=practice.id,
+            section_id=sid,
+        ))
 
     # Assign the id explicitly at construction so we can collect it
     # without an intermediate flush. The model's `default=uuid.uuid4`
@@ -683,11 +725,23 @@ async def publish_assignment(
         return {"status": "ok"}
     # Defense-in-depth: the frontend gates the Publish button on
     # these three, but a stale UI or direct API call could bypass.
-    # Enforce the same contract here.
-    if not problem_ids_in_content(a.content):
+    # Enforce the same contract here. HW counts from content; practice
+    # counts approved items via originating_assignment_id since its
+    # content is empty by design.
+    if a.type == "practice":
+        approved_count = (await db.execute(
+            select(func.count()).select_from(QuestionBankItem).where(
+                QuestionBankItem.originating_assignment_id == a.id,
+                QuestionBankItem.status == "approved",
+            )
+        )).scalar_one()
+        has_problems = approved_count > 0
+    else:
+        has_problems = bool(problem_ids_in_content(a.content))
+    if not has_problems:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot publish a homework with no problems",
+            detail="Cannot publish with no problems",
         )
     if not (a.unit_ids or []):
         raise HTTPException(

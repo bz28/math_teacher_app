@@ -99,7 +99,36 @@ async def hydrate_assignment_content(
 ) -> dict[str, Any] | None:
     """Read assignment.content and return it with live `problems` joined
     from the bank. Backwards-compat fallback: if content is the legacy
-    snapshot shape (`problems` with question text), return it as-is."""
+    snapshot shape (`problems` with question text), return it as-is.
+
+    Practice assignments don't use content.problem_ids — the approve
+    path gates on `parent_question_id IS NULL` and rejects variations
+    from being snapshotted, but practice items are variations by
+    design (each one parented to a source HW primary). For those we
+    derive `problems` directly from approved items whose
+    originating_assignment_id matches, ordered by created_at."""
+    if assignment.type == "practice":
+        items = (await db.execute(
+            select(QuestionBankItem)
+            .where(
+                QuestionBankItem.originating_assignment_id == assignment.id,
+                QuestionBankItem.status == "approved",
+            )
+            .order_by(QuestionBankItem.created_at.asc())
+        )).scalars().all()
+        return {
+            "problems": [
+                {
+                    "bank_item_id": str(it.id),
+                    "position": pos,
+                    "question": it.question,
+                    "solution_steps": it.solution_steps,
+                    "final_answer": it.final_answer,
+                    "difficulty": it.difficulty,
+                }
+                for pos, it in enumerate(items, start=1)
+            ],
+        }
     content = assignment.content
     if not isinstance(content, dict):
         return content
