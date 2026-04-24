@@ -271,6 +271,50 @@ class StudentHomeworkSummary(BaseModel):
     status: str
 
 
+class StudentPracticeSummary(BaseModel):
+    """Summary card for a published practice set the student has
+    access to. No submission status (practice is ungraded) — just
+    title, count of approved items, and source-HW metadata when
+    the set was cloned from a homework."""
+    assignment_id: str
+    title: str
+    problem_count: int
+    source_homework_id: str | None
+    source_homework_title: str | None
+
+
+class StudentPracticeProblem(BaseModel):
+    """One problem on a practice detail page. Unlike HW primaries,
+    practice problems ship the full payload — question, answer,
+    steps, distractors — because the whole point is to let the
+    student self-check and learn from them."""
+    bank_item_id: str
+    position: int
+    question: str
+    solution_steps: list[dict[str, Any]] | None
+    final_answer: str | None
+    distractors: list[str] | None
+    difficulty: str
+
+
+class StudentPracticeDetail(BaseModel):
+    assignment_id: str
+    title: str
+    course_id: str
+    course_name: str
+    source_homework_id: str | None
+    source_homework_title: str | None
+    problems: list[StudentPracticeProblem]
+
+
+class StudentLinkedPracticeResponse(BaseModel):
+    """Linked-practice lookup for a homework. Populated when the
+    student's integrity chat ends with a disposition that warrants
+    a practice nudge and a practice set linked to this HW is
+    published + visible to them. Null when no link exists."""
+    practice_assignment_id: str | None
+
+
 class StudentHomeworkProblem(BaseModel):
     bank_item_id: str
     position: int
@@ -419,10 +463,16 @@ async def _load_assignment_for_student(
     db: AsyncSession,
     assignment_id: uuid.UUID,
     student_id: uuid.UUID,
+    expected_type: str = "homework",
 ) -> Assignment:
     """Load the assignment, ensuring (a) it exists, (b) it is published,
-    and (c) the student is enrolled in at least one section it's been
-    assigned to. Raises HTTPException on any failure.
+    (c) its type matches `expected_type`, and (d) the student is
+    enrolled in at least one section it's been assigned to. Raises
+    HTTPException on any failure.
+
+    The HW variation loop passes expected_type="homework" (the default);
+    the practice-tab endpoints pass expected_type="practice". Quizzes
+    and tests have no student-facing loop and go unreached today.
     """
     assignment = (await db.execute(
         select(Assignment).where(Assignment.id == assignment_id)
@@ -431,10 +481,13 @@ async def _load_assignment_for_student(
         raise HTTPException(status_code=404, detail="Assignment not found")
     if assignment.status != "published":
         raise HTTPException(status_code=403, detail="Assignment is not published")
-    # The school-student loop is for homework only — quizzes and tests
-    # are graded assessments and should not have an open practice loop.
-    if assignment.type != "homework":
-        raise HTTPException(status_code=404, detail="Not a homework assignment")
+    if assignment.type != expected_type:
+        # Use 404 rather than echoing the actual type — keeps cross-
+        # type ids opaque to the student.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Not a {expected_type} assignment",
+        )
 
     # The student must be enrolled in at least one section this
     # assignment was assigned to. We check via a join — single round trip.
@@ -550,6 +603,95 @@ async def list_homework(
             due_at=a.due_at,
             problem_count=len(problem_ids_in_content(a.content)),
             status="submitted" if a.id in submitted_ids else "not_started",
+        )
+        for a in rows
+    ]
+
+
+@router.get("/courses/{course_id}/practice")
+async def list_practice(
+    course_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> list[StudentPracticeSummary]:
+    """List every published practice set in this course the student
+    has section-visibility into. Practice is ungraded — no submitted/
+    not-started state to report. Problem count is the number of
+    approved bank items originating from the practice assignment,
+    since items attach via originating_assignment_id (not content) in
+    the current generation flow."""
+    section_rows = (await db.execute(
+        select(SectionEnrollment.section_id)
+        .join(Section, Section.id == SectionEnrollment.section_id)
+        .where(
+            SectionEnrollment.student_id == user.id,
+            Section.course_id == course_id,
+        )
+    )).scalars().all()
+    if not section_rows:
+        return []
+
+    aid_rows = (await db.execute(
+        select(Assignment.id)
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.status == "published",
+            Assignment.type == "practice",
+            AssignmentSection.section_id.in_(section_rows),
+        )
+        .distinct()
+    )).scalars().all()
+    if not aid_rows:
+        return []
+
+    rows = (await db.execute(
+        select(Assignment)
+        .where(Assignment.id.in_(aid_rows))
+        .order_by(Assignment.created_at.desc())
+    )).scalars().all()
+
+    # Count approved items per practice assignment (via
+    # originating_assignment_id) in one query rather than N+1.
+    from sqlalchemy import func as sqlfunc
+    count_rows = (await db.execute(
+        select(
+            QuestionBankItem.originating_assignment_id,
+            sqlfunc.count(QuestionBankItem.id),
+        )
+        .where(
+            QuestionBankItem.originating_assignment_id.in_(aid_rows),
+            QuestionBankItem.status == "approved",
+        )
+        .group_by(QuestionBankItem.originating_assignment_id)
+    )).all()
+    counts: dict[uuid.UUID, int] = {aid: int(n) for aid, n in count_rows}
+
+    # Pull source-HW titles (only for practices that were cloned) so
+    # the list cards can render "Cloned from <HW title>" without a
+    # per-card fetch. We fetch just the ids we actually reference.
+    source_ids = {a.source_homework_id for a in rows if a.source_homework_id}
+    source_titles: dict[uuid.UUID, str] = {}
+    if source_ids:
+        src_rows = (await db.execute(
+            select(Assignment.id, Assignment.title).where(
+                Assignment.id.in_(source_ids)
+            )
+        )).all()
+        source_titles = {sid: title for sid, title in src_rows}
+
+    return [
+        StudentPracticeSummary(
+            assignment_id=str(a.id),
+            title=a.title,
+            problem_count=counts.get(a.id, 0),
+            source_homework_id=(
+                str(a.source_homework_id) if a.source_homework_id else None
+            ),
+            source_homework_title=(
+                source_titles.get(a.source_homework_id)
+                if a.source_homework_id else None
+            ),
         )
         for a in rows
     ]
@@ -970,6 +1112,116 @@ async def homework_detail(
         final_score=final_score,
         grade_published_at=grade_published_at,
         breakdown=breakdown_out,
+    )
+
+
+@router.get("/practice/{assignment_id}")
+async def practice_detail(
+    assignment_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentPracticeDetail:
+    """Return the full detail for a published practice assignment.
+    Problems are the approved bank items whose originating_assignment_id
+    points at this practice — the current clone + approve flow attaches
+    items via originating_assignment_id rather than content. Ordered by
+    created_at; clone jobs run concurrently so positions reflect the
+    order each job's AI output persisted, NOT strictly the source HW's
+    problem order. Close enough for v1; revisit when clustering lands."""
+    assignment = await _load_assignment_for_student(
+        db, assignment_id, user.id, expected_type="practice",
+    )
+    course = (await db.execute(
+        select(Course).where(Course.id == assignment.course_id)
+    )).scalar_one()
+
+    items = (await db.execute(
+        select(QuestionBankItem)
+        .where(
+            QuestionBankItem.originating_assignment_id == assignment.id,
+            QuestionBankItem.status == "approved",
+        )
+        .order_by(QuestionBankItem.created_at.asc())
+    )).scalars().all()
+
+    problems: list[StudentPracticeProblem] = [
+        StudentPracticeProblem(
+            bank_item_id=str(it.id),
+            position=pos,
+            question=it.question,
+            solution_steps=it.solution_steps,
+            final_answer=it.final_answer,
+            distractors=it.distractors,
+            difficulty=it.difficulty,
+        )
+        for pos, it in enumerate(items, start=1)
+    ]
+
+    source_title: str | None = None
+    if assignment.source_homework_id:
+        source_title = (await db.execute(
+            select(Assignment.title).where(
+                Assignment.id == assignment.source_homework_id
+            )
+        )).scalar_one_or_none()
+
+    return StudentPracticeDetail(
+        assignment_id=str(assignment.id),
+        title=assignment.title,
+        course_id=str(course.id),
+        course_name=course.name,
+        source_homework_id=(
+            str(assignment.source_homework_id)
+            if assignment.source_homework_id else None
+        ),
+        source_homework_title=source_title,
+        problems=problems,
+    )
+
+
+@router.get("/homework/{assignment_id}/linked-practice")
+async def linked_practice_for_homework(
+    assignment_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentLinkedPracticeResponse:
+    """Return the practice assignment linked to this homework (via
+    source_homework_id), if one exists and the student is enrolled in
+    one of its sections. Powers the integrity-chat "Go to Practice"
+    CTA in PR 4 — silent when no link exists so the chat UI can render
+    a no-nudge terminal.
+
+    The HW itself must also be visible to the student (published +
+    enrolled); we reuse the standard loader to gate access, which
+    doubles as the authz guard against enumerating unrelated HW ids.
+    """
+    await _load_assignment_for_student(db, assignment_id, user.id)
+
+    # Find practice sets linked to this HW, filtered to ones visible
+    # to the student via section enrollment. Pick the most recently
+    # created one if multiple exist — a teacher could re-clone and
+    # publish twice; newest is the one they probably want students in.
+    practice_rows = (await db.execute(
+        select(Assignment.id)
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .join(
+            SectionEnrollment,
+            SectionEnrollment.section_id == AssignmentSection.section_id,
+        )
+        .where(
+            Assignment.source_homework_id == assignment_id,
+            Assignment.type == "practice",
+            Assignment.status == "published",
+            SectionEnrollment.student_id == user.id,
+        )
+        .order_by(Assignment.created_at.desc())
+        .limit(1)
+    )).scalars().all()
+
+    if not practice_rows:
+        return StudentLinkedPracticeResponse(practice_assignment_id=None)
+    return StudentLinkedPracticeResponse(
+        practice_assignment_id=str(practice_rows[0]),
     )
 
 

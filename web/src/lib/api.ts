@@ -1416,6 +1416,41 @@ export interface StudentHomeworkSummary {
   status: string;
 }
 
+export interface StudentPracticeSummary {
+  assignment_id: string;
+  title: string;
+  problem_count: number;
+  source_homework_id: string | null;
+  source_homework_title: string | null;
+}
+
+/** Per-problem payload on a practice detail. Unlike HW primaries,
+ *  practice problems expose the full answer + steps since the whole
+ *  point is to let the student self-check and learn. */
+export interface StudentPracticeProblem {
+  bank_item_id: string;
+  position: number;
+  question: string;
+  solution_steps: { title?: string; description: string }[] | null;
+  final_answer: string | null;
+  distractors: string[] | null;
+  difficulty: string;
+}
+
+export interface StudentPracticeDetail {
+  assignment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string;
+  source_homework_id: string | null;
+  source_homework_title: string | null;
+  problems: StudentPracticeProblem[];
+}
+
+export interface StudentLinkedPracticeResponse {
+  practice_assignment_id: string | null;
+}
+
 export interface StudentHomeworkProblem {
   bank_item_id: string;
   position: number;
@@ -1560,8 +1595,26 @@ export const schoolStudent = {
   listHomework(courseId: string) {
     return apiFetch<StudentHomeworkSummary[]>(`/school/student/courses/${courseId}/homework`);
   },
+  listPractice(courseId: string) {
+    return apiFetch<StudentPracticeSummary[]>(
+      `/school/student/courses/${courseId}/practice`,
+    );
+  },
   homeworkDetail(assignmentId: string) {
     return apiFetch<StudentHomeworkDetail>(`/school/student/homework/${assignmentId}`);
+  },
+  practiceDetail(assignmentId: string) {
+    return apiFetch<StudentPracticeDetail>(
+      `/school/student/practice/${assignmentId}`,
+    );
+  },
+  /** Practice set linked to this HW (source_homework_id match),
+   *  filtered to published + student-visible. Returns null when no
+   *  link exists — integrity chat uses that as the silent signal. */
+  linkedPracticeForHomework(homeworkId: string) {
+    return apiFetch<StudentLinkedPracticeResponse>(
+      `/school/student/homework/${homeworkId}/linked-practice`,
+    );
   },
   nextVariation(assignmentId: string, bankItemId: string, mode: "practice" | "learn") {
     return apiFetch<NextVariationResponse>(
