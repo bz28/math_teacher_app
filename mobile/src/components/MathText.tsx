@@ -58,6 +58,12 @@ function renderLatex(latex: string, displayMode: boolean): string {
   }
 }
 
+// Inline math wrappers ($...$) that contain LaTeX environments (matrices,
+// cases, aligned blocks, etc.) render badly inline — they're inherently
+// multi-line / wide and clip in inline flow. Promote them to display mode
+// so they get the .m-display block wrapper with overflow-x: auto.
+const MULTILINE_ENV_RE = /\\begin\{(p|b|v|V|B|small)?matrix\b|\\begin\{cases\b|\\begin\{align(ed)?\*?\b|\\begin\{array\b/;
+
 function buildHtml(text: string, color: string, fontSize: number, fontWeight: string): string {
   const parts: string[] = [];
   const pattern = new RegExp(MATH_OR_BOLD_RE.source, "g");
@@ -71,7 +77,12 @@ function buildHtml(text: string, color: string, fontSize: number, fontWeight: st
     if (seg.startsWith("$$") && seg.endsWith("$$")) {
       parts.push(`<div class="m-display">${renderLatex(seg.slice(2, -2).trim(), true)}</div>`);
     } else if (seg.startsWith("$") && seg.endsWith("$")) {
-      parts.push(renderLatex(seg.slice(1, -1).trim(), false));
+      const inner = seg.slice(1, -1).trim();
+      if (MULTILINE_ENV_RE.test(inner)) {
+        parts.push(`<div class="m-display">${renderLatex(inner, true)}</div>`);
+      } else {
+        parts.push(renderLatex(inner, false));
+      }
     } else if (seg.startsWith("**") && seg.endsWith("**")) {
       parts.push(`<strong>${escapeHtml(seg.slice(2, -2))}</strong>`);
     }
