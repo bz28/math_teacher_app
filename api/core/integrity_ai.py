@@ -178,12 +178,22 @@ async def extract_student_work(
         },
     ]
 
+    # 1024 was too tight for real HW submissions: a multi-problem HW
+    # with dense handwriting pushes the tool-use JSON (per-step
+    # plain_english + latex + per-problem final_answers) well past
+    # that, so Claude cut off at max_tokens and `stop_reason` came
+    # back as `max_tokens` instead of `tool_use`/`end_turn`. The
+    # wrapper rejected the truncated response, the background task
+    # caught silently, and submissions sat with extraction=null.
+    # 4096 gives comfortable headroom for the densest real submissions
+    # (well under Claude's output cap) without letting the prompt run
+    # away. Bump further if we ever see `max_tokens` again in logs.
     result = await call_claude_vision(
         content,
         LLMMode.INTEGRITY_EXTRACT,
         tool_schema=INTEGRITY_EXTRACT_SCHEMA,
         model=MODEL_REASON,
-        max_tokens=1024,
+        max_tokens=4096,
         user_id=user_id,
     )
     return result
