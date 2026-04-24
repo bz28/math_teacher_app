@@ -4,9 +4,9 @@ Revision ID: aj1000027
 Revises: ai1000026
 Create Date: 2026-04-08 19:00:00.000000
 
-Foundation for the integrity-checker feature (plan: plans/integrity-
-checker-pr1.md). After a student submits a homework, an AI pipeline
-asks 2-3 short questions about each of (up to 5) primary problems
+Foundation for the integrity-checker feature. After a student submits
+a homework, an AI pipeline asks 2-3 short questions about each of
+(up to 5) primary problems
 to verify the student understood their own work. The verdict is a
 per-problem confidence badge for the teacher (advisory only, never
 blocks grading, student never sees it).

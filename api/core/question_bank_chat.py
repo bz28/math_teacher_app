@@ -4,8 +4,10 @@ The teacher iterates with Claude in a persistent chat thread bolted to
 each bank item. Claude can either just answer questions (proposal=null)
 or return a scoped proposal (only the fields it wants to change). The
 proposal is NOT applied to the live row — that only happens when the
-teacher accepts via the /chat/accept endpoint. See:
-plans/question-bank-workshop-v2.md
+teacher accepts via the /chat/accept endpoint. This two-step (propose
+→ accept) shape keeps the teacher in control: Claude never silently
+rewrites a question, and a bad proposal is one click away from being
+discarded.
 """
 
 import logging

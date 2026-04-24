@@ -361,8 +361,8 @@ class StudentSubmissionDetail(BaseModel):
 #
 # Surfaces aggregated read-only data for the student "Today" dashboard
 # and "My Grades" page. Deliberately omits teacher_notes, breakdown,
-# and ai_breakdown — per v1 scope, students see scores only. Feedback
-# surfacing lives in v2 (see plans/student-portal-v1-dashboard.md).
+# and ai_breakdown — per v1 scope, students see scores only.
+# Per-problem feedback display is deferred to a later iteration.
 
 class DashboardAssignment(BaseModel):
     assignment_id: str

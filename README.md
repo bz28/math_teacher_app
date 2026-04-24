@@ -80,7 +80,6 @@ api/                    # FastAPI backend
   middleware/           # Auth, logging, rate limiting
 
 dashboard/              # Admin web dashboard (React + Vite)
-plans/                  # Feature planning documents
 tests/                  # Backend test suite
 ```
 

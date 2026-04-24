@@ -4,10 +4,9 @@ Revision ID: an1000031
 Revises: am1000030
 Create Date: 2026-04-14 23:30:00.000000
 
-Pre-scale cutover for the conversational redesign (plan:
-plans/integrity-conversational-redesign.md). No real-user data is at
-stake, so we drop the two old tables entirely and recreate the new
-three-table shape: integrity_check_submissions (parent),
+Pre-scale cutover for the conversational redesign. No real-user data
+is at stake, so we drop the two old tables entirely and recreate the
+new three-table shape: integrity_check_submissions (parent),
 integrity_check_problems (per-problem verdict + extraction snapshot),
 integrity_conversation_turns (chat log including tool calls).
 """
