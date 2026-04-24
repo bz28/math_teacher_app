@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
-import { cleanMathPreview } from "./HistoryCards";
+import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
 import { useColors, spacing } from "../theme";
@@ -130,16 +130,16 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
               style={{ marginRight: 10, marginTop: 1 }}
             />
             <View style={styles.resultContent}>
-              <Text style={styles.resultProblem}>{cleanMathPreview(r.question)}</Text>
+              <MathText text={r.question} style={styles.resultProblem} />
               {r.isCorrect === true && (
                 <>
-                  <Text style={styles.resultAnswer}>Your answer: {cleanMathPreview(r.userAnswer ?? "")}</Text>
+                  <YourAnswerLine answer={r.userAnswer ?? ""} color={colors.textSecondary} />
                   <Text style={[styles.resultAnswer, { color: colors.success }]}>Correct!</Text>
                 </>
               )}
               {r.isCorrect === false && (
                 <>
-                  <Text style={[styles.resultAnswer, { color: colors.error }]}>Your answer: {cleanMathPreview(r.userAnswer ?? "")}</Text>
+                  <YourAnswerLine answer={r.userAnswer ?? ""} color={colors.error} />
                   <Text style={styles.resultHint}>Flag this question and learn it to see the answer</Text>
                 </>
               )}
@@ -184,6 +184,21 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
           <Text style={styles.homeButtonText}>Return Home</Text>
         </AnimatedPressable>
       </ScrollView>
+    </View>
+  );
+}
+
+// "Your answer: $X$" — the prefix Text and the rendered MathText sit on the
+// same row. MathText is wrapped in a flex:1/minWidth:0 View so it shares
+// row space without overflowing (its WebView wrapper is width:100%, which
+// otherwise competes with the prefix label).
+function YourAnswerLine({ answer, color }: { answer: string; color: string }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+      <Text style={{ ...styles.resultAnswer, marginTop: 0, color }}>Your answer: </Text>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <MathText text={answer} style={{ ...styles.resultAnswer, marginTop: 0, color }} />
+      </View>
     </View>
   );
 }
