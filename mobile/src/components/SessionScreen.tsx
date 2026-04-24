@@ -267,30 +267,19 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <View style={readerStyles.problemPill}>
-          <MathText
-            text={session.problem}
-            style={readerStyles.problemPillText}
-            numberOfLines={1}
-          />
-          {problemImages[session.problem] && (
-            <Ionicons name="image" size={14} color={colors.textMuted} />
-          )}
+        <View style={readerStyles.dotsRow}>
+          {Array.from({ length: session.total_steps }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                readerStyles.dot,
+                i < session.current_step && readerStyles.dotDone,
+                i === session.current_step && readerStyles.dotCurrent,
+              ]}
+            />
+          ))}
         </View>
-        {(
-          <View style={readerStyles.dotsRow}>
-            {Array.from({ length: session.total_steps }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  readerStyles.dot,
-                  i < session.current_step && readerStyles.dotDone,
-                  i === session.current_step && readerStyles.dotCurrent,
-                ]}
-              />
-            ))}
-          </View>
-        )}
+        <View style={readerStyles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -298,14 +287,17 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Completed steps — tap to expand */}
-        {completedSteps.length > 0 && (
-          <View style={compactStyles.historyContainer}>
-            {completedSteps.map((step, i) => (
-              <CompletedStepRow key={`step-${i}`} index={i} title={step.title} description={step.description} isLast={i === completedSteps.length - 1} />
-            ))}
-          </View>
-        )}
+        {/* Problem at top + completed steps trail — same row pattern, tap to expand */}
+        <View style={compactStyles.historyContainer}>
+          <ProblemHeaderRow
+            problem={session.problem}
+            hasImage={!!problemImages[session.problem]}
+            hasFollowing={completedSteps.length > 0}
+          />
+          {completedSteps.map((step, i) => (
+            <CompletedStepRow key={`step-${i}`} index={i} title={step.title} description={step.description} isLast={i === completedSteps.length - 1} />
+          ))}
+        </View>
 
         {/* Learn mode: show current step */}
         {!isCompleted && currentStep && (
@@ -503,6 +495,48 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
   );
 }
 
+// Mirrors CompletedStepRow but for the original problem. MathText's WebView
+// ignores numberOfLines (height is dynamic), so for a long problem with $...$
+// the only way to keep the row "step-sized" is to render the collapsed view
+// as plain text via cleanMathPreview. Tap to expand into the full MathText.
+function ProblemHeaderRow({ problem, hasImage, hasFollowing }: { problem: string; hasImage: boolean; hasFollowing: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const colors = useColors();
+  const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
+  return (
+    <TouchableOpacity
+      style={compactStyles.historyItem}
+      onPress={() => setExpanded(!expanded)}
+      activeOpacity={0.6}
+    >
+      <View style={compactStyles.historyDotCol}>
+        <View style={compactStyles.problemDot}>
+          <Ionicons name="document-text" size={11} color={colors.white} />
+        </View>
+        {hasFollowing && <View style={compactStyles.historyLine} />}
+      </View>
+      <View style={compactStyles.historyTextWrap}>
+        <View style={compactStyles.problemLabelRow}>
+          <Text style={compactStyles.problemLabel}>Problem</Text>
+          {hasImage && <Ionicons name="image" size={12} color={colors.textMuted} />}
+        </View>
+        {expanded ? (
+          <MathText text={problem} style={compactStyles.historyText} />
+        ) : (
+          <Text style={compactStyles.historyText} numberOfLines={1}>
+            {cleanMathPreview(problem)}
+          </Text>
+        )}
+      </View>
+      <Ionicons
+        name={expanded ? "chevron-up" : "chevron-down"}
+        size={14}
+        color={colors.textMuted}
+      />
+    </TouchableOpacity>
+  );
+}
+
 const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
   // Slim header
   slimHeader: {
@@ -522,26 +556,18 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  problemPill: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.primaryBg,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  problemPillText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 12,
-    flex: 1,
+  // Visual counterweight to backIconBtn so dotsRow lands centered between
+  // them via flex:1 on each side. Same width as backIconBtn (32).
+  headerSpacer: {
+    width: 32,
+    height: 32,
   },
   dotsRow: {
+    flex: 1,
     flexDirection: "row",
     gap: 4,
     alignItems: "center",
+    justifyContent: "center",
   },
   dot: {
     width: 6,
@@ -724,6 +750,14 @@ const makeCompactStyles = (colors: ColorPalette) => StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  problemDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   historyLine: {
     width: 2,
     flex: 1,
@@ -738,6 +772,16 @@ const makeCompactStyles = (colors: ColorPalette) => StyleSheet.create({
   historyLabel: {
     ...typography.small,
     color: colors.success,
+    marginBottom: 2,
+  },
+  problemLabel: {
+    ...typography.small,
+    color: colors.primary,
+  },
+  problemLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     marginBottom: 2,
   },
   historyText: {
