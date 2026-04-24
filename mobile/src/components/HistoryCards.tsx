@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { MathText } from "./MathText";
 import { type SessionHistoryItem } from "../services/api";
 import { formatRelativeDate } from "../utils/dateFormatting";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
@@ -34,7 +35,9 @@ export function InProgressCard({ item, onPress }: { item: SessionHistoryItem; on
     <AnimatedPressable style={[styles.inProgressCard, shadows.sm]} onPress={onPress} scaleDown={0.98}>
       <Ionicons name="play-circle" size={22} color={colors.success} style={styles.historyIcon} />
       <View style={styles.historyContent}>
-        <Text style={styles.historyProblem} numberOfLines={1}>{cleanMathPreview(item.problem)}</Text>
+        <View style={styles.historyProblemWrap}>
+          <MathText text={item.problem} style={styles.historyProblem} numberOfLines={1} />
+        </View>
         <Text style={styles.historyMeta}>
           Step {item.current_step} of {item.total_steps} · {formatRelativeDate(item.created_at)}
         </Text>
@@ -57,7 +60,9 @@ export function CompletedCard({ item, onPress }: { item: SessionHistoryItem; onP
         style={styles.historyIcon}
       />
       <View style={styles.historyContent}>
-        <Text style={styles.historyProblem} numberOfLines={1}>{cleanMathPreview(item.problem)}</Text>
+        <View style={styles.historyProblemWrap}>
+          <MathText text={item.problem} style={styles.historyProblem} numberOfLines={1} />
+        </View>
         <Text style={styles.historyMeta}>
           {isAbandoned
             ? `Ended early · Step ${item.current_step} of ${item.total_steps} · ${formatRelativeDate(item.created_at)}`
@@ -103,6 +108,14 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     ...typography.bodyBold,
     color: colors.text,
     fontSize: 14,
+  },
+  // maxHeight clips tall LaTeX (matrices, multi-line cases) so a single
+  // outlier row doesn't break the list rhythm. Inline equations and most
+  // fractions fit; matrices show their top portion instead of being mangled
+  // by a text-only fallback.
+  historyProblemWrap: {
+    maxHeight: 36,
+    overflow: "hidden",
     marginBottom: spacing.xs,
   },
   historyMeta: {

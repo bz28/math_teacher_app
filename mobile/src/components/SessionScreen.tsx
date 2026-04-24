@@ -495,10 +495,10 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
   );
 }
 
-// Mirrors CompletedStepRow but for the original problem. MathText's WebView
-// ignores numberOfLines (height is dynamic), so for a long problem with $...$
-// the only way to keep the row "step-sized" is to render the collapsed view
-// as plain text via cleanMathPreview. Tap to expand into the full MathText.
+// Mirrors CompletedStepRow but for the original problem. Collapsed view
+// renders real KaTeX clipped to a single-line height — tall constructs
+// (matrices, fractions) clip at the bottom instead of being mangled into
+// raw \pmatrix garbage. Tap to expand into the full MathText render.
 function ProblemHeaderRow({ problem, hasImage, hasFollowing }: { problem: string; hasImage: boolean; hasFollowing: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const colors = useColors();
@@ -523,9 +523,9 @@ function ProblemHeaderRow({ problem, hasImage, hasFollowing }: { problem: string
         {expanded ? (
           <MathText text={problem} style={compactStyles.historyText} />
         ) : (
-          <Text style={compactStyles.historyText} numberOfLines={1}>
-            {cleanMathPreview(problem)}
-          </Text>
+          <View style={compactStyles.problemPreviewWrap}>
+            <MathText text={problem} style={compactStyles.historyText} numberOfLines={1} />
+          </View>
         )}
       </View>
       <Ionicons
@@ -783,6 +783,10 @@ const makeCompactStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
     gap: 4,
     marginBottom: 2,
+  },
+  problemPreviewWrap: {
+    maxHeight: 36,
+    overflow: "hidden",
   },
   historyText: {
     ...typography.caption,
