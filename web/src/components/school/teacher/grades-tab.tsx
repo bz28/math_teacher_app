@@ -138,7 +138,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
               <tr className="border-b border-border-light bg-bg-subtle text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
                 <th className="px-4 py-2">Name</th>
                 {sectionFilter === "all" && <th className="px-4 py-2">Section</th>}
-                <th className="px-4 py-2">Progress</th>
+                <th className="px-4 py-2">Graded</th>
                 <th className="px-4 py-2 text-right">Avg</th>
                 <th className="px-4 py-2" aria-label="Open" />
               </tr>

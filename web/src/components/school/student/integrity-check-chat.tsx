@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   schoolStudent,
   type IntegrityStateResponse,
@@ -36,6 +37,13 @@ const INACTIVITY_TICK_MS = 5_000;
 
 interface Props {
   submissionId: string;
+  /** The HW this check is gated on. Used to look up a linked
+   *  practice set so the terminal panel can nudge the student
+   *  there when disposition ∈ {needs_practice, tutor_pivot}. */
+  assignmentId: string;
+  /** The course the HW belongs to. Only used to build the target
+   *  URL for the Go-to-Practice CTA. */
+  courseId: string;
   /** Called when the chat reaches the done state OR the kid taps
    *  Exit. The parent re-fetches state on close. */
   onDone: () => void;
@@ -55,7 +63,12 @@ const MIN_MESSAGE_CHARS = 5;
  * No visible turn counter. A thin progress bar at the top reflects
  * how many sampled problems have been verdicted.
  */
-export function IntegrityCheckChat({ submissionId, onDone }: Props) {
+export function IntegrityCheckChat({
+  submissionId,
+  assignmentId,
+  courseId,
+  onDone,
+}: Props) {
   const [state, setState] = useState<IntegrityStateResponse | null>(null);
   const [pendingStudentMessage, setPendingStudentMessage] =
     useState<string | null>(null);
@@ -73,6 +86,12 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
   // When the agent is asking about a specific step, the student can
   // expand to see the original problem + their extracted work.
   const [referenceOpen, setReferenceOpen] = useState(false);
+  // Practice set linked to this HW, if any. Used by the terminal
+  // "Go to Practice" CTA — silent when null (no nudge rendered).
+  // Looked up on mount rather than at render time so a momentary
+  // publish by the teacher while the student is mid-chat picks up
+  // the link without requiring a manual refresh.
+  const [linkedPracticeId, setLinkedPracticeId] = useState<string | null>(null);
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -92,6 +111,23 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
       cancelled = true;
     };
   }, [submissionId]);
+
+  // Look up any practice set linked to this HW on mount. Non-fatal
+  // on failure — if the lookup errors we just skip the CTA.
+  useEffect(() => {
+    let cancelled = false;
+    schoolStudent
+      .linkedPracticeForHomework(assignmentId)
+      .then((r) => {
+        if (!cancelled) setLinkedPracticeId(r.practice_assignment_id);
+      })
+      .catch(() => {
+        /* silent — absence of CTA is the safe default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId]);
 
   // Auto-scroll to the newest turn whenever the transcript grows.
   useEffect(() => {
@@ -358,6 +394,15 @@ export function IntegrityCheckChat({ submissionId, onDone }: Props) {
           <div className="text-sm text-text-secondary">
             Thanks — your work is with your teacher.
           </div>
+          {/* Practice nudge — only renders when the agent's disposition
+              suggests more study would help AND a practice set is
+              actually linked to this HW. Any other combination stays
+              silent so the terminal matches what was there before. */}
+          <PracticeNudge
+            disposition={state?.disposition ?? null}
+            courseId={courseId}
+            linkedPracticeId={linkedPracticeId}
+          />
           <button
             onClick={onDone}
             className="mt-3 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
@@ -507,6 +552,51 @@ function TurnBubble({ turn }: { turn: IntegrityTurn }) {
           <MathText text={turn.content} />
         )}
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Practice nudge — end-of-chat CTA to the linked practice tab.
+// Renders only when the agent's disposition suggests extra study
+// would help AND a practice set is actually linked to this HW.
+// Any other combination stays silent: we don't want to nudge
+// students who passed, flag_for_review cases (which are teacher-
+// action anyway), or cases where no practice set exists yet.
+// ────────────────────────────────────────────────────────────────────
+
+function PracticeNudge({
+  disposition,
+  courseId,
+  linkedPracticeId,
+}: {
+  disposition: string | null;
+  courseId: string;
+  linkedPracticeId: string | null;
+}) {
+  if (!linkedPracticeId) return null;
+  if (disposition !== "needs_practice" && disposition !== "tutor_pivot") {
+    return null;
+  }
+  const copy =
+    disposition === "needs_practice"
+      ? {
+          lead: "Want to try a few more like this?",
+          button: "Go to Practice",
+        }
+      : {
+          lead: "Not quite clear? Walk through it step by step.",
+          button: "Go to Learn",
+        };
+  return (
+    <div className="mt-3 rounded-[--radius-md] border border-primary/30 bg-primary/5 px-4 py-3 text-center">
+      <p className="text-sm text-text-primary">{copy.lead}</p>
+      <Link
+        href={`/school/student/courses/${courseId}/practice/${linkedPracticeId}`}
+        className="mt-2 inline-flex rounded-[--radius-sm] bg-primary px-4 py-1.5 text-sm font-bold text-white hover:bg-primary/90"
+      >
+        {copy.button} →
+      </Link>
     </div>
   );
 }

@@ -486,7 +486,12 @@ async def clone_homework_as_practice(
     practice = Assignment(
         course_id=course_id,
         teacher_id=current_user.user_id,
-        title=source.title,
+        # Prepend "[Practice]" so cross-type surfaces (global search,
+        # allAssignments, activity log) can't confuse the clone with
+        # its source HW. The prefix is just part of the title — the
+        # teacher can edit or remove it freely once the practice is
+        # created; we never strip/re-add it on later updates.
+        title=f"[Practice] {source.title}",
         type="practice",
         unit_ids=list(source.unit_ids or []),
         source_homework_id=source.id,

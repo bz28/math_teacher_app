@@ -58,6 +58,10 @@ async def _published_and_past_due(
         .where(
             Assignment.course_id == course_id,
             Assignment.status == "published",
+            # Grades track homework only. Practice is ungraded by
+            # design, so cloned practice assignments shouldn't inflate
+            # the "graded / N" denominator on the teacher grades tab.
+            Assignment.type == "homework",
             AssignmentSection.published_at.is_not(None),
         )
     )).all()
