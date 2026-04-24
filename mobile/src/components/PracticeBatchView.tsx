@@ -195,13 +195,19 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
                         {letters[i]}
                       </Text>
                     </View>
-                    <MathText
-                      text={choice}
-                      style={{
-                        ...styles.choiceText,
-                        ...(isSelected ? styles.choiceTextSelected : {}),
-                      }}
-                    />
+                    {/* The flex/minWidth wrapper is what makes MathText share
+                        row space with the letter circle. MathText's WebView
+                        wrapper is width:100%, which alone would compete with
+                        the 28px circle and clip wide content (matrices). */}
+                    <View style={styles.choiceMathWrap}>
+                      <MathText
+                        text={choice}
+                        style={{
+                          ...styles.choiceText,
+                          ...(isSelected ? styles.choiceTextSelected : {}),
+                        }}
+                      />
+                    </View>
                   </AnimatedPressable>
                 );
               })}
@@ -371,13 +377,19 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   choiceButton: {
     flexDirection: "row" as const,
-    alignItems: "center" as const,
+    // flex-start so a tall (matrix) choice doesn't squish the letter circle
+    // to vertical center and leave it visually orphaned at the bottom.
+    alignItems: "flex-start" as const,
     borderWidth: 1.5,
     borderColor: colors.borderLight,
     borderRadius: radii.md,
     padding: spacing.lg,
     backgroundColor: colors.white,
     gap: spacing.md,
+  },
+  choiceMathWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   choiceButtonSelected: {
     borderColor: colors.primary,
@@ -405,7 +417,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   choiceText: {
     ...typography.body,
     color: colors.text,
-    flex: 1,
   },
   choiceTextSelected: {
     color: colors.primary,

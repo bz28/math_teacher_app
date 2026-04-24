@@ -17,6 +17,7 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
 import { MathKeyboard } from "./MathKeyboard";
+import { MathText } from "./MathText";
 import { MockTestConfig } from "./MockTestConfig";
 import { PaywallScreen } from "./PaywallScreen";
 import { UpgradePrompt } from "./UpgradePrompt";
@@ -408,7 +409,12 @@ export function InputScreen({
                   <View style={styles.queueBadge}>
                     <Text style={styles.queueBadgeText}>{i + 1}</Text>
                   </View>
-                  <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
+                  {/* Real KaTeX render with a maxHeight clip — matrices and
+                      tall constructs get cut off at the top instead of being
+                      mangled into raw \pmatrix garbage by a text fallback. */}
+                  <View style={styles.queuePreviewWrap}>
+                    <MathText text={problem} style={styles.queueText} numberOfLines={1} />
+                  </View>
                   <TouchableOpacity
                     onPress={() => handleRemoveFromQueue(i)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -720,7 +726,12 @@ const styles = StyleSheet.create({
   queueText: {
     ...typography.body,
     color: colors.text,
+  },
+  queuePreviewWrap: {
     flex: 1,
+    minWidth: 0,
+    maxHeight: 36,
+    overflow: "hidden",
   },
   queueRemove: {
     padding: spacing.xs,
