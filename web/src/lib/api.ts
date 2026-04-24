@@ -681,6 +681,9 @@ export interface TeacherAssignment {
   status: string;
   due_at: string | null;
   late_policy: string;
+  /** For practice assignments cloned from a homework, the source HW's
+   *  id. Null for scratch-built practice and for homework itself. */
+  source_homework_id: string | null;
   section_ids: string[];
   section_names: string[];
   /** Number of problems in this assignment, cheaply derived from
@@ -953,6 +956,24 @@ export const teacher = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+  /** Clone a homework into a new draft practice assignment. Each
+   *  problem on the source HW spawns a 1:1 variation generation job;
+   *  items land in the teacher's review queue as jobs complete. The
+   *  practice set inherits the source HW's title and units and is
+   *  started in `draft` status so the teacher can review/edit before
+   *  publishing, same as the HW flow. */
+  cloneHomeworkAsPractice(courseId: string, hwId: string) {
+    return apiFetch<{
+      id: string;
+      title: string;
+      status: string;
+      source_homework_id: string;
+      job_ids: string[];
+    }>(
+      `/teacher/courses/${courseId}/assignments/${hwId}/clone-as-practice`,
+      { method: "POST" },
+    );
   },
   updateAssignment(assignmentId: string, data: Record<string, unknown>) {
     return apiFetch<{ status: string }>(`/teacher/assignments/${assignmentId}`, {
