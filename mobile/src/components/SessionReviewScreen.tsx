@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { GradientButton } from "./GradientButton";
-import { cleanMathPreview } from "./HistoryCards";
 import { MathText } from "./MathText";
 import { getSession, respondToStep, type SessionData } from "../services/api";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
@@ -232,9 +231,11 @@ function SessionChat({ sessionId, scrollRef }: { sessionId: string; scrollRef: R
               msg.role === "user" ? chatStyles.userBubble : chatStyles.assistantBubble,
             ]}
           >
-            <Text style={[chatStyles.bubbleText, msg.role === "user" && chatStyles.userBubbleText]}>
-              {msg.role === "assistant" ? cleanMathPreview(msg.text) : msg.text}
-            </Text>
+            {msg.role === "user" ? (
+              <Text style={[chatStyles.bubbleText, chatStyles.userBubbleText]}>{msg.text}</Text>
+            ) : (
+              <MathText text={msg.text} style={chatStyles.bubbleText} />
+            )}
           </View>
         ))}
 
