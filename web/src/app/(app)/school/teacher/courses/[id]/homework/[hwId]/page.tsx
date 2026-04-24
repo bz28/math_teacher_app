@@ -293,8 +293,10 @@ export default function HomeworkDetailPage({
   // intercept and show a soft confirm — most "no due date" publishes
   // are mistakes, but it IS a valid choice (in-class work, ongoing
   // practice). Click "Publish anyway" in the confirm to proceed.
+  // Practice assignments have no due-date concept, so skip the
+  // confirm and publish directly.
   const handlePublishClick = () => {
-    if (hw && hw.due_at === null) {
+    if (hw && hw.type !== "practice" && hw.due_at === null) {
       setConfirmingNoDueDate(true);
       return;
     }
@@ -595,8 +597,9 @@ export default function HomeworkDetailPage({
 
       {/* Soft confirm strip for "publish without a due date". Shown
           full-width below the header so it's hard to miss, and its
-          CTAs pair with the already-noticed Publish button above. */}
-      {!editingProblems && hw && confirmingNoDueDate && (
+          CTAs pair with the already-noticed Publish button above.
+          Never shows for practice — due dates don't apply there. */}
+      {!editingProblems && hw && hw.type !== "practice" && confirmingNoDueDate && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/40 dark:bg-amber-500/10">
           <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">
             ⚠ Publish without a due date? Students will see &ldquo;no due date&rdquo;.
