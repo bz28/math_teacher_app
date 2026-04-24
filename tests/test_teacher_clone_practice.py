@@ -65,7 +65,20 @@ async def test_clone_creates_draft_practice_with_source_link(
     # Source HW in the world fixture has exactly one primary problem,
     # so we expect exactly one generation job queued.
     assert len(body["job_ids"]) == 1
+    # Regression guard: the returned job id must be a real UUID,
+    # not literal "None" (what we got when the route captured
+    # job.id before SQLAlchemy's column default fired at flush).
+    returned_job_id = body["job_ids"][0]
+    assert returned_job_id != "None"
+    uuid.UUID(returned_job_id)  # raises ValueError if not a uuid
+
+    # Matching regression guard on the scheduler: every call must
+    # receive a real UUID that matches what the response returned.
+    # Without this, a None-valued schedule call that silently failed
+    # would still produce call_count == 1.
     assert sched.call_count == 1
+    scheduled_arg = sched.call_args_list[0].args[0]
+    assert str(scheduled_arg) == returned_job_id
 
     # Verify the persisted practice assignment matches.
     async with get_session_factory()() as s:
@@ -87,6 +100,8 @@ async def test_clone_creates_draft_practice_with_source_link(
         )).scalars().all()
         assert len(jobs) == 1
         assert jobs[0].parent_question_id == world["primary_id"]
+        # The id the route returned must match what was persisted.
+        assert str(jobs[0].id) == returned_job_id
         assert jobs[0].requested_count == 1
         assert jobs[0].status == "queued"
 

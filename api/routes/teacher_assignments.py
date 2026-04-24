@@ -471,8 +471,12 @@ async def clone_homework_as_practice(
     db.add(practice)
     await db.flush()
 
-    # Collect job rows; QuestionBankGenerationJob.id has a Python-side
-    # uuid4 default so we can read job.id without an intermediate flush.
+    # Assign the id explicitly at construction so we can collect it
+    # without an intermediate flush. The model's `default=uuid.uuid4`
+    # is a SQLAlchemy column default that only fires during flush —
+    # reading `job.id` right after `db.add()` without assigning would
+    # return None, which is how an earlier version silently queued
+    # jobs that `schedule_generation_job(None)` then failed to run.
     job_ids: list[uuid.UUID] = []
     for item_id in source_item_ids:
         parent = item_by_id.get(item_id)
@@ -481,7 +485,9 @@ async def clone_homework_as_practice(
             # query. Skip — teacher ends with a partial practice set
             # and can retry missing slots via "Generate more".
             continue
+        job_id = uuid.uuid4()
         job = QuestionBankGenerationJob(
+            id=job_id,
             course_id=course_id,
             unit_id=parent.unit_id,
             originating_assignment_id=practice.id,
@@ -493,7 +499,7 @@ async def clone_homework_as_practice(
             parent_question_id=parent.id,
         )
         db.add(job)
-        job_ids.append(job.id)
+        job_ids.append(job_id)
 
     await db.commit()
 
