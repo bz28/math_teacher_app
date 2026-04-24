@@ -15,6 +15,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
 import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
+import { cleanMathPreview } from "./HistoryCards";
 import { ImagePreview } from "./ImagePreview";
 import { MathKeyboard } from "./MathKeyboard";
 import { MockTestConfig } from "./MockTestConfig";
@@ -408,7 +409,7 @@ export function InputScreen({
                   <View style={styles.queueBadge}>
                     <Text style={styles.queueBadgeText}>{i + 1}</Text>
                   </View>
-                  <Text style={styles.queueText} numberOfLines={1}>{problem}</Text>
+                  <Text style={styles.queueText} numberOfLines={1}>{cleanMathPreview(problem)}</Text>
                   <TouchableOpacity
                     onPress={() => handleRemoveFromQueue(i)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
