@@ -627,4 +627,16 @@ async def call_claude_vision(
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
     except ValueError as e:
+        # Reached when Anthropic returned HTTP 200 but the response is
+        # unusable — truncation (stop_reason=max_tokens), missing tool
+        # call, or malformed JSON. The API call DID consume tokens, so
+        # persist a success=False row so these failures stay visible
+        # in the admin dashboard instead of vanishing silently (which
+        # is exactly how we lost sight of the max_tokens issue above).
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
+        _circuit.record_failure()
+        await _log_and_persist(
+            use_model, mode, 0, 0, latency_ms,
+            session_id=session_id, user_id=user_id, success=False,
+        )
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e
