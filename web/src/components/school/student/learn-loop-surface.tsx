@@ -112,7 +112,7 @@ export function LearnLoopSurface({
     setThinkingStepIndex(index);
     const token = variationTokenRef.current;
     try {
-      const resp = await schoolStudent.stepChat(variation.bank_item_id, {
+      const chatReply = await schoolStudent.stepChat(variation.bank_item_id, {
         step_index: index,
         question,
         prior_messages: prior,
@@ -122,7 +122,7 @@ export function LearnLoopSurface({
         ...prev,
         [index]: [
           ...(prev[index] ?? []),
-          { role: "assistant", content: resp.reply },
+          { role: "assistant", content: chatReply.reply },
         ],
       }));
     } catch {
@@ -141,14 +141,14 @@ export function LearnLoopSurface({
     setProblemChatThinking(true);
     const token = variationTokenRef.current;
     try {
-      const resp = await schoolStudent.problemChat(variation.bank_item_id, {
+      const chatReply = await schoolStudent.problemChat(variation.bank_item_id, {
         question,
         prior_messages: prior,
       });
       if (variationTokenRef.current !== token) return;
       setProblemChat((curr) => [
         ...curr,
-        { role: "assistant", content: resp.reply },
+        { role: "assistant", content: chatReply.reply },
       ]);
     } catch {
       if (variationTokenRef.current !== token) return;

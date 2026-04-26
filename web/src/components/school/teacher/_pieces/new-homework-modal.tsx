@@ -91,9 +91,9 @@ export function NewHomeworkModal({
       });
     teacher
       .documents(courseId)
-      .then((r) => {
+      .then(({ documents }) => {
         if (cancelled) return;
-        setDocs(r.documents);
+        setDocs(documents);
       })
       .catch(() => {
         // Non-fatal — docs are optional context for generation.

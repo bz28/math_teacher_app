@@ -59,20 +59,20 @@ export function ImageUpload({
     async (base64: string) => {
       setPhase("extracting");
       try {
-        const res = await imageApi.extract(base64, subject);
-        if (res.problems.length === 0) {
+        const extracted = await imageApi.extract(base64, subject);
+        if (extracted.problems.length === 0) {
           setError("No problems found. Try selecting areas manually.");
           setManualMode(true);
           setPhase("select");
           return;
         }
         onExtractComplete?.();
-        setResult(res);
+        setResult(extracted);
         // Attach original image when single problem has a diagram (bracket description).
         // The original photo IS the diagram — cheaper than generating SVG during extraction.
-        const hasDiagram = res.problems.length === 1 && /\[.+\]/.test(res.problems[0]);
-        setCropImages(new Array(res.problems.length).fill(hasDiagram ? base64 : undefined));
-        setSelected(new Array(res.problems.length).fill(true));
+        const hasDiagram = extracted.problems.length === 1 && /\[.+\]/.test(extracted.problems[0]);
+        setCropImages(new Array(extracted.problems.length).fill(hasDiagram ? base64 : undefined));
+        setSelected(new Array(extracted.problems.length).fill(true));
         setPhase("upload");
         setImageBase64(null);
       } catch {

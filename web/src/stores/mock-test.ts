@@ -114,8 +114,8 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
     try {
       if (generateCount > 0) {
         // Phase 1: batch generate similar question texts (1 Claude call)
-        const res = await practiceApi.generate({ problems, subject, difficulty });
-        const questionTexts = res.problems.map((p) => p.question);
+        const generated = await practiceApi.generate({ problems, subject, difficulty });
+        const questionTexts = generated.problems.map((p) => p.question);
 
         // Phase 2: show exam immediately with placeholders, solve in parallel
         const placeholders: PracticeProblem[] = questionTexts.map((q) => ({
@@ -132,11 +132,11 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         // Fire solve calls for all generated questions in parallel
         const batchSessionId = id;
         const solvePromises = questionTexts.map((q, i) =>
-          practiceApi.solve({ problem: q, subject }).then((res) => {
+          practiceApi.solve({ problem: q, subject }).then((solveResult) => {
             const { mockTest: current } = get();
             if (!current || current.sessionId !== batchSessionId) return;
             const updated = [...current.questions];
-            updated[i] = res.problem;
+            updated[i] = solveResult.problem;
             set({ mockTest: { ...current, questions: updated } });
           }),
         );
@@ -186,11 +186,11 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           return practiceApi.solve({
             problem: p, subject,
             ...(image && { image_base64: image }),
-          }).then((res) => {
+          }).then((solveResult) => {
             const { mockTest: current } = get();
             if (!current || current.sessionId !== batchSessionId2) return;
             const updated = [...current.questions];
-            updated[i] = res.problem;
+            updated[i] = solveResult.problem;
             set({ mockTest: { ...current, questions: updated } });
           });
         });
@@ -404,20 +404,20 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
             batch.map(async ({ img, i }) => {
               const q = mt.questions[i];
               const r = results[i];
-              const res = await workApi.submit({
+              const workSubmitResult = await workApi.submit({
                 image_base64: img,
                 problem_text: q.question,
                 user_answer: r?.userAnswer ?? "",
                 user_was_correct: r?.isCorrect === true,
                 subject,
               });
-              if (!res.diagnosis) return;
+              if (!workSubmitResult.diagnosis) return;
               const { mockTest: current } = get();
               if (!current) return;
               const newSubs = [...current.workSubmissions];
-              newSubs[i] = res.diagnosis;
+              newSubs[i] = workSubmitResult.diagnosis;
               const updatedFlags = [...current.flags];
-              if (res.diagnosis.has_issues && !updatedFlags[i]) {
+              if (workSubmitResult.diagnosis.has_issues && !updatedFlags[i]) {
                 updatedFlags[i] = true;
               }
               set({ mockTest: { ...current, workSubmissions: newSubs, flags: updatedFlags } });

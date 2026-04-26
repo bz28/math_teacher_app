@@ -57,9 +57,9 @@ function RegisterPageContent() {
       setInviteLoading(true);
       auth
         .validateInvite(inviteToken)
-        .then((data) => {
-          setInvite(data);
-          setEmail(data.email);
+        .then((inviteData) => {
+          setInvite(inviteData);
+          setEmail(inviteData.email);
         })
         .catch(() => setInviteError("This invite link is invalid or has expired."))
         .finally(() => setInviteLoading(false));
@@ -67,9 +67,9 @@ function RegisterPageContent() {
       setInviteLoading(true);
       auth
         .validateSectionInvite(sectionInviteToken)
-        .then((data) => {
-          setSectionInvite(data);
-          setEmail(data.email);
+        .then((sectionInviteData) => {
+          setSectionInvite(sectionInviteData);
+          setEmail(sectionInviteData.email);
         })
         .catch(() => setInviteError("This invite link is invalid or has expired."))
         .finally(() => setInviteLoading(false));

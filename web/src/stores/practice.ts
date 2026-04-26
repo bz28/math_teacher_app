@@ -122,11 +122,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       const batchId = sessionId;
       Promise.allSettled(
         similarQuestions.map((q, i) =>
-          practiceApi.solve({ problem: q, subject }).then((res) => {
+          practiceApi.solve({ problem: q, subject }).then((solveResult) => {
             const { practiceBatch: current } = get();
             if (!current || current.sessionId !== batchId) return;
             const updated = [...current.problems];
-            updated[i] = res.problem;
+            updated[i] = solveResult.problem;
             set({ practiceBatch: { ...current, problems: updated } });
           }),
         ),
@@ -160,11 +160,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
       // Phase 2: solve in background — user clicks Begin when ready
       const batchId = sessionId;
-      practiceApi.solve({ problem: similarQuestion, subject }).then((res) => {
+      practiceApi.solve({ problem: similarQuestion, subject }).then((solveResult) => {
         const { practiceBatch: current } = get();
         if (!current || current.sessionId !== batchId) return;
         const updated = [...current.problems];
-        updated[0] = res.problem;
+        updated[0] = solveResult.problem;
         set({ practiceBatch: { ...current, problems: updated } });
       }).catch((err) => {
         const { practiceBatch: current } = get();
@@ -189,7 +189,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       answer: "",
     }));
     const sessionId = await sessionApi.createPracticeBatch(problems[0])
-      .then((r) => r.id)
+      .then(({ id }) => id)
       .catch(() => null);
 
     set({

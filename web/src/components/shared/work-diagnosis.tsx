@@ -34,14 +34,14 @@ export function WorkDiagnosis({
     setError(null);
     try {
       const base64 = await fileToBase64(file);
-      const res = await workApi.submit({
+      const workSubmitResult = await workApi.submit({
         image_base64: base64,
         problem_text: problemText,
         user_answer: userAnswer,
         user_was_correct: userWasCorrect,
         subject,
       });
-      setDiagnosis(res.diagnosis);
+      setDiagnosis(workSubmitResult.diagnosis);
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -74,10 +74,10 @@ export function SubmissionPanel({
     setSubmitting(true);
     setError(null);
     try {
-      const resp = await schoolStudent.submitHomework(assignmentId, {
+      const submission = await schoolStudent.submitHomework(assignmentId, {
         image_base64: imageBase64,
       });
-      onSubmitted(resp);
+      onSubmitted(submission);
     } catch (err) {
       setError((err as Error).message || "Submit failed. Try again.");
       setConfirming(false);

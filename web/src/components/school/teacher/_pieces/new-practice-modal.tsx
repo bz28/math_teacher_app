@@ -92,8 +92,8 @@ export function NewPracticeModal({
     if (hwsLoaded) return;
     teacher
       .assignments(courseId)
-      .then((r) => {
-        const onlyHw = r.assignments.filter((a) => a.type === "homework");
+      .then(({ assignments }) => {
+        const onlyHw = assignments.filter((a) => a.type === "homework");
         setHws(onlyHw);
         const pickable = onlyHw.filter((h) => (h.problem_count ?? 0) > 0);
         const firstPublished = pickable.find((a) => a.status === "published");
@@ -117,7 +117,7 @@ export function NewPracticeModal({
     if (step !== 3 || docsLoaded) return;
     teacher
       .documents(courseId)
-      .then((r) => setDocs(r.documents))
+      .then(({ documents }) => setDocs(documents))
       .catch(() => {
         // Non-fatal — docs are optional context for generation.
       })
@@ -164,17 +164,17 @@ export function NewPracticeModal({
 
   const runClone = () =>
     run(async () => {
-      const resp = await teacher.cloneHomeworkAsPractice(
+      const clone = await teacher.cloneHomeworkAsPractice(
         courseId,
         selectedHwId,
       );
       // Stash the most recent job id so the course page's pulsing
       // dot + existing job polling can pick it up. Keyed by the new
       // practice assignment id so concurrent clones don't clobber.
-      if (resp.job_ids[0]) {
-        sessionStorage.setItem(hwGenStorageKey(resp.id), resp.job_ids[0]);
+      if (clone.job_ids[0]) {
+        sessionStorage.setItem(hwGenStorageKey(clone.id), clone.job_ids[0]);
       }
-      onCreated(resp.id, { startedGeneration: resp.job_ids.length > 0 });
+      onCreated(clone.id, { startedGeneration: clone.job_ids.length > 0 });
     });
 
   const createDraft = async (): Promise<string> => {
