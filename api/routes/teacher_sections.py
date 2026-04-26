@@ -278,7 +278,7 @@ async def revoke_invite(
     )).scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status != "pending":
+    if invite.status != INVITE_STATUS_PENDING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Invite is {invite.status}")
     invite.status = INVITE_STATUS_REVOKED
     await db.commit()
@@ -300,7 +300,7 @@ async def resend_invite(
     )).scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status != "pending":
+    if invite.status != INVITE_STATUS_PENDING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Invite is {invite.status}")
     invite.token = secrets.token_urlsafe(32)
     invite.expires_at = datetime.now(UTC) + timedelta(days=INVITE_EXPIRY_DAYS)

@@ -315,7 +315,7 @@ async def _load_section_invite(
             detail="This invite has already been used.",
         )
     if invite.status == INVITE_STATUS_EXPIRED or invite.expires_at < datetime.now(UTC):
-        if invite.status != "expired":
+        if invite.status != INVITE_STATUS_EXPIRED:
             invite.status = INVITE_STATUS_EXPIRED
             await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="This invite has expired")

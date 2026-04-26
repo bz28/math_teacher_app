@@ -20,7 +20,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.assignment import Assignment
+from api.models.assignment import ASSIGNMENT_STATUS_PUBLISHED, Assignment
 from api.models.question_bank import QuestionBankItem
 
 logger = logging.getLogger(__name__)
@@ -263,7 +263,7 @@ async def recompute_bank_locks(db: AsyncSession, course_id: uuid.UUID) -> None:
     # Only published references lock the bank item; drafts can be edited freely.
     locked_ids = {
         pid for pid, refs in used.items()
-        if any(r.get("status") == "published" for r in refs)
+        if any(r.get("status") == ASSIGNMENT_STATUS_PUBLISHED for r in refs)
     }
     items = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)

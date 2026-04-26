@@ -19,6 +19,7 @@ from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
+from api.models.assignment import ASSIGNMENT_STATUS_PUBLISHED
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.routes.teacher_assignments import get_teacher_assignment
@@ -510,7 +511,7 @@ async def approve_bank_item(
     # of a primary via parent_question_id) are practice scaffolding
     # served through the student loop — they never belong in HW
     # content. snapshot_bank_items would reject them anyway.
-    if a.status != "published" and item.parent_question_id is None:
+    if a.status != ASSIGNMENT_STATUS_PUBLISHED and item.parent_question_id is None:
         existing_ids: list[uuid.UUID] = []
         content = a.content if isinstance(a.content, dict) else {}
         for raw in content.get("problem_ids") or []:

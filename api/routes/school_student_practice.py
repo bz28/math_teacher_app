@@ -489,7 +489,7 @@ async def _load_assignment_for_student(
     )).scalar_one_or_none()
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    if assignment.status != "published":
+    if assignment.status != ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(status_code=403, detail="Assignment is not published")
     if assignment.type != expected_type:
         # Use 404 rather than echoing the actual type — keeps cross-

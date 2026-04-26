@@ -846,7 +846,7 @@ async def unpublish_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    if a.status != "published":
+    if a.status != ASSIGNMENT_STATUS_PUBLISHED:
         return {"status": "ok"}
     a.status = ASSIGNMENT_STATUS_DRAFT
     await db.flush()
@@ -1471,7 +1471,7 @@ async def publish_grades(
     # Grades are only visible to students once the HW itself is
     # published. Publishing grades on a draft HW would orphan them
     # (student has no view of the HW to show the grade on), so reject.
-    if a.status != "published":
+    if a.status != ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot publish grades on a draft homework",

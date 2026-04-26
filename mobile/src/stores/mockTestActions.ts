@@ -88,12 +88,12 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
 
       // Fire all API calls in parallel, update each question as it resolves
       const promises = problems.map((p, i) =>
-        solvePracticeProblem(p, subject).then((res) => {
-          const { mockTest: mt } = get();
-          if (!mt) return;
-          const updated = [...mt.questions];
-          updated[i] = res.problem;
-          set({ mockTest: { ...mt, questions: updated } });
+        solvePracticeProblem(p, subject).then((solveResult) => {
+          const currentMockTest = get().mockTest;
+          if (!currentMockTest) return;
+          const updated = [...currentMockTest.questions];
+          updated[i] = solveResult.problem;
+          set({ mockTest: { ...currentMockTest, questions: updated } });
         }),
       );
 
