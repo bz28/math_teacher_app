@@ -15,7 +15,7 @@ import { GradientButton } from "./GradientButton";
 import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
-import { shuffleChoices, formatElapsed } from "../utils/quiz";
+import { sortChoicesByHash, formatElapsed } from "../utils/quiz";
 import { StyleSheet } from "react-native";
 
 interface PracticeBatchViewProps {
@@ -41,7 +41,7 @@ export function PracticeBatchView({ onBack }: PracticeBatchViewProps) {
     if (!currentQuestion?.answer || !currentQuestion.distractors?.length) return [];
     const all = [currentQuestion.answer, ...currentQuestion.distractors];
     const seed = practiceBatch?.currentIndex ?? 0;
-    return shuffleChoices(all, seed);
+    return sortChoicesByHash(all, seed);
   }, [currentQuestion, practiceBatch?.currentIndex]);
 
   // Elapsed timer

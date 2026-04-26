@@ -35,7 +35,7 @@ const INACTIVITY_NUDGE_MS: Record<"desktop" | "mobile", number> = {
 // just needs to appear "about 2 min" after last activity.
 const INACTIVITY_TICK_MS = 5_000;
 
-interface Props {
+interface IntegrityCheckChatProps {
   submissionId: string;
   /** The HW this check is gated on. Used to look up a linked
    *  practice set so the terminal panel can nudge the student
@@ -68,7 +68,7 @@ export function IntegrityCheckChat({
   assignmentId,
   courseId,
   onDone,
-}: Props) {
+}: IntegrityCheckChatProps) {
   const [state, setState] = useState<IntegrityStateResponse | null>(null);
   const [pendingStudentMessage, setPendingStudentMessage] =
     useState<string | null>(null);

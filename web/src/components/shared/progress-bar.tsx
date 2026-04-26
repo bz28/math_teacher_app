@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 
-interface Props {
+interface ProgressBarProps {
   /** 0..100, gets clamped. */
   value: number;
 }
@@ -12,7 +12,7 @@ interface Props {
  * student practice/learn surfaces. Pure render — caller computes
  * the percentage.
  */
-export function ProgressBar({ value }: Props) {
+export function ProgressBar({ value }: ProgressBarProps) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-border-light">

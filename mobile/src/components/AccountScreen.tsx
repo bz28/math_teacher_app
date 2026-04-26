@@ -101,7 +101,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
     ]).start();
   };
 
-  const handleDeleteAccount = () => {
+  const openDeleteConfirm = () => {
     const message = isPro
       ? "You have an active subscription. Please cancel it in your App Store/Play Store settings first, or you'll continue to be charged.\n\nThis will permanently delete your account and all your data. This action cannot be undone."
       : "This will permanently delete your account and all your data. This action cannot be undone.";
@@ -120,7 +120,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
     ]);
   };
 
-  const handleConfirmDelete = async () => {
+  const confirmDelete = async () => {
     if (!deletePassword.trim()) {
       setDeleteError("Please enter your password");
       triggerShake();
@@ -249,7 +249,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
         </View>
 
         {/* Delete Account */}
-        <AnimatedPressable style={styles.deleteButton} onPress={handleDeleteAccount} scaleDown={0.97}>
+        <AnimatedPressable style={styles.deleteButton} onPress={openDeleteConfirm} scaleDown={0.97}>
           <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
           <Text style={styles.deleteText}>Delete Account</Text>
         </AnimatedPressable>
@@ -356,7 +356,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
                 editable={!deleteLoading}
                 autoFocus
                 returnKeyType="go"
-                onSubmitEditing={handleConfirmDelete}
+                onSubmitEditing={confirmDelete}
               />
             </RNAnimated.View>
 
@@ -366,7 +366,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
 
             <AnimatedPressable
               style={[styles.modalCtaBtn, { backgroundColor: colors.error }, deleteLoading && { opacity: 0.6 }]}
-              onPress={handleConfirmDelete}
+              onPress={confirmDelete}
               scaleDown={0.97}
               disabled={deleteLoading}
             >

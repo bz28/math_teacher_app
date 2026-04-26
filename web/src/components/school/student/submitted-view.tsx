@@ -2,7 +2,7 @@
 
 import type { StudentSubmission } from "@/lib/api";
 
-interface Props {
+interface SubmittedViewProps {
   submission: StudentSubmission;
 }
 
@@ -14,7 +14,7 @@ interface Props {
  * this component), not here. The integrity-check transcript and
  * extraction live on their own surface (IntegrityCheckChat).
  */
-export function SubmittedView({ submission }: Props) {
+export function SubmittedView({ submission }: SubmittedViewProps) {
   const submittedAt = new Date(submission.submitted_at);
   return (
     <div className="mt-8 rounded-[--radius-md] border border-green-500 bg-green-50 p-6 dark:bg-green-500/10">

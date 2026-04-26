@@ -41,7 +41,13 @@ from api.core.integrity_pipeline import start_integrity_check
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
-from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import (
+    ASSIGNMENT_STATUS_PUBLISHED,
+    Assignment,
+    AssignmentSection,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.course import Course
 from api.models.question_bank import BankConsumption, QuestionBankItem
 from api.models.section import Section
@@ -483,7 +489,7 @@ async def _load_assignment_for_student(
     )).scalar_one_or_none()
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    if assignment.status != "published":
+    if assignment.status != ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(status_code=403, detail="Assignment is not published")
     if assignment.type != expected_type:
         # Use 404 rather than echoing the actual type — keeps cross-
@@ -574,7 +580,7 @@ async def list_homework(
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
             Assignment.course_id == course_id,
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             # Only homework belongs in the student "Homework" tab.
             # Quizzes and tests are surfaced separately later.
             Assignment.type == "homework",
@@ -640,7 +646,7 @@ async def list_practice(
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
             Assignment.course_id == course_id,
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             Assignment.type == "practice",
             AssignmentSection.section_id.in_(section_rows),
         )
@@ -760,7 +766,7 @@ async def get_dashboard(
         select(Assignment, AssignmentSection.section_id)
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             Assignment.type == "homework",
             AssignmentSection.section_id.in_(section_ids),
         )
@@ -899,7 +905,7 @@ async def get_dashboard(
         .where(
             Submission.student_id == user.id,
             Submission.section_id.in_(section_ids),
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
             SubmissionGrade.final_score.is_not(None),
@@ -971,7 +977,7 @@ async def get_all_grades(
         .where(
             Submission.student_id == user.id,
             Submission.section_id.in_(section_ids),
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
             SubmissionGrade.final_score.is_not(None),
@@ -1216,7 +1222,7 @@ async def linked_practice_for_homework(
         .where(
             Assignment.source_homework_id == assignment_id,
             Assignment.type == "practice",
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             SectionEnrollment.student_id == user.id,
         )
         .order_by(Assignment.created_at.desc())

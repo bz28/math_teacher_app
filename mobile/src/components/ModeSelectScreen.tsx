@@ -64,9 +64,9 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await getSessionHistory(subject, HISTORY_PREVIEW_LIMIT);
-      setHistory(res.items);
-      setHasMore(res.has_more);
+      const historyPage = await getSessionHistory(subject, HISTORY_PREVIEW_LIMIT);
+      setHistory(historyPage.items);
+      setHasMore(historyPage.has_more);
     } catch (err) {
       console.warn("Failed to load history preview:", err);
     } finally {

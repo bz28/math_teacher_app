@@ -28,7 +28,7 @@ import { FilePreviewModal } from "../materials/file-preview-modal";
  * wizard — uploads land in "Unsorted" and are auto-selected on success.
  */
 
-interface Props {
+interface SourceMaterialPickerProps {
   courseId: string;
   docs: TeacherDocument[];
   docsLoaded: boolean;
@@ -71,7 +71,7 @@ export function SourceMaterialPicker({
   disabled,
   filterToSelectedUnits = false,
   units: unitsProp,
-}: Props) {
+}: SourceMaterialPickerProps) {
   // When `unitsProp` is undefined (caller didn't supply), fall back to
   // self-fetching. When `unitsProp` is null, treat that as "parent is
   // still loading" — same loading state as before. Otherwise use the

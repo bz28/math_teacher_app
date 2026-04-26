@@ -21,7 +21,14 @@ from api.core.integrity_pipeline import (
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
-from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import (
+    ASSIGNMENT_STATUS_DRAFT,
+    ASSIGNMENT_STATUS_PUBLISHED,
+    Assignment,
+    AssignmentSection,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -514,7 +521,7 @@ async def clone_homework_as_practice(
         # Teacher publishes explicitly after reviewing — same lifecycle
         # as HW. Content fills in as generation jobs complete and the
         # teacher approves their output.
-        status="draft",
+        status=ASSIGNMENT_STATUS_DRAFT,
     )
     db.add(practice)
     await db.flush()
@@ -667,7 +674,7 @@ async def update_assignment(
         or body.late_policy is not None
         or body.unit_ids is not None
     )
-    if config_fields_touched and a.status == "published":
+    if config_fields_touched and a.status == ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unpublish before editing configuration",
@@ -705,7 +712,7 @@ async def update_assignment(
         a.unit_ids = body.unit_ids
     # Re-snapshotting bank items takes precedence over a raw content blob.
     if body.bank_item_ids is not None or body.content is not None:
-        if a.status == "published":
+        if a.status == ASSIGNMENT_STATUS_PUBLISHED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unpublish before editing problems",
@@ -739,7 +746,7 @@ async def delete_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    if a.status == "published":
+    if a.status == ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unpublish before deleting",
@@ -757,7 +764,7 @@ async def publish_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    if a.status == "published":
+    if a.status == ASSIGNMENT_STATUS_PUBLISHED:
         return {"status": "ok"}
     # Defense-in-depth: the frontend gates the Publish button on
     # these three, but a stale UI or direct API call could bypass.
@@ -825,7 +832,7 @@ async def publish_assignment(
                 index_elements=["assignment_id", "section_id"],
             )
         )
-    a.status = "published"
+    a.status = ASSIGNMENT_STATUS_PUBLISHED
     await db.flush()
     await recompute_bank_locks(db, a.course_id)
     await db.commit()
@@ -839,9 +846,9 @@ async def unpublish_assignment(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    if a.status != "published":
+    if a.status != ASSIGNMENT_STATUS_PUBLISHED:
         return {"status": "ok"}
-    a.status = "draft"
+    a.status = ASSIGNMENT_STATUS_DRAFT
     await db.flush()
     await recompute_bank_locks(db, a.course_id)
     await db.commit()
@@ -862,7 +869,7 @@ async def assign_to_sections(
     here, which silently flipped drafts to published when teachers
     expected pure config)."""
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
-    if a.status == "published":
+    if a.status == ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unpublish before editing sections",
@@ -972,7 +979,7 @@ async def submissions_inbox(
             Assignment.course_id == course_id,
             Assignment.teacher_id == current_user.user_id,
             Assignment.type == "homework",
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
         )
         .order_by(Assignment.due_at.asc().nullslast(), Assignment.created_at.desc())
     )).all()
@@ -1464,7 +1471,7 @@ async def publish_grades(
     # Grades are only visible to students once the HW itself is
     # published. Publishing grades on a draft HW would orphan them
     # (student has no view of the HW to show the grade on), so reject.
-    if a.status != "published":
+    if a.status != ASSIGNMENT_STATUS_PUBLISHED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot publish grades on a draft homework",

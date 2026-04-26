@@ -22,6 +22,10 @@ from api.models.course import Course
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.section_invite import SectionInvite
+from api.models.teacher_invite import (
+    INVITE_STATUS_PENDING,
+    INVITE_STATUS_REVOKED,
+)
 from api.models.user import User
 from api.routes.teacher_courses import get_teacher_course
 
@@ -121,7 +125,7 @@ async def get_section(
     )).all()
     invites = (await db.execute(
         select(SectionInvite)
-        .where(SectionInvite.section_id == section_id, SectionInvite.status == "pending")
+        .where(SectionInvite.section_id == section_id, SectionInvite.status == INVITE_STATUS_PENDING)
         .order_by(SectionInvite.created_at.desc())
     )).scalars().all()
     return {
@@ -222,7 +226,7 @@ async def invite_student(
             select(SectionInvite).where(
                 SectionInvite.section_id == section_id,
                 SectionInvite.email == email,
-                SectionInvite.status == "pending",
+                SectionInvite.status == INVITE_STATUS_PENDING,
             )
         )).scalar_one()
     await db.refresh(invite)
@@ -254,7 +258,7 @@ async def list_invites(
     await _get_section(db, section_id, course_id)
     invites = (await db.execute(
         select(SectionInvite)
-        .where(SectionInvite.section_id == section_id, SectionInvite.status == "pending")
+        .where(SectionInvite.section_id == section_id, SectionInvite.status == INVITE_STATUS_PENDING)
         .order_by(SectionInvite.created_at.desc())
     )).scalars().all()
     return {"invites": [_serialize_invite(i) for i in invites]}
@@ -274,9 +278,9 @@ async def revoke_invite(
     )).scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status != "pending":
+    if invite.status != INVITE_STATUS_PENDING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Invite is {invite.status}")
-    invite.status = "revoked"
+    invite.status = INVITE_STATUS_REVOKED
     await db.commit()
     logger.info("AUDIT: teacher=%s revoked invite=%s", current_user.user_id, invite_id)
     return {"status": "ok"}
@@ -296,7 +300,7 @@ async def resend_invite(
     )).scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status != "pending":
+    if invite.status != INVITE_STATUS_PENDING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Invite is {invite.status}")
     invite.token = secrets.token_urlsafe(32)
     invite.expires_at = datetime.now(UTC) + timedelta(days=INVITE_EXPIRY_DAYS)
@@ -434,7 +438,7 @@ async def _create_or_refresh_invite(
         select(SectionInvite).where(
             SectionInvite.section_id == section_id,
             SectionInvite.email == email,
-            SectionInvite.status == "pending",
+            SectionInvite.status == INVITE_STATUS_PENDING,
         )
     )).scalar_one_or_none()
     expires = datetime.now(UTC) + timedelta(days=INVITE_EXPIRY_DAYS)

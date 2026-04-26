@@ -22,7 +22,7 @@ export type SessionPhase =
 
 export type Subject = "math" | "chemistry" | "physics";
 
-export interface ChatMessage {
+export interface LearnChatMessage {
   role: "user" | "assistant";
   text: string;
 }
@@ -54,7 +54,7 @@ interface SessionState {
   sectionId: string | null;
 
   // Step chat
-  chatHistory: Record<number, ChatMessage[]>;
+  chatHistory: Record<number, LearnChatMessage[]>;
 
   // Learn queue
   learnQueue: LearnQueue | null;

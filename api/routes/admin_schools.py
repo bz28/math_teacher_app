@@ -17,7 +17,11 @@ from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.school import School
-from api.models.teacher_invite import TeacherInvite
+from api.models.teacher_invite import (
+    INVITE_STATUS_EXPIRED,
+    INVITE_STATUS_PENDING,
+    TeacherInvite,
+)
 from api.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -152,7 +156,7 @@ async def get_school(
     # Pending invites
     invites = (await db.execute(
         select(TeacherInvite)
-        .where(TeacherInvite.school_id == school.id, TeacherInvite.status == "pending")
+        .where(TeacherInvite.school_id == school.id, TeacherInvite.status == INVITE_STATUS_PENDING)
         .order_by(TeacherInvite.created_at.desc())
     )).scalars().all()
 
@@ -220,7 +224,7 @@ async def delete_school(
     )).scalar() or 0
     invite_count = (await db.execute(
         select(func.count()).select_from(TeacherInvite).where(
-            TeacherInvite.school_id == school.id, TeacherInvite.status == "pending"
+            TeacherInvite.school_id == school.id, TeacherInvite.status == INVITE_STATUS_PENDING
         )
     )).scalar() or 0
 
@@ -259,7 +263,7 @@ async def invite_teacher(
         select(TeacherInvite).where(
             TeacherInvite.school_id == school.id,
             TeacherInvite.email == body.email.lower(),
-            TeacherInvite.status == "pending",
+            TeacherInvite.status == INVITE_STATUS_PENDING,
         )
     )).scalar_one_or_none()
     if existing:
@@ -322,7 +326,7 @@ async def cancel_invite(
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
 
-    invite.status = "expired"
+    invite.status = INVITE_STATUS_EXPIRED
     await db.commit()
     logger.info("AUDIT: admin=%s cancelled invite=%s", current_user.user_id, invite_id)
     return {"status": "ok"}

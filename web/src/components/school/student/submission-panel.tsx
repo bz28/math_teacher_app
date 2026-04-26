@@ -12,7 +12,7 @@ import {
 } from "@/lib/image-resize";
 import { cn } from "@/lib/utils";
 
-interface Props {
+interface SubmissionPanelProps {
   assignmentId: string;
   dueAt: string | null;
   /** Called after a successful submit so the parent can swap into
@@ -31,7 +31,7 @@ export function SubmissionPanel({
   assignmentId,
   dueAt,
   onSubmitted,
-}: Props) {
+}: SubmissionPanelProps) {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageFilename, setImageFilename] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

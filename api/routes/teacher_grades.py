@@ -20,7 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
-from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import (
+    ASSIGNMENT_STATUS_PUBLISHED,
+    Assignment,
+    AssignmentSection,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -57,7 +63,7 @@ async def _published_and_past_due(
         .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
         .where(
             Assignment.course_id == course_id,
-            Assignment.status == "published",
+            Assignment.status == ASSIGNMENT_STATUS_PUBLISHED,
             # Grades track homework only. Practice is ungraded by
             # design, so cloned practice assignments shouldn't inflate
             # the "graded / N" denominator on the teacher grades tab.

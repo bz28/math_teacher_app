@@ -21,7 +21,7 @@ import { useSessionStore } from "../stores/session";
 import { captureWorkImage } from "../hooks/useCameraCapture";
 import { useMockTimer, formatTime } from "../hooks/useMockTimer";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
-import { shuffleChoices } from "../utils/quiz";
+import { sortChoicesByHash } from "../utils/quiz";
 
 interface Props {
   onBack: () => void;
@@ -215,7 +215,7 @@ export function MockTestScreen({ onBack }: Props) {
             currentQuestion.distractors && currentQuestion.distractors.length > 0 ? (
               <View style={styles.choicesGrid}>
                 {(() => {
-                  const shuffled = shuffleChoices(
+                  const shuffled = sortChoicesByHash(
                     [currentQuestion.answer, ...currentQuestion.distractors],
                     currentIndex,
                   );
