@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
-import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
 import { cn } from "@/lib/utils";
 import type { PracticeBatch } from "@/stores/practice";
 
@@ -24,7 +23,7 @@ export function PracticeSummary({
 }: PracticeSummaryProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const { results, flags, workSubmissions } = practiceBatch;
+  const { results, flags } = practiceBatch;
   const correct = results.filter((r) => r.isCorrect).length;
   const flagged = flags.filter(Boolean).length;
   const percentage = Math.round((correct / results.length) * 100);
@@ -84,7 +83,6 @@ export function PracticeSummary({
                 <div className="text-xs text-text-secondary">
                   {result.userAnswer === "(skipped)" ? "Skipped" : <span>Your answer: <MathText text={result.userAnswer} /></span>}
                 </div>
-                <DiagnosisTeaser diagnosis={workSubmissions[i]} />
               </div>
               <button
                 onClick={() => onToggleFlag(i)}
