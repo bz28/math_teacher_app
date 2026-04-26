@@ -203,20 +203,21 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           </View>
         )}
 
-        {/* Upgrade / Manage */}
-        {!isPro && (
-          <AnimatedPressable onPress={() => setPaywallVisible(true)} scaleDown={0.97}>
-            <LinearGradient
-              colors={gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.upgradeButton}
-            >
-              <Ionicons name="star" size={18} color={colors.white} />
-              <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-            </LinearGradient>
-          </AnimatedPressable>
-        )}
+        {/* Upgrade / View Plans — always reachable so reviewers + subscribers
+            can inspect prices, terms, and Restore Purchases without leaving
+            the app. Apple Guideline 3.1.1 expects subscription metadata to be
+            visible from in-app, not just iOS Settings. */}
+        <AnimatedPressable onPress={() => setPaywallVisible(true)} scaleDown={0.97}>
+          <LinearGradient
+            colors={gradients.primary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.upgradeButton}
+          >
+            <Ionicons name="star" size={18} color={colors.white} />
+            <Text style={styles.upgradeButtonText}>{isPro ? "View Plans" : "Upgrade to Pro"}</Text>
+          </LinearGradient>
+        </AnimatedPressable>
 
         {/* Theme toggle — single icon button matching the web ThemeToggle */}
         <View style={styles.themeRow}>
