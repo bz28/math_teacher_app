@@ -122,6 +122,11 @@ class UpdateAssignmentRequest(BaseModel):
     # passing an empty dict (mirrors the due_at pattern).
     rubric: dict[str, Any] | None = None
     clear_rubric: bool = False
+    # Free-form student-visible instructions. None = leave unchanged.
+    # Empty string clears it (this field has no "leave unchanged vs
+    # clear" ambiguity — empty text and null both render as "no
+    # instructions" on the student page, so we collapse them).
+    description: str | None = None
 
     @field_validator("unit_ids")
     @classmethod
@@ -343,6 +348,7 @@ def assignment_to_dict(
         "course_id": str(a.course_id),
         "unit_ids": [str(u) for u in (a.unit_ids or [])],
         "title": a.title,
+        "description": a.description,
         "type": a.type,
         "source_type": a.source_type,
         "status": a.status,
@@ -696,6 +702,13 @@ async def update_assignment(
         a.rubric = None
     elif body.rubric is not None:
         a.rubric = body.rubric
+
+    if body.description is not None:
+        # Strip + collapse-to-null so we don't store all-whitespace
+        # instructions that render as a visible empty box on the
+        # student page. Editable while published like rubric.
+        cleaned = body.description.strip()
+        a.description = cleaned if cleaned else None
 
     await db.commit()
     return {"status": "ok"}
