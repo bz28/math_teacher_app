@@ -67,6 +67,7 @@ export function SourceMaterialPicker({
   const [overrides, setOverrides] = useState<Set<string>>(new Set());
   const [previewDoc, setPreviewDoc] = useState<TeacherDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Units load independently of docs so we can label group headers
   // even before the doc list is ready. Failure is non-fatal — the
@@ -198,12 +199,15 @@ export function SourceMaterialPicker({
   return (
     <div>
       <div className="flex items-end justify-between gap-3">
-        <label
-          className="block text-sm font-bold text-text-primary"
-          aria-live="polite"
-        >
+        <label className="block text-sm font-bold text-text-primary">
           Source material{" "}
-          <span className="font-normal text-text-muted">
+          {/* The aria-live region wraps only the changing fragment so
+              screen readers announce just "3 of 12 selected" on toggle,
+              not the whole "Source material · ... · optional" label. */}
+          <span
+            className="font-normal text-text-muted"
+            aria-live="polite"
+          >
             {totalDocs > 0
               ? `· ${selectedCount} of ${totalDocs} selected · optional`
               : "· optional"}
@@ -243,6 +247,7 @@ export function SourceMaterialPicker({
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -254,7 +259,12 @@ export function SourceMaterialPicker({
               {search && (
                 <button
                   type="button"
-                  onClick={() => setSearch("")}
+                  onClick={() => {
+                    setSearch("");
+                    // Return focus so keyboard users don't get stripped
+                    // of their place when the X disappears with the term.
+                    searchInputRef.current?.focus();
+                  }}
                   aria-label="Clear search"
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary"
                 >
@@ -300,6 +310,7 @@ export function SourceMaterialPicker({
                     return (
                       <GroupBlock
                         key={g.id}
+                        groupId={g.id}
                         label={g.label}
                         count={g.docs.length}
                         open={open}
@@ -375,6 +386,7 @@ function EmptyState({
 }
 
 function GroupBlock({
+  groupId,
   label,
   count,
   open,
@@ -382,6 +394,7 @@ function GroupBlock({
   disabled,
   children,
 }: {
+  groupId: string;
   label: string;
   count: number;
   open: boolean;
@@ -389,6 +402,10 @@ function GroupBlock({
   disabled: boolean;
   children: React.ReactNode;
 }) {
+  // aria-controls links the toggle button to the panel it expands so
+  // screen readers can navigate between them with the standard
+  // disclosure idiom.
+  const panelId = `source-picker-group-${groupId}`;
   return (
     <div>
       <button
@@ -396,6 +413,7 @@ function GroupBlock({
         onClick={onToggle}
         disabled={disabled}
         aria-expanded={open}
+        aria-controls={panelId}
         className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-semibold text-text-primary hover:bg-bg-subtle disabled:opacity-50"
       >
         {open ? (
@@ -406,7 +424,11 @@ function GroupBlock({
         <span className="flex-1 truncate">{label}</span>
         <span className="text-[11px] font-normal text-text-muted">({count})</span>
       </button>
-      {open && <div className="bg-surface">{children}</div>}
+      {open && (
+        <div id={panelId} className="bg-surface">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -428,49 +450,53 @@ function DocRow({
 }) {
   const kind = fileKind(doc);
   const Icon = kind === "pdf" ? FileTextIcon : ImageIcon;
+  // The outer row is a plain <div> rather than a <label> so the
+  // Preview button can sit beside the checkbox without being absorbed
+  // into the checkbox's accessible name. The inner <label> still
+  // delegates clicks on the icon/filename/size to the checkbox, so
+  // the row feels like one tap target.
   return (
-    <label
-      className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-bg-subtle ${
+    <div
+      className={`group flex items-center px-3 text-xs transition-colors hover:bg-bg-subtle ${
         disabled ? "cursor-not-allowed opacity-50" : ""
       }`}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onToggle}
-        disabled={disabled}
-        className="h-3.5 w-3.5 cursor-pointer accent-primary"
-      />
-      <Icon
-        className={`h-3.5 w-3.5 shrink-0 ${kind === "pdf" ? "text-red-500" : "text-blue-500"}`}
-      />
-      <span
-        className="min-w-0 flex-1 truncate text-text-primary"
-        title={doc.filename}
-      >
-        {doc.filename}
-      </span>
-      {unitBadge && (
-        <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-[10px] font-medium text-text-muted">
-          {unitBadge}
+      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          disabled={disabled}
+          className="h-3.5 w-3.5 cursor-pointer accent-primary"
+        />
+        <Icon
+          className={`h-3.5 w-3.5 shrink-0 ${kind === "pdf" ? "text-red-500" : "text-blue-500"}`}
+        />
+        <span
+          className="min-w-0 flex-1 truncate text-text-primary"
+          title={doc.filename}
+        >
+          {doc.filename}
         </span>
-      )}
-      <span className="shrink-0 text-[11px] tabular-nums text-text-muted">
-        {formatFileSize(doc.file_size)}
-      </span>
+        {unitBadge && (
+          <span className="shrink-0 rounded-full bg-bg-subtle px-2 py-0.5 text-[10px] font-medium text-text-muted">
+            {unitBadge}
+          </span>
+        )}
+        <span className="shrink-0 text-[11px] tabular-nums text-text-muted">
+          {formatFileSize(doc.file_size)}
+        </span>
+      </label>
       <button
         type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onPreview();
-        }}
+        onClick={onPreview}
+        disabled={disabled}
         aria-label={`Preview ${doc.filename}`}
-        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary-bg"
+        className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
       >
         Preview
       </button>
-    </label>
+    </div>
   );
 }
 
