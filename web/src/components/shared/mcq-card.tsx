@@ -5,7 +5,7 @@ import { Button, Card } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 
-interface Props {
+interface MCQCardProps {
   /** Math-rendered question text (LaTeX or plain). */
   question: string;
   /** Already-shuffled multiple-choice options. Caller controls order. */
@@ -67,7 +67,7 @@ export function MCQCard({
   disableChoices,
   correctAnswer,
   belowChoices,
-}: Props) {
+}: MCQCardProps) {
   const showInlineAdvance = onAdvance && advanceLabel;
 
   return (

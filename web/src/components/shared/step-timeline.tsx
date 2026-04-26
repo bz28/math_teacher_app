@@ -17,7 +17,7 @@ export interface TimelineStep {
   final_answer?: string | null;
 }
 
-interface Props {
+interface StepTimelineProps {
   steps: TimelineStep[];
   /** 0-based index of the active step. -1 means the whole problem is
    *  done — all steps render as completed and chat-on-current is hidden. */
@@ -61,7 +61,7 @@ export function StepTimeline({
   finalAnswer,
   thinkingStepIndex,
   confirmLabel,
-}: Props) {
+}: StepTimelineProps) {
   const [localExpanded, setLocalExpanded] = useState<Set<number>>(new Set());
   const effectiveExpanded = expandControl?.expandedSteps ?? localExpanded;
   const toggleExpand = (i: number) => {

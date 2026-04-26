@@ -39,7 +39,7 @@ export interface LoopState {
   remaining: number;
 }
 
-interface Props {
+interface PracticeLoopSurfaceProps {
   assignmentId: string;
   anchorBankItemId: string;
   anchorQuestion: string;
@@ -71,7 +71,7 @@ export function PracticeLoopSurface({
   initial,
   onDone,
   onLearnThis,
-}: Props) {
+}: PracticeLoopSurfaceProps) {
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
   const [remaining, setRemaining] = useState<number>(initial.remaining);

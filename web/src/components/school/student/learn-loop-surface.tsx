@@ -13,7 +13,7 @@ import { ProblemChat } from "@/components/shared/problem-chat";
 import { AnchorBanner } from "./_pieces/anchor-banner";
 import type { LoopState } from "./practice-loop-surface";
 
-interface Props {
+interface LearnLoopSurfaceProps {
   assignmentId: string;
   anchorBankItemId: string;
   anchorQuestion: string;
@@ -49,7 +49,7 @@ export function LearnLoopSurface({
   onDone,
   onPracticeSimilar,
   queue,
-}: Props) {
+}: LearnLoopSurfaceProps) {
   const [variation, setVariation] = useState<VariationPayload>(initial.variation);
   const [consumptionId, setConsumptionId] = useState<string>(initial.consumption_id);
   const [remaining, setRemaining] = useState<number>(

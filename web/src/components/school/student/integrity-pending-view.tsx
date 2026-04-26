@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { schoolStudent } from "@/lib/api";
 
-interface Props {
+interface IntegrityPendingViewProps {
   submissionId: string;
   /** Needed so we can poll the submission row directly. Pre-confirm
    *  there's no IntegrityCheckSubmission row yet (integrity + grading
@@ -41,7 +41,7 @@ export function IntegrityPendingView({
   assignmentId,
   onReady,
   onTimeout,
-}: Props) {
+}: IntegrityPendingViewProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
 
   // Refs for stable callback identities inside the interval closure —

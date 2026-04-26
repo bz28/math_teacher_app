@@ -597,7 +597,7 @@ function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
 
 // ── Main panel ──
 
-interface Props {
+interface SubmissionsPanelProps {
   assignmentId: string;
   onClose: () => void;
 }
@@ -607,7 +607,7 @@ interface Props {
  * expand per-submission detail subview. Wired up from the
  * `⚙ Submissions` button in homework-detail-modal.tsx.
  */
-export function SubmissionsPanel({ assignmentId, onClose }: Props) {
+export function SubmissionsPanel({ assignmentId, onClose }: SubmissionsPanelProps) {
   const [rows, setRows] = useState<TeacherSubmissionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);

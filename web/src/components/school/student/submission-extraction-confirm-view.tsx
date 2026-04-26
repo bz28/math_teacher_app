@@ -11,7 +11,7 @@ import {
 import { MathText } from "@/components/shared/math-text";
 import { useDeviceType } from "./use-device-type";
 
-interface Props {
+interface SubmissionExtractionConfirmViewProps {
   submissionId: string;
   /** Full data-URL of the submitted work, shown alongside the
    *  extraction so the student can eyeball "is that really what I
@@ -149,7 +149,7 @@ export function SubmissionExtractionConfirmView({
   extraction,
   onContinue,
   onFlagged,
-}: Props) {
+}: SubmissionExtractionConfirmViewProps) {
   // Two mutually-exclusive terminal actions on the confirm screen:
   //   Continue → server stamps extraction_confirmed_at, spawns
   //              integrity + AI grading.

@@ -6,7 +6,7 @@ import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import type { TimelineChatMessage } from "./step-timeline";
 
-interface Props {
+interface ProblemChatProps {
   messages: TimelineChatMessage[];
   onSend: (question: string) => Promise<void>;
   placeholder?: string;
@@ -29,7 +29,7 @@ export function ProblemChat({
   disabled = false,
   thinking = false,
   title,
-}: Props) {
+}: ProblemChatProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
