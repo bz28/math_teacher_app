@@ -60,11 +60,12 @@ export function SourceMaterialPicker({
 }: Props) {
   const [units, setUnits] = useState<TeacherUnit[] | null>(null);
   const [search, setSearch] = useState("");
-  // `overrides` tracks groups where the teacher explicitly flipped the
-  // default state. For default-expanded groups the entry is `groupId`
-  // (means: user collapsed it). For default-collapsed groups the entry
-  // is `groupId:open` (means: user expanded it).
-  const [overrides, setOverrides] = useState<Set<string>>(new Set());
+  // Per-group expand override. Absent = use the group's default; true
+  // = teacher expanded; false = teacher collapsed. Defaults still
+  // drive the initial render; this map only records explicit flips.
+  const [expandOverrides, setExpandOverrides] = useState<
+    Map<string, boolean>
+  >(new Map());
   const [previewDoc, setPreviewDoc] = useState<TeacherDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -162,17 +163,14 @@ export function SourceMaterialPicker({
     return out;
   }, [docs, units, unitIds]);
 
-  const expandedFor = (groupId: string, defaultExpanded: boolean) => {
-    if (defaultExpanded) return !overrides.has(groupId);
-    return overrides.has(`${groupId}:open`);
-  };
+  const expandedFor = (groupId: string, defaultExpanded: boolean) =>
+    expandOverrides.get(groupId) ?? defaultExpanded;
 
   const toggleGroup = (groupId: string, defaultExpanded: boolean) => {
-    const key = defaultExpanded ? groupId : `${groupId}:open`;
-    setOverrides((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+    setExpandOverrides((prev) => {
+      const next = new Map(prev);
+      const current = next.get(groupId) ?? defaultExpanded;
+      next.set(groupId, !current);
       return next;
     });
   };
