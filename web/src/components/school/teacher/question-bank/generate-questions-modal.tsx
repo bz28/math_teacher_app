@@ -198,14 +198,21 @@ export function GenerateQuestionsModal({
                     key={u.id}
                     label={u.name}
                     selected={savedTo === u.id}
-                    disabled={submitting}
+                    // Block Save-to switches while uploads are in flight.
+                    // Otherwise an in-flight upload's auto-select can land
+                    // AFTER our switch's selectedDocs clear, leaving a
+                    // freshly-uploaded doc id selected under a different
+                    // unit (or invisibly attached after a switch to
+                    // Uncategorized that unmounts the picker) and silently
+                    // forwarded on submit.
+                    disabled={submitting || uploads.hasInflightUploads}
                     onToggle={() => onPickSavedTo(u.id)}
                   />
                 ))}
                 <SelectableChip
                   label="Uncategorized"
                   selected={explicitUncategorized}
-                  disabled={submitting}
+                  disabled={submitting || uploads.hasInflightUploads}
                   onToggle={() => onPickSavedTo(null)}
                   variant="dashed"
                 />
@@ -234,6 +241,7 @@ export function GenerateQuestionsModal({
                     setCountDraft(String(n));
                   }}
                   disabled={submitting}
+                  aria-pressed={count === n}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                     count === n
                       ? "bg-primary text-white"
