@@ -208,6 +208,8 @@ export function NewHomeworkModal({
               onCountChange={setCount}
               topicHint={topicHint}
               onTopicHintChange={setTopicHint}
+              courseId={courseId}
+              unitIds={unitIds}
               docs={docs}
               docsLoaded={docsLoaded}
               selectedDocs={selectedDocs}
@@ -219,6 +221,25 @@ export function NewHomeworkModal({
                   return next;
                 })
               }
+              onDocumentUploaded={async (newId) => {
+                // Refetch so the freshly-uploaded doc appears in the
+                // grouped list with full metadata; auto-select it so
+                // the teacher doesn't have to tick the checkbox after
+                // explicitly choosing the file.
+                try {
+                  const r = await teacher.documents(courseId);
+                  setDocs(r.documents);
+                } catch {
+                  // Non-fatal — file is uploaded server-side; teacher
+                  // can refresh to see it. Auto-select still works on
+                  // next reload via id match.
+                }
+                setSelectedDocs((prev) => {
+                  const next = new Set(prev);
+                  next.add(newId);
+                  return next;
+                });
+              }}
               disabled={busy}
               helperText="Tell the AI how many problems and any context from your uploaded materials. Skip to create an empty draft you can fill in later."
             />

@@ -283,6 +283,8 @@ export function NewPracticeModal({
               onCountChange={setCount}
               topicHint={topicHint}
               onTopicHintChange={setTopicHint}
+              courseId={courseId}
+              unitIds={unitIds}
               docs={docs}
               docsLoaded={docsLoaded}
               selectedDocs={selectedDocs}
@@ -294,6 +296,19 @@ export function NewPracticeModal({
                   return next;
                 })
               }
+              onDocumentUploaded={async (newId) => {
+                try {
+                  const r = await teacher.documents(courseId);
+                  setDocs(r.documents);
+                } catch {
+                  // Non-fatal — see new-homework-modal for rationale.
+                }
+                setSelectedDocs((prev) => {
+                  const next = new Set(prev);
+                  next.add(newId);
+                  return next;
+                });
+              }}
               disabled={busy}
               helperText="Tell the AI how many problems and any context from your uploaded materials. Skip to create an empty draft you can fill in later."
             />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { TeacherDocument } from "@/lib/api";
 import { UnitMultiSelect } from "./unit-multi-select";
 import { SectionMultiSelect } from "./section-multi-select";
+import { SourceMaterialPicker } from "./source-material-picker";
 
 /**
  * Shared wizard step components used by the New Homework and New
@@ -147,10 +148,13 @@ export function AssignmentProblemsStep({
   onCountChange,
   topicHint,
   onTopicHintChange,
+  courseId,
+  unitIds,
   docs,
   docsLoaded,
   selectedDocs,
   onToggleDoc,
+  onDocumentUploaded,
   disabled,
   helperText,
 }: {
@@ -158,10 +162,16 @@ export function AssignmentProblemsStep({
   onCountChange: (v: number) => void;
   topicHint: string;
   onTopicHintChange: (v: string) => void;
+  courseId: string;
+  /** Step-1 unit selection — the picker auto-expands these groups. */
+  unitIds: string[];
   docs: TeacherDocument[];
   docsLoaded: boolean;
   selectedDocs: Set<string>;
   onToggleDoc: (id: string) => void;
+  /** Called after a successful inline upload. Parent should refetch the
+   *  doc list and add the new id to selectedDocs. */
+  onDocumentUploaded: (newId: string) => void | Promise<void>;
   disabled: boolean;
   helperText: string;
 }) {
@@ -244,40 +254,16 @@ export function AssignmentProblemsStep({
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-bold text-text-primary">
-          Source material <span className="font-normal text-text-muted">· optional</span>
-        </label>
-        {!docsLoaded ? (
-          <p className="mt-2 text-[11px] text-text-muted">Loading…</p>
-        ) : docs.length === 0 ? (
-          <p className="mt-2 text-[11px] text-text-muted">
-            No documents in this course. Upload images in the Materials tab to
-            ground generated problems in your own content.
-          </p>
-        ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {docs.map((d) => {
-              const on = selectedDocs.has(d.id);
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => onToggleDoc(d.id)}
-                  disabled={disabled}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                    on
-                      ? "bg-primary text-white"
-                      : "bg-bg-subtle text-text-primary hover:bg-bg-base"
-                  } disabled:opacity-50`}
-                >
-                  {d.filename}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <SourceMaterialPicker
+        courseId={courseId}
+        docs={docs}
+        docsLoaded={docsLoaded}
+        selectedDocs={selectedDocs}
+        unitIds={unitIds}
+        onToggleDoc={onToggleDoc}
+        onDocumentUploaded={onDocumentUploaded}
+        disabled={disabled}
+      />
     </div>
   );
 }
