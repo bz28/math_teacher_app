@@ -217,7 +217,7 @@ export function SourceMaterialPicker({
           type="button"
           onClick={triggerPicker}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-bg-base px-2.5 py-1 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-subtle disabled:opacity-50"
+          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-subtle disabled:opacity-50"
         >
           <UploadIcon className="h-3.5 w-3.5" />
           Upload new
@@ -414,7 +414,7 @@ function GroupBlock({
         disabled={disabled}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-semibold text-text-primary hover:bg-bg-subtle disabled:opacity-50"
+        className="flex min-h-[44px] w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-semibold text-text-primary hover:bg-bg-subtle disabled:opacity-50"
       >
         {open ? (
           <ChevronDownIcon className="h-3.5 w-3.5 text-text-muted" />
@@ -454,10 +454,11 @@ function DocRow({
   // Preview button can sit beside the checkbox without being absorbed
   // into the checkbox's accessible name. The inner <label> still
   // delegates clicks on the icon/filename/size to the checkbox, so
-  // the row feels like one tap target.
+  // the row feels like one tap target. min-h-[44px] meets the iOS
+  // HIG minimum so taps don't slip onto adjacent rows on touch.
   return (
     <div
-      className={`group flex items-center px-3 text-xs transition-colors hover:bg-bg-subtle ${
+      className={`group flex min-h-[44px] items-center px-3 text-xs transition-colors hover:bg-bg-subtle ${
         disabled ? "cursor-not-allowed opacity-50" : ""
       }`}
     >
@@ -467,7 +468,7 @@ function DocRow({
           checked={checked}
           onChange={onToggle}
           disabled={disabled}
-          className="h-3.5 w-3.5 cursor-pointer accent-primary"
+          className="h-4 w-4 cursor-pointer accent-primary"
         />
         <Icon
           className={`h-3.5 w-3.5 shrink-0 ${kind === "pdf" ? "text-red-500" : "text-blue-500"}`}
@@ -492,7 +493,7 @@ function DocRow({
         onClick={onPreview}
         disabled={disabled}
         aria-label={`Preview ${doc.filename}`}
-        className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
+        className="ml-2 inline-flex min-h-[32px] shrink-0 items-center rounded px-2 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
       >
         Preview
       </button>
