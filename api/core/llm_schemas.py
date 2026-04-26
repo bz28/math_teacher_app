@@ -84,31 +84,6 @@ ANSWER_EQUIVALENCE_SCHEMA: ToolSchema = {
 }
 
 # ---------------------------------------------------------------------------
-# Judge
-# ---------------------------------------------------------------------------
-
-JUDGE_SCHEMA: ToolSchema = {
-    "name": "return_quality_scores",
-    "description": "Return quality scores for a step-by-step solution.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "correctness": {"type": "integer", "description": "Math correctness score 1-5."},
-            "optimality": {"type": "integer", "description": "Approach optimality score 1-5."},
-            "clarity": {"type": "integer", "description": "Step clarity score 1-5."},
-            "flow": {"type": "integer", "description": "Logical flow score 1-5."},
-            "passed": {"type": "boolean", "description": "True only if ALL scores >= 4."},
-            "issues": {
-                "type": ["string", "null"],
-                "description": "Brief description of issues, or null if passed.",
-            },
-        },
-        "required": ["correctness", "optimality", "clarity", "flow", "passed", "issues"],
-        "additionalProperties": False,
-    },
-}
-
-# ---------------------------------------------------------------------------
 # Step decomposition
 # ---------------------------------------------------------------------------
 

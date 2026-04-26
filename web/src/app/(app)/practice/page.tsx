@@ -31,7 +31,7 @@ export default function PracticePage() {
   } = usePracticeStore();
 
   const { fire: fireConfetti } = useConfetti();
-  const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
+  const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
   const { UpgradeModal } = useUpgradePrompt();
 
   // Build MC choices — must be before early returns (rules of hooks)
@@ -68,7 +68,7 @@ export default function PracticePage() {
   }, [phase, practiceBatch, fireConfetti]);
 
   async function handleChoiceSelect(choice: string) {
-    setSelectedChoice(choices.indexOf(choice));
+    setSelectedChoiceIndex(choices.indexOf(choice));
     await submitPracticeAnswer(choice);
   }
 
@@ -150,8 +150,12 @@ export default function PracticePage() {
     );
   }
 
-  // Active practice
-  const current = practiceBatch.problems[practiceBatch.currentIndex];
+  // Active practice. `currentProblem` was already computed at the
+  // top of the component for the choices useMemo (rules-of-hooks
+  // forced it before the early returns). Past those returns, the
+  // optional chain isn't needed — `practiceBatch` is non-null and
+  // currentIndex is in range, so currentProblem is defined.
+  if (!currentProblem) return null;
   const isThinking = phase === "thinking";
   const feedback = practiceBatch.currentFeedback;
   const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
@@ -169,14 +173,14 @@ export default function PracticePage() {
       <ProgressBar value={progress} />
 
       <MCQCard
-        question={current.question}
+        question={currentProblem.question}
         choices={choices}
-        selectedChoice={selectedChoice}
+        selectedChoiceIndex={selectedChoiceIndex}
         feedback={feedback}
         isThinking={isThinking}
         onSelectChoice={handleChoiceSelect}
         onAdvance={() => {
-          setSelectedChoice(null);
+          setSelectedChoiceIndex(null);
           nextPracticeProblem();
         }}
         advanceLabel={isLast ? "See Results" : "Next Problem"}

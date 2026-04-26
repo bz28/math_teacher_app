@@ -138,7 +138,7 @@ async def get_daily_llm_call_count(
 
 
 async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID, since: datetime | None = None) -> int:
-    """Count chat-related LLM calls today (step_chat + final_answer_chat)."""
+    """Count chat-related LLM calls today (step_chat only)."""
     from api.models.llm_call import LLMCall
 
     result = await db.execute(
@@ -146,7 +146,7 @@ async def get_daily_chat_count(db: AsyncSession, user_id: uuid.UUID, since: date
         .select_from(LLMCall)
         .where(
             LLMCall.user_id == user_id,
-            LLMCall.function.in_(["step_chat", "judge"]),
+            LLMCall.function == "step_chat",
             LLMCall.created_at >= (since or today_start()),
         )
     )

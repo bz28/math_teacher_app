@@ -83,17 +83,17 @@ export function NewHomeworkModal({
     let cancelled = false;
     teacher
       .units(courseId)
-      .then((r) => {
-        if (!cancelled) setUnits(r.units);
+      .then(({ units }) => {
+        if (!cancelled) setUnits(units);
       })
       .catch(() => {
         if (!cancelled) setUnits([]);
       });
     teacher
       .documents(courseId)
-      .then((r) => {
+      .then(({ documents }) => {
         if (cancelled) return;
-        setDocs(r.documents);
+        setDocs(documents);
       })
       .catch(() => {
         // Non-fatal — docs are optional context for generation.

@@ -9,7 +9,7 @@ from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
 
-_EXTRACT_TEMPLATE = """Extract all {problems_noun} from this image.
+_PROBLEM_SCAN_EXTRACTION_PROMPT = """Extract all {problems_noun} from this image.
 
 Rules:
 - For mathematical expressions, use LaTeX with $ delimiters for inline math
@@ -39,7 +39,7 @@ Set confidence to:
 
 def _build_extract_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _EXTRACT_TEMPLATE.format(problems_noun=cfg["problems_noun"])
+    return _PROBLEM_SCAN_EXTRACTION_PROMPT.format(problems_noun=cfg["problems_noun"])
 
 
 async def extract_problems_from_image(

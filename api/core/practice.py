@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Distractor generation
 # ---------------------------------------------------------------------------
 
-_DISTRACTOR_PROMPT = """\
+_MCQ_DISTRACTOR_GENERATION_PROMPT = """\
 You are a worldclass {professor_role} designing multiple choice test options.
 
 Given a {domain} problem and its correct answer, generate exactly 3 plausible but WRONG answers.
@@ -46,7 +46,7 @@ async def generate_distractors(
 ) -> list[str]:
     """Generate 3 plausible wrong answers for MC. Uses Haiku for text, Sonnet for diagrams."""
     cfg = get_config(subject)
-    system_prompt = _DISTRACTOR_PROMPT.format(
+    system_prompt = _MCQ_DISTRACTOR_GENERATION_PROMPT.format(
         professor_role=cfg["professor_role"],
         domain=cfg["domain"],
     )
@@ -108,7 +108,7 @@ async def solve_problem(
 # Generate similar question texts (batch, no solving)
 # ---------------------------------------------------------------------------
 
-_GENERATE_QUESTIONS_TEMPLATE = """You are a {professor_role} generating practice problems.
+_SIMILAR_PROBLEMS_GENERATION_PROMPT = """You are a {professor_role} generating practice problems.
 
 Given one or more {problems_noun}, generate similar problems that test the SAME
 concepts and require the SAME approach to solve.
@@ -123,7 +123,7 @@ Rules:
 
 def _build_generate_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _GENERATE_QUESTIONS_TEMPLATE.format(
+    return _SIMILAR_PROBLEMS_GENERATION_PROMPT.format(
         professor_role=cfg["professor_role"],
         problems_noun=cfg["problems_noun"],
     )

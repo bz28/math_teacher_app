@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # System prompts
 # ---------------------------------------------------------------------------
 
-_STEP_CHAT_TEMPLATE = """\
+_LEARN_STEP_CHAT_PROMPT = """\
 You are a {tutor_role} helping a student understand a specific step in solving a problem.
 
 You will receive:
@@ -47,7 +47,7 @@ Rules:
 - NEVER skip ahead to future steps — only discuss the current step
 - If the student asks about something unrelated to this step, gently redirect"""
 
-_COMPLETED_CHAT_TEMPLATE = """\
+_LEARN_COMPLETED_CHAT_PROMPT = """\
 You are a {tutor_role}. The student has already solved the problem correctly and
 is now asking follow-up questions to deepen their understanding.
 
@@ -61,7 +61,7 @@ Rules:
 - You may freely reference any step or the final answer since the problem is solved
 - If the student asks something unrelated to the problem, gently redirect"""
 
-_ANSWER_EQUIVALENCE_TEMPLATE = """You are a strict {tutor_role} checking a student's final answer.
+_LEARN_FINAL_ANSWER_EQUIVALENCE_PROMPT = """You are a strict {tutor_role} checking a student's final answer.
 
 Determine if the student's answer is {equivalence_adjective} EQUIVALENT to the correct
 final answer. Allow differences in formatting or notation (e.g., "x=3" vs
@@ -75,17 +75,17 @@ Be STRICT:
 
 def _build_step_chat_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _STEP_CHAT_TEMPLATE.format(tutor_role=cfg["tutor_role"])
+    return _LEARN_STEP_CHAT_PROMPT.format(tutor_role=cfg["tutor_role"])
 
 
 def _build_completed_chat_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _COMPLETED_CHAT_TEMPLATE.format(tutor_role=cfg["tutor_role"])
+    return _LEARN_COMPLETED_CHAT_PROMPT.format(tutor_role=cfg["tutor_role"])
 
 
 def _build_equivalence_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _ANSWER_EQUIVALENCE_TEMPLATE.format(
+    return _LEARN_FINAL_ANSWER_EQUIVALENCE_PROMPT.format(
         tutor_role=cfg["tutor_role"],
         equivalence_adjective=cfg["equivalence_adjective"],
         equivalence_examples=cfg["equivalence_examples"],

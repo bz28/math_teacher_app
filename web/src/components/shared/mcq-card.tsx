@@ -11,7 +11,7 @@ interface Props {
   /** Already-shuffled multiple-choice options. Caller controls order. */
   choices: string[];
   /** Index of the chosen option in `choices`, or null if not yet picked. */
-  selectedChoice: number | null;
+  selectedChoiceIndex: number | null;
   /** Caller-owned feedback state. Drives the result box + advance button. */
   feedback: "correct" | "wrong" | null;
   /** Caller's "request in flight" flag — disables MCQ buttons during the
@@ -58,7 +58,7 @@ interface Props {
 export function MCQCard({
   question,
   choices,
-  selectedChoice,
+  selectedChoiceIndex,
   feedback,
   isThinking,
   onSelectChoice,
@@ -108,7 +108,7 @@ export function MCQCard({
           {choices.length > 0 ? (
             <div className="space-y-2">
               {choices.map((choice, i) => {
-                const isSelected = selectedChoice === i;
+                const isSelected = selectedChoiceIndex === i;
                 const isWrong = isSelected && feedback === "wrong";
                 const isCorrectChoice =
                   feedback !== null

@@ -15,7 +15,7 @@ import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
 import { MockTestPreview } from "./_components/mock-test-preview";
-import { cn, shuffleChoices, formatElapsed } from "@/lib/utils";
+import { cn, sortChoicesByHash, formatElapsed } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 
 export default function MockTestPage() {
@@ -143,7 +143,7 @@ export default function MockTestPage() {
   }
 
   // Active exam
-  const current = mockTest.questions[mockTest.currentIndex];
+  const currentQuestion = mockTest.questions[mockTest.currentIndex];
   const currentAnswer = mockTest.answers[mockTest.currentIndex] ?? "";
   const isFlagged = mockTest.flags[mockTest.currentIndex];
 
@@ -211,7 +211,7 @@ export default function MockTestPage() {
               {mockTest.questions.length}
             </Badge>
             <div className="mt-3 text-base font-medium text-text-primary">
-              <MathText text={current.question} />
+              <MathText text={currentQuestion.question} />
             </div>
           </div>
           <button
@@ -229,7 +229,7 @@ export default function MockTestPage() {
           </button>
         </div>
 
-        {mockTest.solveSettled && current.answer === "" ? (
+        {mockTest.solveSettled && currentQuestion.answer === "" ? (
           // Permanent solve-failure for this question. The preview
           // screen already warned the student; replace the choices /
           // input with an inline notice so they aren't stuck staring
@@ -240,11 +240,11 @@ export default function MockTestPage() {
             ungraded at submit time. Skip to the next question.
           </div>
         ) : mockTest.multipleChoice ? (
-          current.distractors && current.distractors.length > 0 ? (
+          currentQuestion.distractors && currentQuestion.distractors.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {(() => {
-                const shuffled = shuffleChoices(
-                  [current.answer, ...current.distractors],
+                const shuffled = sortChoicesByHash(
+                  [currentQuestion.answer, ...currentQuestion.distractors],
                   mockTest.currentIndex,
                 );
                 return shuffled.map((choice) => (

@@ -67,7 +67,7 @@ def _strip_data_url_prefix(data: str) -> tuple[str, str]:
 
 # ── Extraction ──────────────────────────────────────────────────────
 
-_EXTRACT_SYSTEM = """\
+_STUDENT_WORK_EXTRACTION_PROMPT = """\
 You are a world-class math professor examining a student's handwritten homework submission. \
 Your task is to extract the student's work steps from the image into structured data \
 AND attribute each step to the homework problem it belongs to so downstream grading \

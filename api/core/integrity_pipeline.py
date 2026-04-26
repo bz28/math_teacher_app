@@ -76,11 +76,11 @@ TOOL_GENERATE_VARIANT = "generate_variant"
 TOOL_FINISH_CHECK = "finish_check"
 
 # Submission-level status state machine.
-STATUS_EXTRACTING = "extracting"
-STATUS_AWAITING_STUDENT = "awaiting_student"
-STATUS_IN_PROGRESS = "in_progress"
-STATUS_COMPLETE = "complete"
-STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
+SUBMISSION_STATUS_EXTRACTING = "extracting"
+SUBMISSION_STATUS_AWAITING_STUDENT = "awaiting_student"
+SUBMISSION_STATUS_IN_PROGRESS = "in_progress"
+SUBMISSION_STATUS_COMPLETE = "complete"
+SUBMISSION_STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
 
 # Problem-level status.
 PROBLEM_STATUS_PENDING = "pending"
@@ -349,7 +349,7 @@ async def start_integrity_check(
 
     check = IntegrityCheckSubmission(
         submission_id=submission_id,
-        status=STATUS_EXTRACTING,
+        status=SUBMISSION_STATUS_EXTRACTING,
         probe_selection_reason=selection_reason,
     )
     db.add(check)
@@ -406,7 +406,7 @@ async def start_integrity_check(
         # Unreadable submissions: status carries the meaning, disposition
         # stays null. Teacher dashboard surfaces the skipped-unreadable
         # bucket separately from the four integrity dispositions.
-        check.status = STATUS_SKIPPED_UNREADABLE
+        check.status = SUBMISSION_STATUS_SKIPPED_UNREADABLE
         check.overall_summary = "Handwriting was unreadable — no questions asked."
         return
 
@@ -479,7 +479,7 @@ async def start_integrity_check(
         role=ROLE_AGENT,
         content=opening_text,
     ))
-    check.status = STATUS_AWAITING_STUDENT
+    check.status = SUBMISSION_STATUS_AWAITING_STUDENT
 
 
 # ── Student turn processing ─────────────────────────────────────────
@@ -513,7 +513,7 @@ async def process_student_turn(
       4. If MAX_STUDENT_TURNS is reached after this turn, force-
          finalize with a null disposition (teacher reviews).
     """
-    if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
+    if check.status in (SUBMISSION_STATUS_COMPLETE, SUBMISSION_STATUS_SKIPPED_UNREADABLE):
         return
 
     # Append the student turn first so it shows up in the transcript
@@ -531,7 +531,7 @@ async def process_student_turn(
         seconds_on_turn=seconds_on_turn,
         telemetry=telemetry,
     ))
-    check.status = STATUS_IN_PROGRESS
+    check.status = SUBMISSION_STATUS_IN_PROGRESS
     await db.flush()
 
     student_turn_count = await count_student_turns(check.id, db)
@@ -599,7 +599,7 @@ async def process_student_turn(
         # When finish_check succeeds, the check is complete — write a
         # canned closing so the student sees a clear goodbye and exit
         # the loop.
-        if check.status == STATUS_COMPLETE:
+        if check.status == SUBMISSION_STATUS_COMPLETE:
             await _append_agent_text(
                 check.id,
                 "Thanks for talking through your work with me! Your "
@@ -610,14 +610,14 @@ async def process_student_turn(
 
     # Hard cap on student turns: if this was the 10th student turn
     # and the check isn't complete, force-finalize.
-    if check.status != STATUS_COMPLETE and student_turn_count >= MAX_STUDENT_TURNS:
+    if check.status != SUBMISSION_STATUS_COMPLETE and student_turn_count >= MAX_STUDENT_TURNS:
         await _force_finalize_turn_cap(check, db)
     # Soft nudge: after the 9th student turn, inject a wrap-up prompt
     # (an agent turn) so the agent sees the signal next time. Only
     # emit this nudge once — check for a prior nudge by scanning
     # recent agent turns.
     elif (
-        check.status != STATUS_COMPLETE
+        check.status != SUBMISSION_STATUS_COMPLETE
         and student_turn_count >= SOFT_CAP_STUDENT_TURNS
         and not await _soft_nudge_already_sent(check.id, db)
     ):
@@ -999,7 +999,7 @@ async def _apply_finish_check(
             + ids
         )
 
-    check.status = STATUS_COMPLETE
+    check.status = SUBMISSION_STATUS_COMPLETE
     check.disposition = disposition
     check.overall_summary = summary
     check.inline_variant_result = variant_result
@@ -1030,7 +1030,7 @@ async def _force_finalize_turn_cap(
                 "Conversation hit the turn cap before this problem was "
                 "verdicted."
             )
-    check.status = STATUS_COMPLETE
+    check.status = SUBMISSION_STATUS_COMPLETE
     check.overall_summary = (
         "Conversation hit the turn cap — inconclusive. Teacher review."
     )

@@ -1,14 +1,18 @@
 "use client";
 
 /**
- * Reusable horizontal progress bar for homework cards.
- * Shows "label current/total" with a colored fill bar.
+ * Labeled horizontal progress bar for the homework Submissions inbox.
+ * Renders "label current/total" with a colored fill bar.
+ *
+ * Distinct from the value-based `ProgressBar` in
+ * `components/shared/progress-bar.tsx` — this one takes label + count
+ * fractions; the shared one takes a single percent value.
  *
  * Handles edge cases:
  * - 0/0 → hidden (returns null)
  * - current > total → clamps fill to 100%
  */
-export function ProgressBar({
+export function LabeledProgressBar({
   label,
   current,
   total,

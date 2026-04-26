@@ -208,7 +208,7 @@ function AnswerPanel({
     return shuffleStable(deduped, problem.bank_item_id);
   }, [problem.bank_item_id, problem.distractors, correctAnswer]);
 
-  const selectedChoice = picked === null ? null : choices.indexOf(picked);
+  const selectedChoiceIndex = picked === null ? null : choices.indexOf(picked);
   const feedback: "correct" | "wrong" | null =
     picked === null
       ? null
@@ -221,7 +221,7 @@ function AnswerPanel({
       <MCQCard
         question={problem.question}
         choices={choices}
-        selectedChoice={selectedChoice}
+        selectedChoiceIndex={selectedChoiceIndex}
         feedback={feedback}
         onSelectChoice={(c) => setPicked(c)}
         disableChoices={picked !== null}

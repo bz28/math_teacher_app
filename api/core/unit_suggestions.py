@@ -10,7 +10,7 @@ from api.core.llm_schemas import UNIT_SUGGESTIONS_SCHEMA
 logger = logging.getLogger(__name__)
 
 
-_SUGGEST_UNITS_PROMPT = """\
+_UNIT_CLASSIFICATION_PROMPT = """\
 You are an expert teaching assistant helping a teacher organize course materials.
 
 Given a list of document filenames and the existing units (chapters/topics) in a course,
@@ -86,7 +86,7 @@ Existing units:
 Documents to organize:
 {batch_files_str}"""
                 vision_prompt = (
-                    f"{_SUGGEST_UNITS_PROMPT}\n\n"
+                    f"{_UNIT_CLASSIFICATION_PROMPT}\n\n"
                     "Document images are attached below. Read the actual content "
                     "to determine which unit each document belongs to — do not rely "
                     "solely on the filename.\n\n"
@@ -126,7 +126,7 @@ Existing units:
 Documents to organize:
 {text_files_str}"""
                 text_result = await call_claude_json(
-                    _SUGGEST_UNITS_PROMPT,
+                    _UNIT_CLASSIFICATION_PROMPT,
                     text_message,
                     mode=LLMMode.SUGGEST_UNITS,
                     tool_schema=UNIT_SUGGESTIONS_SCHEMA,
@@ -141,7 +141,7 @@ Documents to organize:
             suggestions: list[Any] = all_suggestions
         else:
             result = await call_claude_json(
-                _SUGGEST_UNITS_PROMPT,
+                _UNIT_CLASSIFICATION_PROMPT,
                 user_message,
                 mode=LLMMode.SUGGEST_UNITS,
                 tool_schema=UNIT_SUGGESTIONS_SCHEMA,

@@ -123,7 +123,7 @@ async def users(
         .where(
             LLMCall.created_at >= today,
             LLMCall.user_id.isnot(None),
-            LLMCall.function.in_(["step_chat", "judge"]),
+            LLMCall.function == "step_chat",
         )
         .group_by(LLMCall.user_id)
         .subquery()

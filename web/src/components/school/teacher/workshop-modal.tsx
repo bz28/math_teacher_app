@@ -305,8 +305,8 @@ export function WorkshopModal({
     }
     setError(null);
     try {
-      const next = await teacher.sendBankChat(liveItem.id, message);
-      replaceLiveItem(next);
+      const updatedItem = await teacher.sendBankChat(liveItem.id, message);
+      replaceLiveItem(updatedItem);
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chat failed");
@@ -317,8 +317,8 @@ export function WorkshopModal({
   const acceptProposal = () =>
     run(async () => {
       if (!liveItem || pendingIdx < 0) return;
-      const next = await teacher.acceptBankChatProposal(liveItem.id, pendingIdx);
-      replaceLiveItem(next);
+      const updatedItem = await teacher.acceptBankChatProposal(liveItem.id, pendingIdx);
+      replaceLiveItem(updatedItem);
     });
 
   const discardProposal = () =>

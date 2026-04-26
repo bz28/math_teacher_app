@@ -10,7 +10,7 @@ from api.core.subjects import Subject
 
 logger = logging.getLogger(__name__)
 
-DIAGNOSIS_PROMPT = """You are analyzing a student's handwritten {domain} work shown in the attached image.
+_STUDENT_WORK_DIAGNOSIS_PROMPT = """You are analyzing a student's handwritten {domain} work shown in the attached image.
 Compare their work against the reference solution below.
 
 Problem: {problem_text}
@@ -91,7 +91,7 @@ async def diagnose_work(
     steps_text = "\n".join(f"  Step {i + 1}: {s}" for i, s in enumerate(steps))
     correctness = "correct" if user_was_correct else "incorrect"
 
-    prompt = DIAGNOSIS_PROMPT.format(
+    prompt = _STUDENT_WORK_DIAGNOSIS_PROMPT.format(
         domain=subject,
         problem_text=problem_text,
         steps=steps_text,

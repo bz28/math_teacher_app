@@ -118,8 +118,8 @@ export function IntegrityCheckChat({
     let cancelled = false;
     schoolStudent
       .linkedPracticeForHomework(assignmentId)
-      .then((r) => {
-        if (!cancelled) setLinkedPracticeId(r.practice_assignment_id);
+      .then((linked) => {
+        if (!cancelled) setLinkedPracticeId(linked.practice_assignment_id);
       })
       .catch(() => {
         /* silent — absence of CTA is the safe default */
@@ -210,7 +210,7 @@ export function IntegrityCheckChat({
         Math.round((Date.now() - turnStartedAt) / 1000),
       );
       const telemetryPayload = telemetry.snapshot();
-      const next = await schoolStudent.postIntegrityTurn(submissionId, {
+      const nextState = await schoolStudent.postIntegrityTurn(submissionId, {
         message: trimmed,
         seconds_on_turn: seconds,
         telemetry: telemetryPayload,
@@ -218,7 +218,7 @@ export function IntegrityCheckChat({
       // Only reset telemetry after the turn is persisted on the
       // server; a failed POST keeps the signals intact for retry.
       telemetry.reset();
-      setState(next);
+      setState(nextState);
       setPendingStudentMessage(null);
       setTurnStartedAt(Date.now());
       // The agent's reply counts as "fresh activity" — resetting

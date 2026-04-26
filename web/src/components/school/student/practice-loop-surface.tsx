@@ -175,7 +175,7 @@ export function PracticeLoopSurface({
     }
   }
 
-  const selectedChoice = picked === null ? null : choices.indexOf(picked);
+  const selectedChoiceIndex = picked === null ? null : choices.indexOf(picked);
   const feedback: "correct" | "wrong" | null = !revealed
     ? null
     : picked && picked.trim() === correctAnswer
@@ -212,7 +212,7 @@ export function PracticeLoopSurface({
         <MCQCard
           question={variation.question}
           choices={choices}
-          selectedChoice={selectedChoice}
+          selectedChoiceIndex={selectedChoiceIndex}
           feedback={feedback}
           onSelectChoice={handlePick}
           disableChoices={revealed}

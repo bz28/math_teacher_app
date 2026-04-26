@@ -5,7 +5,7 @@ import Link from "next/link";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { ProgressBar } from "./_pieces/progress-bar";
+import { LabeledProgressBar } from "./_pieces/progress-bar";
 
 /**
  * Submissions tab — the teacher's grading inbox.
@@ -189,19 +189,19 @@ function InboxRow({
           </p>
         ) : (
           <div className="mt-2 space-y-1">
-            <ProgressBar
+            <LabeledProgressBar
               label="Submitted"
               current={row.submitted}
               total={row.total_students}
               color="blue"
             />
-            <ProgressBar
+            <LabeledProgressBar
               label="To review"
               current={toReview}
               total={row.submitted}
               color="amber"
             />
-            <ProgressBar
+            <LabeledProgressBar
               label="Published"
               current={row.published}
               total={row.submitted}

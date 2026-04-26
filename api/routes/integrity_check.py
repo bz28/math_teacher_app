@@ -23,8 +23,8 @@ from api.core.integrity_pipeline import (
     MAX_STUDENT_TURNS,
     PROBLEM_STATUS_DISMISSED,
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
-    STATUS_COMPLETE,
-    STATUS_SKIPPED_UNREADABLE,
+    SUBMISSION_STATUS_COMPLETE,
+    SUBMISSION_STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
     count_student_turns,
     process_student_turn,
@@ -425,7 +425,7 @@ async def post_student_turn(
             status_code=404, detail="No integrity check for this submission",
         )
 
-    if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
+    if check.status in (SUBMISSION_STATUS_COMPLETE, SUBMISSION_STATUS_SKIPPED_UNREADABLE):
         raise HTTPException(
             status_code=409, detail="Integrity check already complete",
         )

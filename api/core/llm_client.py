@@ -39,7 +39,6 @@ class LLMMode:
     PRACTICE_EVAL = "practice_eval"
     IMAGE_EXTRACT = "image_extract"
     DIAGNOSE_WORK = "diagnose_work"
-    JUDGE = "judge"
     SUGGEST_UNITS = "suggest_units"
     GENERATE_QUESTIONS = "generate_questions"
     REGENERATE_BANK_ITEM = "regenerate_bank_item"
