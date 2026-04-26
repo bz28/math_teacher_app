@@ -83,8 +83,8 @@ export function NewHomeworkModal({
     let cancelled = false;
     teacher
       .units(courseId)
-      .then((r) => {
-        if (!cancelled) setUnits(r.units);
+      .then(({ units }) => {
+        if (!cancelled) setUnits(units);
       })
       .catch(() => {
         if (!cancelled) setUnits([]);
