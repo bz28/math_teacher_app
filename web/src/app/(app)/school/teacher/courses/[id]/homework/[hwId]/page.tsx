@@ -8,6 +8,7 @@ import {
   teacher,
   type BankItem,
   type BankJob,
+  type SubmissionsInboxRow,
   type TeacherAssignment,
   type TeacherRubric,
 } from "@/lib/api";
@@ -104,6 +105,14 @@ export default function HomeworkDetailPage({
   // "N pending problems" banner + the "Resume queue ▸" CTA that
   // navigates into the full-page approval queue.
   const [pending, setPending] = useState<BankItem[]>([]);
+  // Submissions inbox rows for THIS HW only — populated when the HW is
+  // published so the detail page can show "X of Y submitted · Z to
+  // grade →". One row per section the HW reaches; null while loading
+  // or when the HW is still a draft. The strip degrades silently if
+  // the request fails — it's a convenience link, not core info.
+  const [inboxRows, setInboxRows] = useState<SubmissionsInboxRow[] | null>(
+    null,
+  );
   const [showGenerate, setShowGenerate] = useState(false);
   // Polls bank jobs kicked off from the "Generate more" modal so the
   // pending-banner count updates live when generation completes.
@@ -215,6 +224,34 @@ export default function HomeworkDetailPage({
     reloadPending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  // Load submission inbox rows once the HW is published so the strip
+  // can show submission counts. Fetches the course-level inbox and
+  // filters client-side — there are typically only a few sections per
+  // course so the extra rows don't matter, and we save a backend
+  // endpoint just for this view. Re-fetched whenever the HW (un)pub
+  // status flips.
+  useEffect(() => {
+    if (hw?.status !== "published") {
+      setInboxRows(null);
+      return;
+    }
+    let cancelled = false;
+    teacher
+      .submissionsInbox(courseId)
+      .then((res) => {
+        if (cancelled) return;
+        setInboxRows(
+          res.rows.filter((r) => r.assignment_id === assignmentId),
+        );
+      })
+      .catch(() => {
+        // Non-fatal — strip will simply not render.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hw?.status, courseId, assignmentId]);
 
   // Poll any in-flight generation job so the banner updates when it
   // completes. Stops polling on done/failed or after a ceiling; same
@@ -655,6 +692,19 @@ export default function HomeworkDetailPage({
               🔒 Published — students can see this. Unpublish to edit the
               problem list or configuration.
             </div>
+          )}
+
+          {/* Submission summary — only shown for published HWs. Tells
+              the teacher at a glance how many students have submitted
+              and how many need grading, with a one-click jump to the
+              grading queue. Multi-section HWs expand into an inline
+              section picker rather than auto-pick a section. */}
+          {isPublished && inboxRows && inboxRows.length > 0 && (
+            <SubmissionStrip
+              courseId={courseId}
+              assignmentId={assignmentId}
+              rows={inboxRows}
+            />
           )}
 
           {/* Pending review is the primary CTA when generation produced
@@ -1456,6 +1506,116 @@ function RemovableProblemRow({
       >
         {marked ? "Undo" : "✕"}
       </button>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Submission strip — slim "X of Y submitted · Z to grade →" line that
+// sits between the published-lock banner and the pending-review card.
+// Single-section HWs deep-link directly to the grading queue; multi-
+// section HWs expand inline into a section picker so the teacher
+// chooses which queue to enter rather than us guessing.
+// ────────────────────────────────────────────────────────────────────
+function SubmissionStrip({
+  courseId,
+  assignmentId,
+  rows,
+}: {
+  courseId: string;
+  assignmentId: string;
+  rows: SubmissionsInboxRow[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  const totalStudents = rows.reduce((s, r) => s + r.total_students, 0);
+  const totalSubmitted = rows.reduce((s, r) => s + r.submitted, 0);
+  // "to review" matches the inbox's wording (submissions-tab.tsx:142-145):
+  // graded-but-not-released + edited-after-publish — both need a teacher
+  // click before students see grades. Flagged is shown separately
+  // because it's an integrity signal, not a grading-pipeline state.
+  const totalToReview = rows.reduce((s, r) => s + r.to_grade + r.dirty, 0);
+  const totalFlagged = rows.reduce((s, r) => s + r.flagged, 0);
+
+  const parts: string[] =
+    totalSubmitted === 0
+      ? [`Waiting for first submission`]
+      : [`${totalSubmitted} of ${totalStudents} submitted`];
+  if (totalToReview > 0) parts.push(`${totalToReview} to review`);
+  if (totalFlagged > 0) parts.push(`⚑ ${totalFlagged} flagged`);
+  const summary = parts.join(" · ");
+
+  const reviewHref = (sectionId: string) =>
+    `/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${sectionId}/review`;
+
+  // Single-section HW: one click goes straight to the grading queue.
+  if (rows.length === 1) {
+    return (
+      <Link
+        href={reviewHref(rows[0].section_id)}
+        className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-4 py-2.5 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:bg-bg-subtle"
+      >
+        <span>{summary}</span>
+        <span className="shrink-0 text-primary">View submissions →</span>
+      </Link>
+    );
+  }
+
+  // Multi-section: expandable inline picker so the teacher picks the
+  // section to grade rather than landing in a default they didn't ask
+  // for. Counts live on each row so the choice is informed.
+  return (
+    <div className="mt-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+      >
+        <span>{summary}</span>
+        <span className="shrink-0 text-primary">
+          {open ? "Hide sections ▴" : "View submissions →"}
+        </span>
+      </button>
+      {open && (
+        <div className="divide-y divide-border-light border-t border-border-light bg-surface">
+          {rows.map((r) => {
+            const toReview = r.to_grade + r.dirty;
+            return (
+              <Link
+                key={r.section_id}
+                href={reviewHref(r.section_id)}
+                className="flex items-center justify-between gap-3 px-4 py-2 text-xs hover:bg-bg-subtle"
+              >
+                <span className="font-semibold text-text-primary">
+                  {r.section_name}
+                </span>
+                <span className="text-text-muted">
+                  {r.submitted} of {r.total_students} submitted
+                  {toReview > 0 && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <span className="font-semibold text-primary">
+                        {toReview} to review →
+                      </span>
+                    </>
+                  )}
+                  {r.flagged > 0 && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <span className="font-semibold text-red-600 dark:text-red-400">
+                        ⚑ {r.flagged}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
