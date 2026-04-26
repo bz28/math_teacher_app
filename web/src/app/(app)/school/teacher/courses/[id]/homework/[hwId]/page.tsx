@@ -1826,18 +1826,27 @@ function InstructionsBlock({
   const [committing, setCommitting] = useState(false);
 
   // React to the parent's saveState resolving AFTER a commit. On
-  // "saved" we close the editor (parent already holds our draft via
-  // the optimistic patch). On "error" we leave editing=true so the
-  // textarea retains the typed text and the teacher can retry without
-  // re-typing. Transitions while !committing are ignored so a sibling
-  // field's save (e.g. units) can't close our editor.
+  // "saved" we close the editor — but ONLY if the teacher hasn't
+  // typed more characters since they blurred (draft would diverge
+  // from value). When draft has moved past what we just saved, we
+  // leave the editor open so the next blur can pick up the newer
+  // text — losing those keystrokes on slow networks would surprise
+  // the teacher. On "error" we always leave editing=true so the
+  // typed text is retained for retry. Transitions while !committing
+  // are ignored so a sibling field's save (e.g. units) can't close
+  // our editor.
   //
   // Render-time state derivation rather than useEffect: avoids the
   // cascading-render lint, and the guard runs once per transition
   // because we flip committing=false in the same pass.
   if (committing && (saveState === "saved" || saveState === "error")) {
     setCommitting(false);
-    if (saveState === "saved") setEditing(false);
+    if (
+      saveState === "saved"
+      && draft.trim() === (value ?? "").trim()
+    ) {
+      setEditing(false);
+    }
   }
 
   const startEditing = () => {
@@ -1849,6 +1858,16 @@ function InstructionsBlock({
     setEditing(true);
   };
 
+  const cancel = () => {
+    // Revert local edits and close — escape hatch for a stuck
+    // save-error loop or a teacher who decided not to change anything
+    // after all. Skips the save entirely so a previous error doesn't
+    // re-fire.
+    setDraft(value ?? "");
+    setEditing(false);
+    setCommitting(false);
+  };
+
   const commit = () => {
     if (draft.trim() === (value ?? "").trim()) {
       setEditing(false);
@@ -1856,7 +1875,8 @@ function InstructionsBlock({
     }
     onChange(draft);
     setCommitting(true);
-    // editing stays true — the effect above closes it on save-success.
+    // editing stays true — the guard above closes it on save-success
+    // when draft hasn't diverged from the saved value.
   };
 
   if (!editing) {
@@ -1907,6 +1927,14 @@ function InstructionsBlock({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
+        onKeyDown={(e) => {
+          // Esc cancels the edit and reverts. preventDefault stops the
+          // browser from also blurring (which would re-trigger commit).
+          if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
+          }
+        }}
         autoFocus
         rows={3}
         maxLength={2000}
@@ -1915,7 +1943,20 @@ function InstructionsBlock({
       />
       <div className="mt-1 flex items-center justify-between text-[11px] text-text-muted">
         <span>Visible to students. Supports inline LaTeX like $x^2$.</span>
-        <span className="tabular-nums">{draft.length}/2000</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            // mousedown preventDefault stops the textarea from blurring
+            // (and re-firing commit) before our click handler runs;
+            // keeps cancel a true escape rather than a hidden save.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={cancel}
+            className="font-semibold text-text-muted hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <span className="tabular-nums">{draft.length}/2000</span>
+        </div>
       </div>
     </div>
   );

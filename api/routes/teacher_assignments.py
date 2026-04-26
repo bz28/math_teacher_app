@@ -128,6 +128,16 @@ class UpdateAssignmentRequest(BaseModel):
     # instructions" on the student page, so we collapse them).
     description: str | None = None
 
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str | None) -> str | None:
+        # Cap matches the frontend textarea (2000 chars). Defends
+        # against non-browser callers bloating the assignments table
+        # with unbounded prose. None passes through (= unchanged).
+        if v is not None and len(v) > 2000:
+            raise ValueError("Instructions must be 2000 characters or fewer")
+        return v
+
     @field_validator("unit_ids")
     @classmethod
     def validate_unit_ids(cls, v: list[uuid.UUID] | None) -> list[uuid.UUID] | None:
@@ -647,6 +657,9 @@ async def update_assignment(
     # disables every config control on published HWs and shows the
     # "Unpublish to edit" banner; this enforces the same contract on
     # the API so a stale UI or direct call can't bypass it.
+    #
+    # Rubric and description are deliberately NOT in this list — see
+    # the matching block below the guard for why each is exempt.
     config_fields_touched = (
         body.title is not None
         or body.clear_due_at
@@ -664,6 +677,11 @@ async def update_assignment(
     # patterns. The rubric is a teacher + AI-grader reference, not a
     # student-visible contract, so changes here don't invalidate
     # already-returned work.
+    #
+    # Description (student-visible instructions) is also allowed on
+    # published HWs for the same shape of reason: it doesn't change
+    # which problems students see, it just clarifies expectations.
+    # Teachers commonly add notes like "no calculators" mid-flight.
 
     if body.title is not None:
         title = body.title.strip()
