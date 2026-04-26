@@ -229,7 +229,17 @@ export default function MockTestPage() {
           </button>
         </div>
 
-        {mockTest.multipleChoice ? (
+        {mockTest.solveSettled && current.answer === "" ? (
+          // Permanent solve-failure for this question. The preview
+          // screen already warned the student; replace the choices /
+          // input with an inline notice so they aren't stuck staring
+          // at an infinite "Loading choices…" spinner (MC) or typing
+          // into an answer that will be discarded (free response).
+          <div className="rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-4 py-3 text-sm text-warning-dark">
+            This question couldn&apos;t be loaded — it&apos;ll be marked
+            ungraded at submit time. Skip to the next question.
+          </div>
+        ) : mockTest.multipleChoice ? (
           current.distractors && current.distractors.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {(() => {
