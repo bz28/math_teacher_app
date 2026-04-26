@@ -7,6 +7,7 @@ import {
   type TeacherDocument,
 } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
+import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -71,6 +72,9 @@ export function NewPracticeModal({
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+
+  // Inline document uploads. Same lifted-state rationale as the HW modal.
+  const uploads = useDocumentUploads({ courseId, setDocs, setSelectedDocs });
 
   // Load available HWs for the clone dropdown on first step-1 mount.
   // Preselect within the *cloneable* subset (problem_count > 0) so the
@@ -220,7 +224,9 @@ export function NewPracticeModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={() => {
-        if (!busy) onClose();
+        // Same close-guard as the HW modal — block while an upload is
+        // in flight (failed rows are inert so they don't block).
+        if (!busy && !uploads.hasInflightUploads) onClose();
       }}
     >
       <div
@@ -239,7 +245,7 @@ export function NewPracticeModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={busy}
+            disabled={busy || uploads.hasInflightUploads}
             aria-label="Close"
             className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
           >
@@ -283,6 +289,8 @@ export function NewPracticeModal({
               onCountChange={setCount}
               topicHint={topicHint}
               onTopicHintChange={setTopicHint}
+              courseId={courseId}
+              unitIds={unitIds}
               docs={docs}
               docsLoaded={docsLoaded}
               selectedDocs={selectedDocs}
@@ -294,6 +302,10 @@ export function NewPracticeModal({
                   return next;
                 })
               }
+              pending={uploads.pending}
+              onFilesSelected={uploads.handleFiles}
+              onRetryPending={uploads.retryPending}
+              onDismissPending={uploads.dismissPending}
               disabled={busy}
               helperText="Tell the AI how many problems and any context from your uploaded materials. Skip to create an empty draft you can fill in later."
             />

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { teacher, type TeacherDocument } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
+import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -63,6 +64,10 @@ export function NewHomeworkModal({
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+
+  // Inline document uploads. Lives at the modal level so the pending
+  // rows survive the picker unmounting on Back→Continue.
+  const uploads = useDocumentUploads({ courseId, setDocs, setSelectedDocs });
 
   useEffect(() => {
     if (step !== 2 || docsLoaded) return;
@@ -154,10 +159,11 @@ export function NewHomeworkModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={() => {
-        // Ignore backdrop clicks while a create is in-flight —
-        // otherwise the modal unmounts mid-request and we orphan
-        // whatever the server already persisted.
-        if (!busy) onClose();
+        // Ignore backdrop clicks while a create or upload is in flight
+        // — otherwise the modal unmounts mid-request and we orphan
+        // whatever the server already persisted (failed-upload rows are
+        // inert so they don't block close).
+        if (!busy && !uploads.hasInflightUploads) onClose();
       }}
     >
       <div
@@ -175,7 +181,7 @@ export function NewHomeworkModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={busy}
+            disabled={busy || uploads.hasInflightUploads}
             aria-label="Close"
             className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
           >
@@ -208,6 +214,8 @@ export function NewHomeworkModal({
               onCountChange={setCount}
               topicHint={topicHint}
               onTopicHintChange={setTopicHint}
+              courseId={courseId}
+              unitIds={unitIds}
               docs={docs}
               docsLoaded={docsLoaded}
               selectedDocs={selectedDocs}
@@ -219,6 +227,10 @@ export function NewHomeworkModal({
                   return next;
                 })
               }
+              pending={uploads.pending}
+              onFilesSelected={uploads.handleFiles}
+              onRetryPending={uploads.retryPending}
+              onDismissPending={uploads.dismissPending}
               disabled={busy}
               helperText="Tell the AI how many problems and any context from your uploaded materials. Skip to create an empty draft you can fill in later."
             />
