@@ -61,7 +61,7 @@ Rules:
 - You may freely reference any step or the final answer since the problem is solved
 - If the student asks something unrelated to the problem, gently redirect"""
 
-_FINAL_ANSWER_EQUIVALENCE_PROMPT = """You are a strict {tutor_role} checking a student's final answer.
+_LEARN_FINAL_ANSWER_EQUIVALENCE_PROMPT = """You are a strict {tutor_role} checking a student's final answer.
 
 Determine if the student's answer is {equivalence_adjective} EQUIVALENT to the correct
 final answer. Allow differences in formatting or notation (e.g., "x=3" vs
@@ -85,7 +85,7 @@ def _build_completed_chat_prompt(subject: str) -> str:
 
 def _build_equivalence_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _FINAL_ANSWER_EQUIVALENCE_PROMPT.format(
+    return _LEARN_FINAL_ANSWER_EQUIVALENCE_PROMPT.format(
         tutor_role=cfg["tutor_role"],
         equivalence_adjective=cfg["equivalence_adjective"],
         equivalence_examples=cfg["equivalence_examples"],
