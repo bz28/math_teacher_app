@@ -86,13 +86,17 @@ export function SourceMaterialPicker({
     };
   }, [courseId]);
 
-  // Build groups: Step-1 units first (auto-expanded), then remaining
-  // top-level units in stored order, then Unsorted last. Subfolder
-  // docs roll up to their top-level unit so a doc tagged "Algebra /
-  // Practice" shows under "Algebra" — Step 1 only picks top-level.
+  // Build groups: Step-1 units first (auto-expanded, even when empty
+  // so a teacher who picked "Quadratics" doesn't wonder why no group
+  // appears), then remaining top-level units in stored order, then
+  // Unsorted last. Subfolder docs roll up to their top-level unit so
+  // "Algebra / Practice" shows under "Algebra". Docs whose unit_id
+  // points at a deleted/missing unit are bucketed into Unsorted so
+  // they remain attachable instead of silently disappearing.
   const groups = useMemo(() => {
     if (!units) return [];
     const tops = topUnits(units);
+    const topIds = new Set(tops.map((u) => u.id));
     // Defensive: if Step 1 somehow left unitIds empty (shouldn't happen
     // — wizard requires ≥1), expand everything so the teacher isn't
     // staring at all-collapsed groups with no obvious entry point.
@@ -108,18 +112,22 @@ export function SourceMaterialPicker({
     const docsForTop = (topId: string) =>
       docs.filter((d) => topUnitIdOf(units, d.unit_id) === topId);
 
-    // 1. Step-1 units, in the order the teacher picked them.
+    // 1. Step-1 units, in the order the teacher picked them. Empty
+    //    groups are kept as a "we looked, nothing here yet" signal.
     for (const uid of unitIds) {
       if (taken.has(uid)) continue;
       const u = tops.find((t) => t.id === uid);
       if (!u) continue;
-      const groupDocs = docsForTop(u.id);
-      if (groupDocs.length === 0) continue;
-      out.push({ id: u.id, label: u.name, defaultExpanded: true, docs: groupDocs });
+      out.push({
+        id: u.id,
+        label: u.name,
+        defaultExpanded: true,
+        docs: docsForTop(u.id),
+      });
       taken.add(u.id);
     }
 
-    // 2. Other top-level units in their natural order.
+    // 2. Other top-level units in their natural order. Skip empty.
     for (const u of tops) {
       if (taken.has(u.id)) continue;
       const groupDocs = docsForTop(u.id);
@@ -132,9 +140,15 @@ export function SourceMaterialPicker({
       });
     }
 
-    // 3. Unsorted (unit_id === null) — surfaced so freshly-uploaded
-    //    inline files don't appear hidden.
-    const unsorted = docs.filter((d) => d.unit_id === null);
+    // 3. Unsorted: real unsorted (unit_id === null) plus orphans
+    //    (unit_id refers to a deleted/missing top-level unit). Without
+    //    this bucket, orphans would be excluded from every group and
+    //    invisible in the picker.
+    const unsorted = docs.filter((d) => {
+      if (d.unit_id === null) return true;
+      const topId = topUnitIdOf(units, d.unit_id);
+      return topId === null || !topIds.has(topId);
+    });
     if (unsorted.length > 0) {
       out.push({
         id: "__unsorted__",
@@ -292,16 +306,23 @@ export function SourceMaterialPicker({
                         onToggle={() => toggleGroup(g.id, g.defaultExpanded)}
                         disabled={disabled}
                       >
-                        {g.docs.map((d) => (
-                          <DocRow
-                            key={d.id}
-                            doc={d}
-                            checked={selectedDocs.has(d.id)}
-                            onToggle={() => onToggleDoc(d.id)}
-                            onPreview={() => setPreviewDoc(d)}
-                            disabled={disabled}
-                          />
-                        ))}
+                        {g.docs.length === 0 ? (
+                          <p className="px-3 py-2 text-[11px] italic text-text-muted">
+                            No materials in this unit yet — use Upload new
+                            above to add one.
+                          </p>
+                        ) : (
+                          g.docs.map((d) => (
+                            <DocRow
+                              key={d.id}
+                              doc={d}
+                              checked={selectedDocs.has(d.id)}
+                              onToggle={() => onToggleDoc(d.id)}
+                              onPreview={() => setPreviewDoc(d)}
+                              disabled={disabled}
+                            />
+                          ))
+                        )}
                       </GroupBlock>
                     );
                   })
