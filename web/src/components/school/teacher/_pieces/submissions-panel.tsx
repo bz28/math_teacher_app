@@ -203,25 +203,36 @@ const ACTIVITY_REASON_COPY: Record<
     );
     return `pasted ${total} chars; no typing on this turn`;
   },
-  tab_hidden_long: (turn) => {
+  long_tab_out: (turn) => {
     const longest = Math.max(
       0,
       ...((turn.telemetry?.focus_blur_events ?? []).map((b) => b.duration_ms)),
     );
-    return `tab hidden ${formatMs(longest)} during this turn`;
+    return `tabbed out ${formatMs(longest)} during this turn`;
   },
-  mostly_hidden: (turn) => {
+  dominant_tab_out: (turn) => {
     const total = (turn.telemetry?.focus_blur_events ?? []).reduce(
       (s, b) => s + b.duration_ms,
       0,
     );
-    return `tab hidden ${formatMs(total)} of this turn`;
+    return `tabbed out ${formatMs(total)} of this turn`;
   },
 };
 
+/** Lite shape: just the per-turn entry from activity_summary.notable_turns. */
+export type IntegrityActivityNotableTurnLite = {
+  ordinal: number;
+  reasons: IntegrityActivityReason[];
+};
+
 /** Renders the gray inline note tucked under a notable student turn.
- *  Returns null if the turn has no notable reasons in this summary. */
-function ActivityTurnMarker({
+ *  Returns null if the turn has no notable reasons in this summary,
+ *  or if the turn carries no telemetry — defensive bail-out so a
+ *  drift between backend (which flagged the ordinal) and the
+ *  per-turn telemetry blob doesn't render misleading "0 chars"
+ *  / "0s" copy. Backend is currently lockstep, but this guards
+ *  against future divergence. */
+export function ActivityTurnMarker({
   turn,
   notable,
 }: {
@@ -229,6 +240,7 @@ function ActivityTurnMarker({
   notable: IntegrityActivityNotableTurnLite | undefined;
 }) {
   if (!notable || notable.reasons.length === 0) return null;
+  if (!turn.telemetry) return null;
   return (
     <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] text-text-muted">
       {notable.reasons.map((r) => (
@@ -243,12 +255,6 @@ function ActivityTurnMarker({
   );
 }
 
-/** Lite shape: just the per-turn entry from activity_summary.notable_turns. */
-type IntegrityActivityNotableTurnLite = {
-  ordinal: number;
-  reasons: IntegrityActivityReason[];
-};
-
 /**
  * Session-level digest at the top of the integrity section. Reads the
  * precomputed activity_summary off the detail payload — single source
@@ -259,7 +265,7 @@ type IntegrityActivityNotableTurnLite = {
  * evidence the teacher is there to evaluate). The Activity pill is
  * separate (always shown) and carries the level color independently.
  */
-function ActivityDigest({
+export function ActivityDigest({
   summary,
   disposition,
 }: {
@@ -287,11 +293,11 @@ function ActivityDigest({
         <ActivityLevelPill level={summary.level} />
       </div>
       <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5">
-        <dt className="opacity-70">Tabbed away</dt>
+        <dt className="opacity-70">Tabbed out</dt>
         <dd className="font-medium">
-          {t.tab_hide_count === 0
+          {t.tab_out_count === 0
             ? "never"
-            : `${t.tab_hide_count}× (${formatMs(t.tab_hide_total_ms)} total)`}
+            : `${t.tab_out_count}× (${formatMs(t.tab_out_total_ms)} total)`}
         </dd>
 
         <dt className="opacity-70">Paste events</dt>

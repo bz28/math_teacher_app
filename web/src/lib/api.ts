@@ -1931,8 +1931,8 @@ export interface TeacherIntegrityProblemRow {
 export type IntegrityActivityReason =
   | "large_paste"
   | "full_paste"
-  | "tab_hidden_long"
-  | "mostly_hidden";
+  | "long_tab_out"
+  | "dominant_tab_out";
 
 export interface IntegrityActivityNotableTurn {
   ordinal: number;
@@ -1945,8 +1945,8 @@ export interface IntegrityActivityNotableTurn {
 export interface IntegrityActivitySummary {
   level: IntegrityActivityLevel;
   totals: {
-    tab_hide_count: number;
-    tab_hide_total_ms: number;
+    tab_out_count: number;
+    tab_out_total_ms: number;
     paste_count: number;
     paste_total_chars: number;
     paste_largest_chars: number;

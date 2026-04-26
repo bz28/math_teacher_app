@@ -4,7 +4,12 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
-import { ActivityLevelPill } from "@/components/school/teacher/_pieces/submissions-panel";
+import {
+  ActivityDigest,
+  ActivityLevelPill,
+  ActivityTurnMarker,
+  type IntegrityActivityNotableTurnLite,
+} from "@/components/school/teacher/_pieces/submissions-panel";
 import {
   teacher,
   type AiGradeEntry,
@@ -1837,48 +1842,66 @@ function IntegrityBanner({
   const style = INTEGRITY_STYLE[key];
   const hasTranscript = !!integrity && integrity.transcript.length > 0;
 
+  const activitySummary = integrity?.activity_summary ?? null;
+
   return (
     <>
-      <div
-        className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <span
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${style.iconBg}`}
-              aria-hidden
-            >
-              {style.icon}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-base font-bold text-text-primary">
-                {style.label}
-              </p>
-              {summary && (
-                <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  {summary}
-                </p>
-              )}
-              {inProgress && overviewFallback && (
-                <p className="mt-1.5 text-xs text-text-muted">
-                  {overviewFallback.complete_count} of{" "}
-                  {overviewFallback.problem_count} sampled problems graded.
-                </p>
-              )}
+      <div className="space-y-2">
+        <div
+          className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${style.iconBg}`}
+                aria-hidden
+              >
+                {style.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-bold text-text-primary">
+                    {style.label}
+                  </p>
+                  {/* Activity pill sits next to the disposition label
+                   * so the teacher reads understanding + behavior as
+                   * two equally-prominent axes, not one fused score. */}
+                  {activitySummary && (
+                    <ActivityLevelPill level={activitySummary.level} />
+                  )}
+                </div>
+                {summary && (
+                  <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                    {summary}
+                  </p>
+                )}
+                {inProgress && overviewFallback && (
+                  <p className="mt-1.5 text-xs text-text-muted">
+                    {overviewFallback.complete_count} of{" "}
+                    {overviewFallback.problem_count} sampled problems graded.
+                  </p>
+                )}
+              </div>
             </div>
+            {hasTranscript && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+              >
+                View conversation →
+              </button>
+            )}
           </div>
-          {hasTranscript && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
-            >
-              View conversation →
-            </button>
-          )}
         </div>
+        {/* Session digest sits below the banner so the totals don't
+         * crowd the disposition label. Hides itself on null. */}
+        <ActivityDigest
+          summary={activitySummary}
+          disposition={integrity?.disposition ?? null}
+        />
       </div>
       {integrity && (
         <ConversationModal
@@ -1907,6 +1930,16 @@ function ConversationModal({
   onClose: () => void;
   integrity: TeacherIntegrityDetail;
 }) {
+  // Index notable turns by ordinal so each TranscriptTurn can render
+  // its inline marker in O(1).
+  const notableByOrdinal = useMemo(() => {
+    const out = new Map<number, IntegrityActivityNotableTurnLite>();
+    for (const nt of integrity.activity_summary?.notable_turns ?? []) {
+      out.set(nt.ordinal, nt);
+    }
+    return out;
+  }, [integrity.activity_summary?.notable_turns]);
+
   return (
     <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0">
       <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
@@ -1932,7 +1965,11 @@ function ConversationModal({
       </div>
       <div className="max-h-[70vh] space-y-3 overflow-y-auto px-5 py-4">
         {integrity.transcript.map((t) => (
-          <TranscriptTurn key={t.ordinal} turn={t} />
+          <TranscriptTurn
+            key={t.ordinal}
+            turn={t}
+            notable={notableByOrdinal.get(t.ordinal)}
+          />
         ))}
         {integrity.problems.length > 0 && (
           <div className="mt-4 border-t border-border-light pt-4">
@@ -1951,7 +1988,13 @@ function ConversationModal({
   );
 }
 
-function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
+function TranscriptTurn({
+  turn,
+  notable,
+}: {
+  turn: TeacherIntegrityTranscriptTurn;
+  notable: IntegrityActivityNotableTurnLite | undefined;
+}) {
   // Tool turns are AI internals; kept collapsed by default so teachers
   // see the human-readable conversation first. An expander reveals them
   // when the teacher wants to audit exactly what the agent did.
@@ -1976,31 +2019,40 @@ function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
   }
   const isAgent = turn.role === "agent";
   return (
-    <div className={`flex gap-2 ${isAgent ? "" : "flex-row-reverse"}`}>
-      <div
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-          isAgent
-            ? "bg-primary text-white"
-            : "bg-bg-subtle text-text-secondary"
-        }`}
-        aria-hidden
-      >
-        {isAgent ? "AI" : "S"}
+    <div className="flex flex-col gap-0.5">
+      <div className={`flex gap-2 ${isAgent ? "" : "flex-row-reverse"}`}>
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+            isAgent
+              ? "bg-primary text-white"
+              : "bg-bg-subtle text-text-secondary"
+          }`}
+          aria-hidden
+        >
+          {isAgent ? "AI" : "S"}
+        </div>
+        <div
+          className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
+            isAgent
+              ? "bg-primary-bg text-text-primary"
+              : "bg-bg-subtle text-text-primary"
+          }`}
+        >
+          <MathText text={turn.content} />
+          {turn.seconds_on_turn != null && !isAgent && (
+            <span className="mt-1 block text-[10px] text-text-muted">
+              · {Math.round(turn.seconds_on_turn)}s to reply
+            </span>
+          )}
+        </div>
       </div>
-      <div
-        className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
-          isAgent
-            ? "bg-primary-bg text-text-primary"
-            : "bg-bg-subtle text-text-primary"
-        }`}
-      >
-        <MathText text={turn.content} />
-        {turn.seconds_on_turn != null && !isAgent && (
-          <span className="mt-1 block text-[10px] text-text-muted">
-            · {Math.round(turn.seconds_on_turn)}s to reply
-          </span>
-        )}
-      </div>
+      {/* Marker hangs under the right-aligned student bubble. ml-auto
+        * on a flex-col child pushes it horizontally to the right. */}
+      {!isAgent && (
+        <div className="ml-auto">
+          <ActivityTurnMarker turn={turn} notable={notable} />
+        </div>
+      )}
     </div>
   );
 }
