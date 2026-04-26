@@ -7,13 +7,14 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { getManagementUrl } from "@/services/revenuecat";
-import { Badge, Button, Modal, PasswordInput } from "@/components/ui";
+import { Badge, Button, Modal, PasswordInput, useToast } from "@/components/ui";
 
 export default function AccountPage() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const router = useRouter();
+  const toast = useToast();
 
   const isPro = useEntitlementStore((s) => s.isPro);
   // School-linked students (including teacher "View as Student"
@@ -51,9 +52,18 @@ export default function AccountPage() {
     setPortalLoading(true);
     try {
       const url = await getManagementUrl(user.id);
-      if (url) window.location.assign(url);
+      if (url) {
+        window.location.assign(url);
+        return;
+      }
+      // null = both RC apps returned no managementURL. Most likely
+      // means the subscription is on a different provider or the user
+      // never bought through RC — surface so they can email support.
+      toast.error(
+        "Couldn't open the management portal. Email support@veradicai.com if this keeps happening.",
+      );
     } catch {
-      // Silently fail
+      toast.error("Couldn't reach the subscription portal — try again in a moment.");
     } finally {
       setPortalLoading(false);
     }
