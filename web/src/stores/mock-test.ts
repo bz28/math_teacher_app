@@ -321,6 +321,21 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
             };
           }
 
+          // Permanently-failed solve (q.answer === "" after solveSettled).
+          // Treat as ungraded — matches the preview-screen warning so the
+          // student isn't told something graded when nothing could grade
+          // it. Skips the API check too: practiceApi.check with an empty
+          // correct_answer would either return a meaningless verdict or
+          // 4xx, neither helpful.
+          if (q.answer === "") {
+            return {
+              question: q.question,
+              userAnswer,
+              correctAnswer: "",
+              isCorrect: null,
+            };
+          }
+
           // MC mode: student selected an exact option, no API call needed
           if (mt.multipleChoice) {
             return {
