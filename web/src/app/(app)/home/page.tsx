@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
@@ -38,7 +38,7 @@ export default function HomePage() {
     }
   }, [user, router]);
 
-  const loadEnrolledCourses = () => {
+  const loadEnrolledCourses = useCallback(() => {
     setCoursesError(null);
     auth
       .enrolledCourses()
@@ -49,9 +49,11 @@ export default function HomePage() {
         ),
       )
       .finally(() => setLoadingCourses(false));
-  };
+  }, []);
 
-  useEffect(() => { loadEnrolledCourses(); }, []);
+  useEffect(() => {
+    loadEnrolledCourses();
+  }, [loadEnrolledCourses]);
 
   async function handleJoinSection(e: React.FormEvent) {
     e.preventDefault();
