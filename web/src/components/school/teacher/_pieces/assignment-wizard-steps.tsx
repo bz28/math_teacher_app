@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TeacherDocument } from "@/lib/api";
+import type { PendingUpload } from "@/hooks/use-document-uploads";
 import { UnitMultiSelect } from "./unit-multi-select";
 import { SectionMultiSelect } from "./section-multi-select";
 import { SourceMaterialPicker } from "./source-material-picker";
@@ -154,7 +155,10 @@ export function AssignmentProblemsStep({
   docsLoaded,
   selectedDocs,
   onToggleDoc,
-  onDocumentUploaded,
+  pending,
+  onFilesSelected,
+  onRetryPending,
+  onDismissPending,
   disabled,
   helperText,
 }: {
@@ -169,9 +173,11 @@ export function AssignmentProblemsStep({
   docsLoaded: boolean;
   selectedDocs: Set<string>;
   onToggleDoc: (id: string) => void;
-  /** Called after a successful inline upload. Parent should refetch the
-   *  doc list and add the new id to selectedDocs. */
-  onDocumentUploaded: (newId: string) => void | Promise<void>;
+  /** Inline-upload state owned by the parent so it survives Back→Continue. */
+  pending: PendingUpload[];
+  onFilesSelected: (files: File[]) => void;
+  onRetryPending: (item: PendingUpload) => void;
+  onDismissPending: (id: string) => void;
   disabled: boolean;
   helperText: string;
 }) {
@@ -261,7 +267,10 @@ export function AssignmentProblemsStep({
         selectedDocs={selectedDocs}
         unitIds={unitIds}
         onToggleDoc={onToggleDoc}
-        onDocumentUploaded={onDocumentUploaded}
+        pending={pending}
+        onFilesSelected={onFilesSelected}
+        onRetryPending={onRetryPending}
+        onDismissPending={onDismissPending}
         disabled={disabled}
       />
     </div>

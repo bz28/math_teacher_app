@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 import { topUnitIdOf, topUnits } from "@/lib/units";
-import { uploadDocument } from "@/lib/upload-document";
 import { formatFileSize } from "@/lib/utils";
-import { useToast } from "@/components/ui/toast";
+import type { PendingUpload } from "@/hooks/use-document-uploads";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -29,14 +28,6 @@ import { FilePreviewModal } from "../materials/file-preview-modal";
  * wizard — uploads land in "Unsorted" and are auto-selected on success.
  */
 
-type PendingUpload = {
-  id: string;
-  filename: string;
-  size: number;
-  error: string | null;
-  file: File;
-};
-
 interface Props {
   courseId: string;
   docs: TeacherDocument[];
@@ -45,9 +36,12 @@ interface Props {
   /** Step-1 unit selection — these groups auto-expand. */
   unitIds: string[];
   onToggleDoc: (id: string) => void;
-  /** Fired with the new doc id after a successful inline upload.
-   *  Parent should refetch the doc list and add the id to selectedDocs. */
-  onDocumentUploaded: (newId: string) => void | Promise<void>;
+  /** Inline-upload state owned by the parent modal so it survives the
+   *  picker unmounting (e.g. teacher clicks Back mid-upload). */
+  pending: PendingUpload[];
+  onFilesSelected: (files: File[]) => void;
+  onRetryPending: (item: PendingUpload) => void;
+  onDismissPending: (id: string) => void;
   disabled: boolean;
 }
 
@@ -58,10 +52,12 @@ export function SourceMaterialPicker({
   selectedDocs,
   unitIds,
   onToggleDoc,
-  onDocumentUploaded,
+  pending,
+  onFilesSelected,
+  onRetryPending,
+  onDismissPending,
   disabled,
 }: Props) {
-  const toast = useToast();
   const [units, setUnits] = useState<TeacherUnit[] | null>(null);
   const [search, setSearch] = useState("");
   // `overrides` tracks groups where the teacher explicitly flipped the
@@ -70,7 +66,6 @@ export function SourceMaterialPicker({
   // is `groupId:open` (means: user expanded it).
   const [overrides, setOverrides] = useState<Set<string>>(new Set());
   const [previewDoc, setPreviewDoc] = useState<TeacherDocument | null>(null);
-  const [pending, setPending] = useState<PendingUpload[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Units load independently of docs so we can label group headers
@@ -178,54 +173,6 @@ export function SourceMaterialPicker({
       .sort((a, b) => a.filename.localeCompare(b.filename));
   }, [docs, search]);
 
-  // ── Upload ──
-
-  const startUpload = async (file: File) => {
-    const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setPending((prev) => [
-      ...prev,
-      { id: tempId, filename: file.name, size: file.size, error: null, file },
-    ]);
-    try {
-      const newId = await uploadDocument(courseId, file, null);
-      // Hand off to parent (refetch + auto-select) before clearing the
-      // pending row so the new doc visually replaces it without flicker.
-      await onDocumentUploaded(newId);
-      setPending((prev) => prev.filter((p) => p.id !== tempId));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Upload failed";
-      setPending((prev) =>
-        prev.map((p) => (p.id === tempId ? { ...p, error: msg } : p)),
-      );
-      toast.error(`Couldn't upload ${file.name}: ${msg}`);
-    }
-  };
-
-  const handleFiles = (files: File[]) => {
-    for (const file of files) void startUpload(file);
-  };
-
-  const retryPending = (item: PendingUpload) => {
-    setPending((prev) =>
-      prev.map((p) => (p.id === item.id ? { ...p, error: null } : p)),
-    );
-    void (async () => {
-      try {
-        const newId = await uploadDocument(courseId, item.file, null);
-        await onDocumentUploaded(newId);
-        setPending((prev) => prev.filter((p) => p.id !== item.id));
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Upload failed";
-        setPending((prev) =>
-          prev.map((p) => (p.id === item.id ? { ...p, error: msg } : p)),
-        );
-      }
-    })();
-  };
-
-  const dismissPending = (id: string) =>
-    setPending((prev) => prev.filter((p) => p.id !== id));
-
   const triggerPicker = () => fileInputRef.current?.click();
 
   // ── Render ──
@@ -265,7 +212,7 @@ export function SourceMaterialPicker({
           onChange={(e) => {
             const files = e.target.files ? Array.from(e.target.files) : [];
             e.target.value = "";
-            handleFiles(files);
+            onFilesSelected(files);
           }}
           className="hidden"
           disabled={disabled}
@@ -310,8 +257,8 @@ export function SourceMaterialPicker({
                   <PendingRow
                     key={p.id}
                     item={p}
-                    onRetry={() => retryPending(p)}
-                    onDismiss={() => dismissPending(p.id)}
+                    onRetry={() => onRetryPending(p)}
+                    onDismiss={() => onDismissPending(p.id)}
                   />
                 ))}
               </div>
