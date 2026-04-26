@@ -146,6 +146,7 @@ async def test_submit_caps_sample_at_max_sample(
         for i in range(MAX_SAMPLE + 2):
             clone = QuestionBankItem(
                 course_id=original.course_id,
+                unit_id=original.unit_id,
                 originating_assignment_id=original.originating_assignment_id,
                 title=f"Extra {i}",
                 question=f"Extra problem {i}",

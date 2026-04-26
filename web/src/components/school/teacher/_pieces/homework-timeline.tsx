@@ -149,8 +149,11 @@ function BucketSection({
   );
 }
 
-/** Resolve the first unit_id to a label, or "Uncategorized". */
+/** Resolve the first unit_id to a label. Empty array isn't reachable
+ *  for new HWs (the application layer requires ≥1 unit) — the empty
+ *  string fallback only protects against any pre-existing rows that
+ *  somehow escaped that invariant. */
 function resolveUnitLabel(hw: TeacherAssignment, units: TeacherUnit[]): string {
-  if (hw.unit_ids.length === 0) return "Uncategorized";
+  if (hw.unit_ids.length === 0) return "";
   return labelForUnit(units, hw.unit_ids[0]);
 }

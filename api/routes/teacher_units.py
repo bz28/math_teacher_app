@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -172,20 +172,45 @@ async def delete_unit(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    """Block deletion if any documents or bank items still reference
+    this unit (or one of its subfolders). Teachers move them with the
+    existing move-dialog before deleting the unit. Replaces the older
+    "reassign-to-Uncategorized" fallback now that every doc/item must
+    have a real unit. Subfolders themselves are still removed via
+    ON DELETE CASCADE on parent_unit_id, but only after we confirm
+    they're empty too."""
+    from api.models.question_bank import QuestionBankItem
     await get_teacher_course(db, course_id, current_user.user_id)
     unit = await _get_unit_in_course(db, unit_id, course_id)
 
-    # Move documents in this unit and its subfolders to uncategorized.
-    # Subfolders themselves are removed via ON DELETE CASCADE on parent_unit_id.
     subfolder_ids = [
         r[0] for r in (await db.execute(
             select(Unit.id).where(Unit.parent_unit_id == unit_id)
         )).all()
     ]
     affected_unit_ids = [unit_id, *subfolder_ids]
-    await db.execute(
-        update(Document).where(Document.unit_id.in_(affected_unit_ids)).values(unit_id=None)
-    )
+
+    doc_count = (await db.execute(
+        select(func.count()).select_from(Document)
+        .where(Document.unit_id.in_(affected_unit_ids))
+    )).scalar_one()
+    item_count = (await db.execute(
+        select(func.count()).select_from(QuestionBankItem)
+        .where(QuestionBankItem.unit_id.in_(affected_unit_ids))
+    )).scalar_one()
+    if doc_count or item_count:
+        parts = []
+        if doc_count:
+            parts.append(f"{doc_count} document{'s' if doc_count != 1 else ''}")
+        if item_count:
+            parts.append(f"{item_count} question{'s' if item_count != 1 else ''}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Move {' and '.join(parts)} out of this unit before deleting it."
+            ),
+        )
+
     await db.delete(unit)
     await db.commit()
     return {"status": "ok"}

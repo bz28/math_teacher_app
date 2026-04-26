@@ -109,10 +109,21 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   }, [selected]);
 
   const tops = topUnits(units);
-  const docsIn = (unitId: string | null) => docs.filter((d) => d.unit_id === unitId);
+  const docsIn = (unitId: string) => docs.filter((d) => d.unit_id === unitId);
+
+  // Auto-pick the first top-level unit once units load — there's no
+  // "Uncategorized" landing page anymore. Only fires when nothing is
+  // already selected so a user-driven selection survives reloads.
+  useEffect(() => {
+    if (selected !== null) return;
+    if (tops.length > 0) setSelected(tops[0].id);
+  }, [selected, tops]);
 
   const selectedUnit = selected ? units.find((u) => u.id === selected) ?? null : null;
-  const folderDocs = docsIn(selected);
+  const folderDocs = useMemo(
+    () => (selected !== null ? docs.filter((d) => d.unit_id === selected) : []),
+    [docs, selected],
+  );
 
   const visibleDocs = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -131,7 +142,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
   }, [folderDocs, search, sort]);
 
   const destinations: Destination[] = useMemo(() => {
-    const out: Destination[] = [{ id: null, label: "Uncategorized" }];
+    const out: Destination[] = [];
     for (const top of tops) {
       out.push({ id: top.id, label: top.name });
       for (const sub of subfoldersOf(units, top.id)) {
@@ -149,7 +160,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
    * CollisionDialog before touching the backend.
    */
 
-  const uploadOne = (file: File, unitId: string | null) =>
+  const uploadOne = (file: File, unitId: string) =>
     uploadDocument(courseId, file, unitId);
 
   const handleImport = (tree: DroppedTree) =>
@@ -193,7 +204,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       let failedFiles = 0;
       const UPLOAD_CONCURRENCY = 5;
 
-      const uploadBatch = async (files: File[], unitId: string | null) => {
+      const uploadBatch = async (files: File[], unitId: string) => {
         const results = await mapWithConcurrency(files, UPLOAD_CONCURRENCY, (file) =>
           uploadOne(file, unitId),
         );
@@ -249,7 +260,20 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       }
 
       // ── loose files (go into currently-selected folder) ─────────
-      await uploadBatch(tree.looseFiles, selected);
+      // The Uncategorized bucket was removed: every file lives under
+      // a real unit. The UI gates the upload affordance on a unit
+      // being selected, so `selected` is non-null when loose files
+      // arrive — defense-in-depth: skip + toast if it isn't.
+      if (tree.looseFiles.length > 0) {
+        if (selected !== null) {
+          await uploadBatch(tree.looseFiles, selected);
+        } else {
+          failedFiles += tree.looseFiles.length;
+          toast.error(
+            "Pick a unit on the left before dropping loose files.",
+          );
+        }
+      }
 
       if (await reload()) onChanged();
 
@@ -307,7 +331,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
   /* ── document mutations ── */
 
-  const moveDocuments = (ids: string[], targetUnitId: string | null) =>
+  const moveDocuments = (ids: string[], targetUnitId: string) =>
     run(async () => {
       const results = await mapWithConcurrency(ids, 5, (id) =>
         teacher.updateDocument(courseId, id, { unit_id: targetUnitId }),
@@ -425,7 +449,6 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             units={units}
             selected={selected}
             docCountFor={(id) => docsIn(id).length}
-            uncategorizedCount={docsIn(null).length}
             rowState={rowState}
             busy={busy}
             onSelect={setSelected}
@@ -447,7 +470,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
                       <FolderIcon className="h-5 w-5 shrink-0 text-text-muted" />
                     )}
                     <span className="truncate">
-                      {selectedUnit ? selectedUnit.name : "Uncategorized"}
+                      {selectedUnit ? selectedUnit.name : "Pick a unit"}
                     </span>
                   </h3>
                   <p className="mt-1 text-xs font-medium text-text-muted">

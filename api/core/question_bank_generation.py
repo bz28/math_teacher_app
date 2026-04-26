@@ -173,14 +173,14 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
         select(Course).where(Course.id == job.course_id)
     )).scalar_one()
 
-    # Unit name (or fall back to course name if no unit)
-    unit_name = course.name
-    if job.unit_id:
-        unit = (await db.execute(
-            select(Unit).where(Unit.id == job.unit_id)
-        )).scalar_one_or_none()
-        if unit:
-            unit_name = unit.name
+    # Unit name for the AI prompt. unit_id is required at the model
+    # layer (Uncategorized was removed); a missing unit row would mean
+    # an unrelated bug, so fall back to the course name without
+    # masking the issue and let the prompt go out.
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == job.unit_id)
+    )).scalar_one_or_none()
+    unit_name = unit.name if unit else course.name
 
     # 1. Get question texts — either extract from uploaded images or
     # generate via AI, depending on job mode.
@@ -372,13 +372,10 @@ async def regenerate_one(
     - The previous version is snapshotted to previous_* columns so the
       teacher can undo via /revert.
     """
-    unit_name = course.name
-    if item.unit_id:
-        unit = (await db.execute(
-            select(Unit).where(Unit.id == item.unit_id)
-        )).scalar_one_or_none()
-        if unit:
-            unit_name = unit.name
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == item.unit_id)
+    )).scalar_one_or_none()
+    unit_name = unit.name if unit else course.name
 
     doc_ids = [uuid.UUID(d) for d in (item.source_doc_ids or [])]
     images = await fetch_document_images(

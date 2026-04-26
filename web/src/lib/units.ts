@@ -37,11 +37,11 @@ export function topUnitIdOf(
 }
 
 /**
- * Build a "Unit 5: Quadratics / Practice" label for any unit_id, or
- * "Uncategorized" when null. "Unknown" if the id doesn't resolve.
+ * Build a "Unit 5: Quadratics / Practice" label for any unit_id.
+ * "Unknown" if the id doesn't resolve. The Uncategorized branch was
+ * removed when bd1000047 made unit_id NOT NULL across the board.
  */
-export function unitLabel(units: TeacherUnit[], unitId: string | null): string {
-  if (!unitId) return "Uncategorized";
+export function unitLabel(units: TeacherUnit[], unitId: string): string {
   const u = units.find((x) => x.id === unitId);
   if (!u) return "Unknown";
   if (!u.parent_id) return u.name;

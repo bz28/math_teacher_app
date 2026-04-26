@@ -82,7 +82,7 @@ export function HomeworkCard({
 
       {/* Meta row: unit · due date · sections */}
       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
-        {unitLabel && unitLabel !== "Uncategorized" && (
+        {unitLabel && (
           <>
             <span className="font-medium text-text-secondary">{unitLabel}</span>
             <span aria-hidden>·</span>
@@ -149,7 +149,7 @@ function CompletedRow({
       <span className="min-w-0 flex-1 truncate font-medium text-text-primary">
         {hw.title}
       </span>
-      {unitLabel && unitLabel !== "Uncategorized" && (
+      {unitLabel && (
         <span className="hidden shrink-0 text-[11px] text-text-muted sm:inline">
           {unitLabel}
         </span>

@@ -239,7 +239,7 @@ export function WorkshopModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above: liveItem tracked via course_id only
   }, [liveItem?.course_id]);
 
-  const saveUnit = (nextUnitId: string | null) =>
+  const saveUnit = (nextUnitId: string) =>
     run(async () => {
       // Unit moves are intentionally allowed on locked items — moving a
       // question between folders doesn't change what students see.
@@ -251,7 +251,7 @@ export function WorkshopModal({
       if (nextUnitId === liveItem.unit_id) return;
       const updated = await teacher.updateBankItem(
         liveItem.id,
-        nextUnitId === null ? { clear_unit: true } : { unit_id: nextUnitId },
+        { unit_id: nextUnitId },
       );
       replaceLiveItem(updated);
     });
@@ -546,13 +546,12 @@ export function WorkshopModal({
             <label className="flex items-center gap-1 text-xs font-semibold text-text-muted">
               📁
               <select
-                value={liveItem.unit_id ?? ""}
-                onChange={(e) => saveUnit(e.target.value || null)}
+                value={liveItem.unit_id}
+                onChange={(e) => saveUnit(e.target.value)}
                 disabled={busy}
                 className="cursor-pointer rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-0.5 text-xs font-semibold text-text-primary hover:border-primary focus:border-primary focus:outline-none"
                 title="Move to a different unit"
               >
-                <option value="">Uncategorized</option>
                 {topUnits(units).flatMap((top) => [
                   <option key={top.id} value={top.id}>
                     {top.name}

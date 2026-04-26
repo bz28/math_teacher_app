@@ -12,7 +12,7 @@ interface MoveDialogProps {
   destinations: Destination[];
   busy: boolean;
   onClose: () => void;
-  onConfirm: (target: string | null) => void;
+  onConfirm: (target: string) => void;
 }
 
 export function MoveDialog({
@@ -48,7 +48,7 @@ export function MoveDialog({
             const selected = target === d.id;
             return (
               <button
-                key={d.id ?? "uncategorized"}
+                key={d.id}
                 type="button"
                 role="option"
                 aria-selected={selected}
@@ -96,8 +96,8 @@ export function MoveDialog({
         </button>
         <button
           type="button"
-          disabled={busy || candidates.length === 0}
-          onClick={() => onConfirm(target)}
+          disabled={busy || candidates.length === 0 || target === null}
+          onClick={() => target !== null && onConfirm(target)}
           className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-primary-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
         >
           Move
