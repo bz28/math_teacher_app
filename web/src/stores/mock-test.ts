@@ -123,8 +123,8 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           answer: "",
         }));
         const { id } = await sessionApi.createMockTest(problems[0], questionTexts);
-        const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
-        set({ mockTest: mt });
+        const newMockTest = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
+        set({ mockTest: newMockTest });
 
         // Show preview screen immediately (questions visible, no answers yet)
         set({ phase: "mock_test_preview" });
@@ -176,8 +176,8 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         const { id } = await sessionApi.createMockTest(problems[0], problems);
 
         // Set mockTest with placeholders first so .then() handlers can find it
-        const mt = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
-        set({ mockTest: mt, phase: "mock_test_preview" });
+        const newMockTest = createMockTest(placeholders, id, timeLimitMinutes, multipleChoice);
+        set({ mockTest: newMockTest, phase: "mock_test_preview" });
 
         // Fire all API calls in parallel, update each question as it resolves
         const batchSessionId2 = id;
@@ -302,12 +302,12 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
       }
 
       // Re-read after potential wait
-      const mt = get().mockTest;
-      if (!mt) return;
+      const currentMockTest = get().mockTest;
+      if (!currentMockTest) return;
 
       const results: QuizResult[] = await Promise.all(
-        mt.questions.map(async (q, i) => {
-          const userAnswer = mt.answers[i] ?? null;
+        currentMockTest.questions.map(async (q, i) => {
+          const userAnswer = currentMockTest.answers[i] ?? null;
           if (!userAnswer) {
             return {
               question: q.question,
@@ -333,7 +333,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }
 
           // MC mode: student selected an exact option, no API call needed
-          if (mt.multipleChoice) {
+          if (currentMockTest.multipleChoice) {
             return {
               question: q.question,
               userAnswer,
@@ -368,26 +368,26 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         }),
       );
 
-      if (mt.sessionId) {
+      if (currentMockTest.sessionId) {
         const correctCount = results.filter((r) => r.isCorrect === true).length;
-        await sessionApi.completeMockTest(mt.sessionId, {
+        await sessionApi.completeMockTest(currentMockTest.sessionId, {
           total_questions: results.length,
           correct_count: correctCount,
         });
       }
 
-      const newFlags = [...mt.flags];
+      const newFlags = [...currentMockTest.flags];
       results.forEach((r, i) => {
         if (r.isCorrect !== true) newFlags[i] = true;
       });
 
-      const images = mt.workImages;
+      const images = currentMockTest.workImages;
       const pending = images
         .map((img, i) => (img ? { img, i } : null))
         .filter(Boolean) as { img: string; i: number }[];
 
       const updatedMockTest = {
-        ...mt,
+        ...currentMockTest,
         results,
         flags: newFlags,
         submittedAt: Date.now(),
@@ -402,7 +402,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           const batch = pending.slice(b, b + 3);
           await Promise.allSettled(
             batch.map(async ({ img, i }) => {
-              const q = mt.questions[i];
+              const q = currentMockTest.questions[i];
               const r = results[i];
               const workSubmitResult = await workApi.submit({
                 image_base64: img,

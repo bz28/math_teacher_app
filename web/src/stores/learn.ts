@@ -32,8 +32,12 @@ export interface LearnQueue {
   currentIndex: number;
   flags: boolean[];
   preloadedSessions: Record<number, SessionResponse>;
-  /** Images keyed by problem text, for passing to solver */
-  imageMap: Record<string, string>;
+  /** Images keyed by problem text. Populated when the student picks
+   *  a problem via image upload — the image needs to ride along to
+   *  the solver call so the AI sees what the student is asking
+   *  about. Keyed by text because problems in this queue are
+   *  identified by their text content. */
+  problemImageCache: Record<string, string>;
 }
 
 // ── Store ──
@@ -245,7 +249,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         currentIndex: 0,
         flags: new Array(problems.length).fill(false),
         preloadedSessions: {},
-        imageMap: imageRecord,
+        problemImageCache: imageRecord,
       },
     });
     // Start first session
@@ -299,7 +303,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     const nextProblem = learnQueue.problems[nextIndex];
-    const nextImage = learnQueue.imageMap[nextProblem];
+    const nextImage = learnQueue.problemImageCache[nextProblem];
 
     // Check if preloaded, or wait up to 15s for it
     let preloaded: SessionResponse | undefined | null = learnQueue.preloadedSessions[nextIndex];
