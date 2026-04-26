@@ -6,6 +6,7 @@ import {
   type TeacherAssignment,
   type TeacherDocument,
 } from "@/lib/api";
+import { hwGenStorageKey } from "@/lib/hw-gen-storage";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { useToast } from "@/components/ui/toast";
@@ -171,7 +172,7 @@ export function NewPracticeModal({
       // dot + existing job polling can pick it up. Keyed by the new
       // practice assignment id so concurrent clones don't clobber.
       if (resp.job_ids[0]) {
-        sessionStorage.setItem(`hw-gen-${resp.id}`, resp.job_ids[0]);
+        sessionStorage.setItem(hwGenStorageKey(resp.id), resp.job_ids[0]);
       }
       onCreated(resp.id, { startedGeneration: resp.job_ids.length > 0 });
     });
@@ -218,7 +219,7 @@ export function NewPracticeModal({
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
+        sessionStorage.setItem(hwGenStorageKey(id), job.id);
       } catch {
         startedGeneration = false;
       }

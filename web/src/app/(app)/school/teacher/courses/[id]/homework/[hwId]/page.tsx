@@ -19,6 +19,7 @@ import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
 } from "@/lib/constants";
+import { hwGenStorageKey } from "@/lib/hw-gen-storage";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { UnitMultiSelect } from "@/components/school/teacher/_pieces/unit-multi-select";
 import { SectionMultiSelect } from "@/components/school/teacher/_pieces/section-multi-select";
@@ -198,7 +199,7 @@ export default function HomeworkDetailPage({
   // homework page"), we restore it so the existing polling effect
   // shows a generating indicator and refreshes pending on done.
   useEffect(() => {
-    const key = `hw-gen-${assignmentId}`;
+    const key = hwGenStorageKey(assignmentId);
     const jobId = sessionStorage.getItem(key);
     if (!jobId) return;
     teacher
