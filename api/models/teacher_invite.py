@@ -1,4 +1,9 @@
-"""Teacher invite model — tracks email invitations for teacher onboarding."""
+"""Teacher invite model — tracks email invitations for teacher onboarding.
+
+The four status values defined here also describe SectionInvite's
+lifecycle — both use the same set verbatim, so SectionInvite-related
+code imports these same constants rather than duplicating them.
+"""
 
 import uuid
 from datetime import datetime
@@ -8,6 +13,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
+
+INVITE_STATUS_PENDING = "pending"
+INVITE_STATUS_ACCEPTED = "accepted"
+INVITE_STATUS_EXPIRED = "expired"
+INVITE_STATUS_REVOKED = "revoked"
 
 
 class TeacherInvite(Base):

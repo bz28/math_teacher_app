@@ -10,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
 
+ASSIGNMENT_STATUS_DRAFT = "draft"
+ASSIGNMENT_STATUS_PUBLISHED = "published"
+
 
 class Assignment(Base):
     __tablename__ = "assignments"

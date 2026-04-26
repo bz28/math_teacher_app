@@ -46,7 +46,13 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.section_invite import SectionInvite
 from api.models.session import Session
-from api.models.teacher_invite import TeacherInvite
+from api.models.teacher_invite import (
+    INVITE_STATUS_ACCEPTED,
+    INVITE_STATUS_EXPIRED,
+    INVITE_STATUS_PENDING,
+    INVITE_STATUS_REVOKED,
+    TeacherInvite,
+)
 from api.models.user import RefreshToken, User
 from api.models.work_submission import WorkSubmission
 from api.schemas.auth import (
@@ -78,12 +84,12 @@ async def check_email(body: CheckEmailRequest, db: AsyncSession = Depends(get_db
 async def validate_invite(token: str, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     """Validate a teacher invite token and return pre-fill data for the registration form."""
     invite = (await db.execute(
-        select(TeacherInvite).where(TeacherInvite.token == token, TeacherInvite.status == "pending")
+        select(TeacherInvite).where(TeacherInvite.token == token, TeacherInvite.status == INVITE_STATUS_PENDING)
     )).scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid or expired invite")
     if invite.expires_at < datetime.now(UTC):
-        invite.status = "expired"
+        invite.status = INVITE_STATUS_EXPIRED
         await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Invite has expired")
 
@@ -129,12 +135,15 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         )
     if body.invite_token:
         invite = (await db.execute(
-            select(TeacherInvite).where(TeacherInvite.token == body.invite_token, TeacherInvite.status == "pending")
+            select(TeacherInvite).where(
+                TeacherInvite.token == body.invite_token,
+                TeacherInvite.status == INVITE_STATUS_PENDING,
+            )
         )).scalar_one_or_none()
         if not invite:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired invite")
         if invite.expires_at < datetime.now(UTC):
-            invite.status = "expired"
+            invite.status = INVITE_STATUS_EXPIRED
             await db.commit()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite has expired")
         if invite.email.lower() != body.email.lower():
@@ -146,7 +155,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
 
         school_id = school.id
         role = "teacher"
-        invite.status = "accepted"
+        invite.status = INVITE_STATUS_ACCEPTED
 
     # Section invite (student): claim after user is created so we can enroll.
     section_invite: SectionInvite | None = None
@@ -216,7 +225,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
             course_id=section_course.id,
             student_id=user.id,
         ))
-        section_invite.status = "accepted"
+        section_invite.status = INVITE_STATUS_ACCEPTED
     if join_section_obj is not None:
         db.add(SectionEnrollment(
             section_id=join_section_obj.id,
@@ -281,7 +290,7 @@ async def claim_section_invite(
         ))
     if user.school_id is None and course is not None and course.school_id is not None:
         user.school_id = course.school_id
-    invite.status = "accepted"
+    invite.status = INVITE_STATUS_ACCEPTED
     await db.commit()
     return {"status": "ok", "section_id": str(invite.section_id)}
 
@@ -295,19 +304,19 @@ async def _load_section_invite(
     )).scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status == "revoked":
+    if invite.status == INVITE_STATUS_REVOKED:
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="This invite was revoked by the teacher. Ask them to send a new one.",
         )
-    if invite.status == "accepted":
+    if invite.status == INVITE_STATUS_ACCEPTED:
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="This invite has already been used.",
         )
-    if invite.status == "expired" or invite.expires_at < datetime.now(UTC):
+    if invite.status == INVITE_STATUS_EXPIRED or invite.expires_at < datetime.now(UTC):
         if invite.status != "expired":
-            invite.status = "expired"
+            invite.status = INVITE_STATUS_EXPIRED
             await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="This invite has expired")
     section = (await db.execute(
