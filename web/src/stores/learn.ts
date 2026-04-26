@@ -273,13 +273,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ...(image && { image_base64: image }),
         })
           .then((s) => {
-            const { learnQueue: lq } = get();
-            if (!lq) return;
-            set({
-              learnQueue: {
-                ...lq,
-                preloadedSessions: { ...lq.preloadedSessions, [queueIndex]: s },
-              },
+            // Functional setter so concurrent preload .then()s don't
+            // overwrite each other's writes — reading learnQueue via
+            // get() then calling set({...}) was racy: two preloads
+            // finishing in the same tick would both see the same
+            // pre-write snapshot, and the second one's spread would
+            // drop the first's preloadedSessions entry.
+            set((state) => {
+              const lq = state.learnQueue;
+              if (!lq) return state;
+              return {
+                learnQueue: {
+                  ...lq,
+                  preloadedSessions: {
+                    ...lq.preloadedSessions,
+                    [queueIndex]: s,
+                  },
+                },
+              };
             });
           })
           .catch(() => {}); // Silently skip — preload failures are non-critical
