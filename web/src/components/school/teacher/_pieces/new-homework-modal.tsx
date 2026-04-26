@@ -319,6 +319,7 @@ export function NewHomeworkModal({
               docsLoaded={docsLoaded}
               selectedDocs={selectedDocs}
               unitIds={[unitId]}
+              units={units}
               onToggleDoc={(id) =>
                 setSelectedDocs((prev) => {
                   const next = new Set(prev);
@@ -344,7 +345,7 @@ export function NewHomeworkModal({
             type="button"
             onClick={onCreateEmpty}
             disabled={busy || !title.trim() || !unitId}
-            className="text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
+            className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
           >
             Create empty draft
           </button>

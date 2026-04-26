@@ -49,6 +49,12 @@ interface Props {
    *  picker scopes the relevant materials. Default false preserves
    *  the multi-step wizard's full-list view. */
   filterToSelectedUnits?: boolean;
+  /** Pre-loaded units from the parent modal. When provided, the picker
+   *  skips its own fetch — avoids a duplicate round-trip when the
+   *  parent already needed the list (e.g. for its own topic picker).
+   *  Pass `null` while the parent is still loading. Omit entirely to
+   *  let the picker manage its own load. */
+  units?: TeacherUnit[] | null;
 }
 
 export function SourceMaterialPicker({
@@ -64,8 +70,15 @@ export function SourceMaterialPicker({
   onDismissPending,
   disabled,
   filterToSelectedUnits = false,
+  units: unitsProp,
 }: Props) {
-  const [units, setUnits] = useState<TeacherUnit[] | null>(null);
+  // When `unitsProp` is undefined (caller didn't supply), fall back to
+  // self-fetching. When `unitsProp` is null, treat that as "parent is
+  // still loading" — same loading state as before. Otherwise use the
+  // provided list directly.
+  const callerProvidesUnits = unitsProp !== undefined;
+  const [fetchedUnits, setFetchedUnits] = useState<TeacherUnit[] | null>(null);
+  const units = callerProvidesUnits ? unitsProp : fetchedUnits;
   const [search, setSearch] = useState("");
   // Per-group expand override. Absent = use the group's default; true
   // = teacher expanded; false = teacher collapsed. Defaults still
@@ -94,20 +107,22 @@ export function SourceMaterialPicker({
   // Units load independently of docs so we can label group headers
   // even before the doc list is ready. Failure is non-fatal — the
   // grouped view degrades to "Unknown unit" and search still works.
+  // Skipped entirely when the caller pre-loaded units (slim HW modal).
   useEffect(() => {
+    if (callerProvidesUnits) return;
     let cancelled = false;
     teacher
       .units(courseId)
       .then((r) => {
-        if (!cancelled) setUnits(r.units);
+        if (!cancelled) setFetchedUnits(r.units);
       })
       .catch(() => {
-        if (!cancelled) setUnits([]);
+        if (!cancelled) setFetchedUnits([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, callerProvidesUnits]);
 
   // Build groups: Step-1 units first (auto-expanded, even when empty
   // so a teacher who picked "Quadratics" doesn't wonder why no group
