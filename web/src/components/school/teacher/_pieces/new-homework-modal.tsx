@@ -231,7 +231,12 @@ export function NewHomeworkModal({
                     key={u.id}
                     label={u.name}
                     selected={unitId === u.id}
-                    disabled={busy}
+                    // Block topic switches while uploads are in flight.
+                    // Otherwise an in-flight upload's auto-select can land
+                    // AFTER our switch's selectedDocs clear, leaving a
+                    // freshly-uploaded doc id selected under a different
+                    // topic and silently forwarded on submit.
+                    disabled={busy || uploads.hasInflightUploads}
                     onToggle={() => onPickTopic(u.id)}
                   />
                 ))}
@@ -253,6 +258,7 @@ export function NewHomeworkModal({
                     setCountDraft(String(n));
                   }}
                   disabled={busy}
+                  aria-pressed={count === n}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                     count === n
                       ? "bg-primary text-white"
