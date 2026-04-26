@@ -157,7 +157,7 @@ def _serialize_item(
     return {
         "id": str(item.id),
         "course_id": str(item.course_id),
-        "unit_id": str(item.unit_id) if item.unit_id else None,
+        "unit_id": str(item.unit_id),
         "title": item.title,
         "question": item.question,
         "solution_steps": item.solution_steps,
@@ -182,7 +182,7 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
     return {
         "id": str(job.id),
         "course_id": str(job.course_id),
-        "unit_id": str(job.unit_id) if job.unit_id else None,
+        "unit_id": str(job.unit_id),
         "mode": job.mode,
         "status": job.status,
         "requested_count": job.requested_count,

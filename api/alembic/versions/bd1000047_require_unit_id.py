@@ -26,9 +26,12 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # documents.unit_id: SET NULL → RESTRICT, then NOT NULL.
-    op.drop_constraint("documents_unit_id_fkey", "documents", type_="foreignkey")
+    # `fk_documents_unit_id` is the explicit name from q1000008; we
+    # keep the same name on the new RESTRICT FK so the convention
+    # doesn't drift mid-table.
+    op.drop_constraint("fk_documents_unit_id", "documents", type_="foreignkey")
     op.create_foreign_key(
-        "documents_unit_id_fkey",
+        "fk_documents_unit_id",
         "documents", "units",
         ["unit_id"], ["id"],
         ondelete="RESTRICT",
@@ -95,9 +98,9 @@ def downgrade() -> None:
     )
 
     op.alter_column("documents", "unit_id", nullable=True)
-    op.drop_constraint("documents_unit_id_fkey", "documents", type_="foreignkey")
+    op.drop_constraint("fk_documents_unit_id", "documents", type_="foreignkey")
     op.create_foreign_key(
-        "documents_unit_id_fkey",
+        "fk_documents_unit_id",
         "documents", "units",
         ["unit_id"], ["id"],
         ondelete="SET NULL",
