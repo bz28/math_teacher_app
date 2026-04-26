@@ -741,10 +741,7 @@ export function WorkshopModal({
               {solutionOpen && (
                 <div className="mt-3 space-y-3">
                   {previewSteps && previewSteps.length > 0 ? (
-                    // Historical data can contain null entries from an
-                    // early version of the accept path. Skip them rather
-                    // than crashing on s.title.
-                    previewSteps.filter((s) => s != null).map((s, i) => {
+                    previewSteps.map((s, i) => {
                       const changed = stepChanged(i);
                       const prev = liveItem.solution_steps?.[i];
                       return (
