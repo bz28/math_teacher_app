@@ -279,14 +279,24 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
     set({ phase: "loading" });
 
     try {
-      // Wait for all answers to be resolved before grading
+      // Wait for all answers to be resolved before grading. Short-
+      // circuit when the solve batch has already settled with at
+      // least one permanent failure — those questions' answers will
+      // never arrive, and waiting 30s for the timeout fallback would
+      // just delay grading the answers we DO have.
       const answersResolved = mockTest.questions.every((q) => q.answer !== "");
-      if (!answersResolved) {
+      if (!answersResolved && !mockTest.solveSettled) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => { unsub(); resolve(); }, 30_000);
           const unsub = store.subscribe((state) => {
             if (!state.mockTest) { clearTimeout(timeout); unsub(); resolve(); return; }
-            if (state.mockTest.questions.every((q) => q.answer !== "")) {
+            // Resolve as soon as either every answer arrives OR the
+            // solve batch settles (so a late partial-failure also
+            // unblocks submit instead of riding the 30s timeout).
+            if (
+              state.mockTest.solveSettled ||
+              state.mockTest.questions.every((q) => q.answer !== "")
+            ) {
               clearTimeout(timeout);
               unsub();
               resolve();
