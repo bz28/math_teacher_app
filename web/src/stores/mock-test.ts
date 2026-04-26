@@ -180,7 +180,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         set({ mockTest: newMockTest, phase: "mock_test_preview" });
 
         // Fire all API calls in parallel, update each question as it resolves
-        const batchSessionId2 = id;
+        const batchSessionId = id;
         const promises = problems.map((p, i) => {
           const image = imageMap.get(p);
           return practiceApi.solve({
@@ -188,7 +188,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
             ...(image && { image_base64: image }),
           }).then((solveResult) => {
             const { mockTest: current } = get();
-            if (!current || current.sessionId !== batchSessionId2) return;
+            if (!current || current.sessionId !== batchSessionId) return;
             const updated = [...current.questions];
             updated[i] = solveResult.problem;
             set({ mockTest: { ...current, questions: updated } });
@@ -198,7 +198,7 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         // Same partial-failure handling as the generate branch above.
         Promise.allSettled(promises).then((results) => {
           const { mockTest: current } = get();
-          if (!current || current.sessionId !== batchSessionId2) return;
+          if (!current || current.sessionId !== batchSessionId) return;
           const failedCount = results.filter(
             (r) => r.status === "rejected",
           ).length;
