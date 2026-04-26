@@ -148,18 +148,27 @@ ROLE_TOOL_RESULT = "tool_result"
 
 # ── Activity summary thresholds ─────────────────────────────────────
 # Per-turn signals that promote a student turn to "notable" — the same
-# evidence the teacher panel inlines under the student's bubble. Tuned
-# starting numbers; revisit after we see real-teacher behavior.
-ACTIVITY_LARGE_PASTE_CHARS = 100      # single paste >= 100 chars
-ACTIVITY_FULL_PASTE_RATIO = 0.8       # total paste >= 80% of content len
-ACTIVITY_TAB_HIDDEN_LONG_MS = 30_000  # single blur >= 30s on this turn
-ACTIVITY_MOSTLY_HIDDEN_RATIO = 0.5    # cumulative blur >= 50% of seconds_on_turn
+# evidence the teacher panel inlines under the student's bubble.
+# Numbers are deliberately tight: a 10s tab-out and a 30%-of-turn
+# cumulative absence are both unusual enough that a teacher should
+# see something on the row. Revisit after real-teacher feedback.
+ACTIVITY_LARGE_PASTE_CHARS = 100        # single paste >= 100 chars
+ACTIVITY_FULL_PASTE_RATIO = 0.8         # total paste >= 80% of content len
+ACTIVITY_LONG_TAB_OUT_MS = 10_000       # any one tab-out >= 10s on this turn
+ACTIVITY_DOMINANT_TAB_OUT_RATIO = 0.3   # cumulative tab-out >= 30% of seconds_on_turn
 
 # Per-turn reason codes — frontend renders matching copy.
 ACTIVITY_REASON_LARGE_PASTE = "large_paste"
 ACTIVITY_REASON_FULL_PASTE = "full_paste"
-ACTIVITY_REASON_TAB_HIDDEN_LONG = "tab_hidden_long"
-ACTIVITY_REASON_MOSTLY_HIDDEN = "mostly_hidden"
+ACTIVITY_REASON_LONG_TAB_OUT = "long_tab_out"
+ACTIVITY_REASON_DOMINANT_TAB_OUT = "dominant_tab_out"
+
+ACTIVITY_REASON_VALUES = frozenset({
+    ACTIVITY_REASON_LARGE_PASTE,
+    ACTIVITY_REASON_FULL_PASTE,
+    ACTIVITY_REASON_LONG_TAB_OUT,
+    ACTIVITY_REASON_DOMINANT_TAB_OUT,
+})
 
 # Session-level levels.
 ACTIVITY_LEVEL_CLEAN = "clean"
@@ -1130,20 +1139,20 @@ def _notable_reasons_for_turn(
     blur_longest_ms = max(
         (int(b.get("duration_ms") or 0) for b in blurs), default=0,
     )
-    if blur_longest_ms >= ACTIVITY_TAB_HIDDEN_LONG_MS:
-        reasons.append(ACTIVITY_REASON_TAB_HIDDEN_LONG)
+    if blur_longest_ms >= ACTIVITY_LONG_TAB_OUT_MS:
+        reasons.append(ACTIVITY_REASON_LONG_TAB_OUT)
 
     seconds_on_turn = turn.seconds_on_turn
     if (
         seconds_on_turn is not None
         and seconds_on_turn > 0
-        and blur_total_ms >= ACTIVITY_MOSTLY_HIDDEN_RATIO * seconds_on_turn * 1000
-        # Don't double-count: a single >=30s blur on a short turn would
-        # already trip tab_hidden_long. mostly_hidden is for long turns
-        # where blur dominates without any single blur being huge.
-        and ACTIVITY_REASON_TAB_HIDDEN_LONG not in reasons
+        and blur_total_ms >= ACTIVITY_DOMINANT_TAB_OUT_RATIO * seconds_on_turn * 1000
+        # Don't double-count: a single long tab-out already trips
+        # long_tab_out. dominant_tab_out is for turns where many short
+        # tab-outs cumulatively dominate without any one being long.
+        and ACTIVITY_REASON_LONG_TAB_OUT not in reasons
     ):
-        reasons.append(ACTIVITY_REASON_MOSTLY_HIDDEN)
+        reasons.append(ACTIVITY_REASON_DOMINANT_TAB_OUT)
 
     return reasons
 
@@ -1164,8 +1173,8 @@ def compute_activity_summary(
     if not student_turns:
         return None
 
-    tab_hide_count = 0
-    tab_hide_total_ms = 0
+    tab_out_count = 0
+    tab_out_total_ms = 0
     paste_count = 0
     paste_total_chars = 0
     paste_largest_chars = 0
@@ -1175,8 +1184,8 @@ def compute_activity_summary(
     for t in student_turns:
         tel = t.telemetry or {}
         for ev in tel.get("focus_blur_events") or []:
-            tab_hide_count += 1
-            tab_hide_total_ms += int(ev.get("duration_ms") or 0)
+            tab_out_count += 1
+            tab_out_total_ms += int(ev.get("duration_ms") or 0)
         for ev in tel.get("paste_events") or []:
             byte_count = int(ev.get("byte_count") or 0)
             paste_count += 1
@@ -1206,8 +1215,8 @@ def compute_activity_summary(
     return {
         "level": level,
         "totals": {
-            "tab_hide_count": tab_hide_count,
-            "tab_hide_total_ms": tab_hide_total_ms,
+            "tab_out_count": tab_out_count,
+            "tab_out_total_ms": tab_out_total_ms,
             "paste_count": paste_count,
             "paste_total_chars": paste_total_chars,
             "paste_largest_chars": paste_largest_chars,

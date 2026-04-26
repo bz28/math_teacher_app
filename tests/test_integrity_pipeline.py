@@ -16,13 +16,16 @@ from typing import Any
 
 from api.core.integrity_ai import build_problems_briefing
 from api.core.integrity_pipeline import (
+    ACTIVITY_DOMINANT_TAB_OUT_RATIO,
+    ACTIVITY_LARGE_PASTE_CHARS,
     ACTIVITY_LEVEL_CLEAN,
     ACTIVITY_LEVEL_HEAVY,
     ACTIVITY_LEVEL_NOTABLE,
+    ACTIVITY_LONG_TAB_OUT_MS,
+    ACTIVITY_REASON_DOMINANT_TAB_OUT,
     ACTIVITY_REASON_FULL_PASTE,
     ACTIVITY_REASON_LARGE_PASTE,
-    ACTIVITY_REASON_MOSTLY_HIDDEN,
-    ACTIVITY_REASON_TAB_HIDDEN_LONG,
+    ACTIVITY_REASON_LONG_TAB_OUT,
     SELECTION_REASON_HIGHEST_DIFFERENTIATION,
     _build_agent_messages,
     _validate_rubric,
@@ -343,7 +346,7 @@ class TestComputeActivitySummary:
         assert summary["notable_turns"] == []
         # Totals are still populated for display, just zeros.
         assert summary["totals"]["paste_count"] == 0
-        assert summary["totals"]["tab_hide_count"] == 0
+        assert summary["totals"]["tab_out_count"] == 0
 
     def test_notable_when_one_large_paste(self) -> None:
         turns = [_student_turn(
@@ -399,7 +402,7 @@ class TestComputeActivitySummary:
             _student_turn(
                 1, "answer two",
                 seconds_on_turn=60,
-                blurs=[{"at": "x", "duration_ms": 45_000}],
+                blurs=[{"at": "x", "duration_ms": 15_000}],
             ),
         ]
         summary = compute_activity_summary(turns)
@@ -407,53 +410,53 @@ class TestComputeActivitySummary:
         assert summary["level"] == ACTIVITY_LEVEL_HEAVY
         assert len(summary["notable_turns"]) == 2
 
-    def test_tab_hidden_long_flags_single_long_blur(self) -> None:
+    def test_long_tab_out_flags_single_long_blur(self) -> None:
         turns = [_student_turn(
             0, "ok",
             seconds_on_turn=120,
-            blurs=[{"at": "x", "duration_ms": 35_000}],
+            blurs=[{"at": "x", "duration_ms": 15_000}],
         )]
         summary = compute_activity_summary(turns)
         assert summary is not None
         nt = summary["notable_turns"][0]
-        assert ACTIVITY_REASON_TAB_HIDDEN_LONG in nt["reasons"]
+        assert ACTIVITY_REASON_LONG_TAB_OUT in nt["reasons"]
         # Long blur alone is one notable signal, not full_paste — the
         # session lands at notable, not heavy.
         assert summary["level"] == ACTIVITY_LEVEL_NOTABLE
 
-    def test_mostly_hidden_flags_dominant_blur_without_single_long_event(self) -> None:
+    def test_dominant_tab_out_flags_proportional_blur_without_single_long_event(self) -> None:
         # Many short blurs that cumulatively dominate a long turn.
         # Each blur is under the long-event threshold, so only the
-        # mostly_hidden ratio rule should fire.
+        # dominant ratio rule should fire.
         turns = [_student_turn(
             0, "ok",
             seconds_on_turn=60,
             blurs=[
-                {"at": "a", "duration_ms": 10_000},
-                {"at": "b", "duration_ms": 10_000},
-                {"at": "c", "duration_ms": 12_000},
+                {"at": "a", "duration_ms": 8_000},
+                {"at": "b", "duration_ms": 7_000},
+                {"at": "c", "duration_ms": 6_000},
             ],
         )]
         summary = compute_activity_summary(turns)
         assert summary is not None
         nt = summary["notable_turns"][0]
-        assert ACTIVITY_REASON_MOSTLY_HIDDEN in nt["reasons"]
-        assert ACTIVITY_REASON_TAB_HIDDEN_LONG not in nt["reasons"]
+        assert ACTIVITY_REASON_DOMINANT_TAB_OUT in nt["reasons"]
+        assert ACTIVITY_REASON_LONG_TAB_OUT not in nt["reasons"]
 
-    def test_does_not_double_count_when_long_blur_dominates(self) -> None:
-        # One huge blur on a short turn — tab_hidden_long fires;
-        # mostly_hidden is suppressed to avoid stacking the same
-        # evidence twice.
+    def test_does_not_double_count_when_long_tab_out_dominates(self) -> None:
+        # One long blur on a short turn — long_tab_out fires;
+        # dominant_tab_out is suppressed so the same evidence isn't
+        # stacked under two reason codes.
         turns = [_student_turn(
             0, "ok",
             seconds_on_turn=40,
-            blurs=[{"at": "x", "duration_ms": 35_000}],
+            blurs=[{"at": "x", "duration_ms": 15_000}],
         )]
         summary = compute_activity_summary(turns)
         assert summary is not None
         nt = summary["notable_turns"][0]
-        assert ACTIVITY_REASON_TAB_HIDDEN_LONG in nt["reasons"]
-        assert ACTIVITY_REASON_MOSTLY_HIDDEN not in nt["reasons"]
+        assert ACTIVITY_REASON_LONG_TAB_OUT in nt["reasons"]
+        assert ACTIVITY_REASON_DOMINANT_TAB_OUT not in nt["reasons"]
 
     def test_totals_aggregate_across_turns(self) -> None:
         turns = [
@@ -478,6 +481,83 @@ class TestComputeActivitySummary:
         assert totals["paste_count"] == 2
         assert totals["paste_total_chars"] == 125
         assert totals["paste_largest_chars"] == 75
-        assert totals["tab_hide_count"] == 2
-        assert totals["tab_hide_total_ms"] == 13_000
+        assert totals["tab_out_count"] == 2
+        assert totals["tab_out_total_ms"] == 13_000
         assert totals["long_pause_count"] == 3
+
+    # ── Threshold boundary cases ────────────────────────────────────
+    # Pin the >= semantic at the exact threshold value so a future
+    # off-by-one (e.g. accidentally switching to >) is caught.
+
+    def test_large_paste_fires_at_exactly_threshold(self) -> None:
+        turns = [_student_turn(
+            0, "x" * ACTIVITY_LARGE_PASTE_CHARS,
+            seconds_on_turn=10,
+            pastes=[{"at": "x", "byte_count": ACTIVITY_LARGE_PASTE_CHARS}],
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_LARGE_PASTE in nt["reasons"]
+
+    def test_large_paste_does_not_fire_one_below_threshold(self) -> None:
+        turns = [_student_turn(
+            0, "x" * (ACTIVITY_LARGE_PASTE_CHARS - 1),
+            seconds_on_turn=10,
+            pastes=[{"at": "x", "byte_count": ACTIVITY_LARGE_PASTE_CHARS - 1}],
+        )]
+        summary = compute_activity_summary(turns)
+        # Either None (no notable turns) or the turn isn't flagged.
+        assert summary is None or all(
+            ACTIVITY_REASON_LARGE_PASTE not in nt["reasons"]
+            for nt in summary["notable_turns"]
+        )
+
+    def test_long_tab_out_fires_at_exactly_threshold(self) -> None:
+        turns = [_student_turn(
+            0, "ok",
+            seconds_on_turn=60,
+            blurs=[{"at": "x", "duration_ms": ACTIVITY_LONG_TAB_OUT_MS}],
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_LONG_TAB_OUT in nt["reasons"]
+
+    def test_long_tab_out_does_not_fire_one_below_threshold(self) -> None:
+        turns = [_student_turn(
+            0, "ok",
+            seconds_on_turn=60,
+            blurs=[{"at": "x", "duration_ms": ACTIVITY_LONG_TAB_OUT_MS - 1}],
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is None or all(
+            ACTIVITY_REASON_LONG_TAB_OUT not in nt["reasons"]
+            for nt in summary["notable_turns"]
+        )
+
+    def test_dominant_tab_out_fires_at_exactly_threshold(self) -> None:
+        # Build cumulative blur exactly at the ratio boundary, with
+        # each individual blur kept under the long-tab-out threshold.
+        seconds_on_turn = 60
+        target_ms = int(ACTIVITY_DOMINANT_TAB_OUT_RATIO * seconds_on_turn * 1000)
+        per_event = ACTIVITY_LONG_TAB_OUT_MS - 1
+        # Spread the target across enough events to keep each one
+        # under the long-tab-out threshold.
+        events = [
+            {"at": str(i), "duration_ms": per_event}
+            for i in range(target_ms // per_event)
+        ]
+        remainder = target_ms - sum(e["duration_ms"] for e in events)
+        if remainder > 0:
+            events.append({"at": "tail", "duration_ms": remainder})
+        turns = [_student_turn(
+            0, "ok",
+            seconds_on_turn=seconds_on_turn,
+            blurs=events,
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_DOMINANT_TAB_OUT in nt["reasons"]
+        assert ACTIVITY_REASON_LONG_TAB_OUT not in nt["reasons"]
