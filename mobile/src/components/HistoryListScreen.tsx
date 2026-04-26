@@ -27,16 +27,15 @@ export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSess
   const [error, setError] = useState(false);
 
   const fetchPage = useCallback(async (offset: number) => {
-    const res = await getSessionHistory(subject, PAGE_SIZE, offset);
-    return res;
+    return await getSessionHistory(subject, PAGE_SIZE, offset);
   }, [subject]);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetchPage(0);
-        setItems(res.items);
-        setHasMore(res.has_more);
+        const historyPage = await fetchPage(0);
+        setItems(historyPage.items);
+        setHasMore(historyPage.has_more);
         setError(false);
       } catch {
         setError(true);
@@ -50,9 +49,9 @@ export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSess
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
-      const res = await fetchPage(items.length);
-      setItems((prev) => [...prev, ...res.items]);
-      setHasMore(res.has_more);
+      const historyPage = await fetchPage(items.length);
+      setItems((prev) => [...prev, ...historyPage.items]);
+      setHasMore(historyPage.has_more);
     } catch {
       // Silently fail
     } finally {
@@ -76,7 +75,7 @@ export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSess
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>Couldn't load history</Text>
-          <AnimatedPressable onPress={() => { setLoading(true); setError(false); fetchPage(0).then((res) => { setItems(res.items); setHasMore(res.has_more); }).catch(() => setError(true)).finally(() => setLoading(false)); }}>
+          <AnimatedPressable onPress={() => { setLoading(true); setError(false); fetchPage(0).then((historyPage) => { setItems(historyPage.items); setHasMore(historyPage.has_more); }).catch(() => setError(true)).finally(() => setLoading(false)); }}>
             <Text style={{ color: colors.primary, ...typography.bodyBold, fontSize: 14 }}>Try Again</Text>
           </AnimatedPressable>
         </View>

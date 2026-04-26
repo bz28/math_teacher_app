@@ -140,13 +140,13 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
     },
 
     submitMockTest: async () => {
-      const { mockTest } = get();
-      if (!mockTest) return;
+      const initialMockTest = get().mockTest;
+      if (!initialMockTest) return;
 
       set({ phase: "loading" });
       try {
         // Wait for all correct answers to be resolved
-        const answersResolved = mockTest.questions.every((q) => q.answer !== "");
+        const answersResolved = initialMockTest.questions.every((q) => q.answer !== "");
         if (!answersResolved) {
           await new Promise<void>((resolve) => {
             const unsub = subscribe((state) => {
@@ -160,18 +160,18 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
         }
 
         // Re-read after potential wait
-        const mt = get().mockTest;
-        if (!mt) return;
+        const mockTest = get().mockTest;
+        if (!mockTest) return;
 
         // Batch check all answered questions
-        const checkPromises = mt.questions.map(async (q, i) => {
-          const userAnswer = mt.answers[i];
+        const checkPromises = mockTest.questions.map(async (q, i) => {
+          const userAnswer = mockTest.answers[i];
           if (!userAnswer) {
             return { question: q.question, userAnswer: null, correctAnswer: q.answer, isCorrect: null };
           }
 
           // MC mode: student selected an exact option, no API call needed
-          if (mt.multipleChoice) {
+          if (mockTest.multipleChoice) {
             return { question: q.question, userAnswer, correctAnswer: q.answer, isCorrect: userAnswer.trim() === q.answer.trim() };
           }
 
@@ -217,30 +217,30 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
 
         if (imagesToDiagnose.length > 0) {
           const CONCURRENCY = 3;
-          const processChunk = async (chunk: typeof imagesToDiagnose) => {
+          const diagnoseChunk = async (chunk: typeof imagesToDiagnose) => {
             await Promise.allSettled(
               chunk.map(async ({ index, image }) => {
                 try {
-                  const q = currentMockTest.questions[index];
-                  const r = results[index];
-                  const resp = await submitWork(
+                  const question = currentMockTest.questions[index];
+                  const result = results[index];
+                  const workResponse = await submitWork(
                     image,
-                    q.question,
-                    r?.userAnswer ?? "",
-                    r?.isCorrect === true,
+                    question.question,
+                    result?.userAnswer ?? "",
+                    result?.isCorrect === true,
                     get().subject,
                   );
-                  const latestMt = get().mockTest;
-                  if (!latestMt || !resp.diagnosis) return;
+                  const latestMockTest = get().mockTest;
+                  if (!latestMockTest || !workResponse.diagnosis) return;
 
-                  const diagnosis = resp.diagnosis;
-                  const newSubs = [...latestMt.workSubmissions];
+                  const diagnosis = workResponse.diagnosis;
+                  const newSubs = [...latestMockTest.workSubmissions];
                   newSubs[index] = diagnosis;
-                  const updatedFlags = [...latestMt.flags];
+                  const updatedFlags = [...latestMockTest.flags];
                   if (diagnosis.has_issues && !updatedFlags[index]) {
                     updatedFlags[index] = true;
                   }
-                  set({ mockTest: { ...latestMt, workSubmissions: newSubs, flags: updatedFlags } });
+                  set({ mockTest: { ...latestMockTest, workSubmissions: newSubs, flags: updatedFlags } });
                 } catch {
                   // Diagnosis failed silently
                 }
@@ -249,7 +249,7 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
           };
 
           for (let i = 0; i < imagesToDiagnose.length; i += CONCURRENCY) {
-            await processChunk(imagesToDiagnose.slice(i, i + CONCURRENCY));
+            await diagnoseChunk(imagesToDiagnose.slice(i, i + CONCURRENCY));
           }
         }
       } catch (e) {

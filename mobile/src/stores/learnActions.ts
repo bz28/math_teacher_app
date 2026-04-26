@@ -159,12 +159,12 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
 
       set({ phase: "thinking", error: null });
       try {
-        const resp = await respondToStep(session.id, "", true);
+        const tutorResponse = await respondToStep(session.id, "", true);
         const updated = await getSession(session.id);
         // If the backend marked the session completed (last step advanced),
         // land directly on the completion phase instead of forcing the user
         // to tap "I get it" a second time.
-        const isDone = resp.action === "completed" || updated.status === "completed";
+        const isDone = tutorResponse.action === "completed" || updated.status === "completed";
         set({
           session: updated,
           lastResponse: null,
@@ -193,17 +193,17 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       });
 
       try {
-        const resp = await respondToStep(session.id, question);
+        const tutorResponse = await respondToStep(session.id, question);
         const updated = await getSession(session.id);
         const latest = get().chatHistory;
         const stepHistory = latest[stepIndex] ?? [];
         set({
           session: updated,
-          lastResponse: resp,
+          lastResponse: tutorResponse,
           phase: "awaiting_input",
           chatHistory: {
             ...latest,
-            [stepIndex]: [...stepHistory, { role: "tutor", text: resp.feedback }],
+            [stepIndex]: [...stepHistory, { role: "tutor", text: tutorResponse.feedback }],
           },
         });
       } catch (e) {
