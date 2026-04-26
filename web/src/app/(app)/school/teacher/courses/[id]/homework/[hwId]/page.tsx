@@ -7,6 +7,7 @@ import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
   enterPreviewMode,
+  exitPreviewMode,
   type BankItem,
   type BankJob,
   type SubmissionsInboxRow,
@@ -356,16 +357,35 @@ export default function HomeworkDetailPage({
   //
   // loadUser() is critical — without it the auth store still says
   // role=teacher and the /school/student layout's role guard redirects
-  // back to /home before the page renders. Mirrors the existing "Try
-  // as Student" pattern in app-layout.tsx:200-213.
+  // back to /home before the page renders. If loadUser fails after
+  // the token swap, restore the teacher tokens so the teacher isn't
+  // stranded with student auth and surface the failure (run() catches
+  // the throw and renders error). Independent local busy flag so the
+  // button can show "Switching…" without conflating with other saves.
+  const [previewLoading, setPreviewLoading] = useState(false);
   const onPreviewAsStudent = () =>
     run(async () => {
-      const tokens = await teacher.previewAsStudent();
-      enterPreviewMode(tokens);
-      await loadUser();
-      router.push(
-        `/school/student/courses/${courseId}/homework/${assignmentId}`,
-      );
+      if (previewLoading) return;
+      setPreviewLoading(true);
+      try {
+        const tokens = await teacher.previewAsStudent();
+        enterPreviewMode(tokens);
+        try {
+          await loadUser();
+        } catch (e) {
+          exitPreviewMode();
+          throw new Error(
+            e instanceof Error
+              ? `Couldn't enter preview: ${e.message}`
+              : "Couldn't enter preview mode. Please try again.",
+          );
+        }
+        router.push(
+          `/school/student/courses/${courseId}/homework/${assignmentId}`,
+        );
+      } finally {
+        setPreviewLoading(false);
+      }
     });
 
   // Inline auto-save runner. Optimistic — applies the change to the
@@ -706,7 +726,13 @@ export default function HomeworkDetailPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditingProblems(true)}
+                  onClick={() => {
+                    // Drop any in-flight publish soft-confirm so the
+                    // teacher doesn't return from removal mode to a
+                    // stale "Publish anyway?" bar from before.
+                    setConfirmingNoDueDate(false);
+                    setEditingProblems(true);
+                  }}
                   disabled={isPublished || problems.length === 0}
                   title={
                     isPublished
@@ -860,6 +886,7 @@ export default function HomeworkDetailPage({
         canPublish={canPublish}
         missingForPublish={missingForPublish}
         busy={busy}
+        previewLoading={previewLoading}
         onPublish={handlePublishClick}
         onUnpublish={unpublish}
         onPreviewAsStudent={onPreviewAsStudent}
@@ -1623,6 +1650,7 @@ function ActionBar({
   canPublish,
   missingForPublish,
   busy,
+  previewLoading,
   onPublish,
   onUnpublish,
   onPreviewAsStudent,
@@ -1634,6 +1662,7 @@ function ActionBar({
   canPublish: boolean;
   missingForPublish: string[];
   busy: boolean;
+  previewLoading: boolean;
   onPublish: () => void;
   onUnpublish: () => void;
   onPreviewAsStudent: () => void;
@@ -1646,7 +1675,7 @@ function ActionBar({
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border-light bg-surface/95 px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] backdrop-blur"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {confirmingNoDueDate ? (
           <>
             <span className="min-w-0 flex-1 text-xs font-semibold text-amber-900 dark:text-amber-200">
@@ -1683,10 +1712,10 @@ function ActionBar({
               <button
                 type="button"
                 onClick={onPreviewAsStudent}
-                disabled={busy}
+                disabled={busy || previewLoading}
                 className="text-xs font-semibold text-text-secondary hover:text-primary disabled:opacity-50"
               >
-                Preview as student →
+                {previewLoading ? "Switching…" : "Preview as student →"}
               </button>
               {isPublished ? (
                 <button
