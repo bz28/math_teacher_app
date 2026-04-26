@@ -36,10 +36,6 @@ export interface LearnQueue {
   imageMap: Record<string, string>;
 }
 
-
-
-
-
 // ── Store ──
 
 interface SessionState {
@@ -58,8 +54,6 @@ interface SessionState {
 
   // Learn queue
   learnQueue: LearnQueue | null;
-
-
 
   // Problem input
   problemQueue: { text: string; image?: string }[];
@@ -82,20 +76,14 @@ interface SessionState {
   continueAsking: () => void;
   finishAsking: () => void;
 
-
   // Learn queue actions
   startLearnQueue: (problems: string[]) => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   toggleLearnFlag: (index: number) => void;
 
-
-
   // Reset
   reset: () => void;
 }
-
-
-
 
 const initialState = {
   session: null,
@@ -353,7 +341,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ phase: "completed" as SessionPhase });
   },
 
-
   toggleLearnFlag(index) {
     const { learnQueue } = get();
     if (!learnQueue) return;
@@ -361,7 +348,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     newFlags[index] = !newFlags[index];
     set({ learnQueue: { ...learnQueue, flags: newFlags } });
   },
-
 
   reset() {
     set(initialState);
