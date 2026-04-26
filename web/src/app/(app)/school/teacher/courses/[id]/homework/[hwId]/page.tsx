@@ -357,11 +357,13 @@ export default function HomeworkDetailPage({
   //
   // loadUser() is critical — without it the auth store still says
   // role=teacher and the /school/student layout's role guard redirects
-  // back to /home before the page renders. If loadUser fails after
-  // the token swap, restore the teacher tokens so the teacher isn't
-  // stranded with student auth and surface the failure (run() catches
-  // the throw and renders error). Independent local busy flag so the
-  // button can show "Switching…" without conflating with other saves.
+  // back to /home before the page renders. loadUser swallows its own
+  // errors and resolves with user=null (auth.ts:53-62), so we can't
+  // rely on a throw to detect failure — we read the post-call user
+  // state and treat null as failure: restore teacher tokens so the
+  // teacher isn't stranded with student auth, then throw so run()
+  // surfaces the error. Independent local busy flag so the button can
+  // show "Switching…" without conflating with other saves.
   const [previewLoading, setPreviewLoading] = useState(false);
   const onPreviewAsStudent = () =>
     run(async () => {
@@ -370,14 +372,12 @@ export default function HomeworkDetailPage({
       try {
         const tokens = await teacher.previewAsStudent();
         enterPreviewMode(tokens);
-        try {
-          await loadUser();
-        } catch (e) {
+        await loadUser();
+        const previewUser = useAuthStore.getState().user;
+        if (!previewUser) {
           exitPreviewMode();
           throw new Error(
-            e instanceof Error
-              ? `Couldn't enter preview: ${e.message}`
-              : "Couldn't enter preview mode. Please try again.",
+            "Couldn't enter preview mode. Please try again.",
           );
         }
         router.push(
