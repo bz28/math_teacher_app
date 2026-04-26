@@ -56,9 +56,10 @@ export default function AccountPage() {
         window.location.assign(url);
         return;
       }
-      // null = both RC apps returned no managementURL. Most likely
-      // means the subscription is on a different provider or the user
-      // never bought through RC — surface so they can email support.
+      // null = both configured RevenueCat projects (the weekly + annual
+      // app keys) returned no managementURL. Usually means the user
+      // never bought through RC, or their subscription lives on a
+      // different provider — direct them to support.
       toast.error(
         "Couldn't open the management portal. Email support@veradicai.com if this keeps happening.",
       );

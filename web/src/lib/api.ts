@@ -537,6 +537,17 @@ export const session = {
 // ── Practice endpoints ──
 
 export const practice = {
+  /**
+   * Two distinct uses, distinguished by the data shape:
+   * - `{ problem | problems, count: <N>, subject, difficulty? }` — generate
+   *   N similar question texts (no answers). Used by mock-test and practice
+   *   batch setup to feed the preview screens.
+   * - `{ problem: <text>, count: 0, subject, image_base64? }` — solve a
+   *   single question and return its answer + distractors. The `count: 0`
+   *   value is the magic "just solve, don't generate" signal the backend
+   *   keys on. Used by the per-question background solve in mock-test and
+   *   practice stores.
+   */
   generate(data: { problem?: string; problems?: string[]; count?: number; subject: string; image_base64?: string; difficulty?: string }) {
     return apiFetch<PracticeGenerateResponse>("/practice/generate", {
       method: "POST",
@@ -809,7 +820,10 @@ export interface StudentGradeMissingHw {
   due_at: string | null;
 }
 
-/** Full published-grade record for one student in one section. */
+/** Full published-grade record for one student in one section.
+ *  Returned by the teacher endpoint `studentGrades(courseId, sectionId,
+ *  studentId)`. Not to be confused with `MyGradesResponse` (the
+ *  student-side "list of all my grades" shape further down). */
 export interface StudentGradesResponse {
   student: {
     id: string;
@@ -1513,6 +1527,11 @@ export interface StudentSubmission {
   submission_id: string;
   submitted_at: string;
   is_late: boolean;
+  /** Full data URL (`data:image/<type>;base64,...`), not a raw base64
+   *  payload — the SubmissionPanel keeps the prefix when storing so
+   *  consumers can drop it straight into an `<img src>`. Null when
+   *  the image hasn't been written yet (rare; submission flow stamps
+   *  it before the row is returned). */
   image_data: string | null;
   /** Full Vision extraction (all steps + per-problem final answers +
    *  overall confidence). Null when extraction hasn't run, failed,
@@ -1593,6 +1612,9 @@ export interface StudentDashboardResponse {
   recently_graded: DashboardGrade[];
 }
 
+/** Student-side list of every published grade across every enrolled
+ *  section. Returned by `getAllGrades()`. Not to be confused with
+ *  `StudentGradesResponse` (the teacher-side per-student detail shape). */
 export interface MyGradesResponse {
   grades: DashboardGrade[];
 }

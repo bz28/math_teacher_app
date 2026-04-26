@@ -185,7 +185,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async askAboutStep(question) {
     const { session } = get();
     if (!session) return;
-    // Clamp to valid range to match UI key (stepIndex)
+    // On the completed phase the server reports current_step ===
+    // total_steps (one past the last visible step). Step-chat is keyed
+    // by the last visible step, so clamp to total_steps - 1 to keep
+    // both the UI key and any out-of-range writes well-formed.
     const stepNum = Math.min(session.current_step, session.total_steps - 1);
 
     // Add user message to chat and set thinking
