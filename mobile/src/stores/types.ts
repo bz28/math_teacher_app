@@ -95,7 +95,7 @@ export interface SessionState {
   setPracticeCount: (count: number) => void;
   startSession: (problem: string, mode?: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
-  startPracticeBatch: (problem: string, similarCount: number) => Promise<void>;
+  startPracticeBatch: (problem: string) => Promise<void>;
   startLearnQueue: (problems: string[]) => Promise<void>;
   savePracticeAnswer: (index: number, answer: string) => void;
   setPracticeIndex: (index: number) => void;

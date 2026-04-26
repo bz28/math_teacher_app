@@ -2,7 +2,7 @@ import {
   completePracticeBatchSession,
   createPracticeBatchSession,
   EntitlementError,
-  generatePracticeProblems,
+  solvePracticeProblem,
   type PracticeProblem,
 } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
@@ -31,16 +31,16 @@ function createBatch(
 
 export function createPracticeActions(set: StoreSet, get: StoreGet) {
   return {
-    startPracticeBatch: async (problem: string, count: number) => {
+    startPracticeBatch: async (problem: string) => {
       const { subject } = get();
       set({ ...initialState, subject, phase: "loading" });
       try {
-        const [{ problems }, { id: sessionId }] = await Promise.all([
-          generatePracticeProblems(problem, count, subject),
+        const [{ problem: solved }, { id: sessionId }] = await Promise.all([
+          solvePracticeProblem(problem, subject),
           createPracticeBatchSession(problem),
         ]);
         set({
-          practiceBatch: createBatch(problems, sessionId),
+          practiceBatch: createBatch([solved], sessionId),
           phase: "practice_active",
         });
       } catch (e) {

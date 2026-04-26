@@ -2,9 +2,9 @@ import {
   createPracticeBatchSession,
   createSession,
   EntitlementError,
-  generatePracticeProblems,
   getSession,
   respondToStep,
+  solvePracticeProblem,
 } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
 import { initialState, type SessionPhase, type StoreGet, type StoreSet } from "./types";
@@ -129,10 +129,10 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       set({ ...initialState, subject, phase: "loading" });
       try {
         const [results, sessionId] = await Promise.all([
-          Promise.all(flaggedProblems.map((p) => generatePracticeProblems(p, 1, subject))),
+          Promise.all(flaggedProblems.map((p) => solvePracticeProblem(p, subject))),
           createPracticeBatchSession(flaggedProblems[0]).then((r) => r.id).catch(() => null),
         ]);
-        const practiceProblemsList = results.map((r) => r.problems[0]);
+        const practiceProblemsList = results.map((r) => r.problem);
 
         set({
           practiceBatch: {

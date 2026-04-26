@@ -186,7 +186,7 @@ function AppRoot() {
             sessionId={reviewSessionId}
             onBack={() => setScreen("solve")}
             onPracticeSimilar={async (problem) => {
-              await startPracticeBatch(problem, 1);
+              await startPracticeBatch(problem);
               setScreen("session");
             }}
             onResume={async (sessionId) => {

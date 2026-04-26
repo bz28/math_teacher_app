@@ -3,7 +3,7 @@ import {
   completeMockTestSession,
   createMockTestSession,
   EntitlementError,
-  generatePracticeProblems,
+  solvePracticeProblem,
   submitWork,
   type PracticeProblem,
 } from "../services/api";
@@ -23,9 +23,13 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
       if (generateCount > 0) {
         set({ ...initialState, subject, phase: "loading" });
         try {
+          // NOTE: this concatenates every source problem into one string and
+          // sends it as a single solve request — pre-existing behavior. The
+          // backend never honored a count beyond 1 here; the consumer
+          // receives one PracticeProblem regardless of generateCount.
           const seedText = problems.map((p, i) => `Problem ${i + 1}: ${p}`).join("\n");
-          const { problems: generated } = await generatePracticeProblems(seedText, generateCount, subject);
-          if (generated.length === 0) throw new Error("Failed to generate exam questions");
+          const { problem: generatedOne } = await solvePracticeProblem(seedText, subject);
+          const generated = [generatedOne];
 
           set({
             mockTest: {
@@ -84,14 +88,12 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
 
       // Fire all API calls in parallel, update each question as it resolves
       const promises = problems.map((p, i) =>
-        generatePracticeProblems(p, 0, subject).then((res) => {
-          if (res.problems[0]) {
-            const { mockTest: mt } = get();
-            if (!mt) return;
-            const updated = [...mt.questions];
-            updated[i] = res.problems[0];
-            set({ mockTest: { ...mt, questions: updated } });
-          }
+        solvePracticeProblem(p, subject).then((res) => {
+          const { mockTest: mt } = get();
+          if (!mt) return;
+          const updated = [...mt.questions];
+          updated[i] = res.problem;
+          set({ mockTest: { ...mt, questions: updated } });
         }),
       );
 
