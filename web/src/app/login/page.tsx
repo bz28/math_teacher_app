@@ -62,6 +62,18 @@ function LoginPageContent() {
     clearTokens();
   }, []);
 
+  // Close the forgot-password overlay on Escape — the keyboard
+  // counterpart to the backdrop click. Only listens while the overlay
+  // is mounted to avoid stealing Escape from the rest of the page.
+  useEffect(() => {
+    if (!showForgot) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowForgot(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [showForgot]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     try {
