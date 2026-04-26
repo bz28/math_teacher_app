@@ -43,6 +43,18 @@ interface Props {
   onRetryPending: (item: PendingUpload) => void;
   onDismissPending: (id: string) => void;
   disabled: boolean;
+  /** When true, only the picked-unit groups (+ Unsorted) are shown by
+   *  default; other top-level units are hidden behind a "Show all
+   *  materials" toggle. Used by the slim HW modal where the topic
+   *  picker scopes the relevant materials. Default false preserves
+   *  the multi-step wizard's full-list view. */
+  filterToSelectedUnits?: boolean;
+  /** Pre-loaded units from the parent modal. When provided, the picker
+   *  skips its own fetch — avoids a duplicate round-trip when the
+   *  parent already needed the list (e.g. for its own topic picker).
+   *  Pass `null` while the parent is still loading. Omit entirely to
+   *  let the picker manage its own load. */
+  units?: TeacherUnit[] | null;
 }
 
 export function SourceMaterialPicker({
@@ -57,8 +69,16 @@ export function SourceMaterialPicker({
   onRetryPending,
   onDismissPending,
   disabled,
+  filterToSelectedUnits = false,
+  units: unitsProp,
 }: Props) {
-  const [units, setUnits] = useState<TeacherUnit[] | null>(null);
+  // When `unitsProp` is undefined (caller didn't supply), fall back to
+  // self-fetching. When `unitsProp` is null, treat that as "parent is
+  // still loading" — same loading state as before. Otherwise use the
+  // provided list directly.
+  const callerProvidesUnits = unitsProp !== undefined;
+  const [fetchedUnits, setFetchedUnits] = useState<TeacherUnit[] | null>(null);
+  const units = callerProvidesUnits ? unitsProp : fetchedUnits;
   const [search, setSearch] = useState("");
   // Per-group expand override. Absent = use the group's default; true
   // = teacher expanded; false = teacher collapsed. Defaults still
@@ -66,6 +86,20 @@ export function SourceMaterialPicker({
   const [expandOverrides, setExpandOverrides] = useState<
     Map<string, boolean>
   >(new Map());
+  // Filter-mode escape hatch: switches the picker from "selected-unit
+  // groups only" back to the full grouped list. Reset whenever the
+  // selection changes so switching topic always returns to the focused
+  // view. Derived during render (not in an effect) to avoid the
+  // cascading-render lint and an extra paint.
+  const [showAll, setShowAll] = useState(false);
+  const unitsKey = unitIds.join(",");
+  const [lastUnitsKey, setLastUnitsKey] = useState(unitsKey);
+  if (lastUnitsKey !== unitsKey) {
+    setLastUnitsKey(unitsKey);
+    setShowAll(false);
+  }
+  const inFilterMode =
+    filterToSelectedUnits && !showAll && unitIds.length > 0;
   const [previewDoc, setPreviewDoc] = useState<TeacherDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -73,20 +107,22 @@ export function SourceMaterialPicker({
   // Units load independently of docs so we can label group headers
   // even before the doc list is ready. Failure is non-fatal — the
   // grouped view degrades to "Unknown unit" and search still works.
+  // Skipped entirely when the caller pre-loaded units (slim HW modal).
   useEffect(() => {
+    if (callerProvidesUnits) return;
     let cancelled = false;
     teacher
       .units(courseId)
       .then((r) => {
-        if (!cancelled) setUnits(r.units);
+        if (!cancelled) setFetchedUnits(r.units);
       })
       .catch(() => {
-        if (!cancelled) setUnits([]);
+        if (!cancelled) setFetchedUnits([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, callerProvidesUnits]);
 
   // Build groups: Step-1 units first (auto-expanded, even when empty
   // so a teacher who picked "Quadratics" doesn't wonder why no group
@@ -95,8 +131,8 @@ export function SourceMaterialPicker({
   // "Algebra / Practice" shows under "Algebra". Docs whose unit_id
   // points at a deleted/missing unit are bucketed into Unsorted so
   // they remain attachable instead of silently disappearing.
-  const groups = useMemo(() => {
-    if (!units) return [];
+  const { groups, hiddenGroupsCount } = useMemo(() => {
+    if (!units) return { groups: [], hiddenGroupsCount: 0 };
     const tops = topUnits(units);
     const topIds = new Set(tops.map((u) => u.id));
     // Defensive: if Step 1 somehow left unitIds empty (shouldn't happen
@@ -130,10 +166,17 @@ export function SourceMaterialPicker({
     }
 
     // 2. Other top-level units in their natural order. Skip empty.
+    //    In filter mode we count these as hidden (so the parent can
+    //    surface a "Show all materials" toggle) instead of rendering.
+    let hidden = 0;
     for (const u of tops) {
       if (taken.has(u.id)) continue;
       const groupDocs = docsForTop(u.id);
       if (groupDocs.length === 0) continue;
+      if (inFilterMode) {
+        hidden += 1;
+        continue;
+      }
       out.push({
         id: u.id,
         label: u.name,
@@ -145,7 +188,8 @@ export function SourceMaterialPicker({
     // 3. Unsorted: real unsorted (unit_id === null) plus orphans
     //    (unit_id refers to a deleted/missing top-level unit). Without
     //    this bucket, orphans would be excluded from every group and
-    //    invisible in the picker.
+    //    invisible in the picker. Always shown — uploads inside the
+    //    modal land here pre-tag and need to remain selectable.
     const unsorted = docs.filter((d) => {
       if (d.unit_id === null) return true;
       const topId = topUnitIdOf(units, d.unit_id);
@@ -160,8 +204,8 @@ export function SourceMaterialPicker({
       });
     }
 
-    return out;
-  }, [docs, units, unitIds]);
+    return { groups: out, hiddenGroupsCount: hidden };
+  }, [docs, units, unitIds, inFilterMode]);
 
   const expandedFor = (groupId: string, defaultExpanded: boolean) =>
     expandOverrides.get(groupId) ?? defaultExpanded;
@@ -178,13 +222,31 @@ export function SourceMaterialPicker({
   // Search runs across all docs (including subfolder ones), case-
   // insensitive substring on filename. Hides group structure and shows
   // a flat list with a unit badge per row.
+  // In filter mode the search pool matches the visible groups —
+  // searching while filtered to "Matrices" shouldn't surface hits from
+  // hidden topics, otherwise the teacher could pick a file that
+  // disappears from view the moment they clear the search box.
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
-    return docs
+    // In filter mode we can't compute the allowed pool until units
+    // load — surface an empty result rather than silently showing
+    // hits from currently-hidden topics that would disappear once
+    // groups appear.
+    if (inFilterMode && !units) return [];
+    let pool = docs;
+    if (inFilterMode && units) {
+      const allowed = new Set(unitIds);
+      pool = docs.filter((d) => {
+        if (d.unit_id === null) return true; // Unsorted always allowed
+        const topId = topUnitIdOf(units, d.unit_id);
+        return topId === null || allowed.has(topId);
+      });
+    }
+    return pool
       .filter((d) => d.filename.toLowerCase().includes(q))
       .sort((a, b) => a.filename.localeCompare(b.filename));
-  }, [docs, search]);
+  }, [docs, search, inFilterMode, units, unitIds]);
 
   const triggerPicker = () => fileInputRef.current?.click();
 
@@ -297,46 +359,61 @@ export function SourceMaterialPicker({
                 disabled={disabled}
               />
             ) : (
-              <div className="divide-y divide-border-light">
-                {groups.length === 0 && pending.length === 0 ? (
-                  <p className="p-4 text-center text-xs text-text-muted">
-                    No materials yet.
-                  </p>
-                ) : (
-                  groups.map((g) => {
-                    const open = expandedFor(g.id, g.defaultExpanded);
-                    return (
-                      <GroupBlock
-                        key={g.id}
-                        groupId={g.id}
-                        label={g.label}
-                        count={g.docs.length}
-                        open={open}
-                        onToggle={() => toggleGroup(g.id, g.defaultExpanded)}
-                        disabled={disabled}
-                      >
-                        {g.docs.length === 0 ? (
-                          <p className="px-3 py-2 text-[11px] italic text-text-muted">
-                            No materials in this unit yet — use Upload new
-                            above to add one.
-                          </p>
-                        ) : (
-                          g.docs.map((d) => (
-                            <DocRow
-                              key={d.id}
-                              doc={d}
-                              checked={selectedDocs.has(d.id)}
-                              onToggle={() => onToggleDoc(d.id)}
-                              onPreview={() => setPreviewDoc(d)}
-                              disabled={disabled}
-                            />
-                          ))
-                        )}
-                      </GroupBlock>
-                    );
-                  })
+              <>
+                <div className="divide-y divide-border-light">
+                  {groups.length === 0 && pending.length === 0 ? (
+                    <p className="p-4 text-center text-xs text-text-muted">
+                      No materials yet.
+                    </p>
+                  ) : (
+                    groups.map((g) => {
+                      const open = expandedFor(g.id, g.defaultExpanded);
+                      return (
+                        <GroupBlock
+                          key={g.id}
+                          groupId={g.id}
+                          label={g.label}
+                          count={g.docs.length}
+                          open={open}
+                          onToggle={() =>
+                            toggleGroup(g.id, g.defaultExpanded)
+                          }
+                          disabled={disabled}
+                        >
+                          {g.docs.length === 0 ? (
+                            <p className="px-3 py-2 text-[11px] italic text-text-muted">
+                              No materials in this unit yet — use Upload
+                              new above to add one.
+                            </p>
+                          ) : (
+                            g.docs.map((d) => (
+                              <DocRow
+                                key={d.id}
+                                doc={d}
+                                checked={selectedDocs.has(d.id)}
+                                onToggle={() => onToggleDoc(d.id)}
+                                onPreview={() => setPreviewDoc(d)}
+                                disabled={disabled}
+                              />
+                            ))
+                          )}
+                        </GroupBlock>
+                      );
+                    })
+                  )}
+                </div>
+                {inFilterMode && hiddenGroupsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(true)}
+                    disabled={disabled}
+                    className="flex w-full items-center justify-center border-t border-border-light px-3 py-2 text-[11px] font-semibold text-primary hover:bg-bg-subtle disabled:opacity-50"
+                  >
+                    Show all materials ({hiddenGroupsCount} more{" "}
+                    {hiddenGroupsCount === 1 ? "topic" : "topics"})
+                  </button>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>
