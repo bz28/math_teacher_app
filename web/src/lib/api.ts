@@ -1245,11 +1245,19 @@ export const teacher = {
   },
 };
 
+export type IntegrityActivityLevel = "clean" | "notable" | "heavy";
+
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
   disposition: IntegrityDisposition | null;
   problem_count: number;
   complete_count: number;
+  /** Behavioral activity level rolled up from the integrity chat —
+   *  null while in_progress, when no student turn carried telemetry,
+   *  or on rows from before activity_summary shipped. Drives the
+   *  Activity pill on the queue row. Full totals + notable turns
+   *  live on TeacherIntegrityDetail.activity_summary. */
+  activity_level: IntegrityActivityLevel | null;
 }
 
 export interface TeacherSubmissionRow {
@@ -1920,6 +1928,33 @@ export interface TeacherIntegrityProblemRow {
   student_work_extraction: IntegrityExtraction | null;
 }
 
+export type IntegrityActivityReason =
+  | "large_paste"
+  | "full_paste"
+  | "tab_hidden_long"
+  | "mostly_hidden";
+
+export interface IntegrityActivityNotableTurn {
+  ordinal: number;
+  reasons: IntegrityActivityReason[];
+}
+
+/** Precomputed rollup of student-turn telemetry — what the teacher
+ *  panel renders. Null when no student turn carried telemetry, the
+ *  check hasn't finalized, or the row predates activity_summary. */
+export interface IntegrityActivitySummary {
+  level: IntegrityActivityLevel;
+  totals: {
+    tab_hide_count: number;
+    tab_hide_total_ms: number;
+    paste_count: number;
+    paste_total_chars: number;
+    paste_largest_chars: number;
+    long_pause_count: number;
+  };
+  notable_turns: IntegrityActivityNotableTurn[];
+}
+
 export interface TeacherIntegrityDetail {
   submission_id: string;
   overall_status: string;
@@ -1928,6 +1963,7 @@ export interface TeacherIntegrityDetail {
   probe_selection_reason: IntegrityProbeSelectionReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
+  activity_summary: IntegrityActivitySummary | null;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
 }

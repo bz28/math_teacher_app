@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
+import { ActivityLevelPill } from "@/components/school/teacher/_pieces/submissions-panel";
 import {
   teacher,
   type AiGradeEntry,
@@ -1134,6 +1135,12 @@ function StudentRow({
             📄
           </span>
         )}
+      {sub?.integrity_overview?.activity_level && (
+        <ActivityLevelPill
+          level={sub.integrity_overview.activity_level}
+          className="shrink-0"
+        />
+      )}
     </button>
   );
 }
