@@ -621,45 +621,6 @@ export default function HomeworkDetailPage({
 
       </header>
 
-      {/* Soft confirm strip for "publish without a due date". Shown
-          full-width below the header so it's hard to miss, and its
-          CTAs pair with the already-noticed Publish button above.
-          Never shows for practice — due dates don't apply there. */}
-      {!editingProblems && hw && hw.type !== "practice" && confirmingNoDueDate && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/40 dark:bg-amber-500/10">
-          <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-            ⚠ Publish without a due date? Students will see &ldquo;no due date&rdquo;.
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmingNoDueDate(false);
-                setTimeout(() => {
-                  dueDateInputRef.current?.focus();
-                  dueDateInputRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
-                }, 0);
-              }}
-              disabled={busy}
-              className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              Add due date
-            </button>
-            <button
-              type="button"
-              onClick={publish}
-              disabled={busy}
-              className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              Publish anyway
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Loading / editing-problems states short-circuit the page */}
       {(loading || !hw) ? (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm">
@@ -901,6 +862,23 @@ export default function HomeworkDetailPage({
         onPublish={handlePublishClick}
         onUnpublish={unpublish}
         onPreviewAsStudent={onPreviewAsStudent}
+        confirmingNoDueDate={confirmingNoDueDate && hw.type !== "practice"}
+        onConfirmCancel={() => {
+          setConfirmingNoDueDate(false);
+          // Best-effort scroll to the due-date input if it's currently
+          // mounted (i.e. the Configuration accordion is expanded).
+          // When collapsed, the ref is null — the teacher needs to
+          // expand Configuration manually. Documenting that here so a
+          // future PR can auto-expand on this path.
+          setTimeout(() => {
+            dueDateInputRef.current?.focus();
+            dueDateInputRef.current?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          }, 0);
+        }}
+        onConfirmPublish={publish}
       />
     )}
     </>
@@ -1629,6 +1607,12 @@ function SubmissionStrip({
 // (left) and Publish/Unpublish (right). Includes a small validation
 // hint on the left when Publish is blocked, so the teacher knows what
 // to fix without hovering the disabled button.
+//
+// When `confirmingNoDueDate` is true, the bar replaces the normal
+// row with a soft-confirm UI (warning + "Add due date" / "Publish
+// anyway"). Renders adjacent to the click target so the teacher
+// doesn't have to hunt for the dialog after pressing Publish on a
+// long-scrolled HW.
 // ────────────────────────────────────────────────────────────────────
 function ActionBar({
   isPublished,
@@ -1638,6 +1622,9 @@ function ActionBar({
   onPublish,
   onUnpublish,
   onPreviewAsStudent,
+  confirmingNoDueDate,
+  onConfirmCancel,
+  onConfirmPublish,
 }: {
   isPublished: boolean;
   canPublish: boolean;
@@ -1646,6 +1633,9 @@ function ActionBar({
   onPublish: () => void;
   onUnpublish: () => void;
   onPreviewAsStudent: () => void;
+  confirmingNoDueDate: boolean;
+  onConfirmCancel: () => void;
+  onConfirmPublish: () => void;
 }) {
   return (
     <div
@@ -1653,49 +1643,78 @@ function ActionBar({
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-        <div className="min-w-0 flex-1 text-[11px] text-text-muted">
-          {!isPublished && missingForPublish.length > 0 && (
-            <span>Missing: {missingForPublish.join(", ")}</span>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={onPreviewAsStudent}
-            disabled={busy}
-            className="text-xs font-semibold text-text-secondary hover:text-primary disabled:opacity-50"
-          >
-            Preview as student →
-          </button>
-          {isPublished ? (
-            <button
-              type="button"
-              onClick={onUnpublish}
-              disabled={busy}
-              className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-            >
-              Unpublish
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onPublish}
-              disabled={busy || !canPublish}
-              title={
-                canPublish
-                  ? "Publish — locks the questions in the bank"
-                  : `Missing: ${missingForPublish.join(", ")}`
-              }
-              className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
-                canPublish
-                  ? "bg-green-600 hover:bg-green-700 hover:shadow"
-                  : "cursor-not-allowed bg-gray-400 dark:bg-gray-600"
-              }`}
-            >
-              Publish ▸
-            </button>
-          )}
-        </div>
+        {confirmingNoDueDate ? (
+          <>
+            <span className="min-w-0 flex-1 text-xs font-semibold text-amber-900 dark:text-amber-200">
+              ⚠ Publish without a due date? Students will see &ldquo;no
+              due date&rdquo;.
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={onConfirmCancel}
+                disabled={busy}
+                className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+              >
+                Add due date
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmPublish}
+                disabled={busy}
+                className="rounded-[--radius-md] bg-green-600 px-4 py-2 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                Publish anyway
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="min-w-0 flex-1 text-[11px] text-text-muted">
+              {!isPublished && missingForPublish.length > 0 && (
+                <span>Missing: {missingForPublish.join(", ")}</span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={onPreviewAsStudent}
+                disabled={busy}
+                className="text-xs font-semibold text-text-secondary hover:text-primary disabled:opacity-50"
+              >
+                Preview as student →
+              </button>
+              {isPublished ? (
+                <button
+                  type="button"
+                  onClick={onUnpublish}
+                  disabled={busy}
+                  className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                >
+                  Unpublish
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  disabled={busy || !canPublish}
+                  title={
+                    canPublish
+                      ? "Publish — locks the questions in the bank"
+                      : `Missing: ${missingForPublish.join(", ")}`
+                  }
+                  className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
+                    canPublish
+                      ? "bg-green-600 hover:bg-green-700 hover:shadow"
+                      : "cursor-not-allowed bg-gray-400 dark:bg-gray-600"
+                  }`}
+                >
+                  Publish ▸
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
