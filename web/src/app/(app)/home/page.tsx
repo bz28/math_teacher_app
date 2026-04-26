@@ -20,6 +20,7 @@ export default function HomePage() {
   const router = useRouter();
   const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
+  const [coursesError, setCoursesError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
@@ -38,10 +39,15 @@ export default function HomePage() {
   }, [user, router]);
 
   const loadEnrolledCourses = () => {
+    setCoursesError(null);
     auth
       .enrolledCourses()
       .then((d) => setEnrolledCourses(d.courses))
-      .catch((err: unknown) => console.warn("Failed to load enrolled courses:", err))
+      .catch(() =>
+        setCoursesError(
+          "Couldn't load your classes. Check your connection and retry.",
+        ),
+      )
       .finally(() => setLoadingCourses(false));
   };
 
@@ -193,6 +199,24 @@ export default function HomePage() {
               </Card>
             </motion.div>
           ))}
+        </div>
+      )}
+
+      {/* Error loading classes — shown only after the load attempt
+          finishes; while loading, the spinner below covers it. */}
+      {!loadingCourses && coursesError && (
+        <div className="rounded-[--radius-md] border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10">
+          <p>{coursesError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadingCourses(true);
+              loadEnrolledCourses();
+            }}
+            className="mt-2 text-xs font-bold text-red-700 underline hover:no-underline dark:text-red-300"
+          >
+            Retry
+          </button>
         </div>
       )}
 
