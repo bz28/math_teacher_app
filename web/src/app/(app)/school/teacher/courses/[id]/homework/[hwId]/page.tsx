@@ -639,8 +639,9 @@ export default function HomeworkDetailPage({
         <>
           {isPublished && (
             <div className="mt-4 rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              🔒 Published — students can see this. Unpublish to edit the
-              problem list or configuration.
+              🔒 Published — students can see this. Rubric and
+              instructions stay editable; unpublish to change the
+              problem list, title, due date, or sections.
             </div>
           )}
 
@@ -1064,10 +1065,6 @@ function ConfigBlock({
 }) {
   return (
     <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-bg-base/30 p-4">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-        Configuration
-      </div>
-
       {/* Units */}
       <Field
         label="Units"
