@@ -10,8 +10,6 @@ For each component of the plan:
 
 Present the plan to the user for discussion. Number any questions so the user can answer inline (e.g. "1. … 2. …"). Iterate on feedback until the user approves.
 
-End with: "Reply with changes or approve, and I'll save this to `plans/<slug>.md`."
-
-On approval, save to `plans/` automatically — don't ask again.
+Keep the plan in the conversation. Do NOT save it to a file in the repo. Stale plan docs drift away from the code; the code is the source of truth once it ships.
 
 Do not write any code.
