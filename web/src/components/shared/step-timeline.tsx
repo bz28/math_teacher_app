@@ -6,7 +6,7 @@ import { CheckIcon } from "@/components/ui/icons";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 
-export interface ChatMessage {
+export interface TimelineChatMessage {
   role: "user" | "assistant";
   content: string;
 }
@@ -22,7 +22,7 @@ interface Props {
   /** 0-based index of the active step. -1 means the whole problem is
    *  done — all steps render as completed and chat-on-current is hidden. */
   currentStepIndex: number;
-  chatByStep: Record<number, ChatMessage[]>;
+  chatByStep: Record<number, TimelineChatMessage[]>;
   onConfirmStep: (index: number) => void;
   onAskStepQuestion: (index: number, question: string) => Promise<void>;
   /** Optional controlled expand state. Must be provided as a single
@@ -160,7 +160,7 @@ function CompletedStep({
   index: number;
   expanded: boolean;
   onToggle: () => void;
-  messages: ChatMessage[];
+  messages: TimelineChatMessage[];
 }) {
   return (
     <>
@@ -218,7 +218,7 @@ function ActiveStep({
 }: {
   step: TimelineStep;
   index: number;
-  messages: ChatMessage[];
+  messages: TimelineChatMessage[];
   thinking: boolean;
   onConfirm: () => void;
   onAsk: (question: string) => Promise<void>;
@@ -304,7 +304,7 @@ function ChatBubble({
   message,
   compact = false,
 }: {
-  message: ChatMessage;
+  message: TimelineChatMessage;
   compact?: boolean;
 }) {
   if (message.role === "user") {

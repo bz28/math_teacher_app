@@ -6,7 +6,7 @@ import { Card } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
 import {
   StepTimeline,
-  type ChatMessage,
+  type TimelineChatMessage,
   type TimelineStep,
 } from "@/components/shared/step-timeline";
 import { ProblemChat } from "@/components/shared/problem-chat";
@@ -61,8 +61,8 @@ export function LearnLoopSurface({
   // change — new variation, fresh conversation (per plan: no chat
   // persistence).
   const [stepIdx, setStepIdx] = useState(0);
-  const [chatByStep, setChatByStep] = useState<Record<number, ChatMessage[]>>({});
-  const [problemChat, setProblemChat] = useState<ChatMessage[]>([]);
+  const [chatByStep, setChatByStep] = useState<Record<number, TimelineChatMessage[]>>({});
+  const [problemChat, setProblemChat] = useState<TimelineChatMessage[]>([]);
   const [thinkingStepIndex, setThinkingStepIndex] = useState<number | null>(null);
   const [problemChatThinking, setProblemChatThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +107,7 @@ export function LearnLoopSurface({
   async function handleStepChat(index: number, question: string) {
     setError(null);
     const prior = chatByStep[index] ?? [];
-    const userMsg: ChatMessage = { role: "user", content: question };
+    const userMsg: TimelineChatMessage = { role: "user", content: question };
     setChatByStep((prev) => ({ ...prev, [index]: [...prior, userMsg] }));
     setThinkingStepIndex(index);
     const token = variationTokenRef.current;
@@ -136,7 +136,7 @@ export function LearnLoopSurface({
   async function handleProblemChat(question: string) {
     setError(null);
     const prior = problemChat;
-    const userMsg: ChatMessage = { role: "user", content: question };
+    const userMsg: TimelineChatMessage = { role: "user", content: question };
     setProblemChat([...prior, userMsg]);
     setProblemChatThinking(true);
     const token = variationTokenRef.current;

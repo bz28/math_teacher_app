@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Button, Card, TypingIndicator } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "./step-timeline";
+import type { TimelineChatMessage } from "./step-timeline";
 
 interface Props {
-  messages: ChatMessage[];
+  messages: TimelineChatMessage[];
   onSend: (question: string) => Promise<void>;
   placeholder?: string;
   /** External disable flag — e.g. when the parent is mid-flight. */
@@ -90,7 +90,7 @@ export function ProblemChat({
   );
 }
 
-function MessageRow({ message }: { message: ChatMessage }) {
+function MessageRow({ message }: { message: TimelineChatMessage }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
