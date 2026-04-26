@@ -778,15 +778,17 @@ export default function HomeworkDetailPage({
           )}
 
           {/* Configuration — collapsed accordion. Auto-expands on a
-              fresh HW with no problems so teachers notice the fields;
-              collapses once they're set. For practice we hide the
-              due date + late policy inputs (neither applies) but keep
-              units + sections since they still drive visibility. */}
+              fresh HW with no problems OR when a required field is
+              missing, so teachers can't accidentally collapse the only
+              way to fix what's blocking publish. Collapses once
+              everything's set. For practice we hide the due date + late
+              policy inputs (neither applies) but keep units + sections
+              since they still drive visibility. */}
           <div className="mt-4">
             <CollapsibleSection
               label="Configuration"
               summary={configSummary(hw)}
-              defaultOpen={problems.length === 0}
+              defaultOpen={problems.length === 0 || hw.unit_ids.length === 0}
             >
               <ConfigBlock
                 hw={hw}
