@@ -1,4 +1,4 @@
-"""Practice endpoints: generate similar problems and check answers."""
+"""Practice endpoints: generate similar problem texts, solve a problem, check answers."""
 
 import logging
 
@@ -17,6 +17,8 @@ from api.schemas.practice import (
     PracticeGenerateRequest,
     PracticeGenerateResponse,
     PracticeProblem,
+    PracticeSolveRequest,
+    PracticeSolveResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,46 +34,59 @@ async def generate(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> PracticeGenerateResponse:
-    """Generate similar practice problems or solve a single problem.
+    """Batch-generate similar question texts (no answers).
 
-    - Send `problems` (list) to batch-generate similar question texts (no answers).
-    - Send `problem` with `count=0` to solve a single problem (returns answer + distractors).
+    The frontend calls /practice/solve separately for each generated
+    question to decompose it and get its answer + distractors.
     """
     await check_entitlement(db, user, Entitlement.CREATE_SESSION)
 
     try:
-        # Batch generate similar question texts — solving is done separately by the frontend
-        if body.problems:
-            question_texts = await generate_similar_questions(
-                body.problems,
-                user_id=str(user.id),
-                subject=body.subject,
-                difficulty=body.difficulty,
-            )
-            return PracticeGenerateResponse(
-                problems=[PracticeProblem(question=q, answer="", distractors=[]) for q in question_texts]
-            )
-
-        # Solve a single problem — decompose + distractors
-        problem = body.problem or ""
-        result = await solve_problem(
-            problem,
+        question_texts = await generate_similar_questions(
+            body.problems,
             user_id=str(user.id),
             subject=body.subject,
-            image_base64=body.image_base64,
+            difficulty=body.difficulty,
         )
         return PracticeGenerateResponse(
-            problems=[PracticeProblem(
-                question=result["question"],
-                answer=result["answer"],
-                distractors=result.get("distractors", []),
-            )]
+            problems=[PracticeProblem(question=q, answer="", distractors=[]) for q in question_texts]
         )
-
     except RuntimeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate practice problems",
+        )
+
+
+@router.post("/solve", response_model=PracticeSolveResponse)
+@limiter.limit("10/minute")
+async def solve(
+    request: Request,
+    body: PracticeSolveRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> PracticeSolveResponse:
+    """Solve a single problem: decompose into steps, extract answer, generate MC distractors."""
+    await check_entitlement(db, user, Entitlement.CREATE_SESSION)
+
+    try:
+        result = await solve_problem(
+            body.problem,
+            user_id=str(user.id),
+            subject=body.subject,
+            image_base64=body.image_base64,
+        )
+        return PracticeSolveResponse(
+            problem=PracticeProblem(
+                question=result["question"],
+                answer=result["answer"],
+                distractors=result.get("distractors", []),
+            )
+        )
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to solve problem",
         )
 
 
