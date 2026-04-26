@@ -185,10 +185,12 @@ export function NewPracticeModal({
       late_policy: latePolicy,
       ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
     });
-    // Same rationale as the HW wizard: don't block the route to the
-    // detail page on a section-assignment failure (would risk
-    // double-creating the practice on retry), but toast so the teacher
-    // knows the picks didn't take.
+    // Once the practice itself exists, a section-assignment failure
+    // shouldn't block the teacher from landing on the detail page —
+    // retrying createAssignment would double-create. Sections are
+    // editable inline from the detail page, so the recovery path is
+    // clean. Toast (not silent) so the teacher actually learns the
+    // picks didn't take.
     if (sectionIds.length > 0) {
       try {
         await teacher.assignToSections(created.id, sectionIds);
