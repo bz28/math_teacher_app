@@ -146,6 +146,27 @@ ROLE_TOOL_CALL = "tool_call"
 ROLE_TOOL_RESULT = "tool_result"
 
 
+# ── Activity summary thresholds ─────────────────────────────────────
+# Per-turn signals that promote a student turn to "notable" — the same
+# evidence the teacher panel inlines under the student's bubble. Tuned
+# starting numbers; revisit after we see real-teacher behavior.
+ACTIVITY_LARGE_PASTE_CHARS = 100      # single paste >= 100 chars
+ACTIVITY_FULL_PASTE_RATIO = 0.8       # total paste >= 80% of content len
+ACTIVITY_TAB_HIDDEN_LONG_MS = 30_000  # single blur >= 30s on this turn
+ACTIVITY_MOSTLY_HIDDEN_RATIO = 0.5    # cumulative blur >= 50% of seconds_on_turn
+
+# Per-turn reason codes — frontend renders matching copy.
+ACTIVITY_REASON_LARGE_PASTE = "large_paste"
+ACTIVITY_REASON_FULL_PASTE = "full_paste"
+ACTIVITY_REASON_TAB_HIDDEN_LONG = "tab_hidden_long"
+ACTIVITY_REASON_MOSTLY_HIDDEN = "mostly_hidden"
+
+# Session-level levels.
+ACTIVITY_LEVEL_CLEAN = "clean"
+ACTIVITY_LEVEL_NOTABLE = "notable"
+ACTIVITY_LEVEL_HEAVY = "heavy"
+
+
 # ── Adaptive probe selection ────────────────────────────────────────
 
 # Difficulty tiers from the QuestionBankItem.difficulty column, ranked
@@ -1003,6 +1024,9 @@ async def _apply_finish_check(
     check.disposition = disposition
     check.overall_summary = summary
     check.inline_variant_result = variant_result
+    check.activity_summary = compute_activity_summary(
+        await _load_turns(check.id, db),
+    )
     await db.flush()
     return f"accepted: disposition {disposition}, check complete"
 
@@ -1040,6 +1064,9 @@ async def _force_finalize_turn_cap(
         "work is with your teacher.",
         db,
     )
+    check.activity_summary = compute_activity_summary(
+        await _load_turns(check.id, db),
+    )
 
 
 _SOFT_NUDGE_MARKER = "(Wrap up:"
@@ -1059,6 +1086,135 @@ async def _soft_nudge_already_sent(
         .limit(1)
     )).scalar_one_or_none()
     return hit is not None
+
+
+# ── Activity summary aggregator ─────────────────────────────────────
+
+def _notable_reasons_for_turn(
+    turn: IntegrityConversationTurn,
+) -> list[str]:
+    """Return the reason codes that mark this student turn as notable.
+
+    Pure function over a single turn — the per-turn evidence the
+    teacher panel renders inline under the student bubble.
+    """
+    telemetry = turn.telemetry
+    if not telemetry:
+        return []
+
+    reasons: list[str] = []
+
+    pastes = telemetry.get("paste_events") or []
+    paste_total = sum(int(p.get("byte_count") or 0) for p in pastes)
+    paste_largest = max(
+        (int(p.get("byte_count") or 0) for p in pastes), default=0,
+    )
+    if paste_largest >= ACTIVITY_LARGE_PASTE_CHARS:
+        reasons.append(ACTIVITY_REASON_LARGE_PASTE)
+
+    # full_paste = the turn's content is essentially the paste. The
+    # cadence object being missing OR reporting zero typing is the
+    # tell — the student didn't type, they pasted everything.
+    content_len = len(turn.content or "")
+    cadence = telemetry.get("typing_cadence")
+    typed_anything = bool(cadence and (cadence.get("total_ms") or 0) > 0)
+    if (
+        content_len > 0
+        and paste_total >= ACTIVITY_FULL_PASTE_RATIO * content_len
+        and not typed_anything
+    ):
+        reasons.append(ACTIVITY_REASON_FULL_PASTE)
+
+    blurs = telemetry.get("focus_blur_events") or []
+    blur_total_ms = sum(int(b.get("duration_ms") or 0) for b in blurs)
+    blur_longest_ms = max(
+        (int(b.get("duration_ms") or 0) for b in blurs), default=0,
+    )
+    if blur_longest_ms >= ACTIVITY_TAB_HIDDEN_LONG_MS:
+        reasons.append(ACTIVITY_REASON_TAB_HIDDEN_LONG)
+
+    seconds_on_turn = turn.seconds_on_turn
+    if (
+        seconds_on_turn is not None
+        and seconds_on_turn > 0
+        and blur_total_ms >= ACTIVITY_MOSTLY_HIDDEN_RATIO * seconds_on_turn * 1000
+        # Don't double-count: a single >=30s blur on a short turn would
+        # already trip tab_hidden_long. mostly_hidden is for long turns
+        # where blur dominates without any single blur being huge.
+        and ACTIVITY_REASON_TAB_HIDDEN_LONG not in reasons
+    ):
+        reasons.append(ACTIVITY_REASON_MOSTLY_HIDDEN)
+
+    return reasons
+
+
+def compute_activity_summary(
+    turns: list[IntegrityConversationTurn],
+) -> dict[str, Any] | None:
+    """Roll up student-turn telemetry into the session-level
+    activity_summary blob. Returns None when no student turn carries
+    telemetry (older sessions, future mobile, or checks that finished
+    before any student message landed) — the teacher UI hides the
+    Activity surface on a null summary.
+
+    Pure function — no DB. Caller persists the return on the
+    IntegrityCheckSubmission row.
+    """
+    student_turns = [t for t in turns if t.role == ROLE_STUDENT and t.telemetry]
+    if not student_turns:
+        return None
+
+    tab_hide_count = 0
+    tab_hide_total_ms = 0
+    paste_count = 0
+    paste_total_chars = 0
+    paste_largest_chars = 0
+    long_pause_count = 0
+    notable_turns: list[dict[str, Any]] = []
+
+    for t in student_turns:
+        tel = t.telemetry or {}
+        for ev in tel.get("focus_blur_events") or []:
+            tab_hide_count += 1
+            tab_hide_total_ms += int(ev.get("duration_ms") or 0)
+        for ev in tel.get("paste_events") or []:
+            byte_count = int(ev.get("byte_count") or 0)
+            paste_count += 1
+            paste_total_chars += byte_count
+            if byte_count > paste_largest_chars:
+                paste_largest_chars = byte_count
+        cadence = tel.get("typing_cadence") or {}
+        long_pause_count += int(cadence.get("pauses_over_3s") or 0)
+
+        reasons = _notable_reasons_for_turn(t)
+        if reasons:
+            notable_turns.append({"ordinal": t.ordinal, "reasons": reasons})
+
+    # Level rule: clean = no notable turns. heavy = 2+ notable turns OR
+    # any full_paste turn (full_paste alone is severe enough to skip
+    # the "notable" middle ground). notable = 1 notable turn.
+    has_full_paste = any(
+        ACTIVITY_REASON_FULL_PASTE in nt["reasons"] for nt in notable_turns
+    )
+    if not notable_turns:
+        level = ACTIVITY_LEVEL_CLEAN
+    elif len(notable_turns) >= 2 or has_full_paste:
+        level = ACTIVITY_LEVEL_HEAVY
+    else:
+        level = ACTIVITY_LEVEL_NOTABLE
+
+    return {
+        "level": level,
+        "totals": {
+            "tab_hide_count": tab_hide_count,
+            "tab_hide_total_ms": tab_hide_total_ms,
+            "paste_count": paste_count,
+            "paste_total_chars": paste_total_chars,
+            "paste_largest_chars": paste_largest_chars,
+            "long_pause_count": long_pause_count,
+        },
+        "notable_turns": notable_turns,
+    }
 
 
 # ── Message + transcript helpers ────────────────────────────────────

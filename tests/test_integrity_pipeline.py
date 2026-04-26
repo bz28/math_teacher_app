@@ -16,9 +16,17 @@ from typing import Any
 
 from api.core.integrity_ai import build_problems_briefing
 from api.core.integrity_pipeline import (
+    ACTIVITY_LEVEL_CLEAN,
+    ACTIVITY_LEVEL_HEAVY,
+    ACTIVITY_LEVEL_NOTABLE,
+    ACTIVITY_REASON_FULL_PASTE,
+    ACTIVITY_REASON_LARGE_PASTE,
+    ACTIVITY_REASON_MOSTLY_HIDDEN,
+    ACTIVITY_REASON_TAB_HIDDEN_LONG,
     SELECTION_REASON_HIGHEST_DIFFERENTIATION,
     _build_agent_messages,
     _validate_rubric,
+    compute_activity_summary,
     select_probe_problems,
 )
 from api.models.integrity_check import IntegrityConversationTurn
@@ -34,7 +42,7 @@ class _FakeItem:
     solution_steps: list[Any] | None
 
 
-def _turn(ordinal: int, role: str, content: str, **kw: str) -> IntegrityConversationTurn:
+def _turn(ordinal: int, role: str, content: str, **kw: Any) -> IntegrityConversationTurn:
     return IntegrityConversationTurn(
         integrity_check_submission_id=uuid.uuid4(),
         ordinal=ordinal,
@@ -42,6 +50,34 @@ def _turn(ordinal: int, role: str, content: str, **kw: str) -> IntegrityConversa
         content=content,
         tool_name=kw.get("tool_name"),
         tool_use_id=kw.get("tool_use_id"),
+        seconds_on_turn=kw.get("seconds_on_turn"),
+        telemetry=kw.get("telemetry"),
+    )
+
+
+def _student_turn(
+    ordinal: int,
+    content: str = "ok",
+    *,
+    seconds_on_turn: int | None = None,
+    blurs: list[dict[str, Any]] | None = None,
+    pastes: list[dict[str, Any]] | None = None,
+    cadence: dict[str, Any] | None = None,
+) -> IntegrityConversationTurn:
+    """Build a student turn with telemetry slotted in. Defaults to a
+    clean turn (no events) when args are omitted, so individual tests
+    only specify the signal they care about."""
+    telemetry = {
+        "focus_blur_events": blurs or [],
+        "paste_events": pastes or [],
+        "typing_cadence": cadence,
+        "need_more_time_used": False,
+        "device_type": "desktop",
+    }
+    return _turn(
+        ordinal, "student", content,
+        seconds_on_turn=seconds_on_turn,
+        telemetry=telemetry,
     )
 
 
@@ -275,3 +311,173 @@ class TestValidateRubric:
         assert rubric is None
         assert err is not None
         assert "causal_fluency" in err
+
+
+class TestComputeActivitySummary:
+    def test_returns_none_when_no_telemetry(self) -> None:
+        # Agent + tool turns alone — no student telemetry to roll up.
+        turns = [
+            _turn(0, "agent", "Hi"),
+            _turn(1, "tool_call", "{}", tool_name="finish_check"),
+        ]
+        assert compute_activity_summary(turns) is None
+
+    def test_returns_none_when_only_agent_turns(self) -> None:
+        # Even with a student turn, if telemetry is None the rollup
+        # has nothing to summarise. Agent turns never carry telemetry.
+        turns = [
+            _turn(0, "agent", "Hi"),
+            _turn(1, "student", "Hi", telemetry=None),
+        ]
+        assert compute_activity_summary(turns) is None
+
+    def test_clean_when_only_quiet_typing(self) -> None:
+        turns = [_student_turn(
+            0, "I added 2 + 2",
+            seconds_on_turn=20,
+            cadence={"total_ms": 18_000, "pauses_over_3s": 0, "edits": 1},
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        assert summary["level"] == ACTIVITY_LEVEL_CLEAN
+        assert summary["notable_turns"] == []
+        # Totals are still populated for display, just zeros.
+        assert summary["totals"]["paste_count"] == 0
+        assert summary["totals"]["tab_hide_count"] == 0
+
+    def test_notable_when_one_large_paste(self) -> None:
+        turns = [_student_turn(
+            0, "Sure, here's my reasoning… " * 10,
+            seconds_on_turn=30,
+            pastes=[{"at": "2026-04-26T00:00:00Z", "byte_count": 250}],
+            cadence={"total_ms": 5_000, "pauses_over_3s": 0, "edits": 0},
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        assert summary["level"] == ACTIVITY_LEVEL_NOTABLE
+        assert len(summary["notable_turns"]) == 1
+        nt = summary["notable_turns"][0]
+        assert nt["ordinal"] == 0
+        assert ACTIVITY_REASON_LARGE_PASTE in nt["reasons"]
+        assert summary["totals"]["paste_count"] == 1
+        assert summary["totals"]["paste_largest_chars"] == 250
+
+    def test_heavy_when_full_paste_with_no_typing(self) -> None:
+        # Pasted answer = paste size matches content length and the
+        # student didn't type anything. full_paste alone is enough to
+        # escalate the session to heavy — that's the single-turn
+        # severity rule. Content is intentionally short (below the
+        # large_paste threshold) so the test pins the rule to
+        # full_paste, not paste-volume.
+        content = "x = 5 here"
+        turns = [_student_turn(
+            0, content,
+            seconds_on_turn=8,
+            pastes=[{
+                "at": "2026-04-26T00:00:00Z",
+                "byte_count": len(content),
+            }],
+            cadence={"total_ms": 0, "pauses_over_3s": 0, "edits": 0},
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        assert summary["level"] == ACTIVITY_LEVEL_HEAVY
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_FULL_PASTE in nt["reasons"]
+        # Below the large_paste byte threshold — only full_paste fires.
+        assert ACTIVITY_REASON_LARGE_PASTE not in nt["reasons"]
+
+    def test_heavy_when_two_notable_turns(self) -> None:
+        # Two separate turns with notable signals — even without a
+        # full_paste, two-or-more notable turns escalates to heavy.
+        turns = [
+            _student_turn(
+                0, "answer one",
+                seconds_on_turn=10,
+                pastes=[{"at": "x", "byte_count": 200}],
+            ),
+            _student_turn(
+                1, "answer two",
+                seconds_on_turn=60,
+                blurs=[{"at": "x", "duration_ms": 45_000}],
+            ),
+        ]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        assert summary["level"] == ACTIVITY_LEVEL_HEAVY
+        assert len(summary["notable_turns"]) == 2
+
+    def test_tab_hidden_long_flags_single_long_blur(self) -> None:
+        turns = [_student_turn(
+            0, "ok",
+            seconds_on_turn=120,
+            blurs=[{"at": "x", "duration_ms": 35_000}],
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_TAB_HIDDEN_LONG in nt["reasons"]
+        # Long blur alone is one notable signal, not full_paste — the
+        # session lands at notable, not heavy.
+        assert summary["level"] == ACTIVITY_LEVEL_NOTABLE
+
+    def test_mostly_hidden_flags_dominant_blur_without_single_long_event(self) -> None:
+        # Many short blurs that cumulatively dominate a long turn.
+        # Each blur is under the long-event threshold, so only the
+        # mostly_hidden ratio rule should fire.
+        turns = [_student_turn(
+            0, "ok",
+            seconds_on_turn=60,
+            blurs=[
+                {"at": "a", "duration_ms": 10_000},
+                {"at": "b", "duration_ms": 10_000},
+                {"at": "c", "duration_ms": 12_000},
+            ],
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_MOSTLY_HIDDEN in nt["reasons"]
+        assert ACTIVITY_REASON_TAB_HIDDEN_LONG not in nt["reasons"]
+
+    def test_does_not_double_count_when_long_blur_dominates(self) -> None:
+        # One huge blur on a short turn — tab_hidden_long fires;
+        # mostly_hidden is suppressed to avoid stacking the same
+        # evidence twice.
+        turns = [_student_turn(
+            0, "ok",
+            seconds_on_turn=40,
+            blurs=[{"at": "x", "duration_ms": 35_000}],
+        )]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        nt = summary["notable_turns"][0]
+        assert ACTIVITY_REASON_TAB_HIDDEN_LONG in nt["reasons"]
+        assert ACTIVITY_REASON_MOSTLY_HIDDEN not in nt["reasons"]
+
+    def test_totals_aggregate_across_turns(self) -> None:
+        turns = [
+            _student_turn(
+                0, "answer one",
+                seconds_on_turn=20,
+                pastes=[{"at": "x", "byte_count": 50}],
+                blurs=[{"at": "x", "duration_ms": 5_000}],
+                cadence={"total_ms": 10_000, "pauses_over_3s": 1, "edits": 0},
+            ),
+            _student_turn(
+                1, "answer two",
+                seconds_on_turn=20,
+                pastes=[{"at": "y", "byte_count": 75}],
+                blurs=[{"at": "y", "duration_ms": 8_000}],
+                cadence={"total_ms": 12_000, "pauses_over_3s": 2, "edits": 0},
+            ),
+        ]
+        summary = compute_activity_summary(turns)
+        assert summary is not None
+        totals = summary["totals"]
+        assert totals["paste_count"] == 2
+        assert totals["paste_total_chars"] == 125
+        assert totals["paste_largest_chars"] == 75
+        assert totals["tab_hide_count"] == 2
+        assert totals["tab_hide_total_ms"] == 13_000
+        assert totals["long_pause_count"] == 3

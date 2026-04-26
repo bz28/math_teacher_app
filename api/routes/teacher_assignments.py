@@ -1186,11 +1186,23 @@ async def list_submissions(
         else:
             total, done = problem_count_by_check.get(check.id, (0, 0))
             terminal = check.status in (INTEGRITY_COMPLETE, INTEGRITY_SKIPPED)
+            # Just the level (clean / notable / heavy) on the queue —
+            # the row pill renders that one bit. Full activity_summary
+            # (totals + notable turns) is loaded by the detail endpoint
+            # when the teacher opens a submission. Keeps list payloads
+            # compact across 30+ rows.
+            activity_summary = check.activity_summary or None
+            activity_level = (
+                activity_summary.get("level")
+                if isinstance(activity_summary, dict)
+                else None
+            )
             integrity_overview = {
                 "overall_status": "complete" if terminal else "in_progress",
                 "disposition": check.disposition if terminal else None,
                 "problem_count": total,
                 "complete_count": done,
+                "activity_level": activity_level if terminal else None,
             }
 
         submissions.append({
