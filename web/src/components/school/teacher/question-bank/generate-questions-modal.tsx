@@ -289,7 +289,14 @@ export function GenerateQuestionsModal({
             />
           </div>
 
-          {typeof savedTo === "string" && (
+          {/* Picker is shown for both unit and Uncategorized save-to.
+              Uncategorized passes an empty unitIds array, which trips
+              the picker's `inFilterMode = filterToSelectedUnits &&
+              ... && unitIds.length > 0` guard and falls back to the
+              full grouped view — teacher can still pick docs from any
+              top unit, matching the rest of the app where
+              Uncategorized is a first-class bucket. */}
+          {hasChosenSavedTo && (
             <SourceMaterialPicker
               courseId={courseId}
               docs={docs}
