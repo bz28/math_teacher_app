@@ -132,14 +132,12 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         // Fire solve calls for all generated questions in parallel
         const batchSessionId = id;
         const solvePromises = questionTexts.map((q, i) =>
-          practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
-            if (res.problems.length > 0) {
-              const { mockTest: current } = get();
-              if (!current || current.sessionId !== batchSessionId) return;
-              const updated = [...current.questions];
-              updated[i] = res.problems[0];
-              set({ mockTest: { ...current, questions: updated } });
-            }
+          practiceApi.solve({ problem: q, subject }).then((res) => {
+            const { mockTest: current } = get();
+            if (!current || current.sessionId !== batchSessionId) return;
+            const updated = [...current.questions];
+            updated[i] = res.problem;
+            set({ mockTest: { ...current, questions: updated } });
           }),
         );
 
@@ -185,17 +183,15 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
         const batchSessionId2 = id;
         const promises = problems.map((p, i) => {
           const image = imageMap.get(p);
-          return practiceApi.generate({
-            problem: p, count: 0, subject,
+          return practiceApi.solve({
+            problem: p, subject,
             ...(image && { image_base64: image }),
           }).then((res) => {
-            if (res.problems.length > 0) {
-              const { mockTest: current } = get();
-              if (!current || current.sessionId !== batchSessionId2) return;
-              const updated = [...current.questions];
-              updated[i] = res.problems[0];
-              set({ mockTest: { ...current, questions: updated } });
-            }
+            const { mockTest: current } = get();
+            if (!current || current.sessionId !== batchSessionId2) return;
+            const updated = [...current.questions];
+            updated[i] = res.problem;
+            set({ mockTest: { ...current, questions: updated } });
           });
         });
 

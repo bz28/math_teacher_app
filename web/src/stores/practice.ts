@@ -122,12 +122,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       const batchId = sessionId;
       Promise.allSettled(
         similarQuestions.map((q, i) =>
-          practiceApi.generate({ problem: q, count: 0, subject }).then((res) => {
-            if (!res.problems[0]) return;
+          practiceApi.solve({ problem: q, subject }).then((res) => {
             const { practiceBatch: current } = get();
             if (!current || current.sessionId !== batchId) return;
             const updated = [...current.problems];
-            updated[i] = res.problems[0];
+            updated[i] = res.problem;
             set({ practiceBatch: { ...current, problems: updated } });
           }),
         ),
@@ -161,15 +160,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
       // Phase 2: solve in background — user clicks Begin when ready
       const batchId = sessionId;
-      practiceApi.generate({ problem: similarQuestion, count: 0, subject }).then((res) => {
+      practiceApi.solve({ problem: similarQuestion, subject }).then((res) => {
         const { practiceBatch: current } = get();
         if (!current || current.sessionId !== batchId) return;
-        if (!res.problems[0]) {
-          set({ phase: "error", error: "Failed to generate answer. Please try again." });
-          return;
-        }
         const updated = [...current.problems];
-        updated[0] = res.problems[0];
+        updated[0] = res.problem;
         set({ practiceBatch: { ...current, problems: updated } });
       }).catch((err) => {
         const { practiceBatch: current } = get();
@@ -207,7 +202,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
     // Resolve correct answers in background
     Promise.allSettled(
-      problems.map((p) => practiceApi.generate({ problem: p, count: 0, subject })),
+      problems.map((p) => practiceApi.solve({ problem: p, subject })),
     ).then((results) => {
       const { practiceBatch: batch } = get();
       if (!batch) return;
@@ -215,8 +210,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       const skipped: string[] = [];
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
-        if (r.status === "fulfilled" && r.value.problems[0]) {
-          updated[i] = { question: problems[i], answer: r.value.problems[0].answer };
+        if (r.status === "fulfilled") {
+          updated[i] = { question: problems[i], answer: r.value.problem.answer };
         } else {
           skipped.push(problems[i]);
         }

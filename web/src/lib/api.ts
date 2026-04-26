@@ -92,6 +92,10 @@ export interface PracticeGenerateResponse {
   problems: PracticeProblem[];
 }
 
+export interface PracticeSolveResponse {
+  problem: PracticeProblem;
+}
+
 export interface PracticeCheckResponse {
   is_correct: boolean;
 }
@@ -537,19 +541,22 @@ export const session = {
 // ── Practice endpoints ──
 
 export const practice = {
-  /**
-   * Two distinct uses, distinguished by the data shape:
-   * - `{ problem | problems, count: <N>, subject, difficulty? }` — generate
-   *   N similar question texts (no answers). Used by mock-test and practice
-   *   batch setup to feed the preview screens.
-   * - `{ problem: <text>, count: 0, subject, image_base64? }` — solve a
-   *   single question and return its answer + distractors. The `count: 0`
-   *   value is the magic "just solve, don't generate" signal the backend
-   *   keys on. Used by the per-question background solve in mock-test and
-   *   practice stores.
-   */
-  generate(data: { problem?: string; problems?: string[]; count?: number; subject: string; image_base64?: string; difficulty?: string }) {
+  /** Batch-generate similar question texts (no answers). Each returned
+   *  PracticeProblem has `answer: ""` — call `solve()` separately for
+   *  each generated question to fetch its answer + distractors. */
+  generate(data: { problems: string[]; subject: string; difficulty?: string }) {
     return apiFetch<PracticeGenerateResponse>("/practice/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+      timeout: SESSION_CREATE_TIMEOUT,
+    });
+  },
+
+  /** Solve a single problem: decompose, extract answer, generate MC
+   *  distractors. Used by the per-question background solve in the
+   *  mock-test and practice stores. */
+  solve(data: { problem: string; subject: string; image_base64?: string }) {
+    return apiFetch<PracticeSolveResponse>("/practice/solve", {
       method: "POST",
       body: JSON.stringify(data),
       timeout: SESSION_CREATE_TIMEOUT,
