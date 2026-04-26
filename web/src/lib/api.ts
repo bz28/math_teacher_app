@@ -676,6 +676,10 @@ export interface TeacherAssignment {
   course_id: string;
   unit_ids: string[];
   title: string;
+  /** Free-form student-visible instructions (e.g. "Show all work, no
+   *  calculators"). Plain text with optional inline LaTeX. Null when
+   *  the teacher hasn't authored any. */
+  description: string | null;
   type: string;
   source_type: string | null;
   status: string;
@@ -1474,6 +1478,10 @@ export interface StudentProblemFeedback {
 export interface StudentHomeworkDetail {
   assignment_id: string;
   title: string;
+  /** Teacher-authored instructions (e.g. "Show all work, no
+   *  calculators"). Plain text with optional inline LaTeX; null or
+   *  empty means nothing to show — the page hides the block. */
+  description: string | null;
   type: string;
   due_at: string | null;
   course_id: string;

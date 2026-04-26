@@ -343,6 +343,10 @@ class StudentProblemFeedback(BaseModel):
 class StudentHomeworkDetail(BaseModel):
     assignment_id: str
     title: str
+    # Teacher-authored instructions for students (e.g. "Show all work,
+    # no calculators"). Plain text with optional inline LaTeX. Null or
+    # empty = nothing for the student to see; the page hides the block.
+    description: str | None
     type: str
     due_at: datetime | None
     course_id: str
@@ -1101,6 +1105,7 @@ async def homework_detail(
     return StudentHomeworkDetail(
         assignment_id=str(assignment.id),
         title=assignment.title,
+        description=assignment.description,
         type=assignment.type,
         due_at=assignment.due_at,
         course_id=str(course.id),

@@ -122,6 +122,21 @@ class UpdateAssignmentRequest(BaseModel):
     # passing an empty dict (mirrors the due_at pattern).
     rubric: dict[str, Any] | None = None
     clear_rubric: bool = False
+    # Free-form student-visible instructions. None = leave unchanged.
+    # Empty string clears it (this field has no "leave unchanged vs
+    # clear" ambiguity — empty text and null both render as "no
+    # instructions" on the student page, so we collapse them).
+    description: str | None = None
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str | None) -> str | None:
+        # Cap matches the frontend textarea (2000 chars). Defends
+        # against non-browser callers bloating the assignments table
+        # with unbounded prose. None passes through (= unchanged).
+        if v is not None and len(v) > 2000:
+            raise ValueError("Instructions must be 2000 characters or fewer")
+        return v
 
     @field_validator("unit_ids")
     @classmethod
@@ -343,6 +358,7 @@ def assignment_to_dict(
         "course_id": str(a.course_id),
         "unit_ids": [str(u) for u in (a.unit_ids or [])],
         "title": a.title,
+        "description": a.description,
         "type": a.type,
         "source_type": a.source_type,
         "status": a.status,
@@ -641,6 +657,9 @@ async def update_assignment(
     # disables every config control on published HWs and shows the
     # "Unpublish to edit" banner; this enforces the same contract on
     # the API so a stale UI or direct call can't bypass it.
+    #
+    # Rubric and description are deliberately NOT in this list — see
+    # the matching block below the guard for why each is exempt.
     config_fields_touched = (
         body.title is not None
         or body.clear_due_at
@@ -658,6 +677,11 @@ async def update_assignment(
     # patterns. The rubric is a teacher + AI-grader reference, not a
     # student-visible contract, so changes here don't invalidate
     # already-returned work.
+    #
+    # Description (student-visible instructions) is also allowed on
+    # published HWs for the same shape of reason: it doesn't change
+    # which problems students see, it just clarifies expectations.
+    # Teachers commonly add notes like "no calculators" mid-flight.
 
     if body.title is not None:
         title = body.title.strip()
@@ -696,6 +720,13 @@ async def update_assignment(
         a.rubric = None
     elif body.rubric is not None:
         a.rubric = body.rubric
+
+    if body.description is not None:
+        # Strip + collapse-to-null so we don't store all-whitespace
+        # instructions that render as a visible empty box on the
+        # student page. Editable while published like rubric.
+        cleaned = body.description.strip()
+        a.description = cleaned if cleaned else None
 
     await db.commit()
     return {"status": "ok"}

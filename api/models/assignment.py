@@ -29,6 +29,11 @@ class Assignment(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Free-form instructions the teacher writes for students (e.g.
+    # "Show all work, no calculators"). Plain text with optional inline
+    # LaTeX. Editable while published — parallels rubric since it
+    # doesn't change which problems students see.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # homework | quiz | test | practice
     source_type: Mapped[str | None] = mapped_column(
         String(20), nullable=True,
