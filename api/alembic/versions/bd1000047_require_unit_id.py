@@ -6,12 +6,12 @@ Create Date: 2026-04-26 00:00:00.000000
 
 Removes the "Uncategorized" bucket. Every document and question bank
 item now belongs to a real unit. Pre-launch (no real users yet, per
-CLAUDE.md), so we drop nullability directly without a backfill step
-and switch the foreign-key behavior from ON DELETE SET NULL to
-ON DELETE RESTRICT — the application layer blocks unit deletion
-when contents exist and surfaces a "move them first" message
-(teacher_units.delete_unit), so the database constraint is the
-defense-in-depth backstop.
+CLAUDE.md), so we delete any existing NULL-unit rows in-place rather
+than backfilling, then drop nullability and switch the foreign-key
+behavior from ON DELETE SET NULL to ON DELETE RESTRICT — the
+application layer blocks unit deletion when contents exist and
+surfaces a "move them first" message (teacher_units.delete_unit),
+so the database constraint is the defense-in-depth backstop.
 """
 from collections.abc import Sequence
 
@@ -36,6 +36,7 @@ def upgrade() -> None:
         ["unit_id"], ["id"],
         ondelete="RESTRICT",
     )
+    op.execute("DELETE FROM documents WHERE unit_id IS NULL")
     op.alter_column("documents", "unit_id", nullable=False)
 
     # question_bank_items.unit_id: SET NULL → RESTRICT, then NOT NULL.
@@ -50,6 +51,7 @@ def upgrade() -> None:
         ["unit_id"], ["id"],
         ondelete="RESTRICT",
     )
+    op.execute("DELETE FROM question_bank_items WHERE unit_id IS NULL")
     op.alter_column("question_bank_items", "unit_id", nullable=False)
 
     # question_bank_generation_jobs.unit_id: same treatment. With
@@ -67,6 +69,7 @@ def upgrade() -> None:
         ["unit_id"], ["id"],
         ondelete="RESTRICT",
     )
+    op.execute("DELETE FROM question_bank_generation_jobs WHERE unit_id IS NULL")
     op.alter_column("question_bank_generation_jobs", "unit_id", nullable=False)
 
 
