@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
+import { useToast } from "@/components/ui/toast";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -53,6 +54,7 @@ export function NewPracticeModal({
   const [step, setStep] = useState<Step>(1);
   const [sourceMode, setSourceMode] = useState<SourceMode>("clone");
   const { busy, error, setError, run } = useAsyncAction();
+  const toast = useToast();
 
   // ── Step 1 state (clone-mode only) ──
   const [hws, setHws] = useState<TeacherAssignment[]>([]);
@@ -182,11 +184,17 @@ export function NewPracticeModal({
       late_policy: latePolicy,
       ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
     });
+    // Same rationale as the HW wizard: don't block the route to the
+    // detail page on a section-assignment failure (would risk
+    // double-creating the practice on retry), but toast so the teacher
+    // knows the picks didn't take.
     if (sectionIds.length > 0) {
       try {
         await teacher.assignToSections(created.id, sectionIds);
       } catch {
-        // Non-fatal — teacher adds sections manually on detail page.
+        toast.error(
+          "Practice created, but assigning to your selected sections failed. Add them on the detail page.",
+        );
       }
     }
     return created.id;
