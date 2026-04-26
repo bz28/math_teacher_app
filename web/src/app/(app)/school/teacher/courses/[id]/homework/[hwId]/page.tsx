@@ -1139,7 +1139,7 @@ function ConfigBlock({
   return (
     <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-bg-base/30 p-4">
       {/* Units */}
-      <Field
+      <InlineSavedField
         label="Units"
         required
         hint={
@@ -1156,12 +1156,12 @@ function ConfigBlock({
           onChange={onChangeUnits}
           disabled={disabled}
         />
-      </Field>
+      </InlineSavedField>
 
       {/* Due date — hidden for practice: practice is ungraded and
           has no deadline concept. */}
       {hw.type !== "practice" && (
-        <Field
+        <InlineSavedField
           label="Due date"
           saveState={saveStates.dueAt}
           saveError={saveErrors.dueAt}
@@ -1172,13 +1172,13 @@ function ConfigBlock({
             disabled={disabled}
             inputRef={dueDateInputRef}
           />
-        </Field>
+        </InlineSavedField>
       )}
 
       {/* Late policy — hidden for practice: nothing can be late
           when there's no due date. */}
       {hw.type !== "practice" && (
-        <Field
+        <InlineSavedField
           label="Late policy"
           saveState={saveStates.latePolicy}
           saveError={saveErrors.latePolicy}
@@ -1204,11 +1204,11 @@ function ConfigBlock({
               );
             })}
           </div>
-        </Field>
+        </InlineSavedField>
       )}
 
       {/* Sections */}
-      <Field
+      <InlineSavedField
         label="Sections"
         hint={
           hw.section_ids.length === 0
@@ -1224,12 +1224,19 @@ function ConfigBlock({
           onChange={onChangeSections}
           disabled={disabled}
         />
-      </Field>
+      </InlineSavedField>
     </div>
   );
 }
 
-function Field({
+/**
+ * Labeled config row with an inline auto-save status hint. Distinct
+ * from the shared `Field` in components/school/shared/field.tsx —
+ * that one is a form-control wrapper (label + htmlFor); this one is a
+ * status-bearing row used inside the HW configuration accordion to
+ * show "saving / saved / error" next to the field title.
+ */
+function InlineSavedField({
   label,
   required,
   hint,
