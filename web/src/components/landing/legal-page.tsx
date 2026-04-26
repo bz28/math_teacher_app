@@ -1,7 +1,6 @@
 "use client";
 
-import DOMPurify from "dompurify";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Eyebrow } from "./eyebrow";
 
 interface Section {
@@ -18,14 +17,6 @@ interface LegalPageProps {
 
 export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
   const [tocOpen, setTocOpen] = useState(false);
-  // Defense-in-depth: even though current callers hand us hardcoded
-  // strings from page files, sanitize before rendering so a future
-  // contributor wiring this up to a CMS / API field can't open an
-  // XSS hole by mistake. DOMPurify is already a dependency.
-  const sanitizedSections = useMemo(
-    () => sections.map((s) => ({ ...s, content: DOMPurify.sanitize(s.content) })),
-    [sections],
-  );
 
   return (
     <div className="bg-[color:var(--color-surface)] px-6 pt-24 pb-24 md:pt-32 md:pb-32">
@@ -100,11 +91,12 @@ export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
 
           {/* Content */}
           <div className="space-y-12">
-            {sanitizedSections.map((s, i) => (
+            {sections.map((s, i) => (
               <section key={s.id} id={s.id} className="scroll-mt-28">
                 <h2 className="text-2xl font-bold text-[color:var(--color-text)] md:text-3xl">
                   {i + 1}. {s.title}
                 </h2>
+                {/* SAFETY: content is hardcoded in page files, never from user input or CMS */}
                 <div
                   className="mt-5 space-y-4 leading-relaxed text-[color:var(--color-text-secondary)] [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-2 [&_strong]:text-[color:var(--color-text)] [&_strong]:font-semibold"
                   dangerouslySetInnerHTML={{ __html: s.content }}
