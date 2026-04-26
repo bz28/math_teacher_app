@@ -1594,7 +1594,7 @@ export interface StudentDashboardResponse {
   recently_graded: DashboardGrade[];
 }
 
-export interface StudentGradesResponse {
+export interface MyGradesResponse {
   grades: DashboardGrade[];
 }
 
@@ -1606,7 +1606,7 @@ export const schoolStudent = {
     return apiFetch<StudentDashboardResponse>("/school/student/dashboard");
   },
   getAllGrades() {
-    return apiFetch<StudentGradesResponse>("/school/student/grades");
+    return apiFetch<MyGradesResponse>("/school/student/grades");
   },
   listHomework(courseId: string) {
     return apiFetch<StudentHomeworkSummary[]>(`/school/student/courses/${courseId}/homework`);
