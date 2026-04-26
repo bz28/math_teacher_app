@@ -15,7 +15,7 @@ import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
 import { MockTestSummary } from "./_components/mock-test-summary";
 import { MockTestPreview } from "./_components/mock-test-preview";
-import { cn, shuffleChoices, formatElapsed } from "@/lib/utils";
+import { cn, sortChoicesByHash, formatElapsed } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 
 export default function MockTestPage() {
@@ -243,7 +243,7 @@ export default function MockTestPage() {
           current.distractors && current.distractors.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2">
               {(() => {
-                const shuffled = shuffleChoices(
+                const shuffled = sortChoicesByHash(
                   [current.answer, ...current.distractors],
                   mockTest.currentIndex,
                 );

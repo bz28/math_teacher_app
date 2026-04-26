@@ -31,7 +31,7 @@ export default function PracticePage() {
   } = usePracticeStore();
 
   const { fire: fireConfetti } = useConfetti();
-  const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
+  const [selectedChoiceIndex, setSelectedChoice] = useState<number | null>(null);
   const { UpgradeModal } = useUpgradePrompt();
 
   // Build MC choices — must be before early returns (rules of hooks)
@@ -171,7 +171,7 @@ export default function PracticePage() {
       <MCQCard
         question={current.question}
         choices={choices}
-        selectedChoice={selectedChoice}
+        selectedChoiceIndex={selectedChoiceIndex}
         feedback={feedback}
         isThinking={isThinking}
         onSelectChoice={handleChoiceSelect}

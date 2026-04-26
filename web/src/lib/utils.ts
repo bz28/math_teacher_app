@@ -118,8 +118,12 @@ export interface QuizResult {
   isCorrect: boolean | null;
 }
 
-/** Deterministic shuffle for MCQ choices using a string hash. */
-export function shuffleChoices(choices: string[], seed: number): string[] {
+/** Deterministic order for MCQ choices via a string-hash sort. The
+ *  output is stable for the same (choices, seed) pair so the visible
+ *  positions don't shuffle between renders, but it is NOT a Fisher-
+ *  Yates shuffle — it's a sort by hash, so the relative order is
+ *  predictable to anyone reading the source. */
+export function sortChoicesByHash(choices: string[], seed: number): string[] {
   return [...choices].sort((a, b) => {
     const ha = Array.from(a).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
     const hb = Array.from(b).reduce((h, c) => (h * 31 + c.charCodeAt(0) + seed) | 0, 0);
