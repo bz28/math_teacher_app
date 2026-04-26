@@ -1,6 +1,7 @@
 """Practice mode: generate similar problems and check answers."""
 
 import logging
+import re
 
 import anthropic
 
@@ -27,6 +28,11 @@ Rules:
 wrong formula, partial solution, etc.)
 - Distractors must be clearly wrong but look reasonable to a student who made an error
 - Use LaTeX $ delimiters for ALL math, even simple expressions
+- CRITICAL — NO EXPLANATIONS: each distractor must contain ONLY the wrong answer value. \
+Do NOT append any commentary, label, or reason. Specifically forbidden are trailing \
+parentheticals like "(sign error)", "(forgot to subtract)", "(off by one)", \
+"(partial)" — these reveal which option is wrong to the student. Return only the \
+bare wrong value, exactly as a student would write it on their paper.
 - If the correct answer contains @@{{"diagram_type": "smiles", ...}}@@, generate 3 WRONG \
 SMILES structures using the same @@{{...}}@@ notation (wrong functional groups, wrong \
 charges, wrong connectivity)
@@ -34,6 +40,31 @@ charges, wrong connectivity)
 graph definitions (wrong functions, shifted curves, etc.)
 
 """
+
+
+# Defense in depth for the rule above: even with the explicit instruction,
+# the LLM occasionally appends "(sign error)" / "(forgot a step)" to a
+# distractor. Strip a trailing parenthetical only when its content contains a
+# tell-tale "explanation" word — this avoids stripping legitimate math like
+# $\sin(\theta)$, ordered pairs $(0, 1)$, or expressions like $(x+1)$.
+_LEAK_KEYWORDS = (
+    r"error|mistake|wrong|forgot|forgets|forgotten|missed|missing|"
+    r"swap(?:ped|s)?|reversed?|off[- ]by[- ]?one|partial|incorrect|"
+    r"confused?|sign(?: flip| change| error)?|dropped|omit(?:ted)?|"
+    r"skipped|neglect(?:ed)?|miscalculat(?:ed|ion)|misread"
+)
+_LEAK_RE = re.compile(
+    rf"\s*\((?=[^)]*\b(?:{_LEAK_KEYWORDS})\b)[^)]*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_distractor_leak(s: str) -> str:
+    # Fall back to the original (trimmed) when the strip would empty the
+    # distractor — guards against a model returning a bare commentary like
+    # "(missing)", which would otherwise propagate as an empty MC option.
+    stripped = _LEAK_RE.sub("", s).strip()
+    return stripped or s.strip()
 
 
 async def generate_distractors(
@@ -68,7 +99,7 @@ async def generate_distractors(
         )
         distractors = result.get("distractors", [])
         if isinstance(distractors, list) and len(distractors) >= 3:
-            return [str(d) for d in distractors[:3]]
+            return [_strip_distractor_leak(str(d)) for d in distractors[:3]]
     except Exception:
         logger.warning("Failed to generate distractors for: %s", problem[:80])
 

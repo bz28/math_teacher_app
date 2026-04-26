@@ -6,7 +6,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
-import { cleanMathPreview } from "./HistoryCards";
+import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 import { formatDuration } from "../utils/quiz";
@@ -137,15 +137,21 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                   </Text>
                 </AnimatedPressable>
               </View>
-              <Text style={styles.resultQuestion} numberOfLines={2}>
-                {cleanMathPreview(result.question)}
-              </Text>
+              {/* Cap question height to ~2 lines via maxHeight wrapper —
+                  MathText's WebView ignores numberOfLines, so this is the
+                  only way to clip tall constructs (matrices, fractions). */}
+              <View style={styles.resultQuestionWrap}>
+                <MathText text={result.question} style={styles.resultQuestion} numberOfLines={2} />
+              </View>
               <View style={styles.resultAnswers}>
                 {result.isCorrect === true && (
                   <>
-                    <Text style={styles.resultAnswer}>
-                      Your answer: {cleanMathPreview(result.userAnswer ?? "")}
-                    </Text>
+                    <View style={styles.answerLine}>
+                      <Text style={styles.resultAnswer}>Your answer: </Text>
+                      <View style={styles.answerMathWrap}>
+                        <MathText text={result.userAnswer ?? ""} style={styles.resultAnswer} />
+                      </View>
+                    </View>
                     <Text style={styles.resultCorrectAnswer}>
                       Correct!
                     </Text>
@@ -153,9 +159,12 @@ export function MockTestSummary({ onBack, onHome }: Props) {
                 )}
                 {result.isCorrect === false && (
                   <>
-                    <Text style={[styles.resultAnswer, styles.resultAnswerWrong]}>
-                      Your answer: {cleanMathPreview(result.userAnswer ?? "")}
-                    </Text>
+                    <View style={styles.answerLine}>
+                      <Text style={[styles.resultAnswer, styles.resultAnswerWrong]}>Your answer: </Text>
+                      <View style={styles.answerMathWrap}>
+                        <MathText text={result.userAnswer ?? ""} style={{ ...styles.resultAnswer, ...styles.resultAnswerWrong }} />
+                      </View>
+                    </View>
                     <Text style={styles.resultHint}>
                       Flag this question and learn it to see the answer
                     </Text>
@@ -348,6 +357,15 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     ...typography.body,
     color: colors.text,
     fontSize: 14,
+  },
+  // Cap question height. MathText's WebView ignores numberOfLines (height
+  // is dynamic), so this maxHeight clip is the only way to keep tall LaTeX
+  // (matrices, fractions) from blowing up the row. 60px lets a single
+  // inline display block (KaTeX adds ~16px of vertical margins) render
+  // fully; tighter caps (e.g. 44) clipped fractions mid-symbol.
+  resultQuestionWrap: {
+    maxHeight: 60,
+    overflow: "hidden",
     marginBottom: spacing.sm,
   },
   resultAnswers: {
@@ -356,6 +374,19 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   resultAnswer: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  // Layout helpers for the "Your answer: $X$" row — Text prefix + MathText
+  // need to share row width. minWidth: 0 prevents the WebView wrapper
+  // (width:100%) from competing with the prefix label. flex-start so a
+  // multi-line answer (fraction, matrix) lines up its first row with the
+  // prefix instead of centering the prefix vertically against tall content.
+  answerLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  answerMathWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   resultAnswerWrong: {
     color: colors.error,
