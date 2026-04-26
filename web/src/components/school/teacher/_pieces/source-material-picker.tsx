@@ -229,6 +229,11 @@ export function SourceMaterialPicker({
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
+    // In filter mode we can't compute the allowed pool until units
+    // load — surface an empty result rather than silently showing
+    // hits from currently-hidden topics that would disappear once
+    // groups appear.
+    if (inFilterMode && !units) return [];
     let pool = docs;
     if (inFilterMode && units) {
       const allowed = new Set(unitIds);

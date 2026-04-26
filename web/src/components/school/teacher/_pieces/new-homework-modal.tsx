@@ -47,7 +47,7 @@ export function NewHomeworkModal({
     opts: { startedGeneration: boolean },
   ) => void;
 }) {
-  const { busy, error, setError, run } = useAsyncAction();
+  const { busy, error, run } = useAsyncAction();
 
   const [title, setTitle] = useState("");
   const [unitId, setUnitId] = useState<string | null>(
@@ -120,17 +120,14 @@ export function NewHomeworkModal({
     else setCountDraft(String(clamp(v)));
   };
 
-  const validate = (): string | null => {
-    if (!title.trim()) return "Add a title";
-    if (!unitId) return "Pick a topic";
-    return null;
-  };
-
   const createDraft = async (): Promise<string> => {
+    // Both submit buttons are `disabled` until title + unitId are
+    // present (see button props below), so unitId is non-null here.
+    if (!unitId) throw new Error("Pick a topic");
     const created = await teacher.createAssignment(courseId, {
       title: title.trim(),
       type: "homework",
-      unit_ids: [unitId!],
+      unit_ids: [unitId],
       late_policy: "none",
     });
     return created.id;
@@ -138,22 +135,12 @@ export function NewHomeworkModal({
 
   const onCreateEmpty = () =>
     run(async () => {
-      const v = validate();
-      if (v) {
-        setError(v);
-        return;
-      }
       const id = await createDraft();
       onCreated(id, { startedGeneration: false });
     });
 
   const onGenerate = () =>
     run(async () => {
-      const v = validate();
-      if (v) {
-        setError(v);
-        return;
-      }
       const id = await createDraft();
       // Fire-and-forget: the job runs server-side regardless of the
       // client. The teacher routes straight to the review queue —
