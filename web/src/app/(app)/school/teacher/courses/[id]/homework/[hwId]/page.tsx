@@ -6,11 +6,15 @@ import { useRouter } from "next/navigation";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
+  enterPreviewMode,
+  exitPreviewMode,
   type BankItem,
   type BankJob,
+  type SubmissionsInboxRow,
   type TeacherAssignment,
   type TeacherRubric,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -76,6 +80,7 @@ export default function HomeworkDetailPage({
 }) {
   const { id: courseId, hwId: assignmentId } = use(params);
   const router = useRouter();
+  const { loadUser } = useAuthStore();
 
   const [hw, setHw] = useState<
     (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
@@ -104,6 +109,14 @@ export default function HomeworkDetailPage({
   // "N pending problems" banner + the "Resume queue ▸" CTA that
   // navigates into the full-page approval queue.
   const [pending, setPending] = useState<BankItem[]>([]);
+  // Submissions inbox rows for THIS HW only — populated when the HW is
+  // published so the detail page can show "X of Y submitted · Z to
+  // grade →". One row per section the HW reaches; null while loading
+  // or when the HW is still a draft. The strip degrades silently if
+  // the request fails — it's a convenience link, not core info.
+  const [inboxRows, setInboxRows] = useState<SubmissionsInboxRow[] | null>(
+    null,
+  );
   const [showGenerate, setShowGenerate] = useState(false);
   // Polls bank jobs kicked off from the "Generate more" modal so the
   // pending-banner count updates live when generation completes.
@@ -216,6 +229,34 @@ export default function HomeworkDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
+  // Load submission inbox rows once the HW is published so the strip
+  // can show submission counts. Fetches the course-level inbox and
+  // filters client-side — there are typically only a few sections per
+  // course so the extra rows don't matter, and we save a backend
+  // endpoint just for this view. Re-fetched whenever the HW (un)pub
+  // status flips.
+  useEffect(() => {
+    if (hw?.status !== "published") {
+      setInboxRows(null);
+      return;
+    }
+    let cancelled = false;
+    teacher
+      .submissionsInbox(courseId)
+      .then((res) => {
+        if (cancelled) return;
+        setInboxRows(
+          res.rows.filter((r) => r.assignment_id === assignmentId),
+        );
+      })
+      .catch(() => {
+        // Non-fatal — strip will simply not render.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hw?.status, courseId, assignmentId]);
+
   // Poll any in-flight generation job so the banner updates when it
   // completes. Stops polling on done/failed or after a ceiling; same
   // pattern as the course workspace page's active-job polling.
@@ -307,6 +348,44 @@ export default function HomeworkDetailPage({
     run(async () => {
       await teacher.unpublishAssignment(assignmentId);
       await reload();
+    });
+
+  // Token-swap preview: hands the teacher a shadow-student session and
+  // navigates to the same HW on the student app. Same-tab navigation
+  // because preview tokens live in localStorage which is shared across
+  // tabs (a per-tab preview would require reworking auth storage).
+  //
+  // loadUser() is critical — without it the auth store still says
+  // role=teacher and the /school/student layout's role guard redirects
+  // back to /home before the page renders. loadUser swallows its own
+  // errors and resolves with user=null (auth.ts:53-62), so we can't
+  // rely on a throw to detect failure — we read the post-call user
+  // state and treat null as failure: restore teacher tokens so the
+  // teacher isn't stranded with student auth, then throw so run()
+  // surfaces the error. Independent local busy flag so the button can
+  // show "Switching…" without conflating with other saves.
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const onPreviewAsStudent = () =>
+    run(async () => {
+      if (previewLoading) return;
+      setPreviewLoading(true);
+      try {
+        const tokens = await teacher.previewAsStudent();
+        enterPreviewMode(tokens);
+        await loadUser();
+        const previewUser = useAuthStore.getState().user;
+        if (!previewUser) {
+          exitPreviewMode();
+          throw new Error(
+            "Couldn't enter preview mode. Please try again.",
+          );
+        }
+        router.push(
+          `/school/student/courses/${courseId}/homework/${assignmentId}`,
+        );
+      } finally {
+        setPreviewLoading(false);
+      }
     });
 
   // Inline auto-save runner. Optimistic — applies the change to the
@@ -477,7 +556,7 @@ export default function HomeworkDetailPage({
         }}
       />
     )}
-    <div className="mx-auto max-w-4xl px-4 pb-10">
+    <div className="mx-auto max-w-4xl px-4 pb-32">
       {/* Breadcrumb */}
       <div className="pt-3">
         <Link
@@ -488,7 +567,9 @@ export default function HomeworkDetailPage({
         </Link>
       </div>
 
-      {/* Hero header row: status + title + primary action (publish) */}
+      {/* Hero header row: status + title. Publish lives in the sticky
+          action bar at the viewport bottom so it stays reachable even
+          on long HWs with many problems below. */}
       <header className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 flex-1">
           {hw && (
@@ -558,81 +639,7 @@ export default function HomeworkDetailPage({
           </div>
         </div>
 
-        {/* Publish / Unpublish lives alongside the title. Draft HWs
-            show a disabled Publish with a tooltip listing what's still
-            needed (e.g. "Missing: at least one problem"). */}
-        {!editingProblems && hw && (
-          <div className="flex shrink-0 items-center gap-2">
-            {isPublished ? (
-              <button
-                type="button"
-                onClick={unpublish}
-                disabled={busy}
-                className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-              >
-                Unpublish
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handlePublishClick}
-                disabled={busy || !canPublish}
-                title={
-                  canPublish
-                    ? "Publish — locks the questions in the bank"
-                    : `Missing: ${missingForPublish.join(", ")}`
-                }
-                className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
-                  canPublish
-                    ? "bg-green-600 hover:bg-green-700 hover:shadow"
-                    : "bg-gray-400 cursor-not-allowed dark:bg-gray-600"
-                }`}
-              >
-                Publish ▸
-              </button>
-            )}
-          </div>
-        )}
       </header>
-
-      {/* Soft confirm strip for "publish without a due date". Shown
-          full-width below the header so it's hard to miss, and its
-          CTAs pair with the already-noticed Publish button above.
-          Never shows for practice — due dates don't apply there. */}
-      {!editingProblems && hw && hw.type !== "practice" && confirmingNoDueDate && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/40 dark:bg-amber-500/10">
-          <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-            ⚠ Publish without a due date? Students will see &ldquo;no due date&rdquo;.
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmingNoDueDate(false);
-                setTimeout(() => {
-                  dueDateInputRef.current?.focus();
-                  dueDateInputRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
-                }, 0);
-              }}
-              disabled={busy}
-              className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-            >
-              Add due date
-            </button>
-            <button
-              type="button"
-              onClick={publish}
-              disabled={busy}
-              className="rounded-[--radius-md] bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              Publish anyway
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Loading / editing-problems states short-circuit the page */}
       {(loading || !hw) ? (
@@ -652,9 +659,23 @@ export default function HomeworkDetailPage({
         <>
           {isPublished && (
             <div className="mt-4 rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              🔒 Published — students can see this. Unpublish to edit the
-              problem list or configuration.
+              🔒 Published — students can see this. Rubric and
+              instructions stay editable; unpublish to change the
+              problem list, title, due date, or sections.
             </div>
+          )}
+
+          {/* Submission summary — only shown for published HWs. Tells
+              the teacher at a glance how many students have submitted
+              and how many need grading, with a one-click jump to the
+              grading queue. Multi-section HWs expand into an inline
+              section picker rather than auto-pick a section. */}
+          {isPublished && inboxRows && inboxRows.length > 0 && (
+            <SubmissionStrip
+              courseId={courseId}
+              assignmentId={assignmentId}
+              rows={inboxRows}
+            />
           )}
 
           {/* Pending review is the primary CTA when generation produced
@@ -705,7 +726,13 @@ export default function HomeworkDetailPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditingProblems(true)}
+                  onClick={() => {
+                    // Drop any in-flight publish soft-confirm so the
+                    // teacher doesn't return from removal mode to a
+                    // stale "Publish anyway?" bar from before.
+                    setConfirmingNoDueDate(false);
+                    setEditingProblems(true);
+                  }}
                   disabled={isPublished || problems.length === 0}
                   title={
                     isPublished
@@ -778,15 +805,17 @@ export default function HomeworkDetailPage({
           )}
 
           {/* Configuration — collapsed accordion. Auto-expands on a
-              fresh HW with no problems so teachers notice the fields;
-              collapses once they're set. For practice we hide the
-              due date + late policy inputs (neither applies) but keep
-              units + sections since they still drive visibility. */}
+              fresh HW with no problems OR when a required field is
+              missing, so teachers can't accidentally collapse the only
+              way to fix what's blocking publish. Collapses once
+              everything's set. For practice we hide the due date + late
+              policy inputs (neither applies) but keep units + sections
+              since they still drive visibility. */}
           <div className="mt-4">
             <CollapsibleSection
               label="Configuration"
               summary={configSummary(hw)}
-              defaultOpen={problems.length === 0}
+              defaultOpen={problems.length === 0 || hw.unit_ids.length === 0}
             >
               <ConfigBlock
                 hw={hw}
@@ -847,6 +876,39 @@ export default function HomeworkDetailPage({
         </>
       )}
     </div>
+    {/* Sticky action bar — pins Publish + Preview-as-student to the
+        viewport bottom so they're always reachable, no matter how far
+        the teacher has scrolled. Hidden during the in-place "edit
+        problems" sub-view because that mode has its own footer. */}
+    {hw && !editingProblems && !loading && (
+      <ActionBar
+        isPublished={isPublished}
+        canPublish={canPublish}
+        missingForPublish={missingForPublish}
+        busy={busy}
+        previewLoading={previewLoading}
+        onPublish={handlePublishClick}
+        onUnpublish={unpublish}
+        onPreviewAsStudent={onPreviewAsStudent}
+        confirmingNoDueDate={confirmingNoDueDate && hw.type !== "practice"}
+        onConfirmCancel={() => {
+          setConfirmingNoDueDate(false);
+          // Best-effort scroll to the due-date input if it's currently
+          // mounted (i.e. the Configuration accordion is expanded).
+          // When collapsed, the ref is null — the teacher needs to
+          // expand Configuration manually. Documenting that here so a
+          // future PR can auto-expand on this path.
+          setTimeout(() => {
+            dueDateInputRef.current?.focus();
+            dueDateInputRef.current?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          }, 0);
+        }}
+        onConfirmPublish={publish}
+      />
+    )}
     </>
   );
 }
@@ -1030,10 +1092,6 @@ function ConfigBlock({
 }) {
   return (
     <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-bg-base/30 p-4">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-        Configuration
-      </div>
-
       {/* Units */}
       <Field
         label="Units"
@@ -1454,6 +1512,243 @@ function RemovableProblemRow({
       >
         {marked ? "Undo" : "✕"}
       </button>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Submission strip — slim "X of Y submitted · Z to grade →" line that
+// sits between the published-lock banner and the pending-review card.
+// Single-section HWs deep-link directly to the grading queue; multi-
+// section HWs expand inline into a section picker so the teacher
+// chooses which queue to enter rather than us guessing.
+// ────────────────────────────────────────────────────────────────────
+function SubmissionStrip({
+  courseId,
+  assignmentId,
+  rows,
+}: {
+  courseId: string;
+  assignmentId: string;
+  rows: SubmissionsInboxRow[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  const totalStudents = rows.reduce((s, r) => s + r.total_students, 0);
+  const totalSubmitted = rows.reduce((s, r) => s + r.submitted, 0);
+  // "To review" = submissions whose grade isn't out yet OR has been
+  // edited since publish. `to_grade` counts only graded-but-unpublished
+  // (per teacher_assignments.py:985-994), so the truly-ungraded would
+  // be silently dropped if we used it directly. `submitted - published`
+  // captures both ungraded + to_grade in one expression; `+ dirty`
+  // adds back the published-but-edited subset that needs a republish
+  // click before students see the latest. Flagged is reported
+  // separately as an integrity signal, not a grading-pipeline state.
+  const totalToReview = rows.reduce(
+    (s, r) => s + (r.submitted - r.published) + r.dirty,
+    0,
+  );
+  const totalFlagged = rows.reduce((s, r) => s + r.flagged, 0);
+
+  const parts: string[] =
+    totalSubmitted === 0
+      ? [`Waiting for first submission`]
+      : [`${totalSubmitted} of ${totalStudents} submitted`];
+  if (totalToReview > 0) parts.push(`${totalToReview} to review`);
+  if (totalFlagged > 0) parts.push(`⚑ ${totalFlagged} flagged`);
+  const summary = parts.join(" · ");
+
+  const reviewHref = (sectionId: string) =>
+    `/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${sectionId}/review`;
+
+  // Single-section HW: one click goes straight to the grading queue.
+  if (rows.length === 1) {
+    return (
+      <Link
+        href={reviewHref(rows[0].section_id)}
+        className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-4 py-2.5 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:bg-bg-subtle"
+      >
+        <span>{summary}</span>
+        <span className="shrink-0 text-primary">View submissions →</span>
+      </Link>
+    );
+  }
+
+  // Multi-section: expandable inline picker so the teacher picks the
+  // section to grade rather than landing in a default they didn't ask
+  // for. Counts live on each row so the choice is informed.
+  return (
+    <div className="mt-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+      >
+        <span>{summary}</span>
+        <span className="shrink-0 text-primary">
+          {open ? "Hide sections ▴" : "View submissions →"}
+        </span>
+      </button>
+      {open && (
+        <div className="divide-y divide-border-light border-t border-border-light bg-surface">
+          {rows.map((r) => {
+            const toReview = (r.submitted - r.published) + r.dirty;
+            return (
+              <Link
+                key={r.section_id}
+                href={reviewHref(r.section_id)}
+                className="flex items-center justify-between gap-3 px-4 py-2 text-xs hover:bg-bg-subtle"
+              >
+                <span className="font-semibold text-text-primary">
+                  {r.section_name}
+                </span>
+                <span className="text-text-muted">
+                  {r.submitted} of {r.total_students} submitted
+                  {toReview > 0 && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <span className="font-semibold text-primary">
+                        {toReview} to review →
+                      </span>
+                    </>
+                  )}
+                  {r.flagged > 0 && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <span className="font-semibold text-red-600 dark:text-red-400">
+                        ⚑ {r.flagged}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Sticky action bar — viewport-pinned footer with Preview as student
+// (left) and Publish/Unpublish (right). Includes a small validation
+// hint on the left when Publish is blocked, so the teacher knows what
+// to fix without hovering the disabled button.
+//
+// When `confirmingNoDueDate` is true, the bar replaces the normal
+// row with a soft-confirm UI (warning + "Add due date" / "Publish
+// anyway"). Renders adjacent to the click target so the teacher
+// doesn't have to hunt for the dialog after pressing Publish on a
+// long-scrolled HW.
+// ────────────────────────────────────────────────────────────────────
+function ActionBar({
+  isPublished,
+  canPublish,
+  missingForPublish,
+  busy,
+  previewLoading,
+  onPublish,
+  onUnpublish,
+  onPreviewAsStudent,
+  confirmingNoDueDate,
+  onConfirmCancel,
+  onConfirmPublish,
+}: {
+  isPublished: boolean;
+  canPublish: boolean;
+  missingForPublish: string[];
+  busy: boolean;
+  previewLoading: boolean;
+  onPublish: () => void;
+  onUnpublish: () => void;
+  onPreviewAsStudent: () => void;
+  confirmingNoDueDate: boolean;
+  onConfirmCancel: () => void;
+  onConfirmPublish: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border-light bg-surface/95 px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] backdrop-blur"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        {confirmingNoDueDate ? (
+          <>
+            <span className="min-w-0 flex-1 text-xs font-semibold text-amber-900 dark:text-amber-200">
+              ⚠ Publish without a due date? Students will see &ldquo;no
+              due date&rdquo;.
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={onConfirmCancel}
+                disabled={busy}
+                className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+              >
+                Add due date
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmPublish}
+                disabled={busy}
+                className="rounded-[--radius-md] bg-green-600 px-4 py-2 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                Publish anyway
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="min-w-0 flex-1 text-[11px] text-text-muted">
+              {!isPublished && missingForPublish.length > 0 && (
+                <span>Missing: {missingForPublish.join(", ")}</span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={onPreviewAsStudent}
+                disabled={busy || previewLoading}
+                className="text-xs font-semibold text-text-secondary hover:text-primary disabled:opacity-50"
+              >
+                {previewLoading ? "Switching…" : "Preview as student →"}
+              </button>
+              {isPublished ? (
+                <button
+                  type="button"
+                  onClick={onUnpublish}
+                  disabled={busy}
+                  className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                >
+                  Unpublish
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  disabled={busy || !canPublish}
+                  title={
+                    canPublish
+                      ? "Publish — locks the questions in the bank"
+                      : `Missing: ${missingForPublish.join(", ")}`
+                  }
+                  className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
+                    canPublish
+                      ? "bg-green-600 hover:bg-green-700 hover:shadow"
+                      : "cursor-not-allowed bg-gray-400 dark:bg-gray-600"
+                  }`}
+                >
+                  Publish ▸
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

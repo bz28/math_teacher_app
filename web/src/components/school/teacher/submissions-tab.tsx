@@ -138,11 +138,16 @@ function InboxRow({
   const href = `/school/teacher/courses/${courseId}/homework/${row.assignment_id}/sections/${row.section_id}/review`;
   const dueLabel = row.due_at ? formatDueShort(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
-  const hasOutstanding = row.to_grade + row.dirty + row.flagged > 0;
-  // "to review" folds fresh-ungraded + dirty-republish into one count.
-  // From the teacher's point of view both states mean "needs a click
-  // before students see it"; the mechanical split doesn't help scan.
-  const toReview = row.to_grade + row.dirty;
+  // "To review" = anything that needs the teacher's attention before
+  // students see grades — ungraded submissions, graded-but-unpublished
+  // ones (`to_grade`), AND published-but-edited (`dirty`, needs a
+  // republish click). `submitted - published` captures the first two
+  // since `to_grade` only flags graded-but-unpublished and the truly-
+  // ungraded would otherwise be silently dropped from the count
+  // (per teacher_assignments.py:985-994). + dirty adds back the
+  // republish-pending subset of published rows.
+  const toReview = (row.submitted - row.published) + row.dirty;
+  const hasOutstanding = toReview + row.flagged > 0;
 
   return (
     <Link
@@ -220,8 +225,15 @@ function InboxRow({
  *  group ordered by due date ascending. Null due dates sink within
  *  their group. */
 function compareRows(a: SubmissionsInboxRow, b: SubmissionsInboxRow): number {
-  const aWork = a.flagged + a.to_grade + a.dirty > 0 ? 0 : 1;
-  const bWork = b.flagged + b.to_grade + b.dirty > 0 ? 0 : 1;
+  // "Outstanding" mirrors the per-row "to review" math: anything that
+  // needs teacher attention before grades release. Using to_grade +
+  // dirty alone would silently sink HWs with ungraded submissions
+  // (final_score IS NULL — not in to_grade) to the bottom of the
+  // inbox. (submitted - published) catches both ungraded and to_grade.
+  const aOutstanding = (a.submitted - a.published) + a.dirty + a.flagged;
+  const bOutstanding = (b.submitted - b.published) + b.dirty + b.flagged;
+  const aWork = aOutstanding > 0 ? 0 : 1;
+  const bWork = bOutstanding > 0 ? 0 : 1;
   if (aWork !== bWork) return aWork - bWork;
   return dueKey(a) - dueKey(b);
 }
