@@ -52,6 +52,7 @@ async def generate(
             problems=[PracticeProblem(question=q, answer="", distractors=[]) for q in question_texts]
         )
     except RuntimeError:
+        logger.exception("Practice generate failed")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to generate practice problems",
@@ -84,6 +85,7 @@ async def solve(
             )
         )
     except RuntimeError:
+        logger.exception("Practice solve failed")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to solve problem",
