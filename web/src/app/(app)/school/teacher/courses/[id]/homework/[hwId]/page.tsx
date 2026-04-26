@@ -1901,16 +1901,29 @@ function InstructionsBlock({
           </span>
           <InlineSavedHint state={saveState} errorMessage={saveError} />
         </div>
-        <button
-          type="button"
+        {/* role=button instead of <button> because MathText can render
+            display-math as a <div> for $$...$$ inputs, and a <div>
+            inside a <button> is invalid HTML (hydration warnings,
+            inconsistent click targets). The role+tabIndex+keyboard
+            handlers reproduce native button semantics for keyboard
+            and screen-reader users. */}
+        <div
+          role="button"
+          tabIndex={0}
           onClick={startEditing}
-          className="block w-full rounded-[--radius-md] border border-border-light bg-bg-base/50 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-primary/40 hover:bg-bg-subtle"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              startEditing();
+            }
+          }}
+          className="block w-full cursor-pointer rounded-[--radius-md] border border-border-light bg-bg-base/50 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-primary/40 hover:bg-bg-subtle"
           title="Click to edit"
         >
           <div className="whitespace-pre-wrap">
             <MathText text={value} />
           </div>
-        </button>
+        </div>
       </div>
     );
   }

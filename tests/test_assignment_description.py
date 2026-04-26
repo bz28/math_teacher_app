@@ -140,9 +140,15 @@ async def test_patch_description_allowed_on_published_hw(
 ) -> None:
     """Description edits parallel rubric edits — both are allowed on
     published HWs because neither changes the problem set students
-    see, only the surrounding context. Title/units/etc. would 400."""
+    see, only the surrounding context. Title/units/etc. would 400.
+
+    The `world` fixture seeds the assignment as published already, so
+    we round-trip draft→published here to make the state transition
+    load-bearing rather than incidental to the fixture setup.
+    """
     course_id = await _course_id_for(world["assignment_id"])
     await _link_teacher_to_course(world["teacher_id"], course_id)
+    await _set_status(world["assignment_id"], "draft")
     await _set_status(world["assignment_id"], "published")
 
     # Title PATCH should fail on published HW (sanity check on the lock).
