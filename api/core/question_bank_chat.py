@@ -36,7 +36,7 @@ CHAT_HARD_CAP = 100
 CHAT_CONTEXT_WINDOW = 20
 
 
-_CHAT_SYSTEM_TEMPLATE = """\
+_WORKSHOP_CHAT_SYSTEM_PROMPT = """\
 You are a {professor_role} working with a teacher in their question bank workshop.
 
 The teacher has a question (with a worked solution) and may want to revise it,
@@ -176,7 +176,7 @@ async def chat_with_bank_item(
             unit_name = unit.name
 
     cfg = get_config(course.subject)
-    system_prompt = _CHAT_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
+    system_prompt = _WORKSHOP_CHAT_SYSTEM_PROMPT.format(professor_role=cfg["professor_role"])
 
     user_context = _build_user_context(item, unit_name, course.name)
 

@@ -81,7 +81,7 @@ async def _run_job(job_id: uuid.UUID) -> None:
             await db.commit()
 
 
-_EXTRACT_WORKSHEET_TEMPLATE = """\
+_WORKSHEET_PROBLEMS_EXTRACTION_PROMPT = """\
 You are a {professor_role} extracting problems from a teacher's worksheet.
 
 The teacher has uploaded images of an existing worksheet or problem set.
@@ -115,7 +115,7 @@ async def _extract_from_images(
     generate_questions() so the downstream pipeline is unchanged.
     """
     cfg = get_config(subject)
-    system_prompt = _EXTRACT_WORKSHEET_TEMPLATE.format(
+    system_prompt = _WORKSHEET_PROBLEMS_EXTRACTION_PROMPT.format(
         professor_role=cfg["professor_role"],
     )
 
@@ -339,7 +339,7 @@ def snapshot_history(item: QuestionBankItem) -> None:
     item.previous_status = item.status
 
 
-_REGENERATE_SYSTEM_TEMPLATE = """\
+_PROBLEM_REGENERATION_PROMPT = """\
 You are a {professor_role} revising a single problem for a teacher's question bank.
 
 Return one question with its complete worked solution and final answer. The
@@ -383,7 +383,7 @@ async def regenerate_one(
     )
 
     cfg = get_config(course.subject)
-    system_prompt = _REGENERATE_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
+    system_prompt = _PROBLEM_REGENERATION_PROMPT.format(professor_role=cfg["professor_role"])
 
     # User message: include the topic + original constraint always; only
     # include the original question + instructions when the teacher provided

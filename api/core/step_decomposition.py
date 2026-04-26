@@ -39,7 +39,7 @@ def _cache_set(problem: str, decomp: "Decomposition") -> None:
         del _cache[oldest_key]
     _cache[problem] = (time.monotonic(), decomp)
 
-_SYSTEM_PROMPT_TEMPLATE = (
+_PROBLEM_DECOMPOSITION_PROMPT = (
     "You are a {professor_role}.\n\n"
 
     "Before solving, consider if there is a simpler or faster approach than "
@@ -76,7 +76,7 @@ _SYSTEM_PROMPT_TEMPLATE = (
 
 def _build_system_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _SYSTEM_PROMPT_TEMPLATE.format(
+    return _PROBLEM_DECOMPOSITION_PROMPT.format(
         professor_role=cfg["professor_role"],
         domain=cfg["domain"],
     )

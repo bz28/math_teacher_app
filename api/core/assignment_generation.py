@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # ── Question generation ──
 
-_GENERATE_QUESTIONS_TEMPLATE = """\
+_ASSIGNMENT_QUESTIONS_GENERATION_PROMPT = """\
 You are a {professor_role} creating assignment questions for a teacher.
 
 The teacher wants questions about a specific topic for their students.
@@ -33,7 +33,7 @@ Rules:
 
 def _build_generate_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    return _GENERATE_QUESTIONS_TEMPLATE.format(
+    return _ASSIGNMENT_QUESTIONS_GENERATION_PROMPT.format(
         professor_role=cfg["professor_role"],
     )
 
