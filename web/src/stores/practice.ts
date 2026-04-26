@@ -75,7 +75,7 @@ interface PracticeState {
   beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
   practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: Difficulty) => Promise<void>;
-  submitPracticeAnswer: (answer: string, subject: Subject) => Promise<void>;
+  submitPracticeAnswer: (answer: string) => Promise<void>;
   skipPracticeProblem: () => void;
   nextPracticeProblem: () => void;
   togglePracticeFlag: (index: number) => void;
@@ -232,7 +232,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     });
   },
 
-  async submitPracticeAnswer(answer, _subject) {
+  async submitPracticeAnswer(answer) {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
     const idx = practiceBatch.currentIndex;

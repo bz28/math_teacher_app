@@ -273,7 +273,7 @@ export function NewPracticeModal({
             <SourceStep
               sourceMode={sourceMode}
               onSourceModeChange={setSourceMode}
-              hws={cloneable}
+              cloneableHws={cloneable}
               hwsLoaded={hwsLoaded}
               selectedHwId={selectedHwId}
               onSelectedHwIdChange={setSelectedHwId}
@@ -419,7 +419,7 @@ export function NewPracticeModal({
 function SourceStep({
   sourceMode,
   onSourceModeChange,
-  hws,
+  cloneableHws,
   hwsLoaded,
   selectedHwId,
   onSelectedHwIdChange,
@@ -427,13 +427,17 @@ function SourceStep({
 }: {
   sourceMode: SourceMode;
   onSourceModeChange: (v: SourceMode) => void;
-  hws: TeacherAssignment[];
+  /** Pre-filtered to homeworks with problem_count > 0 by the parent.
+   *  This component assumes that filter has been applied — pass an
+   *  unfiltered list and the dropdown will surface drafts that the
+   *  clone endpoint would reject. */
+  cloneableHws: TeacherAssignment[];
   hwsLoaded: boolean;
   selectedHwId: string;
   onSelectedHwIdChange: (v: string) => void;
   disabled: boolean;
 }) {
-  const noClonableHw = hwsLoaded && hws.length === 0;
+  const noClonableHw = hwsLoaded && cloneableHws.length === 0;
   return (
     <div className="space-y-5">
       <p className="text-xs text-text-muted">
@@ -466,7 +470,7 @@ function SourceStep({
                 aria-label="Source homework"
                 className="mt-3 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
               >
-                {hws.map((h) => (
+                {cloneableHws.map((h) => (
                   <option key={h.id} value={h.id}>
                     {h.title} · {h.problem_count}{" "}
                     {h.problem_count === 1 ? "problem" : "problems"}

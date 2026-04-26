@@ -319,14 +319,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     if (preloaded) {
-      set({
+      // Functional setter mirrors the preload-write pattern above —
+      // and makes the learnQueue read safe without a non-null assert
+      // on a state slice that another path could in theory have reset.
+      set((state) => ({
         session: preloaded,
         sessionImage: nextImage ?? null,
-        phase: "awaiting_input",
+        phase: "awaiting_input" as SessionPhase,
         lastResponse: null,
         chatHistory: {},
-        learnQueue: { ...get().learnQueue!, currentIndex: nextIndex },
-      });
+        learnQueue: state.learnQueue
+          ? { ...state.learnQueue, currentIndex: nextIndex }
+          : null,
+      }));
       return;
     }
 

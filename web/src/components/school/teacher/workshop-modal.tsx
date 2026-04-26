@@ -156,6 +156,9 @@ export function WorkshopModal({
     }
     return -1;
   }, [liveItem]);
+  // Non-null assertion is safe: pendingIdx is only set when the loop
+  // above (line 153) found an entry where m.proposal was truthy, so
+  // the message at pendingIdx is guaranteed to carry a proposal.
   const pendingProposal: BankChatProposal | null =
     pendingIdx >= 0 && liveItem ? liveItem.chat_messages[pendingIdx].proposal! : null;
   const isProposalPending = pendingIdx >= 0;
