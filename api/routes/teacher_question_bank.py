@@ -48,7 +48,9 @@ class GenerateRequest(BaseModel):
     # no longer a standalone question-bank flow; every item belongs to
     # a HW.
     assignment_id: uuid.UUID
-    unit_id: uuid.UUID | None = None
+    # Required — generated bank items are saved under this unit. Used
+    # to be nullable to allow Uncategorized; that bucket is gone.
+    unit_id: uuid.UUID
     document_ids: list[uuid.UUID] = []
     constraint: str | None = None  # natural-language extra instructions
     # difficulty intentionally absent: questions are modeled after the source
@@ -66,7 +68,7 @@ class GenerateRequest(BaseModel):
 class UploadWorksheetRequest(BaseModel):
     images: list[str]  # base64-encoded JPEG/PNG
     assignment_id: uuid.UUID
-    unit_id: uuid.UUID | None = None
+    unit_id: uuid.UUID
 
     @field_validator("images")
     @classmethod
@@ -84,8 +86,10 @@ class UpdateBankItemRequest(BaseModel):
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
     difficulty: str | None = None
+    # None = leave unchanged; must be a real unit when set. The old
+    # `clear_unit` sentinel is gone — there's no unsorted bucket to
+    # move items to anymore.
     unit_id: uuid.UUID | None = None
-    clear_unit: bool = False
 
 
 class RegenerateRequest(BaseModel):
@@ -281,21 +285,20 @@ async def generate_bank_questions(
     # Frontend gates this in the generate-questions-modal but a stale UI
     # or direct API call could bypass and save into a subfolder, leaving
     # an orphaned-looking item the rail filter can't surface naturally.
-    if body.unit_id is not None:
-        from api.models.unit import Unit
-        unit = (await db.execute(
-            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
-        )).scalar_one_or_none()
-        if unit is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unit not found in this course",
-            )
-        if unit.parent_unit_id is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Generated questions must save into a top-level unit, not a subfolder",
-            )
+    from api.models.unit import Unit
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+    )).scalar_one_or_none()
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found in this course",
+        )
+    if unit.parent_unit_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Generated questions must save into a top-level unit, not a subfolder",
+        )
 
     job = QuestionBankGenerationJob(
         course_id=course_id,
@@ -333,21 +336,20 @@ async def upload_worksheet(
     """
     await get_teacher_course(db, course_id, current_user.user_id)
 
-    if body.unit_id is not None:
-        from api.models.unit import Unit
-        unit = (await db.execute(
-            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
-        )).scalar_one_or_none()
-        if unit is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unit not found in this course",
-            )
-        if unit.parent_unit_id is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Uploaded questions must save into a top-level unit, not a subfolder",
-            )
+    from api.models.unit import Unit
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+    )).scalar_one_or_none()
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found in this course",
+        )
+    if unit.parent_unit_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded questions must save into a top-level unit, not a subfolder",
+        )
 
     # Validate each image and build the stored payload
     validated_images = []
@@ -446,9 +448,7 @@ async def update_bank_item(
         if body.difficulty not in ("easy", "medium", "hard"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty")
         item.difficulty = body.difficulty
-    if body.clear_unit:
-        item.unit_id = None
-    elif body.unit_id is not None:
+    if body.unit_id is not None:
         item.unit_id = body.unit_id
 
     await db.commit()

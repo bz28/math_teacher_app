@@ -73,8 +73,14 @@ export function NewPracticeModal({
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
 
-  // Inline document uploads. Same lifted-state rationale as the HW modal.
-  const uploads = useDocumentUploads({ courseId, setDocs, setSelectedDocs });
+  // Inline document uploads. Same lifted-state rationale as the HW
+  // modal. Uploads land in the first picked unit (Step 1 requires ≥1).
+  const uploads = useDocumentUploads({
+    courseId,
+    getUnitId: () => unitIds[0] ?? "",
+    setDocs,
+    setSelectedDocs,
+  });
 
   // Load available HWs for the clone dropdown on first step-1 mount.
   // Preselect within the *cloneable* subset (problem_count > 0) so the

@@ -20,12 +20,9 @@ import { QUANTITY_CHIPS } from "./constants";
  * (here: "Save to") first, then count, then a focus hint, then a
  * topic-filtered SourceMaterialPicker. Generated questions are
  * stamped with `originating_assignment_id = assignmentId` and saved
- * under the picked unit's bank.
- *
- * The Save-to picker also accepts "Uncategorized" because the
- * question bank itself supports null unit_id — kept here as a real
- * choice with an explicit warning, even though new-HW creation
- * requires a real unit.
+ * under the picked unit's bank. Save-to is required — the
+ * Uncategorized bucket was removed, so every generated item lives
+ * under a real unit.
  */
 export function GenerateQuestionsModal({
   courseId,
@@ -44,8 +41,8 @@ export function GenerateQuestionsModal({
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
   // Save-to state. undefined = no choice yet (Generate disabled);
-  // null = explicit "Uncategorized"; string = a real unit id.
-  const [savedTo, setSavedTo] = useState<string | null | undefined>(undefined);
+  // string = a real unit id.
+  const [savedTo, setSavedTo] = useState<string | undefined>(undefined);
   const [count, setCount] = useState<number>(10);
   const [countDraft, setCountDraft] = useState("10");
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
@@ -53,7 +50,15 @@ export function GenerateQuestionsModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const uploads = useDocumentUploads({ courseId, setDocs, setSelectedDocs });
+  const uploads = useDocumentUploads({
+    courseId,
+    // Uploads land in the picked Save-to. The picker (and its upload
+    // affordance) only render when savedTo is set, so this is reached
+    // with a real id; "" is a defensive fallback the backend rejects.
+    getUnitId: () => savedTo ?? "",
+    setDocs,
+    setSelectedDocs,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +86,7 @@ export function GenerateQuestionsModal({
     };
   }, [courseId]);
 
-  const onPickSavedTo = (next: string | null) => {
+  const onPickSavedTo = (next: string) => {
     if (next === savedTo) return;
     setSavedTo(next);
     // Switching the Save-to unit invalidates any selected docs from
@@ -112,11 +117,10 @@ export function GenerateQuestionsModal({
   const onlyPdfsSelected = selectedDocs.size > 0 && readableSelectedCount === 0;
 
   const hasChosenSavedTo = savedTo !== undefined;
-  const explicitUncategorized = savedTo === null;
   const canSubmit = !submitting && hasChosenSavedTo && !onlyPdfsSelected;
 
   const submit = async () => {
-    if (!hasChosenSavedTo) {
+    if (savedTo === undefined) {
       setError("Pick a unit to save these questions to");
       return;
     }
@@ -144,7 +148,7 @@ export function GenerateQuestionsModal({
   };
 
   const tops = units ? topUnits(units) : [];
-  const pickerUnitIds = typeof savedTo === "string" ? [savedTo] : [];
+  const pickerUnitIds = savedTo !== undefined ? [savedTo] : [];
 
   return (
     <div
@@ -202,28 +206,12 @@ export function GenerateQuestionsModal({
                     // Otherwise an in-flight upload's auto-select can land
                     // AFTER our switch's selectedDocs clear, leaving a
                     // freshly-uploaded doc id selected under a different
-                    // unit (or invisibly attached after a switch to
-                    // Uncategorized that unmounts the picker) and silently
-                    // forwarded on submit.
+                    // unit and silently forwarded on submit.
                     disabled={submitting || uploads.hasInflightUploads}
                     onToggle={() => onPickSavedTo(u.id)}
                   />
                 ))}
-                <SelectableChip
-                  label="Uncategorized"
-                  selected={explicitUncategorized}
-                  disabled={submitting || uploads.hasInflightUploads}
-                  onToggle={() => onPickSavedTo(null)}
-                  variant="dashed"
-                />
               </div>
-            )}
-            {explicitUncategorized && (
-              <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
-                Heads up: these questions won&apos;t be organized under any
-                unit and won&apos;t show up when filtering by unit. You can
-                move them later.
-              </p>
             )}
           </div>
 
@@ -289,13 +277,6 @@ export function GenerateQuestionsModal({
             />
           </div>
 
-          {/* Picker is shown for both unit and Uncategorized save-to.
-              Uncategorized passes an empty unitIds array, which trips
-              the picker's `inFilterMode = filterToSelectedUnits &&
-              ... && unitIds.length > 0` guard and falls back to the
-              full grouped view — teacher can still pick docs from any
-              top unit, matching the rest of the app where
-              Uncategorized is a first-class bucket. */}
           {hasChosenSavedTo && (
             <SourceMaterialPicker
               courseId={courseId}

@@ -24,7 +24,7 @@ MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 class UploadDocumentRequest(BaseModel):
     image_base64: str
     filename: str = "upload.jpg"
-    unit_id: uuid.UUID | None = None
+    unit_id: uuid.UUID
 
 
 @router.post("/courses/{course_id}/documents", status_code=status.HTTP_201_CREATED)
@@ -48,13 +48,12 @@ async def upload_document(
     type_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "pdf": "application/pdf"}
     file_type = type_map.get(ext, "image/jpeg")
 
-    # Validate unit belongs to same course if specified
-    if body.unit_id is not None:
-        unit = (await db.execute(
-            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
-        )).scalar_one_or_none()
-        if not unit:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
+    # Validate unit belongs to same course.
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+    )).scalar_one_or_none()
+    if not unit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
 
     doc = Document(
         course_id=course_id, teacher_id=current_user.user_id,
@@ -86,7 +85,7 @@ async def list_documents(
     return {"documents": [{
         "id": str(d.id), "filename": d.filename,
         "file_type": d.file_type, "file_size": d.file_size,
-        "unit_id": str(d.unit_id) if d.unit_id else None,
+        "unit_id": str(d.unit_id),
         "created_at": d.created_at.isoformat(),
     } for d in docs]}
 
@@ -129,7 +128,7 @@ async def delete_document(
 
 
 class UpdateDocumentRequest(BaseModel):
-    unit_id: uuid.UUID | None = None  # null = move to uncategorized
+    unit_id: uuid.UUID  # required — every doc lives in a unit
 
 
 @router.patch("/courses/{course_id}/documents/{document_id}")
@@ -145,13 +144,11 @@ async def update_document(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    # Validate unit belongs to same course
-    if body.unit_id is not None:
-        unit = (await db.execute(
-            select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
-        )).scalar_one_or_none()
-        if not unit:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
+    unit = (await db.execute(
+        select(Unit).where(Unit.id == body.unit_id, Unit.course_id == course_id)
+    )).scalar_one_or_none()
+    if not unit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found in this course")
 
     doc.unit_id = body.unit_id
     await db.commit()

@@ -140,8 +140,7 @@ function Chip({
   );
 }
 
-function unitLabel(unitId: string | null, units: TeacherUnit[]): string {
-  if (!unitId) return "Uncategorized";
+function unitLabel(unitId: string, units: TeacherUnit[]): string {
   const top = units.find((u) => u.id === unitId);
   if (!top) return "Unknown";
   if (!top.parent_id) return top.name;

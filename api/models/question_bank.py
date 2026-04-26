@@ -28,8 +28,8 @@ class QuestionBankItem(Base):
     course_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    unit_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True, index=True,
+    unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id", ondelete="RESTRICT"), nullable=False, index=True,
     )
     # Every bank item belongs to a homework — the one the teacher was
     # on when they kicked off generation. Cascade-on-delete so deleting
@@ -115,8 +115,8 @@ class QuestionBankGenerationJob(Base):
     course_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    unit_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("units.id", ondelete="SET NULL"), nullable=True,
+    unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units.id", ondelete="RESTRICT"), nullable=False,
     )
     # The HW that triggered this generation job. Copied onto each
     # produced item so the item remembers its origin even if teachers

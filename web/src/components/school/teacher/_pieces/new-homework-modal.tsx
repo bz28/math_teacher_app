@@ -63,8 +63,17 @@ export function NewHomeworkModal({
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
 
   // Inline document uploads. Owned at the modal so the pending rows
-  // survive the picker remounting when the topic switches.
-  const uploads = useDocumentUploads({ courseId, setDocs, setSelectedDocs });
+  // survive the picker remounting when the topic switches. Uploads
+  // land in the currently-picked topic; the picker only renders
+  // after a topic is picked, so unitId is non-null whenever Upload
+  // is reachable. Upload-during-topic-switch race is closed by
+  // disabling the topic chips while `hasInflightUploads` is true.
+  const uploads = useDocumentUploads({
+    courseId,
+    getUnitId: () => unitId ?? "",
+    setDocs,
+    setSelectedDocs,
+  });
 
   // Load units + docs eagerly on mount. Both are tiny lists scoped to
   // the course; pre-loading avoids a flash of empty UI when the

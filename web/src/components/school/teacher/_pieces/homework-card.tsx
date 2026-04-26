@@ -82,7 +82,7 @@ export function HomeworkCard({
 
       {/* Meta row: unit · due date · sections */}
       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
-        {unitLabel && unitLabel !== "Uncategorized" && (
+        {unitLabel && (
           <>
             <span className="font-medium text-text-secondary">{unitLabel}</span>
             <span aria-hidden>·</span>

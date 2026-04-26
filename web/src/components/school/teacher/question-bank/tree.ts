@@ -24,13 +24,14 @@ export function buildTree(items: BankItem[]): TreeNode[] {
 
 // Group items by unit for visual scanning. Top units come first in
 // position order, with their subfolders nested via breadcrumb labels.
-// "Uncategorized" goes last.
+// Every item has a unit (the Uncategorized bucket was removed), so
+// the no-fallback bucket that used to live here is gone too.
 export function buildUnitGroups(
   items: BankItem[],
   units: TeacherUnit[],
 ): { id: string; label: string; items: BankItem[] }[] {
   const groups: { id: string; label: string; items: BankItem[] }[] = [];
-  const itemsIn = (uid: string | null) => items.filter((i) => i.unit_id === uid);
+  const itemsIn = (uid: string) => items.filter((i) => i.unit_id === uid);
   for (const top of topUnits(units)) {
     const own = itemsIn(top.id);
     if (own.length > 0) groups.push({ id: top.id, label: top.name, items: own });
@@ -41,7 +42,5 @@ export function buildUnitGroups(
       }
     }
   }
-  const uncat = itemsIn(null);
-  if (uncat.length > 0) groups.push({ id: "uncategorized", label: "Uncategorized", items: uncat });
   return groups;
 }

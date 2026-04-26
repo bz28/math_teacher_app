@@ -10,7 +10,7 @@ export type RowState =
   | { kind: "renaming"; id: string }
   | { kind: "deletingFolder"; id: string };
 
-export type Destination = { id: string | null; label: string };
+export type Destination = { id: string; label: string };
 
 export type SortMode = "name" | "size" | "added";
 

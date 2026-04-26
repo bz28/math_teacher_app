@@ -54,6 +54,7 @@ async def _publish_linked_practice(
         # job's output).
         variation = QuestionBankItem(
             course_id=source_hw.course_id,
+            unit_id=world["unit_id"],
             originating_assignment_id=practice.id,
             title="Practice variation",
             question="Solve x^2 - 5x + 6 = 0 (practice).",

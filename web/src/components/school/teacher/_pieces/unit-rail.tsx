@@ -4,18 +4,18 @@ import type { TeacherUnit } from "@/lib/api";
 import { topUnits } from "@/lib/units";
 import { FolderIcon, FolderOpenIcon } from "@/components/ui/icons";
 
-// Selection model for the rail. "all" = no filter; "uncategorized" =
-// items with no unit; otherwise a unit id.
-export type UnitSelection = "all" | "uncategorized" | string;
+// Selection model for the rail. "all" = no filter; otherwise a unit id.
+// The "uncategorized" bucket was removed — every item has a unit.
+export type UnitSelection = "all" | string;
 
 interface UnitRailProps {
   units: TeacherUnit[];
   selected: UnitSelection;
   onSelect: (selection: UnitSelection) => void;
-  /** Compute the count for a given unit (or null for uncategorized).
-   *  Caller-provided so the rail works for both bank items (single
-   *  unit_id) and assignments (unit_ids array). */
-  countFor: (unitId: string | null) => number;
+  /** Compute the count for a given unit. Caller-provided so the rail
+   *  works for both bank items (single unit_id) and assignments
+   *  (unit_ids array). */
+  countFor: (unitId: string) => number;
   totalCount: number;
 }
 
@@ -36,7 +36,6 @@ export function UnitRail({
   totalCount,
 }: UnitRailProps) {
   const tops = topUnits(units);
-  const uncategorizedCount = countFor(null);
 
   return (
     <div>
@@ -49,18 +48,6 @@ export function UnitRail({
         active={selected === "all"}
         onSelect={() => onSelect("all")}
       />
-      {/* Hide Uncategorized when empty so the homework tab doesn't
-          show a permanent zero (HWs require ≥1 unit so the bucket
-          is always empty there). The question bank can still have
-          uncategorized items so the row appears when relevant. */}
-      {(uncategorizedCount > 0 || selected === "uncategorized") && (
-        <RailRow
-          label="Uncategorized"
-          count={uncategorizedCount}
-          active={selected === "uncategorized"}
-          onSelect={() => onSelect("uncategorized")}
-        />
-      )}
 
       <div className="my-2 h-px bg-border-light/60" />
 

@@ -15,11 +15,10 @@ import type { RowState } from "./types";
 interface FolderTreeProps {
   units: TeacherUnit[];
   selected: string | null;
-  docCountFor: (unitId: string | null) => number;
-  uncategorizedCount: number;
+  docCountFor: (unitId: string) => number;
   rowState: RowState;
   busy: boolean;
-  onSelect: (unitId: string | null) => void;
+  onSelect: (unitId: string) => void;
   onStartRename: (id: string) => void;
   onSubmitRename: (unit: TeacherUnit, name: string) => void;
   onCancelRow: () => void;
@@ -31,7 +30,6 @@ export function FolderTree({
   units,
   selected,
   docCountFor,
-  uncategorizedCount,
   rowState,
   busy,
   onSelect,
@@ -45,14 +43,6 @@ export function FolderTree({
 
   return (
     <div className="rounded-[--radius-lg] border border-border-light bg-surface p-3 shadow-sm">
-      <UncategorizedRow
-        active={selected === null}
-        count={uncategorizedCount}
-        onSelect={() => onSelect(null)}
-      />
-
-      <div className="my-2 h-px bg-border-light" />
-
       {tops.length === 0 && (
         <p className="px-2 py-2 text-xs text-text-muted">No units yet.</p>
       )}
@@ -191,41 +181,6 @@ function FolderRow({
   );
 }
 
-function UncategorizedRow({
-  active,
-  count,
-  onSelect,
-}: {
-  active: boolean;
-  count: number;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`relative flex w-full items-center gap-2 rounded-[--radius-sm] px-2 py-2 text-left text-sm transition-colors duration-150 ease-out focus-visible:outline-none ${
-        active
-          ? "bg-primary-bg font-semibold text-primary"
-          : "text-text-secondary hover:bg-bg-subtle"
-      }`}
-    >
-      {active && (
-        <span
-          aria-hidden
-          className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-primary"
-        />
-      )}
-      <FolderIcon
-        className={`h-4 w-4 shrink-0 transition-colors ${
-          active ? "text-primary" : "text-text-muted"
-        }`}
-      />
-      <span className="flex-1 truncate">Uncategorized</span>
-      <CountPill active={active} count={count} />
-    </button>
-  );
-}
 
 function CountPill({ active, count }: { active: boolean; count: number }) {
   return (

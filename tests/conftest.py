@@ -28,6 +28,7 @@ from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session  # noqa: F401 — register models with Base
+from api.models.unit import Unit
 from api.models.user import User
 from api.routes.school_student_practice import drain_integrity_background_tasks
 
@@ -215,8 +216,8 @@ async def _truncate_world_tables() -> None:
     async with get_session_factory()() as s:
         await s.execute(text(
             "TRUNCATE TABLE bank_consumption, assignment_sections, assignments, "
-            "section_enrollments, sections, question_bank_items, courses, users "
-            "RESTART IDENTITY CASCADE"
+            "section_enrollments, sections, question_bank_items, units, courses, "
+            "users RESTART IDENTITY CASCADE"
         ))
         await s.commit()
 
@@ -260,6 +261,13 @@ async def world() -> dict[str, Any]:
         s.add(course)
         await s.flush()
 
+        # Every bank item now requires a real unit_id (Uncategorized
+        # bucket removed in bd1000047). Seed a top-level unit before
+        # the assignment + bank items so they can reference it.
+        unit = Unit(course_id=course.id, name="Quadratics", position=0)
+        s.add(unit)
+        await s.flush()
+
         section = Section(course_id=course.id, name="Period 1")
         s.add(section)
         await s.flush()
@@ -275,7 +283,7 @@ async def world() -> dict[str, Any]:
         # content snapshot is filled in below once the primary has an id.
         assignment = Assignment(
             course_id=course.id,
-            unit_ids=[],
+            unit_ids=[unit.id],
             teacher_id=teacher.id,
             title="HW 1",
             type="homework",
@@ -287,6 +295,7 @@ async def world() -> dict[str, Any]:
 
         primary = QuestionBankItem(
             course_id=course.id,
+            unit_id=unit.id,
             originating_assignment_id=assignment.id,
             title="Quadratics 1",
             question="Solve x^2 - 5x + 6 = 0",
@@ -307,6 +316,7 @@ async def world() -> dict[str, Any]:
         ]):
             sib = QuestionBankItem(
                 course_id=course.id,
+                unit_id=unit.id,
                 originating_assignment_id=assignment.id,
                 title=q[0],
                 question=q[1],
@@ -322,6 +332,7 @@ async def world() -> dict[str, Any]:
 
         pending_sib = QuestionBankItem(
             course_id=course.id,
+            unit_id=unit.id,
             originating_assignment_id=assignment.id,
             title="Sib pending",
             question="Solve x^2 - 13x + 42 = 0",
@@ -356,6 +367,7 @@ async def world() -> dict[str, Any]:
             "student_id": student.id,
             "outsider_id": outsider.id,
             "teacher_id": teacher.id,
+            "unit_id": unit.id,
             "assignment_id": assignment.id,
             "primary_id": primary.id,
             "approved_sibling_ids": [s.id for s in siblings_approved],

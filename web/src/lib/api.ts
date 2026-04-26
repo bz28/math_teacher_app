@@ -659,7 +659,9 @@ export interface TeacherDocument {
   filename: string;
   file_type: string;
   file_size: number;
-  unit_id: string | null;
+  /** Required — every document lives under a real unit. The
+   *  Uncategorized bucket was removed; null is no longer reachable. */
+  unit_id: string;
   created_at: string;
 }
 
@@ -897,13 +899,13 @@ export const teacher = {
       created_at: string;
     }>(`/teacher/courses/${courseId}/documents/${docId}`);
   },
-  uploadDocument(courseId: string, data: { image_base64: string; filename: string; unit_id?: string | null }) {
+  uploadDocument(courseId: string, data: { image_base64: string; filename: string; unit_id: string }) {
     return apiFetch<{ id: string }>(`/teacher/courses/${courseId}/documents`, {
       method: "POST",
       body: JSON.stringify(data),
     });
   },
-  updateDocument(courseId: string, docId: string, data: { unit_id: string | null }) {
+  updateDocument(courseId: string, docId: string, data: { unit_id: string }) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/documents/${docId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -1134,7 +1136,9 @@ export const teacher = {
     /** The HW the teacher is on — every item produced gets stamped
      *  with this so it knows which homework it belongs to. */
     assignment_id: string;
-    unit_id?: string | null;
+    /** Required — generated items live under this unit. The
+     *  Uncategorized bucket was removed. */
+    unit_id: string;
     document_ids?: string[];
     constraint?: string | null;
   }) {
@@ -1146,7 +1150,7 @@ export const teacher = {
   uploadWorksheet(courseId: string, data: {
     images: string[];
     assignment_id: string;
-    unit_id?: string | null;
+    unit_id: string;
   }) {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/upload`, {
       method: "POST",
@@ -1163,8 +1167,9 @@ export const teacher = {
     solution_steps?: { title: string; description: string }[];
     final_answer?: string;
     difficulty?: string;
-    unit_id?: string | null;
-    clear_unit?: boolean;
+    /** Move the item to a different unit. Required to be a real id
+     *  when set (Uncategorized bucket removed). */
+    unit_id?: string;
   }) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}`, {
       method: "PATCH",
@@ -1344,7 +1349,9 @@ export interface BankChatMessage {
 export interface BankItem {
   id: string;
   course_id: string;
-  unit_id: string | null;
+  /** Required — every bank item lives under a real unit. The
+   *  Uncategorized bucket was removed; null is no longer reachable. */
+  unit_id: string;
   title: string;
   question: string;
   solution_steps: { title: string; description: string }[] | null;
@@ -1381,7 +1388,8 @@ export interface BankCounts {
 export interface BankJob {
   id: string;
   course_id: string;
-  unit_id: string | null;
+  /** Required — every job is for a real unit (Uncategorized removed). */
+  unit_id: string;
   mode: "generate" | "upload";
   status: "queued" | "running" | "done" | "failed";
   requested_count: number;

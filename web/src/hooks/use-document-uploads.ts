@@ -26,13 +26,21 @@ export type PendingUpload = {
  * `hasInflightUploads` lets the parent modal block close while an
  * upload is mid-flight; rows in the error state don't block close
  * because they're inert until the teacher retries or dismisses.
+ *
+ * `getUnitId` returns the destination unit at upload time. Read at
+ * the moment the upload fires (not at hook init) so a parent that
+ * lets the teacher switch topics still sends the current pick. Modals
+ * gate the topic-switch buttons on `hasInflightUploads` to keep this
+ * stable while a request is in flight.
  */
 export function useDocumentUploads({
   courseId,
+  getUnitId,
   setDocs,
   setSelectedDocs,
 }: {
   courseId: string;
+  getUnitId: () => string;
   setDocs: (docs: TeacherDocument[]) => void;
   setSelectedDocs: (updater: (prev: Set<string>) => Set<string>) => void;
 }) {
@@ -73,7 +81,7 @@ export function useDocumentUploads({
         { id: tempId, filename: file.name, size: file.size, error: null, file },
       ]);
       try {
-        const newId = await uploadDocument(courseId, file, null);
+        const newId = await uploadDocument(courseId, file, getUnitId());
         await finishWithRefetch(newId, file.name);
         setPending((prev) => prev.filter((p) => p.id !== tempId));
       } catch (e) {
@@ -84,7 +92,7 @@ export function useDocumentUploads({
         toast.error(`Couldn't upload ${file.name}: ${msg}`);
       }
     },
-    [courseId, finishWithRefetch, toast],
+    [courseId, finishWithRefetch, getUnitId, toast],
   );
 
   const handleFiles = useCallback(
@@ -101,7 +109,7 @@ export function useDocumentUploads({
       );
       void (async () => {
         try {
-          const newId = await uploadDocument(courseId, item.file, null);
+          const newId = await uploadDocument(courseId, item.file, getUnitId());
           await finishWithRefetch(newId, item.filename);
           setPending((prev) => prev.filter((p) => p.id !== item.id));
         } catch (e) {
@@ -113,7 +121,7 @@ export function useDocumentUploads({
         }
       })();
     },
-    [courseId, finishWithRefetch, toast],
+    [courseId, finishWithRefetch, getUnitId, toast],
   );
 
   const dismissPending = useCallback(

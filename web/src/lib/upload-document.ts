@@ -16,7 +16,7 @@ import { fileToBase64 } from "@/lib/utils";
 export async function uploadDocument(
   courseId: string,
   file: File,
-  unitId: string | null,
+  unitId: string,
 ): Promise<string> {
   if (file.size > MATERIAL_UPLOAD_MAX_BYTES) throw new Error("exceeds 25MB");
   const base64 = await fileToBase64(file);
