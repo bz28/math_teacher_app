@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
+  enterPreviewMode,
   type BankItem,
   type BankJob,
   type SubmissionsInboxRow,
   type TeacherAssignment,
   type TeacherRubric,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -77,6 +79,7 @@ export default function HomeworkDetailPage({
 }) {
   const { id: courseId, hwId: assignmentId } = use(params);
   const router = useRouter();
+  const { loadUser } = useAuthStore();
 
   const [hw, setHw] = useState<
     (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
@@ -346,6 +349,25 @@ export default function HomeworkDetailPage({
       await reload();
     });
 
+  // Token-swap preview: hands the teacher a shadow-student session and
+  // navigates to the same HW on the student app. Same-tab navigation
+  // because preview tokens live in localStorage which is shared across
+  // tabs (a per-tab preview would require reworking auth storage).
+  //
+  // loadUser() is critical — without it the auth store still says
+  // role=teacher and the /school/student layout's role guard redirects
+  // back to /home before the page renders. Mirrors the existing "Try
+  // as Student" pattern in app-layout.tsx:200-213.
+  const onPreviewAsStudent = () =>
+    run(async () => {
+      const tokens = await teacher.previewAsStudent();
+      enterPreviewMode(tokens);
+      await loadUser();
+      router.push(
+        `/school/student/courses/${courseId}/homework/${assignmentId}`,
+      );
+    });
+
   // Inline auto-save runner. Optimistic — applies the change to the
   // local hw state immediately, fires the PATCH, and on failure
   // restores ONLY this field (via the caller-supplied applyRevert).
@@ -514,7 +536,7 @@ export default function HomeworkDetailPage({
         }}
       />
     )}
-    <div className="mx-auto max-w-4xl px-4 pb-10">
+    <div className="mx-auto max-w-4xl px-4 pb-32">
       {/* Breadcrumb */}
       <div className="pt-3">
         <Link
@@ -525,7 +547,9 @@ export default function HomeworkDetailPage({
         </Link>
       </div>
 
-      {/* Hero header row: status + title + primary action (publish) */}
+      {/* Hero header row: status + title. Publish lives in the sticky
+          action bar at the viewport bottom so it stays reachable even
+          on long HWs with many problems below. */}
       <header className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 flex-1">
           {hw && (
@@ -595,41 +619,6 @@ export default function HomeworkDetailPage({
           </div>
         </div>
 
-        {/* Publish / Unpublish lives alongside the title. Draft HWs
-            show a disabled Publish with a tooltip listing what's still
-            needed (e.g. "Missing: at least one problem"). */}
-        {!editingProblems && hw && (
-          <div className="flex shrink-0 items-center gap-2">
-            {isPublished ? (
-              <button
-                type="button"
-                onClick={unpublish}
-                disabled={busy}
-                className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
-              >
-                Unpublish
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handlePublishClick}
-                disabled={busy || !canPublish}
-                title={
-                  canPublish
-                    ? "Publish — locks the questions in the bank"
-                    : `Missing: ${missingForPublish.join(", ")}`
-                }
-                className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
-                  canPublish
-                    ? "bg-green-600 hover:bg-green-700 hover:shadow"
-                    : "bg-gray-400 cursor-not-allowed dark:bg-gray-600"
-                }`}
-              >
-                Publish ▸
-              </button>
-            )}
-          </div>
-        )}
       </header>
 
       {/* Soft confirm strip for "publish without a due date". Shown
@@ -899,6 +888,21 @@ export default function HomeworkDetailPage({
         </>
       )}
     </div>
+    {/* Sticky action bar — pins Publish + Preview-as-student to the
+        viewport bottom so they're always reachable, no matter how far
+        the teacher has scrolled. Hidden during the in-place "edit
+        problems" sub-view because that mode has its own footer. */}
+    {hw && !editingProblems && !loading && (
+      <ActionBar
+        isPublished={isPublished}
+        canPublish={canPublish}
+        missingForPublish={missingForPublish}
+        busy={busy}
+        onPublish={handlePublishClick}
+        onUnpublish={unpublish}
+        onPreviewAsStudent={onPreviewAsStudent}
+      />
+    )}
     </>
   );
 }
@@ -1616,6 +1620,83 @@ function SubmissionStrip({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Sticky action bar — viewport-pinned footer with Preview as student
+// (left) and Publish/Unpublish (right). Includes a small validation
+// hint on the left when Publish is blocked, so the teacher knows what
+// to fix without hovering the disabled button.
+// ────────────────────────────────────────────────────────────────────
+function ActionBar({
+  isPublished,
+  canPublish,
+  missingForPublish,
+  busy,
+  onPublish,
+  onUnpublish,
+  onPreviewAsStudent,
+}: {
+  isPublished: boolean;
+  canPublish: boolean;
+  missingForPublish: string[];
+  busy: boolean;
+  onPublish: () => void;
+  onUnpublish: () => void;
+  onPreviewAsStudent: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border-light bg-surface/95 px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] backdrop-blur"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+        <div className="min-w-0 flex-1 text-[11px] text-text-muted">
+          {!isPublished && missingForPublish.length > 0 && (
+            <span>Missing: {missingForPublish.join(", ")}</span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onPreviewAsStudent}
+            disabled={busy}
+            className="text-xs font-semibold text-text-secondary hover:text-primary disabled:opacity-50"
+          >
+            Preview as student →
+          </button>
+          {isPublished ? (
+            <button
+              type="button"
+              onClick={onUnpublish}
+              disabled={busy}
+              className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+            >
+              Unpublish
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onPublish}
+              disabled={busy || !canPublish}
+              title={
+                canPublish
+                  ? "Publish — locks the questions in the bank"
+                  : `Missing: ${missingForPublish.join(", ")}`
+              }
+              className={`rounded-[--radius-md] px-5 py-2 text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
+                canPublish
+                  ? "bg-green-600 hover:bg-green-700 hover:shadow"
+                  : "cursor-not-allowed bg-gray-400 dark:bg-gray-600"
+              }`}
+            >
+              Publish ▸
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
