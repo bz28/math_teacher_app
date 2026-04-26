@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.integrity_pipeline import (
-    STATUS_COMPLETE as INTEGRITY_COMPLETE,
+    SUBMISSION_STATUS_COMPLETE as INTEGRITY_COMPLETE,
 )
 from api.core.integrity_pipeline import (
-    STATUS_SKIPPED_UNREADABLE as INTEGRITY_SKIPPED,
+    SUBMISSION_STATUS_SKIPPED_UNREADABLE as INTEGRITY_SKIPPED,
 )
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
