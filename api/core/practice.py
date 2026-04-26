@@ -60,7 +60,11 @@ _LEAK_RE = re.compile(
 
 
 def _strip_distractor_leak(s: str) -> str:
-    return _LEAK_RE.sub("", s).strip()
+    # Fall back to the original (trimmed) when the strip would empty the
+    # distractor — guards against a model returning a bare commentary like
+    # "(missing)", which would otherwise propagate as an empty MC option.
+    stripped = _LEAK_RE.sub("", s).strip()
+    return stripped or s.strip()
 
 
 async def generate_distractors(

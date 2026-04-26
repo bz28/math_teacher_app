@@ -194,7 +194,10 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 // otherwise competes with the prefix label).
 function YourAnswerLine({ answer, color }: { answer: string; color: string }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+    // flex-start so a multi-line answer (fraction, matrix) lines up its
+    // first row with the static "Your answer:" prefix instead of centering
+    // the prefix vertically against the tall block.
+    <View style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 2 }}>
       <Text style={{ ...styles.resultAnswer, marginTop: 0, color }}>Your answer: </Text>
       <View style={{ flex: 1, minWidth: 0 }}>
         <MathText text={answer} style={{ ...styles.resultAnswer, marginTop: 0, color }} />

@@ -7,27 +7,6 @@ import { type SessionHistoryItem } from "../services/api";
 import { formatRelativeDate } from "../utils/dateFormatting";
 import { useColors, spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
-/** Strip LaTeX delimiters and commands for a clean single-line preview.
- *  Full math rendering via WebView is too heavy for a list of cards. */
-export function cleanMathPreview(text: string): string {
-  return text
-    .replace(/\$\$/g, "")         // $$
-    .replace(/\$/g, "")           // $
-    .replace(/\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g, "($1)/($2)")
-    .replace(/\\sqrt\s*\{([^}]*)\}/g, "√($1)")
-    .replace(/\\times/g, "×")
-    .replace(/\\div/g, "÷")
-    .replace(/\\pm/g, "±")
-    .replace(/\\pi/g, "π")
-    .replace(/\\theta/g, "θ")
-    .replace(/\\alpha/g, "α")
-    .replace(/\\beta/g, "β")
-    .replace(/\\[a-zA-Z]+/g, "")  // strip remaining commands
-    .replace(/[{}]/g, "")         // strip braces
-    .replace(/\s+/g, " ")         // collapse whitespace
-    .trim();
-}
-
 export function InProgressCard({ item, onPress }: { item: SessionHistoryItem; onPress: () => void }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);

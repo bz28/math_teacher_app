@@ -358,11 +358,13 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.text,
     fontSize: 14,
   },
-  // Cap question height to ~2 lines. MathText's WebView ignores
-  // numberOfLines (height is dynamic), so this maxHeight clip is the only
-  // way to keep tall LaTeX (matrices, fractions) from blowing up the row.
+  // Cap question height. MathText's WebView ignores numberOfLines (height
+  // is dynamic), so this maxHeight clip is the only way to keep tall LaTeX
+  // (matrices, fractions) from blowing up the row. 60px lets a single
+  // inline display block (KaTeX adds ~16px of vertical margins) render
+  // fully; tighter caps (e.g. 44) clipped fractions mid-symbol.
   resultQuestionWrap: {
-    maxHeight: 44,
+    maxHeight: 60,
     overflow: "hidden",
     marginBottom: spacing.sm,
   },
@@ -375,10 +377,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   // Layout helpers for the "Your answer: $X$" row — Text prefix + MathText
   // need to share row width. minWidth: 0 prevents the WebView wrapper
-  // (width:100%) from competing with the prefix label.
+  // (width:100%) from competing with the prefix label. flex-start so a
+  // multi-line answer (fraction, matrix) lines up its first row with the
+  // prefix instead of centering the prefix vertically against tall content.
   answerLine: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   answerMathWrap: {
     flex: 1,

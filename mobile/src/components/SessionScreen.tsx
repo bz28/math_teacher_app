@@ -701,6 +701,10 @@ const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingRight: 60,
   },
   bubbleUser: {
+    // maxWidth gives Yoga a definite cross-axis cap so MathText's
+    // width:100% wrapper resolves predictably; without it the bubble +
+    // WebView width depend on each other circularly and collapse weirdly.
+    maxWidth: "85%",
     backgroundColor: colors.primary,
     borderRadius: 18,
     borderBottomRightRadius: 4,
@@ -713,6 +717,7 @@ const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.white,
   },
   bubbleTutor: {
+    maxWidth: "85%",
     backgroundColor: colors.white,
     borderRadius: 18,
     borderBottomLeftRadius: 4,
