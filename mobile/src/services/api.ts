@@ -393,8 +393,13 @@ export interface PracticeProblem {
   distractors?: string[];
 }
 
-export const generatePracticeProblems = (problem: string, count: number, subject: string = "math") =>
-  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count, subject }, LLM_TIMEOUT_MS);
+// Solve a single problem: decompose, extract answer, generate MC distractors.
+// All current mobile callers use this single-problem path; if a future flow
+// needs to batch-generate similar question texts, add a separate
+// generatePracticeProblems(problems: string[], subject) wrapper that hits
+// POST /practice/generate (which now requires a problems array).
+export const solvePracticeProblem = (problem: string, subject: string = "math") =>
+  apiPost<{ problem: PracticeProblem }>("/practice/solve", { problem, subject }, LLM_TIMEOUT_MS);
 
 export const checkPracticeAnswer = (question: string, correctAnswer: string, userAnswer: string, subject: string = "math") =>
   apiPost<{ is_correct: boolean }>("/practice/check", {
