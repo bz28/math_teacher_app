@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { teacher, type TeacherCourse } from "@/lib/api";
+import { Field } from "@/components/school/shared/field";
 
 const subjectStyles: Record<string, { bg: string; text: string; label: string }> = {
   math: { bg: "bg-primary-bg", text: "text-primary", label: "Math" },
@@ -256,11 +257,3 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-bold uppercase tracking-wider text-text-muted">{label}</label>
-      <div className="mt-1">{children}</div>
-    </div>
-  );
-}
