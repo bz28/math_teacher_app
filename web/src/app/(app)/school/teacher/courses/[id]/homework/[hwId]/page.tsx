@@ -1819,13 +1819,35 @@ function InstructionsBlock({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
+  // Tracks whether commit() just fired a save we're awaiting. Lets us
+  // keep the textarea (and the teacher's typed text) on save-error,
+  // and close it only on save-success — without this gate we'd either
+  // close on every "saved" (breaking re-edits) or never close at all.
+  const [committing, setCommitting] = useState(false);
 
-  // Sync draft when the parent's value changes (e.g. autosave landed,
-  // page reloaded). Skip while editing so we don't yank the textarea
-  // out from under a typing teacher.
-  if (!editing && draft !== (value ?? "")) {
-    setDraft(value ?? "");
+  // React to the parent's saveState resolving AFTER a commit. On
+  // "saved" we close the editor (parent already holds our draft via
+  // the optimistic patch). On "error" we leave editing=true so the
+  // textarea retains the typed text and the teacher can retry without
+  // re-typing. Transitions while !committing are ignored so a sibling
+  // field's save (e.g. units) can't close our editor.
+  //
+  // Render-time state derivation rather than useEffect: avoids the
+  // cascading-render lint, and the guard runs once per transition
+  // because we flip committing=false in the same pass.
+  if (committing && (saveState === "saved" || saveState === "error")) {
+    setCommitting(false);
+    if (saveState === "saved") setEditing(false);
   }
+
+  const startEditing = () => {
+    // Snapshot the current value into draft when entering edit mode.
+    // We don't keep draft synced with value while idle (would risk
+    // yanking text out from under a teacher whose committed text
+    // hasn't propagated yet), so do the sync here, on user intent.
+    setDraft(value ?? "");
+    setEditing(true);
+  };
 
   const commit = () => {
     if (draft.trim() === (value ?? "").trim()) {
@@ -1833,7 +1855,8 @@ function InstructionsBlock({
       return;
     }
     onChange(draft);
-    setEditing(false);
+    setCommitting(true);
+    // editing stays true — the effect above closes it on save-success.
   };
 
   if (!editing) {
@@ -1842,8 +1865,8 @@ function InstructionsBlock({
         <div className="mt-3">
           <button
             type="button"
-            onClick={() => setEditing(true)}
-            className="text-xs font-semibold text-text-muted hover:text-primary"
+            onClick={startEditing}
+            className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-primary"
           >
             + Add instructions for students
           </button>
@@ -1860,7 +1883,7 @@ function InstructionsBlock({
         </div>
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          onClick={startEditing}
           className="block w-full rounded-[--radius-md] border border-border-light bg-bg-base/50 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-primary/40 hover:bg-bg-subtle"
           title="Click to edit"
         >
