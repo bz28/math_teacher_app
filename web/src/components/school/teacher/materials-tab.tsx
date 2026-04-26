@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
-import { MATERIAL_UPLOAD_MAX_BYTES } from "@/lib/constants";
 import { subfoldersOf, topUnits } from "@/lib/units";
+import { uploadDocument } from "@/lib/upload-document";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,7 +40,6 @@ import {
   type RowState,
   type SortMode,
 } from "./materials/types";
-import { fileToBase64 } from "@/lib/utils";
 
 export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChanged: () => void }) {
   const toast = useToast();
@@ -150,15 +149,8 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
    * CollisionDialog before touching the backend.
    */
 
-  const uploadOne = async (file: File, unitId: string | null) => {
-    if (file.size > MATERIAL_UPLOAD_MAX_BYTES) throw new Error("exceeds 25MB");
-    const base64 = await fileToBase64(file);
-    await teacher.uploadDocument(courseId, {
-      image_base64: base64,
-      filename: file.name,
-      unit_id: unitId,
-    });
-  };
+  const uploadOne = (file: File, unitId: string | null) =>
+    uploadDocument(courseId, file, unitId);
 
   const handleImport = (tree: DroppedTree) =>
     run(async () => {
