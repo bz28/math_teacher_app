@@ -509,24 +509,12 @@ export function WorkshopModal({
 
   // Outer chrome differs between modal (fixed overlay, backdrop
   // click-to-close) and page-level (plain container, no backdrop)
-  // rendering. Inner card keeps the same shape either way.
-  const OuterShell = renderAsPage
-    ? ({ children }: { children: React.ReactNode }) => (
-        <div className="mx-auto max-w-6xl px-4 pb-10">{children}</div>
-      )
-    : ({ children }: { children: React.ReactNode }) => (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={onClose}
-          role="dialog"
-          aria-modal="true"
-        >
-          {children}
-        </div>
-      );
-
-  return (
-    <OuterShell>
+  // rendering. Inner card keeps the same shape either way. Inlined as
+  // a ternary on the return rather than a wrapper component defined
+  // here — a fresh wrapper function each render would cause React to
+  // unmount/remount the entire subtree (and ChatPanel's local state).
+  const card = (
+    <>
       <div
         className={
           renderAsPage
@@ -931,7 +919,20 @@ export function WorkshopModal({
           }}
         />
       )}
-    </OuterShell>
+    </>
+  );
+
+  return renderAsPage ? (
+    <div className="mx-auto max-w-6xl px-4 pb-10">{card}</div>
+  ) : (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      {card}
+    </div>
   );
 }
 
