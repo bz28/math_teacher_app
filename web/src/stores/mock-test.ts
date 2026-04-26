@@ -36,6 +36,15 @@ export interface MockTest {
   workImages: (string | null)[];
   workSubmissions: (DiagnosisResult | null)[];
   multipleChoice: boolean;
+  /** True once all background solve requests have settled (succeeded
+   *  or rejected). Lets the preview screen unblock the Begin button
+   *  when some answers permanently failed — without this, the student
+   *  would stare at "Preparing answers…" forever. */
+  solveSettled: boolean;
+  /** Number of solve requests that rejected. The preview surfaces a
+   *  warning when > 0 so the student knows missing-answer questions
+   *  will be ungraded at submit time. */
+  solveErrorCount: number;
 }
 
 // ── Helpers ──
@@ -60,6 +69,8 @@ function createMockTest(
     workImages: new Array(len).fill(null),
     workSubmissions: new Array(len).fill(null),
     multipleChoice,
+    solveSettled: false,
+    solveErrorCount: 0,
   };
 }
 
@@ -132,14 +143,32 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }),
         );
 
-        // Solve in background — transition to error if all fail
+        // Solve in background — count failures off the actual results
+        // array (not the post-write batch) so we can distinguish
+        // total vs partial failure. Total failure → phase: error.
+        // Partial failure → set solveErrorCount + solveSettled so the
+        // preview screen can unblock Begin and warn the student that
+        // missing-answer questions will be ungraded.
         Promise.allSettled(solvePromises).then((results) => {
           const { mockTest: current } = get();
           if (!current || current.sessionId !== batchSessionId) return;
-          const allFailed = current.questions.every((q) => q.answer === "");
-          if (allFailed) {
-            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          const failedCount = results.filter(
+            (r) => r.status === "rejected",
+          ).length;
+          if (failedCount === results.length) {
+            set({
+              phase: "error",
+              error: "Failed to generate answers. Please try again.",
+            });
+            return;
           }
+          set({
+            mockTest: {
+              ...current,
+              solveSettled: true,
+              solveErrorCount: failedCount,
+            },
+          });
         });
       } else {
         const placeholders: PracticeProblem[] = problems.map((p) => ({
@@ -170,14 +199,27 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           });
         });
 
-        // Solve in background — transition to error if all fail
+        // Same partial-failure handling as the generate branch above.
         Promise.allSettled(promises).then((results) => {
           const { mockTest: current } = get();
           if (!current || current.sessionId !== batchSessionId2) return;
-          const allFailed = current.questions.every((q) => q.answer === "");
-          if (allFailed) {
-            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          const failedCount = results.filter(
+            (r) => r.status === "rejected",
+          ).length;
+          if (failedCount === results.length) {
+            set({
+              phase: "error",
+              error: "Failed to generate answers. Please try again.",
+            });
+            return;
           }
+          set({
+            mockTest: {
+              ...current,
+              solveSettled: true,
+              solveErrorCount: failedCount,
+            },
+          });
         });
       }
     } catch (err) {
