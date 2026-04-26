@@ -277,6 +277,20 @@ export default function HomeworkPage() {
         {hw.due_at ? ` · Due ${new Date(hw.due_at).toLocaleDateString()}` : ""}
       </p>
 
+      {/* Teacher-authored instructions, e.g. "Show all work, no
+          calculators." Hidden when there's nothing to say. Renders LaTeX
+          inline so formulas in the instructions display correctly. */}
+      {hw.description && (
+        <div className="mt-4 rounded-[--radius-md] border border-border bg-bg-subtle/40 px-4 py-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            Instructions
+          </div>
+          <div className="mt-1 whitespace-pre-wrap text-sm text-text-primary">
+            <MathText text={hw.description} />
+          </div>
+        </div>
+      )}
+
       <div className="mt-5">
         <AssignmentTimeline
           submittedAt={hw.submitted_at}

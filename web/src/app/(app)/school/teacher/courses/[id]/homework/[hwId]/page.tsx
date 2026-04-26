@@ -45,9 +45,17 @@ const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
   { value: "no_credit", label: "No credit after due" },
 ];
 
-// The five inline-editable config fields. Each has its own SaveState
-// so a saving units field doesn't block a separate due-date edit.
-type ConfigField = "units" | "dueAt" | "latePolicy" | "sections" | "rubric";
+// Inline-editable fields with their own SaveState — a saving units
+// field doesn't block a separate due-date edit. Description is the
+// student-visible instructions block under the title; the rest live
+// in the Configuration accordion + grading card below the problems.
+type ConfigField =
+  | "units"
+  | "dueAt"
+  | "latePolicy"
+  | "sections"
+  | "rubric"
+  | "description";
 
 /** Collapse a partial rubric into a normalized dict. Drops empty-string
  *  and whitespace-only values so the stored shape stays tight. */
@@ -155,6 +163,7 @@ export default function HomeworkDetailPage({
     latePolicy: "idle",
     sections: "idle",
     rubric: "idle",
+    description: "idle",
   });
   const [saveErrors, setSaveErrors] = useState<Record<ConfigField, string | null>>({
     units: null,
@@ -162,6 +171,7 @@ export default function HomeworkDetailPage({
     latePolicy: null,
     sections: null,
     rubric: null,
+    description: null,
   });
 
   const reload = async () => {
@@ -401,7 +411,7 @@ export default function HomeworkDetailPage({
   // Per-field lastCallRef gives last-write-wins for rapid-fire edits
   // to the same field (the date picker can fire many onChanges).
   const lastCallRef = useRef<Record<ConfigField, number>>({
-    units: 0, dueAt: 0, latePolicy: 0, sections: 0, rubric: 0,
+    units: 0, dueAt: 0, latePolicy: 0, sections: 0, rubric: 0, description: 0,
   });
   const patchField = async <K extends ConfigField>(
     field: K,
@@ -485,6 +495,25 @@ export default function HomeworkDetailPage({
       () => setHw((h) => (h ? { ...h, section_ids: next } : h)),
       () => setHw((h) => (h ? { ...h, section_ids: prev } : h)),
       () => teacher.assignToSections(assignmentId, next).then(() => undefined),
+    );
+  };
+
+  const onChangeDescription = (next: string) => {
+    if (!hw) return;
+    // Trim + collapse-to-null so all-whitespace doesn't leave a phantom
+    // empty block on the student page. Backend mirrors this.
+    const cleaned = next.trim();
+    const stored: string | null = cleaned.length > 0 ? cleaned : null;
+    if (stored === (hw.description ?? null)) return;
+    const prev = hw.description;
+    void patchField(
+      "description",
+      () => setHw((h) => (h ? { ...h, description: stored } : h)),
+      () => setHw((h) => (h ? { ...h, description: prev } : h)),
+      () =>
+        teacher
+          .updateAssignment(assignmentId, { description: stored ?? "" })
+          .then(() => undefined),
     );
   };
 
@@ -640,6 +669,22 @@ export default function HomeworkDetailPage({
         </div>
 
       </header>
+
+      {/* Instructions students will see (e.g. "Show all work, no
+          calculators"). Editable inline; lives just below the title so
+          teachers see it as a first-class part of the HW, not buried in
+          a settings page. Editable while published — instructions
+          don't change which problems students see. Practice has no
+          student-visible page yet, so we hide the field there. */}
+      {!editingProblems && hw && hw.type !== "practice" && (
+        <InstructionsBlock
+          value={hw.description}
+          saveState={saveStates.description}
+          saveError={saveErrors.description}
+          onChange={onChangeDescription}
+        />
+      )}
+
 
       {/* Loading / editing-problems states short-circuit the page */}
       {(loading || !hw) ? (
@@ -1748,6 +1793,106 @@ function ActionBar({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Instructions block — student-visible notes the teacher writes for
+// the homework (e.g. "Show all work, no calculators"). Click-to-edit
+// textarea that autosaves on blur. Empty state shows a quiet "+ Add
+// instructions for students" affordance so teachers who don't need
+// it aren't visually nagged. Renders LaTeX inline so formulas like
+// $a + b\sqrt{c}$ display correctly.
+// ────────────────────────────────────────────────────────────────────
+function InstructionsBlock({
+  value,
+  saveState,
+  saveError,
+  onChange,
+}: {
+  value: string | null;
+  saveState: SaveState;
+  saveError: string | null;
+  onChange: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  // Sync draft when the parent's value changes (e.g. autosave landed,
+  // page reloaded). Skip while editing so we don't yank the textarea
+  // out from under a typing teacher.
+  if (!editing && draft !== (value ?? "")) {
+    setDraft(value ?? "");
+  }
+
+  const commit = () => {
+    if (draft.trim() === (value ?? "").trim()) {
+      setEditing(false);
+      return;
+    }
+    onChange(draft);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    if (!value) {
+      return (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs font-semibold text-text-muted hover:text-primary"
+          >
+            + Add instructions for students
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-3 group">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            Instructions for students
+          </span>
+          <InlineSavedHint state={saveState} errorMessage={saveError} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="block w-full rounded-[--radius-md] border border-border-light bg-bg-base/50 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-primary/40 hover:bg-bg-subtle"
+          title="Click to edit"
+        >
+          <div className="whitespace-pre-wrap">
+            <MathText text={value} />
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+          Instructions for students
+        </span>
+        <InlineSavedHint state={saveState} errorMessage={saveError} />
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        autoFocus
+        rows={3}
+        maxLength={2000}
+        placeholder='e.g. "Show all work and circle final answers. No calculators."'
+        className="w-full rounded-[--radius-md] border border-primary bg-bg-base px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+      />
+      <div className="mt-1 flex items-center justify-between text-[11px] text-text-muted">
+        <span>Visible to students. Supports inline LaTeX like $x^2$.</span>
+        <span className="tabular-nums">{draft.length}/2000</span>
       </div>
     </div>
   );
