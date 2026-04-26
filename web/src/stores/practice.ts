@@ -38,7 +38,6 @@ export interface PracticeBatch {
 export interface PracticeResult {
   problem: string;
   userAnswer: string;
-  correctAnswer: string;
   isCorrect: boolean;
 }
 
@@ -260,7 +259,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         const result: PracticeResult = {
           problem: current.question,
           userAnswer: answer,
-          correctAnswer: "",
           isCorrect: true,
         };
         const newFlags = [...practiceBatch.flags];
@@ -307,7 +305,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     const result: PracticeResult = {
       problem: current.question,
       userAnswer: "(skipped)",
-      correctAnswer: "",
       isCorrect: false,
     };
 
