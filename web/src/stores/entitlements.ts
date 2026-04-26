@@ -2,6 +2,11 @@
 
 import { create } from "zustand";
 import { auth as authApi } from "@/lib/api";
+import {
+  FREE_DAILY_CHAT_LIMIT,
+  FREE_DAILY_SCAN_LIMIT,
+  FREE_DAILY_SESSION_LIMIT,
+} from "@/lib/constants";
 
 interface EntitlementState {
   isPro: boolean;
@@ -21,11 +26,11 @@ interface EntitlementState {
 export const useEntitlementStore = create<EntitlementState>((set) => ({
   isPro: false,
   dailySessionsUsed: 0,
-  dailySessionsLimit: 5,
+  dailySessionsLimit: FREE_DAILY_SESSION_LIMIT,
   dailyScansUsed: 0,
-  dailyScansLimit: 3,
+  dailyScansLimit: FREE_DAILY_SCAN_LIMIT,
   dailyChatsUsed: 0,
-  dailyChatsLimit: 20,
+  dailyChatsLimit: FREE_DAILY_CHAT_LIMIT,
   gatedFeatures: [],
   loaded: false,
 
