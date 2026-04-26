@@ -1514,7 +1514,6 @@ export interface StudentSubmission {
   submitted_at: string;
   is_late: boolean;
   image_data: string | null;
-  final_answers: Record<string, string>;
   /** Full Vision extraction (all steps + per-problem final answers +
    *  overall confidence). Null when extraction hasn't run, failed,
    *  or the HW has both integrity and AI grading disabled. Drives

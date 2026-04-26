@@ -342,8 +342,9 @@ export function WorkshopModal({
     });
 
   // Approve — backend auto-attaches to the item's originating HW
-  // (Feature 7a). No picker, no sticky, no per-queue destination
-  // prompt: every item already knows which HW it belongs to.
+  // using the originating_assignment_id stamped at generation time.
+  // No picker, no sticky, no per-queue destination prompt: every
+  // item already knows which HW it belongs to.
   const approve = () =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
@@ -1036,8 +1037,9 @@ function ModeLineFooter({
 
   // Default reading mode: approve/reject/skip/chat/delete. Approve
   // always goes through the same handler — backend auto-attaches to
-  // the originating HW (Feature 7a). Variations get "Approve as
-  // practice" instead to signal they're scaffolding, not HW content.
+  // the originating HW via the item's originating_assignment_id.
+  // Variations get "Approve as practice" instead to signal they're
+  // scaffolding, not HW content.
   const showApproveReject = isQueueMode || status === "pending";
   const useVariationLabel = !isQueueMode && status === "pending" && isVariation;
 
