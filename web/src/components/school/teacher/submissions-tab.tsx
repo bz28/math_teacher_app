@@ -225,8 +225,15 @@ function InboxRow({
  *  group ordered by due date ascending. Null due dates sink within
  *  their group. */
 function compareRows(a: SubmissionsInboxRow, b: SubmissionsInboxRow): number {
-  const aWork = a.flagged + a.to_grade + a.dirty > 0 ? 0 : 1;
-  const bWork = b.flagged + b.to_grade + b.dirty > 0 ? 0 : 1;
+  // "Outstanding" mirrors the per-row "to review" math: anything that
+  // needs teacher attention before grades release. Using to_grade +
+  // dirty alone would silently sink HWs with ungraded submissions
+  // (final_score IS NULL — not in to_grade) to the bottom of the
+  // inbox. (submitted - published) catches both ungraded and to_grade.
+  const aOutstanding = (a.submitted - a.published) + a.dirty + a.flagged;
+  const bOutstanding = (b.submitted - b.published) + b.dirty + b.flagged;
+  const aWork = aOutstanding > 0 ? 0 : 1;
+  const bWork = bOutstanding > 0 ? 0 : 1;
   if (aWork !== bWork) return aWork - bWork;
   return dueKey(a) - dueKey(b);
 }
