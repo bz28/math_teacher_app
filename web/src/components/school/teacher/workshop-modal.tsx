@@ -105,11 +105,6 @@ export function WorkshopModal({
   // needed during review and should be discoverable. Toggleable via the
   // 💬 AI button or C key.
   const [chatOpen, setChatOpen] = useState(true);
-  // Queue-mode variations are rare (generate-similar produces them)
-  // but they need a different approve handler — the backend skips the
-  // auto-attach for variations (Feature 7a), and the teacher closes
-  // the workshop after approving rather than advancing a queue.
-  const isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
 
   const { busy, error, setError, run } = useAsyncAction();
 
@@ -939,10 +934,6 @@ export function WorkshopModal({
 // Mode-line footer — switches content based on the current state. Like
 // Vim's status line: tells the teacher what they're doing right now.
 // ─────────────────────────────────────────────────────────────────────
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
-}
 
 function ModeLineFooter({
   isQueueMode,
