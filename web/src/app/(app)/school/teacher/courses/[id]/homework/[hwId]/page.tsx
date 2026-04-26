@@ -1512,11 +1512,18 @@ function SubmissionStrip({
 
   const totalStudents = rows.reduce((s, r) => s + r.total_students, 0);
   const totalSubmitted = rows.reduce((s, r) => s + r.submitted, 0);
-  // "to review" matches the inbox's wording (submissions-tab.tsx:142-145):
-  // graded-but-not-released + edited-after-publish — both need a teacher
-  // click before students see grades. Flagged is shown separately
-  // because it's an integrity signal, not a grading-pipeline state.
-  const totalToReview = rows.reduce((s, r) => s + r.to_grade + r.dirty, 0);
+  // "To review" = submissions whose grade isn't out yet OR has been
+  // edited since publish. `to_grade` counts only graded-but-unpublished
+  // (per teacher_assignments.py:985-994), so the truly-ungraded would
+  // be silently dropped if we used it directly. `submitted - published`
+  // captures both ungraded + to_grade in one expression; `+ dirty`
+  // adds back the published-but-edited subset that needs a republish
+  // click before students see the latest. Flagged is reported
+  // separately as an integrity signal, not a grading-pipeline state.
+  const totalToReview = rows.reduce(
+    (s, r) => s + (r.submitted - r.published) + r.dirty,
+    0,
+  );
   const totalFlagged = rows.reduce((s, r) => s + r.flagged, 0);
 
   const parts: string[] =
@@ -1562,7 +1569,7 @@ function SubmissionStrip({
       {open && (
         <div className="divide-y divide-border-light border-t border-border-light bg-surface">
           {rows.map((r) => {
-            const toReview = r.to_grade + r.dirty;
+            const toReview = (r.submitted - r.published) + r.dirty;
             return (
               <Link
                 key={r.section_id}

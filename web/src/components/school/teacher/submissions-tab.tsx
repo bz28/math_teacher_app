@@ -138,11 +138,16 @@ function InboxRow({
   const href = `/school/teacher/courses/${courseId}/homework/${row.assignment_id}/sections/${row.section_id}/review`;
   const dueLabel = row.due_at ? formatDueShort(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
-  const hasOutstanding = row.to_grade + row.dirty + row.flagged > 0;
-  // "to review" folds fresh-ungraded + dirty-republish into one count.
-  // From the teacher's point of view both states mean "needs a click
-  // before students see it"; the mechanical split doesn't help scan.
-  const toReview = row.to_grade + row.dirty;
+  // "To review" = anything that needs the teacher's attention before
+  // students see grades — ungraded submissions, graded-but-unpublished
+  // ones (`to_grade`), AND published-but-edited (`dirty`, needs a
+  // republish click). `submitted - published` captures the first two
+  // since `to_grade` only flags graded-but-unpublished and the truly-
+  // ungraded would otherwise be silently dropped from the count
+  // (per teacher_assignments.py:985-994). + dirty adds back the
+  // republish-pending subset of published rows.
+  const toReview = (row.submitted - row.published) + row.dirty;
+  const hasOutstanding = toReview + row.flagged > 0;
 
   return (
     <Link
