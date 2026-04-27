@@ -18,8 +18,15 @@ const PAGE_SIZE = 25;
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { apiSchoolFilter } = useScope();
+  const { apiSchoolFilter, scope } = useScope();
   const schoolFilter = apiSchoolFilter() ?? "";
+  // Scope-aware deep-link to the per-submission flight recorder so a
+  // user drilled into a school stays in school scope when they jump
+  // into a trace.
+  const tracePathFor = (submissionId: string) =>
+    scope.kind === "school"
+      ? `/school/${scope.schoolId}/submissions/${submissionId}/trace`
+      : `/admin/submissions/${submissionId}/trace`;
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
@@ -369,7 +376,7 @@ export default function LLMCalls() {
                           {c.submission_id && (
                             <div style={{ marginTop: 8 }}>
                               <Link
-                                to={`/admin/submissions/${c.submission_id}/trace`}
+                                to={tracePathFor(c.submission_id)}
                                 style={{ fontSize: 13, fontWeight: 600 }}
                               >
                                 Open flight recorder for this submission →

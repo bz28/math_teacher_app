@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type LLMCallsData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
+import { useScope } from "../lib/scope";
 
 // Per-submission flight recorder. Pulls every LLM call stamped with
 // the given submission_id and renders them as a vertical chronological
@@ -43,6 +44,14 @@ function shortModel(model: string): string {
 
 export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
+  const { scope } = useScope();
+  // Scope-aware "back" path — when the user came in via a school
+  // route the trail returns to that school's LLM Calls list, not
+  // the admin one. Avoids silently bouncing them into Admin scope.
+  const llmCallsPath =
+    scope.kind === "school"
+      ? `/school/${scope.schoolId}/llm-calls`
+      : "/admin/llm-calls";
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -228,7 +237,7 @@ export default function SubmissionTrace() {
       </ol>
 
       <div style={{ marginTop: 16 }}>
-        <Link to={`/admin/llm-calls?submission=${submissionId}`}>
+        <Link to={`${llmCallsPath}?submission=${submissionId}`}>
           ← Back to LLM Calls list view
         </Link>
       </div>
