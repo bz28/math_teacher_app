@@ -212,7 +212,7 @@ const ROW_DISPOSITION_COPY: Partial<
   Record<IntegrityDisposition, { text: string; style: string }>
 > = {
   flag_for_review: {
-    text: "Review needed",
+    text: "Review",
     style: "bg-red-600 text-white dark:bg-red-500",
   },
   tutor_pivot: {

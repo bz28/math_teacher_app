@@ -1072,9 +1072,6 @@ function StudentRow({
   const statusLabel = rowStatusLabel(entry);
   const mutedName = sub === null;
   const overview = sub?.integrity_overview ?? null;
-  // RowDispositionPill renders null on pass / needs_practice / in-
-  // progress, so we duplicate the same gate here to decide whether the
-  // pill row should appear at all.
   const showsDispositionPill =
     overview?.overall_status === "complete" &&
     (overview.disposition === "flag_for_review" ||
@@ -1082,7 +1079,7 @@ function StudentRow({
       !overview.disposition);
   const showsActivityPill = (overview?.notable_count ?? 0) > 0;
   const hasScore = sub?.final_score != null;
-  const hasAnyPill = hasScore || showsDispositionPill || showsActivityPill;
+  const hasAnyPill = showsDispositionPill || showsActivityPill;
   return (
     <button
       type="button"
@@ -1091,51 +1088,56 @@ function StudentRow({
         selected ? "bg-primary-bg/40" : "hover:bg-bg-subtle"
       }`}
     >
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-baseline justify-between gap-2">
+        {/* Score sits next to the name on the header row — it answers
+         * "how did they do?", which is the natural pairing with
+         * student identity. Pulling it out of the pill row keeps that
+         * row exclusively for filled pills, so we don't have a plain
+         * number sandwiched between two colored pills. */}
         <div
-          className={`truncate font-semibold ${
+          className={`min-w-0 flex-1 truncate font-semibold ${
             mutedName ? "text-text-muted" : "text-text-primary"
           }`}
         >
           {entry.student_name}
         </div>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
+        {hasScore && (
           <span
-            className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusLabel.dotClass}`}
-          />
-          <span className="truncate">{statusLabel.text}</span>
-          {sub?.is_late && (
-            <span className="ml-1 shrink-0 font-semibold text-red-600 dark:text-red-400">
-              · late
-            </span>
-          )}
-        </div>
+            className={`shrink-0 text-xs font-bold ${
+              sub!.grade_published_at && !sub!.grade_dirty
+                ? "text-green-700 dark:text-green-400"
+                : "text-text-secondary"
+            }`}
+          >
+            {Math.round(sub!.final_score!)}%
+          </span>
+        )}
       </div>
-      {/* Pills live on their own row beneath the name + status. The
-       * side panel is fixed at 280px and the Activity pill alone can
-       * eat 200px+, so any attempt to share a row with the status
-       * forced overlap or aggressive truncation. Stacking pills under
-       * gives each surface its full natural width.
+      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
+        <span
+          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusLabel.dotClass}`}
+        />
+        <span className="truncate">{statusLabel.text}</span>
+        {sub?.is_late && (
+          <span className="ml-1 shrink-0 font-semibold text-red-600 dark:text-red-400">
+            · late
+          </span>
+        )}
+      </div>
+      {/* Disposition + activity pills on their own row, right-aligned.
+       * The 280px-wide side panel can fit them together in the common
+       * case ("Review" + "Activity: N notable moments"); rare wide
+       * combinations (e.g. "Inconclusive" + long activity copy) wrap,
+       * but each wrapped line is then a single semantically-coherent
+       * pill, which reads cleaner than mixing pills with bare text.
        *
-       * Order is intentional: disposition → score → activity. The AI
-       * verdict is the most urgent signal (does this row need a human
-       * eye?), score is supporting magnitude, activity is behavior
-       * context. Quiet rows (pass / needs_practice / clean activity)
-       * render no pills at all so the loud rows actually pop. */}
+       * Order: disposition first (most urgent — "should I look at this
+       * row?"), then activity (supporting behavior context). Quiet
+       * rows (pass / needs_practice / clean activity) render no pill
+       * row at all so loud rows actually pop. */}
       {hasAnyPill && (
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <RowDispositionPill overview={overview} />
-          {hasScore && (
-            <span
-              className={`text-xs font-bold ${
-                sub!.grade_published_at && !sub!.grade_dirty
-                  ? "text-green-700 dark:text-green-400"
-                  : "text-text-secondary"
-              }`}
-            >
-              {Math.round(sub!.final_score!)}%
-            </span>
-          )}
           <ActivityPill count={overview?.notable_count ?? null} />
         </div>
       )}
