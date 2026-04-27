@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
+import { useScope } from "../lib/scope";
 import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
 import StatCard from "../components/StatCard";
 
@@ -40,6 +41,7 @@ export default function Schools() {
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const { enterSchool } = useScope();
 
   const reload = () => {
     setLoading(true);
@@ -353,7 +355,22 @@ export default function Schools() {
               <tr key={s.id} style={{ opacity: s.is_active ? 1 : 0.55 }}>
                 <td>
                   <div>
-                    <span style={{ fontWeight: 600 }}>{s.name}</span>
+                    <button
+                      onClick={() => enterSchool(s.id)}
+                      title={`Open ${s.name} dashboard`}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        fontWeight: 600,
+                        color: "#6366f1",
+                        cursor: "pointer",
+                        fontSize: "inherit",
+                        textAlign: "left",
+                      }}
+                    >
+                      {s.name}
+                    </button>
                     {(s.city || s.state) && (
                       <div style={{ fontSize: 12, color: "#64748b" }}>
                         {[s.city, s.state].filter(Boolean).join(", ")}
@@ -413,6 +430,9 @@ export default function Schools() {
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
+                      <button onClick={() => { setOpenMenu(null); enterSchool(s.id); }}>
+                        Open Dashboard
+                      </button>
                       <button onClick={() => { setOpenMenu(null); handleViewDetail(s.id); }}>
                         View Details
                       </button>

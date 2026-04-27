@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { getToken, setToken } from "../lib/api";
-import { useScope } from "../lib/scope";
+import { INTERNAL_SCHOOL_ID, useScope } from "../lib/scope";
 import ScopePicker from "./ScopePicker";
 
 interface NavItem {
@@ -32,9 +32,26 @@ function buildSchoolNav(schoolId: string): NavItem[] {
 }
 
 export default function Layout() {
-  const { scope } = useScope();
+  const { scope, schools } = useScope();
   const nav =
     scope.kind === "admin" ? ADMIN_NAV : buildSchoolNav(scope.schoolId);
+
+  // Top-of-content scope chip so the user can see which world they
+  // are in without having to read the small picker label. The chip
+  // matches the dropdown's vocabulary so the two surfaces reinforce.
+  let scopeChipLabel: string;
+  let scopeChipKind: "admin" | "internal" | "school";
+  if (scope.kind === "admin") {
+    scopeChipLabel = "Admin (everything)";
+    scopeChipKind = "admin";
+  } else if (scope.schoolId === INTERNAL_SCHOOL_ID) {
+    scopeChipLabel = "Internal · no-school";
+    scopeChipKind = "internal";
+  } else {
+    const name = schools.find((s) => s.id === scope.schoolId)?.name;
+    scopeChipLabel = name ? `School · ${name}` : "School";
+    scopeChipKind = "school";
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -65,6 +82,10 @@ export default function Layout() {
         )}
       </nav>
       <main className="main-content">
+        <div className={`scope-banner scope-banner-${scopeChipKind}`}>
+          <span className="scope-banner-eyebrow">Scope</span>
+          <span className="scope-banner-value">{scopeChipLabel}</span>
+        </div>
         <Outlet />
       </main>
     </div>

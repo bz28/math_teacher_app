@@ -53,16 +53,17 @@ export default function App() {
             path="/school/:schoolId/llm-calls"
             element={<LLMCalls />}
           />
+          {/* /school/:id with no subpath lands on Overview rather
+              than rendering an empty Layout. */}
+          <Route
+            path="/school/:schoolId"
+            element={<SchoolOverviewPlaceholder />}
+          />
 
-          {/* Legacy URL backwards-compat — old bookmarks
-              redirect into Admin. */}
-          <Route path="/overview" element={<Navigate to="/admin/overview" replace />} />
-          <Route path="/llm-calls" element={<Navigate to="/admin/llm-calls" replace />} />
-          <Route path="/quality" element={<Navigate to="/admin/quality" replace />} />
-          <Route path="/users" element={<Navigate to="/admin/users" replace />} />
-          <Route path="/promo-codes" element={<Navigate to="/admin/promo-codes" replace />} />
-          <Route path="/schools" element={<Navigate to="/admin/schools" replace />} />
-          <Route path="/leads" element={<Navigate to="/admin/leads" replace />} />
+          {/* Anything else under the protected layout (including
+              bare /school) bounces back to Admin Overview rather
+              than rendering a blank page. */}
+          <Route path="*" element={<Navigate to="/admin/overview" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
