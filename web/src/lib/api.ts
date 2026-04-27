@@ -1930,6 +1930,10 @@ export interface TeacherIntegrityProblemRow {
   bank_item_id: string;
   question: string;
   sample_position: number;
+  /** 1-based HW position — what the student saw as "Problem N" in
+   *  chat. Render this on the teacher panel so the label matches the
+   *  student's experience. */
+  hw_position: number;
   status: IntegrityProblemStatus;
   rubric: IntegrityRubric | null;
   ai_reasoning: string | null;

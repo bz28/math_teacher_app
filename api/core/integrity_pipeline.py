@@ -507,9 +507,19 @@ async def start_integrity_check(
         opening_text = None
 
     if not opening_text:
+        # Parameterize on the first sampled problem's hw_position so the
+        # canned fallback matches the labels the student sees in the
+        # reference panel ("Problem N"). Hardcoding "problem 1" was
+        # wrong on every check that didn't sample problem 1.
+        first_hw_position = (
+            problems_for_prompt[0]["hw_position"]
+            if problems_for_prompt
+            else 1
+        )
         opening_text = (
             "Hi! I just took a look at your homework. "
-            "Can you walk me through the first step you took on problem 1?"
+            f"Can you walk me through the first step you took on problem "
+            f"{first_hw_position}?"
         )
 
     db.add(IntegrityConversationTurn(
