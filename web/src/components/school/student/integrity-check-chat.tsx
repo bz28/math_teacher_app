@@ -261,7 +261,7 @@ export function IntegrityCheckChat({
   const canSend =
     !sending && !isComplete && message.trim().length >= MIN_MESSAGE_CHARS;
 
-  const hasReference = state && state.problems.length > 0;
+  const hasReference = state.problems.length > 0;
 
   return (
     // Outer wrapper holds both columns at full viewport height. On
@@ -392,142 +392,142 @@ export function IntegrityCheckChat({
             </div>
           )}
 
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-4"
-      >
-        {visibleTranscript.map((t) => (
-          <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
-        ))}
-        {/* Animated "AI is thinking" indicator shown while we're
-            waiting on the /turn round-trip. Appears right after the
-            optimistic student message so the chat flow reads
-            student → thinking → agent reply. Matches the pattern
-            used in the teacher workshop agent. */}
-        {sending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
-              <span className="inline-flex gap-1">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
-              </span>
-              AI is thinking…
-            </div>
-          </div>
-        )}
-      </div>
-
-      {isComplete ? (
-        <div className="border-t border-border-light px-2 py-4 text-center">
-          <div className="text-sm text-text-secondary">
-            Thanks — your work is with your teacher.
-          </div>
-          {/* Practice nudge — only renders when the agent's disposition
-              suggests more study would help AND a practice set is
-              actually linked to this HW. Any other combination stays
-              silent so the terminal matches what was there before. */}
-          <PracticeNudge
-            disposition={state?.disposition ?? null}
-            courseId={courseId}
-            linkedPracticeId={linkedPracticeId}
-          />
-          <button
-            onClick={onDone}
-            className="mt-3 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-4"
           >
-            Back to homework
-          </button>
-        </div>
-      ) : (
-        <div className="border-t border-border-light px-2 py-3">
-          {nudgeVisible && !timeoutDoubled && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
-            >
-              <span>Still there? Take your time.</span>
+            {visibleTranscript.map((t) => (
+              <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
+            ))}
+            {/* Animated "AI is thinking" indicator shown while we're
+                waiting on the /turn round-trip. Appears right after the
+                optimistic student message so the chat flow reads
+                student → thinking → agent reply. Matches the pattern
+                used in the teacher workshop agent. */}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
+                  <span className="inline-flex gap-1">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+                  </span>
+                  AI is thinking…
+                </div>
+              </div>
+            )}
+          </div>
+
+          {isComplete ? (
+            <div className="border-t border-border-light px-2 py-4 text-center">
+              <div className="text-sm text-text-secondary">
+                Thanks — your work is with your teacher.
+              </div>
+              {/* Practice nudge — only renders when the agent's disposition
+                  suggests more study would help AND a practice set is
+                  actually linked to this HW. Any other combination stays
+                  silent so the terminal matches what was there before. */}
+              <PracticeNudge
+                disposition={state?.disposition ?? null}
+                courseId={courseId}
+                linkedPracticeId={linkedPracticeId}
+              />
               <button
-                type="button"
-                onClick={handleNeedMoreTime}
-                className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+                onClick={onDone}
+                className="mt-3 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
               >
-                I need more time
+                Back to homework
               </button>
             </div>
-          )}
-          {error && <p className="mb-2 text-xs text-error">{error}</p>}
-          <div className="flex items-end gap-2">
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                // Activity resets on ANY keydown — CJK IME composition
-                // keystrokes, Shift+Arrow text selection, and Cmd/Ctrl
-                // shortcuts all count as "student is engaged" even
-                // though they don't count as typing for the cadence
-                // signal.
-                markActivity();
+          ) : (
+            <div className="border-t border-border-light px-2 py-3">
+              {nudgeVisible && !timeoutDoubled && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+                >
+                  <span>Still there? Take your time.</span>
+                  <button
+                    type="button"
+                    onClick={handleNeedMoreTime}
+                    className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+                  >
+                    I need more time
+                  </button>
+                </div>
+              )}
+              {error && <p className="mb-2 text-xs text-error">{error}</p>}
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Activity resets on ANY keydown — CJK IME composition
+                    // keystrokes, Shift+Arrow text selection, and Cmd/Ctrl
+                    // shortcuts all count as "student is engaged" even
+                    // though they don't count as typing for the cadence
+                    // signal.
+                    markActivity();
 
-                // Typing-cadence tracking is stricter: Backspace/Delete
-                // count as "edits", everything else as a normal
-                // keystroke. Skip when it's not really text entry:
-                //   - Modifier-only keys (shift/ctrl/alt/meta) don't
-                //     produce characters.
-                //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
-                //     ⌘A select-all) — the paste gesture is counted
-                //     separately via onPaste; logging the "v" keystroke
-                //     too would double-count a single user action.
-                //   - IME composition (Chinese/Japanese/Korean input)
-                //     fires many intermediate keydowns per character;
-                //     counting them inflates cadence for i18n users.
-                const isEdit = e.key === "Backspace" || e.key === "Delete";
-                const isModifier =
-                  e.key === "Shift" ||
-                  e.key === "Control" ||
-                  e.key === "Alt" ||
-                  e.key === "Meta";
-                const isShortcut = e.metaKey || e.ctrlKey;
-                const isComposing =
-                  e.nativeEvent.isComposing || e.keyCode === 229;
-                if (!isModifier && !isShortcut && !isComposing) {
-                  telemetry.recordKeystroke(isEdit);
-                }
+                    // Typing-cadence tracking is stricter: Backspace/Delete
+                    // count as "edits", everything else as a normal
+                    // keystroke. Skip when it's not really text entry:
+                    //   - Modifier-only keys (shift/ctrl/alt/meta) don't
+                    //     produce characters.
+                    //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
+                    //     ⌘A select-all) — the paste gesture is counted
+                    //     separately via onPaste; logging the "v" keystroke
+                    //     too would double-count a single user action.
+                    //   - IME composition (Chinese/Japanese/Korean input)
+                    //     fires many intermediate keydowns per character;
+                    //     counting them inflates cadence for i18n users.
+                    const isEdit = e.key === "Backspace" || e.key === "Delete";
+                    const isModifier =
+                      e.key === "Shift" ||
+                      e.key === "Control" ||
+                      e.key === "Alt" ||
+                      e.key === "Meta";
+                    const isShortcut = e.metaKey || e.ctrlKey;
+                    const isComposing =
+                      e.nativeEvent.isComposing || e.keyCode === 229;
+                    if (!isModifier && !isShortcut && !isComposing) {
+                      telemetry.recordKeystroke(isEdit);
+                    }
 
-                // Cmd/Ctrl + Enter sends so phone typers don't hit it
-                // by accident. Plain Enter just adds a newline.
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              onPaste={(e) => {
-                // Size only — content is never captured.
-                const pasted = e.clipboardData.getData("text");
-                telemetry.recordPaste(pasted.length);
-                markActivity();
-              }}
-              placeholder="Type your answer…"
-              rows={2}
-              disabled={sending}
-              className="flex-1 resize-none rounded-[--radius-sm] border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
-            />
-            <button
-              onClick={() => void handleSend()}
-              disabled={!canSend}
-              className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              {sending ? "…" : "Send"}
-            </button>
-          </div>
-          {message.length > 0 && message.trim().length < MIN_MESSAGE_CHARS && (
-            <p className="mt-1 text-xs text-text-muted">
-              Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
-            </p>
+                    // Cmd/Ctrl + Enter sends so phone typers don't hit it
+                    // by accident. Plain Enter just adds a newline.
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    // Size only — content is never captured.
+                    const pasted = e.clipboardData.getData("text");
+                    telemetry.recordPaste(pasted.length);
+                    markActivity();
+                  }}
+                  placeholder="Type your answer…"
+                  rows={2}
+                  disabled={sending}
+                  className="flex-1 resize-none rounded-[--radius-sm] border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
+                />
+                <button
+                  onClick={() => void handleSend()}
+                  disabled={!canSend}
+                  className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {sending ? "…" : "Send"}
+                </button>
+              </div>
+              {message.length > 0 && message.trim().length < MIN_MESSAGE_CHARS && (
+                <p className="mt-1 text-xs text-text-muted">
+                  Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
+                </p>
+              )}
+            </div>
           )}
-        </div>
-      )}
         </div>
       </div>
     </div>
