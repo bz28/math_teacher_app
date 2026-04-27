@@ -1074,7 +1074,7 @@ function StudentRow({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center justify-between gap-2 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
+      className={`flex w-full items-start justify-between gap-2 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
         selected ? "bg-primary-bg/40" : "hover:bg-bg-subtle"
       }`}
     >
@@ -1086,66 +1086,74 @@ function StudentRow({
         >
           {entry.student_name}
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+        {/* truncate so the status doesn't wrap to 3 narrow lines when
+         * the pill stack on the right squeezes this column. The pill
+         * stack itself is also wrap-friendly (see below), so on a
+         * really tight width pills flow to a second row instead of
+         * overlapping this status text. */}
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[11px] text-text-muted">
           <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${statusLabel.dotClass}`}
+            className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusLabel.dotClass}`}
           />
-          {statusLabel.text}
+          <span className="truncate">{statusLabel.text}</span>
           {sub?.is_late && (
-            <span className="ml-1 font-semibold text-red-600 dark:text-red-400">
+            <span className="ml-1 shrink-0 font-semibold text-red-600 dark:text-red-400">
               · late
             </span>
           )}
         </div>
       </div>
-      {sub?.final_score != null && (
-        <span
-          className={`shrink-0 text-xs font-bold ${
-            sub.grade_published_at && !sub.grade_dirty
-              ? "text-green-700 dark:text-green-400"
-              : "text-amber-700 dark:text-amber-400"
-          }`}
-        >
-          {Math.round(sub.final_score)}%
-        </span>
-      )}
-      {sub?.integrity_overview?.disposition === "flag_for_review" && (
-        <span
-          className="shrink-0 text-[11px] font-bold text-red-600 dark:text-red-400"
-          role="img"
-          aria-label="Integrity flag: review needed"
-          title="Integrity flag: review needed"
-        >
-          🔴
-        </span>
-      )}
-      {sub?.integrity_overview?.disposition === "tutor_pivot" && (
-        <span
-          className="shrink-0 text-[11px] font-bold text-amber-600 dark:text-amber-400"
-          role="img"
-          aria-label="Student got tutored through this"
-          title="Student got tutored through this"
-        >
-          🟡
-        </span>
-      )}
-      {sub?.integrity_overview?.overall_status === "complete" &&
-        !sub?.integrity_overview?.disposition && (
+      {/* Right-side pill stack. flex-wrap + justify-end means a too-
+       * narrow row pushes the Activity pill (the widest item) onto a
+       * second line below the score + disposition glyph instead of
+       * overlapping the student status on the left. */}
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        {sub?.final_score != null && (
           <span
-            className="shrink-0 text-[11px] font-bold text-text-muted"
-            role="img"
-            aria-label="Integrity check inconclusive — review"
-            title="Integrity check inconclusive — review"
+            className={`text-xs font-bold ${
+              sub.grade_published_at && !sub.grade_dirty
+                ? "text-green-700 dark:text-green-400"
+                : "text-amber-700 dark:text-amber-400"
+            }`}
           >
-            📄
+            {Math.round(sub.final_score)}%
           </span>
         )}
-      {sub?.integrity_overview?.notable_count != null && (
-        <ActivityPill
-          count={sub.integrity_overview.notable_count}
-          className="shrink-0"
-        />
-      )}
+        {sub?.integrity_overview?.disposition === "flag_for_review" && (
+          <span
+            className="text-[11px] font-bold text-red-600 dark:text-red-400"
+            role="img"
+            aria-label="Integrity flag: review needed"
+            title="Integrity flag: review needed"
+          >
+            🔴
+          </span>
+        )}
+        {sub?.integrity_overview?.disposition === "tutor_pivot" && (
+          <span
+            className="text-[11px] font-bold text-amber-600 dark:text-amber-400"
+            role="img"
+            aria-label="Student got tutored through this"
+            title="Student got tutored through this"
+          >
+            🟡
+          </span>
+        )}
+        {sub?.integrity_overview?.overall_status === "complete" &&
+          !sub?.integrity_overview?.disposition && (
+            <span
+              className="text-[11px] font-bold text-text-muted"
+              role="img"
+              aria-label="Integrity check inconclusive — review"
+              title="Integrity check inconclusive — review"
+            >
+              📄
+            </span>
+          )}
+        {sub?.integrity_overview?.notable_count != null && (
+          <ActivityPill count={sub.integrity_overview.notable_count} />
+        )}
+      </div>
     </button>
   );
 }
