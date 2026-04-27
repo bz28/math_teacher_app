@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
-import { topUnits } from "@/lib/units";
+import { topUnits, unitLabel as labelForUnit } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { NewPracticeModal } from "./_pieces/new-practice-modal";
 
@@ -211,6 +211,7 @@ export function PracticeTab({ courseId }: { courseId: string }) {
               <PracticeCard
                 key={p.id}
                 practice={p}
+                unitLabel={resolveUnitLabel(p, units)}
                 sourceHw={
                   p.source_homework_id
                     ? hwById.get(p.source_homework_id) ?? null
@@ -249,58 +250,92 @@ export function PracticeTab({ courseId }: { courseId: string }) {
 
 function PracticeCard({
   practice,
+  unitLabel,
   sourceHw,
   onOpen,
 }: {
   practice: TeacherAssignment;
+  /** Pre-resolved unit label string. Empty string when the practice
+   *  has no units yet — the meta row hides that segment. */
+  unitLabel: string;
   sourceHw: TeacherAssignment | null;
   onOpen: () => void;
 }) {
-  const isPublished = practice.status === "published";
+  const isDraft = practice.status !== "published";
+  const sectionLabel =
+    practice.section_names.length > 0
+      ? practice.section_names.join(", ")
+      : "No sections";
   return (
     <button
       type="button"
       onClick={onOpen}
       className="group w-full rounded-[--radius-md] border border-border bg-surface p-4 text-left transition-colors hover:border-primary"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-bold text-text-primary group-hover:text-primary">
-            {practice.title}
-          </div>
-          <div className="mt-1 text-xs text-text-muted">
-            {practice.problem_count}{" "}
-            {practice.problem_count === 1 ? "problem" : "problems"}
-            {practice.pending_review > 0 && (
-              <>
-                {" · "}
-                <span className="font-semibold text-amber-600">
-                  {practice.pending_review} pending review
-                </span>
-              </>
-            )}
-          </div>
-          {sourceHw && (
-            <div className="mt-1.5 text-[11px] text-text-muted">
-              Cloned from{" "}
-              <span className="font-medium text-text-secondary">
-                {sourceHw.title}
-              </span>
-            </div>
-          )}
-        </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            isPublished
-              ? "bg-green-50 text-green-600 dark:bg-green-500/10"
-              : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"
-          }`}
-        >
-          {isPublished ? "Published" : "Draft"}
+      {/* Title row — pill is inline with the title, matching the HW
+          card's pattern so the two list pages feel like siblings. */}
+      <div className="flex items-center gap-2">
+        <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary group-hover:text-primary">
+          {practice.title}
+        </h3>
+        {isDraft ? (
+          <span className="shrink-0 rounded-full border border-text-muted/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
+            draft
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 dark:bg-green-500/20 dark:text-green-300">
+            published
+          </span>
+        )}
+      </div>
+
+      {/* Meta row: unit · sections — mirrors HomeworkCard's meta. No
+          due date because practice is ungraded. */}
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
+        {unitLabel && (
+          <>
+            <span className="font-medium text-text-secondary">{unitLabel}</span>
+            <span aria-hidden>·</span>
+          </>
+        )}
+        <span className={practice.section_names.length === 0 ? "italic" : ""}>
+          {sectionLabel}
         </span>
       </div>
+
+      <div className="mt-1 text-[11px] text-text-muted">
+        {practice.problem_count}{" "}
+        {practice.problem_count === 1 ? "problem" : "problems"}
+        {practice.pending_review > 0 && (
+          <>
+            {" · "}
+            <span className="font-semibold text-amber-600 dark:text-amber-400">
+              {practice.pending_review} pending review
+            </span>
+          </>
+        )}
+      </div>
+
+      {sourceHw && (
+        <div className="mt-1.5 text-[11px] text-text-muted">
+          Cloned from{" "}
+          <span className="font-medium text-text-secondary">
+            {sourceHw.title}
+          </span>
+        </div>
+      )}
     </button>
   );
+}
+
+/** Resolve a single unit label from the practice's unit_ids. Practice
+ *  is single-unit in current product UX, so we honor the first id. */
+function resolveUnitLabel(
+  practice: TeacherAssignment,
+  units: TeacherUnit[],
+): string {
+  if (practice.unit_ids.length === 0) return "";
+  return labelForUnit(units, practice.unit_ids[0]);
 }
 
 function FilterSelect({
