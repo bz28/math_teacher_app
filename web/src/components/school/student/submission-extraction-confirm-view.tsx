@@ -81,7 +81,13 @@ function groupByProblem(extraction: IntegrityExtraction): ProblemGroup[] {
     map.get(key)!.steps.push(step);
   }
   for (const fa of extraction.final_answers) {
-    const key = fa.problem_position;
+    // Coerce null with the same "null" sentinel the steps loop uses,
+    // so a final_answer with null position dedupes into the same
+    // "Other work" bucket. Previously the steps loop used "null"
+    // (string) and this loop used null (the value) — different Map
+    // keys, so two ProblemGroup entries with position=null landed in
+    // the output. The render then collided on key={g.position ?? "other"}.
+    const key = fa.problem_position ?? "null";
     if (!map.has(key)) {
       // Problem had a final answer but no tagged steps — still worth
       // surfacing so the student sees the answer we read for that
