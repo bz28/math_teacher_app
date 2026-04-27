@@ -169,16 +169,23 @@ function activityPillCopy(count: number): { text: string; style: string } {
 
 /** Compact pill for the queue row + the IntegritySection header +
  *  the digest. Renders nothing on null (older sessions, no
- *  telemetry, in-progress check). Shows the count directly so a
- *  teacher doesn't have to interpret a severity word. */
+ *  telemetry, in-progress check) or on count=0 — clean rows stay
+ *  quiet so loud rows actually stand out. Shows the count directly
+ *  so a teacher doesn't have to interpret a severity word. */
 export function ActivityPill({
   count,
   className,
+  alwaysShow,
 }: {
   count: number | null;
   className?: string;
+  /** Force-render even on count=0. Used inside the digest panel
+   *  where "Activity: clean" is the whole reason the panel exists;
+   *  on the queue row we hide it instead. */
+  alwaysShow?: boolean;
 }) {
   if (count == null) return null;
+  if (count === 0 && !alwaysShow) return null;
   const { text, style } = activityPillCopy(count);
   return (
     <span
@@ -189,6 +196,71 @@ export function ActivityPill({
       )}
     >
       {text}
+    </span>
+  );
+}
+
+// Loud, filled disposition pill for the queue row. Only renders for
+// states that demand teacher action — flag-for-review (red),
+// tutor_pivot (amber), and inconclusive complete-with-no-disposition
+// (gray). pass / needs_practice render nothing so quiet rows stay
+// quiet. Color weights match ActivityPill so they sit visually as
+// siblings on the row. Red is reserved for this disposition channel
+// alone — Activity heavy stays orange so the eye doesn't conflate
+// "behavior" with "AI verdict".
+const ROW_DISPOSITION_COPY: Partial<
+  Record<IntegrityDisposition, { text: string; style: string }>
+> = {
+  flag_for_review: {
+    text: "Review needed",
+    style: "bg-red-600 text-white dark:bg-red-500",
+  },
+  tutor_pivot: {
+    text: "Tutored",
+    style: "bg-amber-600 text-white dark:bg-amber-500",
+  },
+};
+
+const ROW_INCONCLUSIVE_STYLE =
+  "bg-gray-500 text-white dark:bg-gray-600";
+
+/** Queue-row disposition pill. Shows only on actionable verdicts
+ *  (flag / tutored / inconclusive). Pass / needs_practice / in-
+ *  progress render null, keeping clean rows visually quiet. */
+export function RowDispositionPill({
+  overview,
+  className,
+}: {
+  overview: IntegrityOverview | null;
+  className?: string;
+}) {
+  if (!overview) return null;
+  if (overview.overall_status !== "complete") return null;
+  if (!overview.disposition) {
+    return (
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-[11px] font-bold",
+          ROW_INCONCLUSIVE_STYLE,
+          className,
+        )}
+        title="Integrity check inconclusive — review"
+      >
+        Inconclusive
+      </span>
+    );
+  }
+  const cfg = ROW_DISPOSITION_COPY[overview.disposition];
+  if (!cfg) return null;
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[11px] font-bold",
+        cfg.style,
+        className,
+      )}
+    >
+      {cfg.text}
     </span>
   );
 }
@@ -313,6 +385,7 @@ export function ActivityDigest({
         </div>
         <ActivityPill
           count={summary.notable_turns.length}
+          alwaysShow
           className="shrink-0"
         />
       </div>

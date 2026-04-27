@@ -8,6 +8,7 @@ import {
   ActivityDigest,
   ActivityPill,
   ActivityTurnMarker,
+  RowDispositionPill,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
 import {
@@ -1070,20 +1071,18 @@ function StudentRow({
   const sub = entry.submission;
   const statusLabel = rowStatusLabel(entry);
   const mutedName = sub === null;
-  const hasFlagPill =
-    sub?.integrity_overview?.disposition === "flag_for_review";
-  const hasTutorPivot = sub?.integrity_overview?.disposition === "tutor_pivot";
-  const hasInconclusive =
-    sub?.integrity_overview?.overall_status === "complete" &&
-    !sub?.integrity_overview?.disposition;
-  const hasActivityPill = sub?.integrity_overview?.notable_count != null;
+  const overview = sub?.integrity_overview ?? null;
+  // RowDispositionPill renders null on pass / needs_practice / in-
+  // progress, so we duplicate the same gate here to decide whether the
+  // pill row should appear at all.
+  const showsDispositionPill =
+    overview?.overall_status === "complete" &&
+    (overview.disposition === "flag_for_review" ||
+      overview.disposition === "tutor_pivot" ||
+      !overview.disposition);
+  const showsActivityPill = (overview?.notable_count ?? 0) > 0;
   const hasScore = sub?.final_score != null;
-  const hasAnyPill =
-    hasScore ||
-    hasFlagPill ||
-    hasTutorPivot ||
-    hasInconclusive ||
-    hasActivityPill;
+  const hasAnyPill = hasScore || showsDispositionPill || showsActivityPill;
   return (
     <button
       type="button"
@@ -1116,53 +1115,28 @@ function StudentRow({
        * side panel is fixed at 280px and the Activity pill alone can
        * eat 200px+, so any attempt to share a row with the status
        * forced overlap or aggressive truncation. Stacking pills under
-       * gives each surface its full natural width. */}
+       * gives each surface its full natural width.
+       *
+       * Order is intentional: disposition → score → activity. The AI
+       * verdict is the most urgent signal (does this row need a human
+       * eye?), score is supporting magnitude, activity is behavior
+       * context. Quiet rows (pass / needs_practice / clean activity)
+       * render no pills at all so the loud rows actually pop. */}
       {hasAnyPill && (
         <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <RowDispositionPill overview={overview} />
           {hasScore && (
             <span
               className={`text-xs font-bold ${
                 sub!.grade_published_at && !sub!.grade_dirty
                   ? "text-green-700 dark:text-green-400"
-                  : "text-amber-700 dark:text-amber-400"
+                  : "text-text-secondary"
               }`}
             >
               {Math.round(sub!.final_score!)}%
             </span>
           )}
-          {hasFlagPill && (
-            <span
-              className="text-[11px] font-bold text-red-600 dark:text-red-400"
-              role="img"
-              aria-label="Integrity flag: review needed"
-              title="Integrity flag: review needed"
-            >
-              🔴
-            </span>
-          )}
-          {hasTutorPivot && (
-            <span
-              className="text-[11px] font-bold text-amber-600 dark:text-amber-400"
-              role="img"
-              aria-label="Student got tutored through this"
-              title="Student got tutored through this"
-            >
-              🟡
-            </span>
-          )}
-          {hasInconclusive && (
-            <span
-              className="text-[11px] font-bold text-text-muted"
-              role="img"
-              aria-label="Integrity check inconclusive — review"
-              title="Integrity check inconclusive — review"
-            >
-              📄
-            </span>
-          )}
-          {hasActivityPill && (
-            <ActivityPill count={sub!.integrity_overview!.notable_count} />
-          )}
+          <ActivityPill count={overview?.notable_count ?? null} />
         </div>
       )}
     </button>
@@ -1886,9 +1860,16 @@ function IntegrityBanner({
                   </p>
                   {/* Activity pill sits next to the disposition label
                    * so the teacher reads understanding + behavior as
-                   * two equally-prominent axes, not one fused score. */}
+                   * two equally-prominent axes, not one fused score.
+                   * alwaysShow so the "clean" pill renders here even
+                   * when there's nothing notable — inside the detail
+                   * view the teacher wants explicit reassurance that
+                   * behavior was checked, not silent absence. */}
                   {activitySummary && (
-                    <ActivityPill count={activitySummary.notable_turns.length} />
+                    <ActivityPill
+                      count={activitySummary.notable_turns.length}
+                      alwaysShow
+                    />
                   )}
                 </div>
                 {summary && (
