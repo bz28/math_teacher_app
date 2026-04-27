@@ -298,14 +298,12 @@ export function IntegrityCheckChat({
                 Problem &amp; your work
               </div>
             </div>
-            {/* tabIndex/role/aria-label on the inner scroller mirror
-             *  the mobile collapsible — a keyboard user lands on this
-             *  region with Tab and can scroll it with arrow keys.
-             *  The outer <aside> is a landmark; this inner div is
-             *  the focusable scroll container. */}
+            {/* tabIndex on the inner scroller lets a keyboard user
+             *  tab into the panel and scroll it with arrow keys.
+             *  The outer <aside> is the labeled landmark; the inner
+             *  div is just a focusable scroll container, so we don't
+             *  duplicate the aria-label here. */}
             <div
-              role="region"
-              aria-label="Problem and your submitted work"
               tabIndex={0}
               className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
             >
@@ -317,7 +315,16 @@ export function IntegrityCheckChat({
           </aside>
         )}
 
-        <div className="mx-auto flex h-full w-full max-w-2xl flex-col md:mx-0 md:max-w-none">
+        <div
+          className={cn(
+            "mx-auto flex h-full w-full max-w-2xl flex-col",
+            // When the reference column is present, let the chat
+            // fill the grid track. When it's absent (mobile, or no
+            // problems on the session), keep the original centered
+            // max-w-2xl so the chat doesn't blow out to 5xl wide.
+            hasReference && "md:mx-0 md:max-w-none",
+          )}
+        >
           <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
             <div className="flex items-baseline gap-2">
               <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
