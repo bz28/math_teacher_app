@@ -224,11 +224,13 @@ export default function SubmissionTrace() {
                     <span style={{ color: "#dc2626", fontWeight: 700 }}>FAILED</span>
                   )}
                 </div>
-                <MetadataChips
-                  metadata={c.metadata}
-                  hidePromoted
-                  extraSkipKeys={["posture"]}
-                />
+                <div className="trace-row-meta">
+                  <MetadataChips
+                    metadata={c.metadata}
+                    hidePromoted
+                    extraSkipKeys={["posture"]}
+                  />
+                </div>
                 <details className="trace-row-detail">
                   <summary>Show input / output</summary>
                   <div className="trace-row-detail-grid">
