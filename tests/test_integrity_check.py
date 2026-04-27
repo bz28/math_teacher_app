@@ -1661,6 +1661,98 @@ async def test_finish_check_rejects_when_agent_asked_question_same_turn(
         )
 
 
+async def test_finish_check_rejects_when_agent_asked_question_prior_iteration(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Cross-iteration variant of the question guard. The agent splits
+    the bug across two iterations of the same process_student_turn:
+    iter 1 emits text ending in "?" plus a verdict (text persisted);
+    iter 2 emits only finish_check. The guard must inspect the latest
+    persisted agent turn — not just this iteration's text — and reject
+    so the check doesn't close with an unanswered question on screen."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        problem_id = str(problem.id)
+
+    # Iter 1: question text + verdict (no finish_check yet).
+    # Iter 2: finish_check alone, no text. Guard must still reject
+    # because the latest persisted agent turn ends with "?".
+    set_agent_script([
+        [
+            make_text("Let's try the second row — what did you get?"),
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "rubric": {
+                        "paraphrase_originality": "high",
+                        "causal_fluency": "high",
+                    },
+                    "reasoning": "Looks fine so far.",
+                },
+                use_id="uv1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "disposition": "pass",
+                    "summary": "Done.",
+                    "inline_variant_result": "not_applicable",
+                },
+                use_id="uf1",
+            ),
+        ],
+        # After rejection the agent loops once more with plain text.
+        [make_text("Sorry — take your time on that row.")],
+    ])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I did the first row."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Finalize was rejected — check must not be complete.
+        assert check.status != "complete"
+        assert check.disposition is None
+
+        # Pin that iter-1 actually ran (verdict landed) before iter-2
+        # tried to finalize. Without this, a regression that broke the
+        # iter-1 path would still let the test pass on the rejection
+        # alone, masking the very split this test is meant to cover.
+        problem_after = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        assert problem_after.rubric is not None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "outstanding question" in t.content for t in tool_results
+        )
+
+
 # ── Telemetry ──────────────────────────────────────────────────────
 
 

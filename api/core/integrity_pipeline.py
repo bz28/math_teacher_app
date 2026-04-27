@@ -984,14 +984,11 @@ async def process_student_turn(
             break
 
         # Apply tool calls, persisting tool_call + tool_result turns.
-        # Pass text_reply through so finish_check can detect the
-        # "asked a question AND finalized in one response" pattern.
         for block in tool_uses:
             await _record_tool_call(check.id, block, db)
             result_text = await _apply_tool_call(
                 check, block, db,
                 user_id=user_id,
-                current_turn_text=text_reply,
             )
             await _record_tool_result(
                 check.id, getattr(block, "id", ""), result_text, db,
@@ -1094,15 +1091,9 @@ async def _apply_tool_call(
     db: AsyncSession,
     *,
     user_id: str | None = None,
-    current_turn_text: str | None = None,
 ) -> str:
     """Validate + apply a single tool call. Returns the tool_result
     text to persist (and echo back to the agent on the next loop).
-
-    `current_turn_text` is the text reply the agent emitted alongside
-    this tool call in the same response (None if the response was
-    tool_use-only). Used by finish_check to detect the agent asking
-    a question and finalizing in the same breath.
     """
     tool_name = getattr(block, "name", "")
     raw_input = getattr(block, "input", {}) or {}
@@ -1114,9 +1105,7 @@ async def _apply_tool_call(
             check, raw_input, db, user_id=user_id,
         )
     if tool_name == TOOL_FINISH_CHECK:
-        return await _apply_finish_check(
-            check, raw_input, db, current_turn_text=current_turn_text,
-        )
+        return await _apply_finish_check(check, raw_input, db)
     return f"rejected: unknown tool '{tool_name}'"
 
 
@@ -1335,28 +1324,23 @@ async def _apply_finish_check(
     check: IntegrityCheckSubmission,
     raw_input: dict[str, Any],
     db: AsyncSession,
-    *,
-    current_turn_text: str | None = None,
 ) -> str:
     disposition = raw_input.get("disposition")
     summary = raw_input.get("summary") or ""
     variant_result = raw_input.get("inline_variant_result")
 
-    # Guard against the "ask a question AND finalize" bug. If the
-    # agent's text in this same response ends with a question mark,
-    # there's an outstanding question the student hasn't answered —
-    # don't let the agent finalize underneath it. Force the agent to
-    # either drop the question or wait for the reply. The trailing "?"
-    # heuristic is coarse but catches the real failure mode cleanly
-    # (the alternative is an LLM judging whether prose contains a
-    # question, which is overkill for this guard).
-    if current_turn_text and current_turn_text.rstrip().endswith("?"):
+    # Guard against the "ask a question AND finalize" bug — see
+    # _has_unanswered_agent_question. The agent can split the question
+    # and finish_check across iterations of the agent loop within one
+    # process_student_turn call, so the guard inspects persisted turns
+    # rather than just this iteration's text.
+    if await _has_unanswered_agent_question(check.id, db):
         return (
-            "rejected: you just asked the student a question in this "
-            "same response. finish_check is terminal — don't call it "
-            "while you have an outstanding question. Either wait for "
-            "the student's reply (no finish_check this turn) or drop "
-            "the question from your response before finalizing."
+            "rejected: your latest message to the student contains a "
+            "question. finish_check is terminal — don't call it while "
+            "you have an outstanding question. Either wait for the "
+            "student's reply (no finish_check this turn) or drop the "
+            "question from your response before finalizing."
         )
 
     if disposition not in DISPOSITION_VALUES:
@@ -1452,6 +1436,45 @@ async def _force_finalize_turn_cap(
 
 
 _SOFT_NUDGE_MARKER = "(Wrap up:"
+
+
+async def _has_unanswered_agent_question(
+    check_id: uuid.UUID, db: AsyncSession,
+) -> bool:
+    """True if the latest persisted agent turn contains a `?` and no
+    student turn has landed since.
+
+    Used by `_apply_finish_check` to reject finalization when the agent
+    asked a question that's still on the student's screen — including
+    the cross-iteration split where the question is in turn N and
+    finish_check is fired in turn N+M of the same process_student_turn
+    call. We use `"?" in content` (not `endswith("?")`) so patterns like
+    "got it??", "really?!", and "what did you get? take your time"
+    still trip the guard. The cost of a false positive (agent quotes a
+    student question while finalizing) is just the agent rephrasing —
+    the cost of a false negative is the bug we're guarding against.
+    """
+    latest_agent_turn = (await db.execute(
+        select(IntegrityConversationTurn)
+        .where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == ROLE_AGENT,
+        )
+        .order_by(IntegrityConversationTurn.ordinal.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if latest_agent_turn is None or "?" not in latest_agent_turn.content:
+        return False
+    later_student_turn = (await db.execute(
+        select(IntegrityConversationTurn.id)
+        .where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == ROLE_STUDENT,
+            IntegrityConversationTurn.ordinal > latest_agent_turn.ordinal,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    return later_student_turn is None
 
 
 async def _soft_nudge_already_sent(
