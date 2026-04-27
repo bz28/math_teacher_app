@@ -447,13 +447,57 @@ h3 {
 }
 
 .trace-bucket-pill {
-  background: #eef2ff;
-  color: #4338ca;
-  border: 1px solid #c7d2fe;
-  border-radius: 999px;
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.trace-bucket-pill-label {
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.trace-bucket-pill-count {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.trace-bucket-pill-vision {
+  border-color: #93c5fd;
+}
+.trace-bucket-pill-vision .trace-bucket-pill-count {
+  color: #0369a1;
+}
+
+.trace-bucket-pill-integrity {
+  border-color: #c4b5fd;
+}
+.trace-bucket-pill-integrity .trace-bucket-pill-count {
+  color: #5b21b6;
+}
+
+.trace-bucket-pill-grading {
+  border-color: #6ee7b7;
+}
+.trace-bucket-pill-grading .trace-bucket-pill-count {
+  color: #047857;
+}
+
+.trace-summary-cell-alert {
+  background: #fef2f2;
+  margin: -8px -8px;
+  padding: 8px;
+  border-radius: 6px;
 }
 
 .trace-timeline {

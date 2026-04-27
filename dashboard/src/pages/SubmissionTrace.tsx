@@ -12,8 +12,12 @@ import { useScope } from "../lib/scope";
 // individual cost outliers without scrolling through the global LLM
 // Calls list.
 
+// Function names match LLMMode in api/core/llm_client.py. Keep this
+// in sync with that source of truth — adding a new mode there
+// without listing it here would silently drop every call into the
+// "Other" bucket on this page.
 const PIPELINE_BUCKETS: { label: string; functions: string[] }[] = [
-  { label: "Vision", functions: ["vision_extract"] },
+  { label: "Vision", functions: ["image_extract", "integrity_extract", "bank_extract"] },
   { label: "Integrity", functions: ["integrity_agent", "integrity_answer_equivalence"] },
   { label: "Grading", functions: ["ai_grading"] },
 ];
@@ -33,6 +37,18 @@ function fmtCost(n: number): string {
 function fmtRelativeMs(ms: number): string {
   if (ms < 1000) return `${ms.toFixed(0)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function fmtWallTime(ms: number): string {
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 3_600_000) {
+    const m = Math.floor(ms / 60_000);
+    const s = Math.round((ms % 60_000) / 1000);
+    return `${m}m ${s}s`;
+  }
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.round((ms % 3_600_000) / 60_000);
+  return `${h}h ${m}m`;
 }
 
 function shortModel(model: string): string {
@@ -114,11 +130,21 @@ export default function SubmissionTrace() {
 
   // Bucket counts so the user can scan "what stages this submission
   // went through" at the top of the page before reading any rows.
+  // Pills emit in canonical pipeline order (Vision → Integrity →
+  // Grading → Other) so the stack reads as a flowchart not a
+  // data-driven shuffle.
   const bucketCounts = new Map<string, number>();
   for (const c of calls) {
     const b = bucketFor(c.function);
     bucketCounts.set(b, (bucketCounts.get(b) ?? 0) + 1);
   }
+  const orderedBuckets: { label: string; count: number }[] = [];
+  for (const b of PIPELINE_BUCKETS) {
+    const count = bucketCounts.get(b.label);
+    if (count) orderedBuckets.push({ label: b.label, count });
+  }
+  const otherCount = bucketCounts.get("Other");
+  if (otherCount) orderedBuckets.push({ label: "Other", count: otherCount });
 
   return (
     <div>
@@ -146,29 +172,35 @@ export default function SubmissionTrace() {
         </div>
         <div className="trace-summary-cell">
           <div className="trace-summary-label">Wall time</div>
-          <div className="trace-summary-value">
-            {wallMs < 60_000
-              ? `${(wallMs / 1000).toFixed(1)}s`
-              : `${Math.floor(wallMs / 60_000)}m ${Math.round(
-                  (wallMs % 60_000) / 1000,
-                )}s`}
-          </div>
+          <div className="trace-summary-value">{fmtWallTime(wallMs)}</div>
         </div>
-        <div className="trace-summary-cell">
+        <div
+          className={`trace-summary-cell ${
+            failures > 0 ? "trace-summary-cell-alert" : ""
+          }`}
+        >
           <div className="trace-summary-label">Failures</div>
           <div
             className="trace-summary-value"
             style={{ color: failures > 0 ? "#dc2626" : "#10b981" }}
           >
+            {failures > 0 && <span aria-hidden>⚠️ </span>}
             {failures}
           </div>
         </div>
       </div>
 
-      <div className="trace-buckets">
-        {Array.from(bucketCounts.entries()).map(([label, count]) => (
-          <span key={label} className="trace-bucket-pill">
-            {label}: {count}
+      <div className="trace-buckets" role="list" aria-label="Pipeline stages">
+        {orderedBuckets.map(({ label, count }) => (
+          <span
+            key={label}
+            role="listitem"
+            className={`trace-bucket-pill trace-bucket-pill-${label
+              .toLowerCase()
+              .replace(/\s+/g, "-")}`}
+          >
+            <span className="trace-bucket-pill-label">{label}</span>
+            <span className="trace-bucket-pill-count">{count}</span>
           </span>
         ))}
       </div>
@@ -196,7 +228,9 @@ export default function SubmissionTrace() {
                     <span className="trace-row-posture">posture: {posture}</span>
                   )}
                   <span className="trace-row-time" title={c.created_at}>
-                    +{fmtRelativeMs(elapsedMs)} · {formatRelativeDate(c.created_at)}
+                    {i === 0 ? "start" : `+${fmtRelativeMs(elapsedMs)} from start`}
+                    {" · "}
+                    {formatRelativeDate(c.created_at)}
                   </span>
                 </div>
                 <div className="trace-row-stats">
