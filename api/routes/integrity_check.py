@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -501,6 +501,41 @@ class TeacherIntegrityProblemRow(BaseModel):
     student_work_extraction: dict[str, Any] | None
 
 
+class IntegrityActivityTotals(BaseModel):
+    """Session-level counters the teacher digest renders verbatim."""
+    tab_out_count: int
+    tab_out_total_ms: int
+    paste_count: int
+    paste_total_chars: int
+    paste_largest_chars: int
+    long_pause_count: int
+
+
+class IntegrityActivityNotableTurn(BaseModel):
+    """One student turn flagged as notable, plus the reason codes
+    that flagged it. Ordinal indexes into the transcript so the UI
+    can render an inline marker on the matching student bubble."""
+    ordinal: int
+    reasons: list[
+        Literal[
+            "large_paste",
+            "full_paste",
+            "long_tab_out",
+            "dominant_tab_out",
+        ]
+    ]
+
+
+class IntegrityActivitySummary(BaseModel):
+    """Precomputed rollup of student-turn telemetry. Stored as JSON
+    on integrity_check_submissions.activity_summary; this Pydantic
+    model is the canonical API contract for both endpoints that
+    surface it. See api.core.integrity_pipeline.compute_activity_summary."""
+    level: Literal["clean", "notable", "heavy"]
+    totals: IntegrityActivityTotals
+    notable_turns: list[IntegrityActivityNotableTurn]
+
+
 class TeacherIntegrityDetail(BaseModel):
     submission_id: str
     overall_status: str
@@ -512,6 +547,10 @@ class TeacherIntegrityDetail(BaseModel):
     probe_selection_reason: str | None
     inline_variant_used: bool
     inline_variant_result: str | None
+    # Precomputed rollup of student-turn telemetry. Null when no
+    # student turn carried telemetry or the check hasn't finalized.
+    # See IntegrityActivitySummary above.
+    activity_summary: IntegrityActivitySummary | None
     problems: list[TeacherIntegrityProblemRow]
     transcript: list[TeacherTranscriptTurn]
 
@@ -542,6 +581,7 @@ async def teacher_get_integrity_detail(
             probe_selection_reason=None,
             inline_variant_used=False,
             inline_variant_result=None,
+            activity_summary=None,
             problems=[],
             transcript=[],
         )
@@ -598,6 +638,7 @@ async def teacher_get_integrity_detail(
         probe_selection_reason=check.probe_selection_reason,
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,
+        activity_summary=check.activity_summary,
         problems=problem_rows,
         transcript=transcript_rows,
     )

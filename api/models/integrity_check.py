@@ -89,6 +89,18 @@ class IntegrityCheckSubmission(Base):
         String(32), nullable=True,
     )
 
+    # Precomputed rollup of student-turn telemetry for this session.
+    # Populated when the agent finalizes (or the turn cap fires); null
+    # while in_progress, when no student turn carries telemetry, and
+    # on rows from before this column shipped. The IntegrityActivitySummary
+    # Pydantic model in api/routes/integrity_check.py is the canonical
+    # shape — it serializes from this JSON blob on read and is the
+    # API contract for both the queue overview (level only) and the
+    # per-submission detail endpoint (full summary).
+    activity_summary: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
