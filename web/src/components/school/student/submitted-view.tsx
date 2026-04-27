@@ -8,13 +8,11 @@ interface Props {
 
 /**
  * Read-only view of a submitted homework. Renders the uploaded work
- * image (the only thing the student turns in v1) plus the submission
- * timestamp and late badge.
+ * image plus the submission timestamp and late badge.
  *
- * The integrity-checker PR will add a per-problem section here for
- * the Vision-extracted answers + the understanding-check chat
- * results — that's why StudentSubmission.final_answers is still on
- * the API shape even though we don't render it yet.
+ * Per-problem grade feedback lives on the homework detail page (above
+ * this component), not here. The integrity-check transcript and
+ * extraction live on their own surface (IntegrityCheckChat).
  */
 export function SubmittedView({ submission }: Props) {
   const submittedAt = new Date(submission.submitted_at);

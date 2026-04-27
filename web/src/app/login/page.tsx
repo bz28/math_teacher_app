@@ -62,6 +62,27 @@ function LoginPageContent() {
     clearTokens();
   }, []);
 
+  // Single close path so backdrop / Cancel / Escape / Back-to-Login
+  // all behave the same. Resets `forgotSent` so the next open shows
+  // the form, not the post-send "Check your email" screen. Preserves
+  // `forgotEmail` so an accidental Esc doesn't lose the typed input.
+  const closeForgot = () => {
+    setShowForgot(false);
+    setForgotSent(false);
+  };
+
+  // Close the forgot-password overlay on Escape — the keyboard
+  // counterpart to the backdrop click. Only listens while the overlay
+  // is mounted to avoid stealing Escape from the rest of the page.
+  useEffect(() => {
+    if (!showForgot) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeForgot();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [showForgot]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     try {
@@ -181,7 +202,7 @@ function LoginPageContent() {
 
       {/* Forgot password overlay */}
       {showForgot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6" onClick={() => setShowForgot(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6" onClick={closeForgot}>
           <motion.div
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
@@ -200,7 +221,7 @@ function LoginPageContent() {
                   If an account exists for <strong>{forgotEmail}</strong>, we sent a password reset link.
                 </p>
                 <button
-                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(""); }}
+                  onClick={() => { closeForgot(); setForgotEmail(""); }}
                   className="mt-4 text-sm font-semibold text-primary hover:text-primary-dark"
                 >
                   Back to Login
@@ -225,7 +246,7 @@ function LoginPageContent() {
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      onClick={() => setShowForgot(false)}
+                      onClick={closeForgot}
                       className="flex-1 rounded-[--radius-md] border border-border px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:border-primary/30"
                     >
                       Cancel

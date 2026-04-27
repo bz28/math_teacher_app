@@ -17,7 +17,7 @@ import { MathText } from "@/components/shared/math-text";
 
 export default function PracticePage() {
   const router = useRouter();
-  const { startLearnQueue, subject } = useSessionStore();
+  const { startLearnQueue } = useSessionStore();
   const {
     practiceBatch,
     phase,
@@ -69,7 +69,7 @@ export default function PracticePage() {
 
   async function handleChoiceSelect(choice: string) {
     setSelectedChoice(choices.indexOf(choice));
-    await submitPracticeAnswer(choice, subject);
+    await submitPracticeAnswer(choice);
   }
 
   if (phase === "loading" || !practiceBatch) {

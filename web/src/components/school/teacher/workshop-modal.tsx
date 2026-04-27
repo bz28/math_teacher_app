@@ -105,11 +105,6 @@ export function WorkshopModal({
   // needed during review and should be discoverable. Toggleable via the
   // 💬 AI button or C key.
   const [chatOpen, setChatOpen] = useState(true);
-  // Queue-mode variations are rare (generate-similar produces them)
-  // but they need a different approve handler — the backend skips the
-  // auto-attach for variations (Feature 7a), and the teacher closes
-  // the workshop after approving rather than advancing a queue.
-  const isVariationQueue = isQueueMode && !!queue?.[0]?.parent_question_id;
 
   const { busy, error, setError, run } = useAsyncAction();
 
@@ -161,6 +156,9 @@ export function WorkshopModal({
     }
     return -1;
   }, [liveItem]);
+  // Non-null assertion is safe: pendingIdx is only set when the loop
+  // above (line 153) found an entry where m.proposal was truthy, so
+  // the message at pendingIdx is guaranteed to carry a proposal.
   const pendingProposal: BankChatProposal | null =
     pendingIdx >= 0 && liveItem ? liveItem.chat_messages[pendingIdx].proposal! : null;
   const isProposalPending = pendingIdx >= 0;
@@ -347,8 +345,9 @@ export function WorkshopModal({
     });
 
   // Approve — backend auto-attaches to the item's originating HW
-  // (Feature 7a). No picker, no sticky, no per-queue destination
-  // prompt: every item already knows which HW it belongs to.
+  // using the originating_assignment_id stamped at generation time.
+  // No picker, no sticky, no per-queue destination prompt: every
+  // item already knows which HW it belongs to.
   const approve = () =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
@@ -742,10 +741,7 @@ export function WorkshopModal({
               {solutionOpen && (
                 <div className="mt-3 space-y-3">
                   {previewSteps && previewSteps.length > 0 ? (
-                    // Historical data can contain null entries from an
-                    // early version of the accept path. Skip them rather
-                    // than crashing on s.title.
-                    previewSteps.filter((s) => s != null).map((s, i) => {
+                    previewSteps.map((s, i) => {
                       const changed = stepChanged(i);
                       const prev = liveItem.solution_steps?.[i];
                       return (
@@ -940,10 +936,6 @@ export function WorkshopModal({
 // Vim's status line: tells the teacher what they're doing right now.
 // ─────────────────────────────────────────────────────────────────────
 
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
-}
-
 function ModeLineFooter({
   isQueueMode,
   isProposalPending,
@@ -1045,8 +1037,9 @@ function ModeLineFooter({
 
   // Default reading mode: approve/reject/skip/chat/delete. Approve
   // always goes through the same handler — backend auto-attaches to
-  // the originating HW (Feature 7a). Variations get "Approve as
-  // practice" instead to signal they're scaffolding, not HW content.
+  // the originating HW via the item's originating_assignment_id.
+  // Variations get "Approve as practice" instead to signal they're
+  // scaffolding, not HW content.
   const showApproveReject = isQueueMode || status === "pending";
   const useVariationLabel = !isQueueMode && status === "pending" && isVariation;
 

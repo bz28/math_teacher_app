@@ -152,7 +152,7 @@ function InboxRow({
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
+      className="group flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">

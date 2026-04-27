@@ -36,10 +36,6 @@ export interface LearnQueue {
   imageMap: Record<string, string>;
 }
 
-
-
-
-
 // ── Store ──
 
 interface SessionState {
@@ -58,8 +54,6 @@ interface SessionState {
 
   // Learn queue
   learnQueue: LearnQueue | null;
-
-
 
   // Problem input
   problemQueue: { text: string; image?: string }[];
@@ -82,20 +76,14 @@ interface SessionState {
   continueAsking: () => void;
   finishAsking: () => void;
 
-
   // Learn queue actions
   startLearnQueue: (problems: string[]) => Promise<void>;
   advanceLearnQueue: () => Promise<void>;
   toggleLearnFlag: (index: number) => void;
 
-
-
   // Reset
   reset: () => void;
 }
-
-
-
 
 const initialState = {
   session: null,
@@ -197,7 +185,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   async askAboutStep(question) {
     const { session } = get();
     if (!session) return;
-    // Clamp to valid range to match UI key (stepIndex)
+    // On the completed phase the server reports current_step ===
+    // total_steps (one past the last visible step). Step-chat is keyed
+    // by the last visible step, so clamp to total_steps - 1 to keep
+    // both the UI key and any out-of-range writes well-formed.
     const stepNum = Math.min(session.current_step, session.total_steps - 1);
 
     // Add user message to chat and set thinking
@@ -273,13 +264,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ...(image && { image_base64: image }),
         })
           .then((s) => {
-            const { learnQueue: lq } = get();
-            if (!lq) return;
-            set({
-              learnQueue: {
-                ...lq,
-                preloadedSessions: { ...lq.preloadedSessions, [queueIndex]: s },
-              },
+            // Functional setter so concurrent preload .then()s don't
+            // overwrite each other's writes — reading learnQueue via
+            // get() then calling set({...}) was racy: two preloads
+            // finishing in the same tick would both see the same
+            // pre-write snapshot, and the second one's spread would
+            // drop the first's preloadedSessions entry.
+            set((state) => {
+              const lq = state.learnQueue;
+              if (!lq) return state;
+              return {
+                learnQueue: {
+                  ...lq,
+                  preloadedSessions: {
+                    ...lq.preloadedSessions,
+                    [queueIndex]: s,
+                  },
+                },
+              };
             });
           })
           .catch(() => {}); // Silently skip — preload failures are non-critical
@@ -317,14 +319,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     if (preloaded) {
-      set({
+      // Functional setter mirrors the preload-write pattern above —
+      // and makes the learnQueue read safe without a non-null assert
+      // on a state slice that another path could in theory have reset.
+      set((state) => ({
         session: preloaded,
         sessionImage: nextImage ?? null,
-        phase: "awaiting_input",
+        phase: "awaiting_input" as SessionPhase,
         lastResponse: null,
         chatHistory: {},
-        learnQueue: { ...get().learnQueue!, currentIndex: nextIndex },
-      });
+        learnQueue: state.learnQueue
+          ? { ...state.learnQueue, currentIndex: nextIndex }
+          : null,
+      }));
       return;
     }
 
@@ -342,7 +349,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ phase: "completed" as SessionPhase });
   },
 
-
   toggleLearnFlag(index) {
     const { learnQueue } = get();
     if (!learnQueue) return;
@@ -350,7 +356,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     newFlags[index] = !newFlags[index];
     set({ learnQueue: { ...learnQueue, flags: newFlags } });
   },
-
 
   reset() {
     set(initialState);

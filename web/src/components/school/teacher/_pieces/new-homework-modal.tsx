@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import { hwGenStorageKey } from "@/lib/hw-gen-storage";
 import { topUnits } from "@/lib/units";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
@@ -163,7 +164,7 @@ export function NewHomeworkModal({
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
+        sessionStorage.setItem(hwGenStorageKey(id), job.id);
       } catch {
         startedGeneration = false;
       }

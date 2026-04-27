@@ -19,6 +19,7 @@ import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
 } from "@/lib/constants";
+import { hwGenStorageKey } from "@/lib/hw-gen-storage";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { UnitMultiSelect } from "@/components/school/teacher/_pieces/unit-multi-select";
 import { SectionMultiSelect } from "@/components/school/teacher/_pieces/section-multi-select";
@@ -198,7 +199,7 @@ export default function HomeworkDetailPage({
   // homework page"), we restore it so the existing polling effect
   // shows a generating indicator and refreshes pending on done.
   useEffect(() => {
-    const key = `hw-gen-${assignmentId}`;
+    const key = hwGenStorageKey(assignmentId);
     const jobId = sessionStorage.getItem(key);
     if (!jobId) return;
     teacher
@@ -1138,7 +1139,7 @@ function ConfigBlock({
   return (
     <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-bg-base/30 p-4">
       {/* Units */}
-      <Field
+      <InlineSavedField
         label="Units"
         required
         hint={
@@ -1155,12 +1156,12 @@ function ConfigBlock({
           onChange={onChangeUnits}
           disabled={disabled}
         />
-      </Field>
+      </InlineSavedField>
 
       {/* Due date — hidden for practice: practice is ungraded and
           has no deadline concept. */}
       {hw.type !== "practice" && (
-        <Field
+        <InlineSavedField
           label="Due date"
           saveState={saveStates.dueAt}
           saveError={saveErrors.dueAt}
@@ -1171,13 +1172,13 @@ function ConfigBlock({
             disabled={disabled}
             inputRef={dueDateInputRef}
           />
-        </Field>
+        </InlineSavedField>
       )}
 
       {/* Late policy — hidden for practice: nothing can be late
           when there's no due date. */}
       {hw.type !== "practice" && (
-        <Field
+        <InlineSavedField
           label="Late policy"
           saveState={saveStates.latePolicy}
           saveError={saveErrors.latePolicy}
@@ -1203,11 +1204,11 @@ function ConfigBlock({
               );
             })}
           </div>
-        </Field>
+        </InlineSavedField>
       )}
 
       {/* Sections */}
-      <Field
+      <InlineSavedField
         label="Sections"
         hint={
           hw.section_ids.length === 0
@@ -1223,12 +1224,19 @@ function ConfigBlock({
           onChange={onChangeSections}
           disabled={disabled}
         />
-      </Field>
+      </InlineSavedField>
     </div>
   );
 }
 
-function Field({
+/**
+ * Labeled config row with an inline auto-save status hint. Distinct
+ * from the shared `Field` in components/school/shared/field.tsx —
+ * that one is a form-control wrapper (label + htmlFor); this one is a
+ * status-bearing row used inside the HW configuration accordion to
+ * show "saving / saved / error" next to the field title.
+ */
+function InlineSavedField({
   label,
   required,
   hint,

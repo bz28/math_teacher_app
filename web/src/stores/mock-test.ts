@@ -36,6 +36,15 @@ export interface MockTest {
   workImages: (string | null)[];
   workSubmissions: (DiagnosisResult | null)[];
   multipleChoice: boolean;
+  /** True once all background solve requests have settled (succeeded
+   *  or rejected). Lets the preview screen unblock the Begin button
+   *  when some answers permanently failed — without this, the student
+   *  would stare at "Preparing answers…" forever. */
+  solveSettled: boolean;
+  /** Number of solve requests that rejected. The preview surfaces a
+   *  warning when > 0 so the student knows missing-answer questions
+   *  will be ungraded at submit time. */
+  solveErrorCount: number;
 }
 
 // ── Helpers ──
@@ -60,6 +69,8 @@ function createMockTest(
     workImages: new Array(len).fill(null),
     workSubmissions: new Array(len).fill(null),
     multipleChoice,
+    solveSettled: false,
+    solveErrorCount: 0,
   };
 }
 
@@ -132,14 +143,32 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           }),
         );
 
-        // Solve in background — transition to error if all fail
+        // Solve in background — count failures off the actual results
+        // array (not the post-write batch) so we can distinguish
+        // total vs partial failure. Total failure → phase: error.
+        // Partial failure → set solveErrorCount + solveSettled so the
+        // preview screen can unblock Begin and warn the student that
+        // missing-answer questions will be ungraded.
         Promise.allSettled(solvePromises).then((results) => {
           const { mockTest: current } = get();
           if (!current || current.sessionId !== batchSessionId) return;
-          const allFailed = current.questions.every((q) => q.answer === "");
-          if (allFailed) {
-            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          const failedCount = results.filter(
+            (r) => r.status === "rejected",
+          ).length;
+          if (failedCount === results.length) {
+            set({
+              phase: "error",
+              error: "Failed to generate answers. Please try again.",
+            });
+            return;
           }
+          set({
+            mockTest: {
+              ...current,
+              solveSettled: true,
+              solveErrorCount: failedCount,
+            },
+          });
         });
       } else {
         const placeholders: PracticeProblem[] = problems.map((p) => ({
@@ -170,14 +199,27 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
           });
         });
 
-        // Solve in background — transition to error if all fail
+        // Same partial-failure handling as the generate branch above.
         Promise.allSettled(promises).then((results) => {
           const { mockTest: current } = get();
           if (!current || current.sessionId !== batchSessionId2) return;
-          const allFailed = current.questions.every((q) => q.answer === "");
-          if (allFailed) {
-            set({ phase: "error", error: "Failed to generate answers. Please try again." });
+          const failedCount = results.filter(
+            (r) => r.status === "rejected",
+          ).length;
+          if (failedCount === results.length) {
+            set({
+              phase: "error",
+              error: "Failed to generate answers. Please try again.",
+            });
+            return;
           }
+          set({
+            mockTest: {
+              ...current,
+              solveSettled: true,
+              solveErrorCount: failedCount,
+            },
+          });
         });
       }
     } catch (err) {
@@ -237,14 +279,24 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
     set({ phase: "loading" });
 
     try {
-      // Wait for all answers to be resolved before grading
+      // Wait for all answers to be resolved before grading. Short-
+      // circuit when the solve batch has already settled with at
+      // least one permanent failure — those questions' answers will
+      // never arrive, and waiting 30s for the timeout fallback would
+      // just delay grading the answers we DO have.
       const answersResolved = mockTest.questions.every((q) => q.answer !== "");
-      if (!answersResolved) {
+      if (!answersResolved && !mockTest.solveSettled) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => { unsub(); resolve(); }, 30_000);
           const unsub = store.subscribe((state) => {
             if (!state.mockTest) { clearTimeout(timeout); unsub(); resolve(); return; }
-            if (state.mockTest.questions.every((q) => q.answer !== "")) {
+            // Resolve as soon as either every answer arrives OR the
+            // solve batch settles (so a late partial-failure also
+            // unblocks submit instead of riding the 30s timeout).
+            if (
+              state.mockTest.solveSettled ||
+              state.mockTest.questions.every((q) => q.answer !== "")
+            ) {
               clearTimeout(timeout);
               unsub();
               resolve();
@@ -265,6 +317,21 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
               question: q.question,
               userAnswer: null,
               correctAnswer: q.answer,
+              isCorrect: null,
+            };
+          }
+
+          // Permanently-failed solve (q.answer === "" after solveSettled).
+          // Treat as ungraded — matches the preview-screen warning so the
+          // student isn't told something graded when nothing could grade
+          // it. Skips the API check too: practiceApi.check with an empty
+          // correct_answer would either return a meaningless verdict or
+          // 4xx, neither helpful.
+          if (q.answer === "") {
+            return {
+              question: q.question,
+              userAnswer,
+              correctAnswer: "",
               isCorrect: null,
             };
           }

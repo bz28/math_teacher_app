@@ -6,8 +6,10 @@ import {
   type TeacherAssignment,
   type TeacherDocument,
 } from "@/lib/api";
+import { hwGenStorageKey } from "@/lib/hw-gen-storage";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
+import { useToast } from "@/components/ui/toast";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -53,6 +55,7 @@ export function NewPracticeModal({
   const [step, setStep] = useState<Step>(1);
   const [sourceMode, setSourceMode] = useState<SourceMode>("clone");
   const { busy, error, setError, run } = useAsyncAction();
+  const toast = useToast();
 
   // ── Step 1 state (clone-mode only) ──
   const [hws, setHws] = useState<TeacherAssignment[]>([]);
@@ -169,7 +172,7 @@ export function NewPracticeModal({
       // dot + existing job polling can pick it up. Keyed by the new
       // practice assignment id so concurrent clones don't clobber.
       if (resp.job_ids[0]) {
-        sessionStorage.setItem(`hw-gen-${resp.id}`, resp.job_ids[0]);
+        sessionStorage.setItem(hwGenStorageKey(resp.id), resp.job_ids[0]);
       }
       onCreated(resp.id, { startedGeneration: resp.job_ids.length > 0 });
     });
@@ -182,11 +185,17 @@ export function NewPracticeModal({
       late_policy: latePolicy,
       ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
     });
+    // Same rationale as the HW wizard: don't block the route to the
+    // detail page on a section-assignment failure (would risk
+    // double-creating the practice on retry), but toast so the teacher
+    // knows the picks didn't take.
     if (sectionIds.length > 0) {
       try {
         await teacher.assignToSections(created.id, sectionIds);
       } catch {
-        // Non-fatal — teacher adds sections manually on detail page.
+        toast.error(
+          "Practice created, but assigning to your selected sections failed. Add them on the detail page.",
+        );
       }
     }
     return created.id;
@@ -210,7 +219,7 @@ export function NewPracticeModal({
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
+        sessionStorage.setItem(hwGenStorageKey(id), job.id);
       } catch {
         startedGeneration = false;
       }
@@ -264,7 +273,7 @@ export function NewPracticeModal({
             <SourceStep
               sourceMode={sourceMode}
               onSourceModeChange={setSourceMode}
-              hws={cloneable}
+              cloneableHws={cloneable}
               hwsLoaded={hwsLoaded}
               selectedHwId={selectedHwId}
               onSelectedHwIdChange={setSelectedHwId}
@@ -410,7 +419,7 @@ export function NewPracticeModal({
 function SourceStep({
   sourceMode,
   onSourceModeChange,
-  hws,
+  cloneableHws,
   hwsLoaded,
   selectedHwId,
   onSelectedHwIdChange,
@@ -418,13 +427,17 @@ function SourceStep({
 }: {
   sourceMode: SourceMode;
   onSourceModeChange: (v: SourceMode) => void;
-  hws: TeacherAssignment[];
+  /** Pre-filtered to homeworks with problem_count > 0 by the parent.
+   *  This component assumes that filter has been applied — pass an
+   *  unfiltered list and the dropdown will surface drafts that the
+   *  clone endpoint would reject. */
+  cloneableHws: TeacherAssignment[];
   hwsLoaded: boolean;
   selectedHwId: string;
   onSelectedHwIdChange: (v: string) => void;
   disabled: boolean;
 }) {
-  const noClonableHw = hwsLoaded && hws.length === 0;
+  const noClonableHw = hwsLoaded && cloneableHws.length === 0;
   return (
     <div className="space-y-5">
       <p className="text-xs text-text-muted">
@@ -457,7 +470,7 @@ function SourceStep({
                 aria-label="Source homework"
                 className="mt-3 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
               >
-                {hws.map((h) => (
+                {cloneableHws.map((h) => (
                   <option key={h.id} value={h.id}>
                     {h.title} · {h.problem_count}{" "}
                     {h.problem_count === 1 ? "problem" : "problems"}

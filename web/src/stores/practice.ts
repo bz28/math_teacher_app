@@ -4,10 +4,8 @@ import { create } from "zustand";
 import {
   session as sessionApi,
   practice as practiceApi,
-  work as workApi,
   EntitlementError,
   type PracticeProblem,
-  type DiagnosisResult,
 } from "@/lib/api";
 import { pollForState } from "@/lib/poll";
 import type { Subject } from "@/stores/learn";
@@ -29,7 +27,6 @@ export interface PracticeBatch {
   currentIndex: number;
   results: PracticeResult[];
   flags: boolean[];
-  workSubmissions: (DiagnosisResult | null)[];
   firstAttemptCorrect: (boolean | null)[];
   currentFeedback: "correct" | "wrong" | null;
   sessionId: string | null;
@@ -41,7 +38,6 @@ export interface PracticeBatch {
 export interface PracticeResult {
   problem: string;
   userAnswer: string;
-  correctAnswer: string;
   isCorrect: boolean;
 }
 
@@ -58,7 +54,6 @@ function createPracticeBatch(
     currentIndex: 0,
     results: [],
     flags: new Array(len).fill(false),
-    workSubmissions: new Array(len).fill(null),
     firstAttemptCorrect: new Array(len).fill(null),
     currentFeedback: null,
     sessionId,
@@ -80,9 +75,8 @@ interface PracticeState {
   beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
   practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: Difficulty) => Promise<void>;
-  submitPracticeAnswer: (answer: string, subject: Subject) => Promise<void>;
+  submitPracticeAnswer: (answer: string) => Promise<void>;
   skipPracticeProblem: () => void;
-  submitPracticeWork: (index: number, imageBase64: string, userAnswer: string, subject: Subject) => void;
   nextPracticeProblem: () => void;
   togglePracticeFlag: (index: number) => void;
   reset: () => void;
@@ -238,7 +232,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     });
   },
 
-  async submitPracticeAnswer(answer, _subject) {
+  async submitPracticeAnswer(answer) {
     const { practiceBatch } = get();
     if (!practiceBatch) return;
     const idx = practiceBatch.currentIndex;
@@ -265,7 +259,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         const result: PracticeResult = {
           problem: current.question,
           userAnswer: answer,
-          correctAnswer: "",
           isCorrect: true,
         };
         const newFlags = [...practiceBatch.flags];
@@ -312,7 +305,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     const result: PracticeResult = {
       problem: current.question,
       userAnswer: "(skipped)",
-      correctAnswer: "",
       isCorrect: false,
     };
 
@@ -341,34 +333,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
         phase: "awaiting_input",
       });
     }
-  },
-
-  submitPracticeWork(index, imageBase64, userAnswer, subject) {
-    const { practiceBatch } = get();
-    if (!practiceBatch) return;
-    const problem = practiceBatch.problems[index];
-
-    workApi
-      .submit({
-        image_base64: imageBase64,
-        problem_text: problem.question,
-        user_answer: userAnswer,
-        user_was_correct: false,
-        subject,
-      })
-      .then((res) => {
-        if (!res.diagnosis) return;
-        const { practiceBatch: current } = get();
-        if (!current) return;
-        const newSubmissions = [...current.workSubmissions];
-        newSubmissions[index] = res.diagnosis;
-        const newFlags = [...current.flags];
-        if (res.diagnosis.has_issues && !newFlags[index]) {
-          newFlags[index] = true;
-        }
-        set({ practiceBatch: { ...current, workSubmissions: newSubmissions, flags: newFlags } });
-      })
-      .catch(console.error);
   },
 
   nextPracticeProblem() {

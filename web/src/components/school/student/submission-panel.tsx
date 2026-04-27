@@ -24,8 +24,8 @@ interface Props {
  * The "Submit Homework" section that appears at the bottom of the
  * locked HW page. Required: a single image upload of the whole
  * completed homework. The image is the source of truth — the
- * upcoming integrity checker (next PR) will read it to extract per-
- * problem answers and run the understanding-check chat.
+ * integrity checker reads it on submit to extract per-problem answers
+ * and drive the understanding-check chat.
  */
 export function SubmissionPanel({
   assignmentId,

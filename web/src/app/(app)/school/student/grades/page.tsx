@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   schoolStudent,
   type DashboardGrade,
-  type StudentGradesResponse,
+  type MyGradesResponse,
 } from "@/lib/api";
 import { StudentGradeRow } from "@/components/school/student/student-grade-row";
 
@@ -16,7 +16,7 @@ type Sort = "date_desc" | "date_asc" | "score_desc" | "score_asc";
  * no rank, no feedback; v1 is a record-only view.
  */
 export default function StudentGradesPage() {
-  const [data, setData] = useState<StudentGradesResponse | null>(null);
+  const [data, setData] = useState<MyGradesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("date_desc");
 
