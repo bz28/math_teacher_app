@@ -208,23 +208,18 @@ export function SubmissionExtractionConfirmView({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
+      {/* Lead with the question the student is being asked. The
+          previous "Here's what we read…" headline named the screen
+          but didn't tell the student what to *do* — they would scan
+          and wonder what response was expected. A direct question
+          makes the action immediate. */}
       <h1 className="text-2xl font-bold text-text-primary">
-        Here&rsquo;s what we read from your work
+        Does this match what you wrote?
       </h1>
       <p className="mt-2 text-sm text-text-secondary">
-        Before we chat about your homework, take a quick look — does this
-        match what you wrote? If anything&rsquo;s off, let us know so your
-        teacher knows too.
+        We just read your homework photo. Look it over — if the reader
+        got something wrong, flag it so your teacher knows.
       </p>
-
-      {/* Upfront rules — stated once, before the chat starts. Makes
-          behavioral signals meaningful by setting the expectation,
-          not ambushing the student after. */}
-      <div className="mt-4 rounded-[--radius-sm] border border-border-light bg-bg-subtle px-4 py-3 text-sm text-text-secondary">
-        <span className="font-semibold text-text-primary">Quick check-in:</span>{" "}
-        Stay in this window and answer in your own words. You don&rsquo;t need
-        to look anything up. {BUDGET_COPY[device]}
-      </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div>
@@ -287,9 +282,25 @@ export function SubmissionExtractionConfirmView({
         </div>
       </div>
 
+      {/* "What's next" panel sits right above the buttons so the
+          student reads it the moment before they choose. The previous
+          version put rules at the top, where they were attentionally
+          stranded — students were focused on reviewing the extraction,
+          not memorizing rules for a chat that hadn't started. Here the
+          rules land at the moment they become relevant. */}
+      <div className="mt-8 rounded-[--radius-md] border border-primary/30 bg-primary-bg/40 px-4 py-3.5">
+        <p className="text-sm font-semibold text-text-primary">
+          Next: a quick chat about your work
+        </p>
+        <p className="mt-1 text-sm text-text-secondary">
+          {BUDGET_COPY[device]} Stay in this window and answer in your
+          own words — you don&rsquo;t need to look anything up.
+        </p>
+      </div>
+
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
-      <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-end">
+      <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={handleFlag}
@@ -304,7 +315,7 @@ export function SubmissionExtractionConfirmView({
           disabled={submitting}
           className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
         >
-          {submitting ? "Saving…" : "Looks right — continue"}
+          {submitting ? "Saving…" : "Looks right — start chat"}
         </button>
       </div>
     </div>
