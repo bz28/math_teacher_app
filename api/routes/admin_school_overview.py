@@ -37,10 +37,9 @@ from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.section import Section
 from api.models.user import User
+from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
 
 router = APIRouter()
-
-INTERNAL_SCHOOL_SENTINEL = "internal"
 
 
 def _month_window(now: datetime) -> tuple[datetime, datetime, datetime]:
@@ -198,6 +197,10 @@ async def school_overview(
         # Top 5 classes by spend this month. We go LLMCall → Submission →
         # Section → Course so we can present the section name + course
         # name (a class is "Algebra I · Period 3" not just "Period 3").
+        # We filter on BOTH the denormalized LLMCall.school_id and the
+        # joined Course.school_id so that a stale snapshot (e.g. a
+        # teacher's school changed mid-stream) can't bleed into another
+        # school's totals via the Submission→Course chain.
         top_classes_rows = (await db.execute(
             select(
                 Section.id.label("section_id"),
@@ -210,6 +213,7 @@ async def school_overview(
             .join(Course, Course.id == Section.course_id)
             .where(
                 llm_school,
+                Course.school_id == school_id,
                 LLMCall.created_at >= this_month_start,
             )
             .group_by(Section.id, Section.name, Course.name)
@@ -228,6 +232,8 @@ async def school_overview(
 
         # Top 5 teachers by spend this month — Assignment.teacher_id is
         # the source of truth for "who owns this HW", so we group by it.
+        # As with top_classes above, we double-filter via Course.school_id
+        # so a snapshot/join-target mismatch can't bleed across schools.
         top_teachers_rows = (await db.execute(
             select(
                 User.id.label("teacher_id"),
@@ -237,9 +243,11 @@ async def school_overview(
             )
             .join(Submission, Submission.id == LLMCall.submission_id)
             .join(Assignment, Assignment.id == Submission.assignment_id)
+            .join(Course, Course.id == Assignment.course_id)
             .join(User, User.id == Assignment.teacher_id)
             .where(
                 llm_school,
+                Course.school_id == school_id,
                 LLMCall.created_at >= this_month_start,
             )
             .group_by(User.id, User.name, User.email)
@@ -257,8 +265,8 @@ async def school_overview(
         ]
 
         # Top 5 most expensive submissions this week — drives the
-        # flight-recorder drill-down (PR E). Until then the row at
-        # least surfaces the offender by id.
+        # per-submission flight-recorder drill-down. Frontend renders
+        # each row as a deep-link into the timeline view.
         top_subs_rows = (await db.execute(
             select(
                 LLMCall.submission_id,
