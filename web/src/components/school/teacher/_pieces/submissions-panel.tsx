@@ -143,11 +143,11 @@ function formatMs(ms: number): string {
 
 // Filled-style pills (solid bg + white text) so the count is legible
 // regardless of where the pill sits — queue row hover bg, amber
-// flag-for-review banner, neutral submission detail. Color thresholds
-// match the activity_level rules: 0 = clean (muted gray), 1 = notable
-// (amber), ≥2 = heavy (orange). Pill text drops the level abstraction
-// and shows the count directly so teachers don't have to learn what
-// "heavy" means.
+// flag-for-review banner, neutral submission detail. Color thresholds:
+// 0 = clean (muted gray), 1 = notable (yellow), ≥2 = heavy (orange).
+// Yellow→orange keeps Activity in its own channel; amber/red are
+// reserved for the disposition pill so the two surfaces don't
+// collide visually.
 function activityPillCopy(count: number): { text: string; style: string } {
   if (count <= 0) {
     return {
@@ -158,7 +158,7 @@ function activityPillCopy(count: number): { text: string; style: string } {
   if (count === 1) {
     return {
       text: "Activity: 1 notable moment",
-      style: "bg-amber-600 text-white dark:bg-amber-500",
+      style: "bg-yellow-500 text-white dark:bg-yellow-400 dark:text-gray-900",
     };
   }
   return {
