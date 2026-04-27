@@ -19,10 +19,15 @@ type StatusFilter = "all" | "draft" | "published";
 
 interface PracticeFilters {
   status: StatusFilter;
+  section: string | null;
   unit: string | null;
 }
 
-const EMPTY_FILTERS: PracticeFilters = { status: "all", unit: null };
+const EMPTY_FILTERS: PracticeFilters = {
+  status: "all",
+  section: null,
+  unit: null,
+};
 
 export function PracticeTab({ courseId }: { courseId: string }) {
   const router = useRouter();
@@ -70,6 +75,17 @@ export function PracticeTab({ courseId }: { courseId: string }) {
 
   const allUnitOptions = useMemo(() => topUnits(units), [units]);
 
+  // Section options derived from the loaded practices (name-based,
+  // mirroring the HW tab's filter so the two list pages feel like
+  // siblings).
+  const allSections = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of practices) {
+      for (const s of p.section_names) set.add(s);
+    }
+    return Array.from(set).sort();
+  }, [practices]);
+
   const filtered = useMemo(() => {
     let out = practices;
 
@@ -80,6 +96,11 @@ export function PracticeTab({ courseId }: { courseId: string }) {
       out = out.filter((p) => p.status !== "published");
     } else if (filters.status === "published") {
       out = out.filter((p) => p.status === "published");
+    }
+
+    if (filters.section) {
+      const sec = filters.section;
+      out = out.filter((p) => p.section_names.includes(sec));
     }
 
     if (filters.unit) {
@@ -98,6 +119,7 @@ export function PracticeTab({ courseId }: { courseId: string }) {
 
   const hasActiveFilters =
     filters.status !== "all" ||
+    filters.section !== null ||
     filters.unit !== null ||
     searchQuery.trim() !== "";
 
@@ -165,6 +187,19 @@ export function PracticeTab({ courseId }: { courseId: string }) {
             { value: "published", label: "Published" },
           ]}
         />
+        {allSections.length > 0 && (
+          <FilterSelect
+            label="Section"
+            value={filters.section ?? ""}
+            onChange={(v) =>
+              setFilters((f) => ({ ...f, section: v || null }))
+            }
+            options={[
+              { value: "", label: "All sections" },
+              ...allSections.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+        )}
         {allUnitOptions.length > 0 && (
           <FilterSelect
             label="Unit"
