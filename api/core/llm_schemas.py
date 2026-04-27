@@ -503,12 +503,17 @@ AI_GRADING_SCHEMA: ToolSchema = {
                             "description": "1-based position matching the problem order.",
                         },
                         "student_answer": {
-                            "type": "string",
+                            "type": ["string", "null"],
                             "description": (
                                 "The student's final answer as you understood "
                                 "it from the extraction. Wrap math in $...$ "
                                 "for inline or $$...$$ for display so the "
-                                "teacher sees rendered math, not raw LaTeX."
+                                "teacher sees rendered math, not raw LaTeX. "
+                                "Set to null when the student left the problem "
+                                "blank or the extraction couldn't recover an "
+                                "answer — do NOT write placeholder prose like "
+                                "\"No answer submitted\" or \"(blank)\". The "
+                                "frontend renders an empty-state itself."
                             ),
                         },
                         "score_status": {
