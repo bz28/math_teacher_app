@@ -17,7 +17,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from api.core.integrity_ai import build_problems_briefing
+from api.core.integrity_ai import (
+    POSTURE_PROMPT_FRAGMENTS,
+    build_agent_system_prompt,
+    build_problems_briefing,
+)
 from api.core.integrity_pipeline import (
     ACTIVITY_DOMINANT_TAB_OUT_RATIO,
     ACTIVITY_LARGE_PASTE_CHARS,
@@ -26,13 +30,17 @@ from api.core.integrity_pipeline import (
     ACTIVITY_REASON_FULL_PASTE,
     ACTIVITY_REASON_LARGE_PASTE,
     ACTIVITY_REASON_LONG_TAB_OUT,
-    SELECTION_REASON_HIGHEST_DIFFERENTIATION,
+    SELECTION_REASON_STRUGGLING_EASIEST,
+    SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
     _build_agent_messages,
     _normalize_answer_for_trivial_match,
     _validate_rubric,
+    build_fallback_opener,
+    build_kickoff_message,
     check_answer_correctness,
     compute_activity_summary,
-    select_probe_problems,
+    derive_agent_posture,
+    select_probe_problem,
 )
 from api.models.integrity_check import IntegrityConversationTurn
 
@@ -40,7 +48,7 @@ from api.models.integrity_check import IntegrityConversationTurn
 @dataclass
 class _FakeItem:
     """Stand-in for QuestionBankItem that carries just the fields
-    select_probe_problems + check_answer_correctness look at. Spares
+    select_probe_problem + check_answer_correctness look at. Spares
     these tests from the full ORM + DB setup."""
     id: uuid.UUID
     difficulty: str | None = "medium"
@@ -221,7 +229,7 @@ class TestBuildAgentMessages:
         assert messages[1]["content"][0]["type"] == "tool_use"
 
 
-class TestSelectProbeProblems:
+class TestSelectProbeProblem:
     def _item(
         self, difficulty: str | None = "medium", steps: int = 3,
     ) -> _FakeItem:
@@ -231,56 +239,159 @@ class TestSelectProbeProblems:
             solution_steps=[{"step_num": i + 1} for i in range(steps)],
         )
 
-    def test_picks_highest_difficulty(self) -> None:
-        easy = self._item(difficulty="easy", steps=10)
-        medium = self._item(difficulty="medium", steps=5)
+    def test_verified_picks_hardest_correct(self) -> None:
+        # Three problems, mixed correctness. Verified tier picks the
+        # hardest *among the correct ones* — not the hardest overall.
+        easy_correct = self._item(difficulty="easy", steps=2)
+        medium_correct = self._item(difficulty="medium", steps=2)
+        hard_wrong = self._item(difficulty="hard", steps=5)
+        items_by_id = {
+            easy_correct.id: easy_correct,
+            medium_correct.id: medium_correct,
+            hard_wrong.id: hard_wrong,
+        }
+        correct_by_id = {
+            easy_correct.id: True,
+            medium_correct.id: True,
+            hard_wrong.id: False,
+        }
+
+        result = select_probe_problem(
+            items_by_id,
+            [easy_correct.id, medium_correct.id, hard_wrong.id],
+            correct_by_id,
+        )
+        assert result is not None
+        assert result.bank_item_id == medium_correct.id
+        assert result.tier == "verified"
+        assert result.selection_reason == SELECTION_REASON_VERIFIED_HARDEST_CORRECT
+
+    def test_struggling_picks_easiest_when_none_correct(self) -> None:
+        # Zero correct → struggling tier, picks the easiest problem
+        # (lowest difficulty score).
+        easy = self._item(difficulty="easy", steps=2)
+        medium = self._item(difficulty="medium", steps=2)
         hard = self._item(difficulty="hard", steps=2)
         items_by_id = {easy.id: easy, medium.id: medium, hard.id: hard}
+        correct_by_id = {easy.id: False, medium.id: False, hard.id: False}
 
-        picked, reason = select_probe_problems(
-            items_by_id, [easy.id, medium.id, hard.id], max_picks=1,
+        result = select_probe_problem(
+            items_by_id, [easy.id, medium.id, hard.id], correct_by_id,
         )
-        assert picked == [hard.id]
-        assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+        assert result is not None
+        assert result.bank_item_id == easy.id
+        assert result.tier == "struggling"
+        assert result.selection_reason == SELECTION_REASON_STRUGGLING_EASIEST
 
-    def test_tiebreak_on_solution_step_count(self) -> None:
-        # Both hard — tiebreak wins on more steps.
+    def test_tiebreak_within_tier_uses_step_count(self) -> None:
+        # Verified path: two hard correct, the one with more steps wins.
         short_hard = self._item(difficulty="hard", steps=2)
         long_hard = self._item(difficulty="hard", steps=7)
         items_by_id = {short_hard.id: short_hard, long_hard.id: long_hard}
+        correct_by_id = {short_hard.id: True, long_hard.id: True}
 
-        picked, _ = select_probe_problems(
-            items_by_id, [short_hard.id, long_hard.id], max_picks=1,
+        result = select_probe_problem(
+            items_by_id, [short_hard.id, long_hard.id], correct_by_id,
         )
-        assert picked == [long_hard.id]
+        assert result is not None
+        assert result.bank_item_id == long_hard.id
 
-    def test_unknown_difficulty_treated_as_medium(self) -> None:
-        # Stray string or null doesn't crash selection.
-        unknown = self._item(difficulty="impossible", steps=10)
-        medium = self._item(difficulty="medium", steps=1)
-        items_by_id = {unknown.id: unknown, medium.id: medium}
+    def test_struggling_tiebreak_picks_fewer_steps_in_easiest_tier(self) -> None:
+        # Struggling path uses min(); easy with 1 step beats easy with 5.
+        short_easy = self._item(difficulty="easy", steps=1)
+        long_easy = self._item(difficulty="easy", steps=5)
+        items_by_id = {short_easy.id: short_easy, long_easy.id: long_easy}
+        correct_by_id = {short_easy.id: False, long_easy.id: False}
 
-        picked, _ = select_probe_problems(
-            items_by_id, [unknown.id, medium.id], max_picks=1,
+        result = select_probe_problem(
+            items_by_id, [short_easy.id, long_easy.id], correct_by_id,
         )
-        # Both rank as "medium" in difficulty → step count breaks the tie.
-        assert picked == [unknown.id]
+        assert result is not None
+        assert result.bank_item_id == short_easy.id
 
     def test_drops_missing_items(self) -> None:
+        # bank_item_id in candidate list but not items_by_id → ignored.
         present = self._item(difficulty="hard", steps=4)
-        missing = uuid.uuid4()  # not in items_by_id
+        missing = uuid.uuid4()
         items_by_id = {present.id: present}
+        correct_by_id = {present.id: True}
 
-        picked, reason = select_probe_problems(
-            items_by_id, [missing, present.id], max_picks=1,
+        result = select_probe_problem(
+            items_by_id, [missing, present.id], correct_by_id,
         )
-        assert picked == [present.id]
-        assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+        assert result is not None
+        assert result.bank_item_id == present.id
 
-    def test_empty_input_returns_empty_picks(self) -> None:
-        picked, reason = select_probe_problems({}, [], max_picks=1)
-        assert picked == []
-        assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+    def test_empty_candidates_returns_none(self) -> None:
+        # No candidates at all → selector returns None and the caller
+        # bails without creating a stuck row.
+        assert select_probe_problem({}, [], {}) is None
+
+    def test_all_candidates_missing_returns_none(self) -> None:
+        # candidate ids exist but none hydrated → also None.
+        assert select_probe_problem({}, [uuid.uuid4(), uuid.uuid4()], {}) is None
+
+
+class TestDeriveAgentPosture:
+    def test_verified_maps_to_verified(self) -> None:
+        assert derive_agent_posture("verified", 0) == "verified"
+        # Step count is irrelevant in verified tier.
+        assert derive_agent_posture("verified", 100) == "verified"
+
+    def test_struggling_with_real_steps_is_attempted(self) -> None:
+        # ATTEMPTED_STEP_THRESHOLD = 2; equal counts as attempted.
+        assert derive_agent_posture("struggling", 2) == "struggling_attempted"
+        assert derive_agent_posture("struggling", 5) == "struggling_attempted"
+
+    def test_struggling_with_minimal_steps_is_blank(self) -> None:
+        assert derive_agent_posture("struggling", 0) == "struggling_blank"
+        assert derive_agent_posture("struggling", 1) == "struggling_blank"
+
+
+class TestBuildKickoffAndOpenerTemplates:
+    def test_kickoff_includes_briefing_and_posture_specific_template(self) -> None:
+        msg = build_kickoff_message("struggling_blank", "BRIEFING TEXT")
+        assert "BRIEFING TEXT" in msg
+        # Distinct cue from the struggling_blank template.
+        assert "didn't get far" in msg.lower() or "feels confusing" in msg.lower()
+
+    def test_kickoff_falls_back_to_verified_for_unknown_posture(self) -> None:
+        msg = build_kickoff_message("nonsense", "B")
+        # Verified template has the "warmly" word; struggling templates
+        # don't. Cheap fingerprint that doesn't break on copy edits.
+        assert "warmly" in msg
+
+    def test_fallback_opener_per_posture(self) -> None:
+        # All three postures render a non-empty opener with the
+        # hw_position substituted in.
+        for posture in ("verified", "struggling_attempted", "struggling_blank"):
+            opener = build_fallback_opener(posture, hw_position=4)
+            assert "problem 4" in opener.lower()
+
+    def test_fallback_opener_falls_back_to_verified_for_unknown(self) -> None:
+        opener = build_fallback_opener("garbage", hw_position=2)
+        assert "first step" in opener.lower()
+
+
+class TestBuildAgentSystemPrompt:
+    def test_each_posture_renders_distinct_fragment(self) -> None:
+        v = build_agent_system_prompt("verified")
+        a = build_agent_system_prompt("struggling_attempted")
+        b = build_agent_system_prompt("struggling_blank")
+        assert v != a != b
+        # Each fragment carries its tier/posture marker so misrouting
+        # is easy to spot in a fixture or LLM call log.
+        assert "VERIFIED" in v
+        assert "STRUGGLING (attempted)" in a
+        assert "STRUGGLING (blank)" in b
+
+    def test_unknown_posture_falls_back_to_verified(self) -> None:
+        rendered = build_agent_system_prompt("not_a_posture")
+        assert "VERIFIED" in rendered
+
+    def test_all_postures_have_a_fragment(self) -> None:
+        for posture in ("verified", "struggling_attempted", "struggling_blank"):
+            assert posture in POSTURE_PROMPT_FRAGMENTS
 
 
 class TestNormalizeAnswerForTrivialMatch:

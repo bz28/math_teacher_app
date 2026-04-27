@@ -1915,12 +1915,6 @@ export interface IntegrityRubric {
   self_correction: "low" | "mid" | "high" | "not_observed";
 }
 
-export type IntegrityProbeSelectionReason =
-  | "highest_differentiation"
-  | "anomaly_copied"            // v2
-  | "anomaly_wrong_method"      // v2
-  | "skip_all_wrong";           // reserved
-
 export type IntegrityInlineVariantResult =
   | "specific_approach"
   | "approach_after_followup"
@@ -1939,7 +1933,6 @@ export interface TeacherIntegrityProblemRow {
   status: IntegrityProblemStatus;
   rubric: IntegrityRubric | null;
   ai_reasoning: string | null;
-  selected_reason: IntegrityProbeSelectionReason | null;
   teacher_dismissed: boolean;
   teacher_dismissal_reason: string | null;
   student_work_extraction: IntegrityExtraction | null;
@@ -1975,7 +1968,6 @@ export interface TeacherIntegrityDetail {
   overall_status: string;
   disposition: IntegrityDisposition | null;
   overall_summary: string | null;
-  probe_selection_reason: IntegrityProbeSelectionReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
   activity_summary: IntegrityActivitySummary | null;

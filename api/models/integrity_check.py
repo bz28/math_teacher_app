@@ -70,9 +70,10 @@ class IntegrityCheckSubmission(Base):
     disposition: Mapped[str | None] = mapped_column(String(32), nullable=True)
     overall_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Why the pipeline picked the problem(s) it did — one of
-    # highest_differentiation / anomaly_copied / anomaly_wrong_method /
-    # skip_all_wrong. For audit.
+    # Why the pipeline picked the problem it did — one of
+    # verified_hardest_correct / struggling_easiest. Drives the
+    # agent's posture (see derive_agent_posture). For audit. Null
+    # when the submission was unreadable (no real selection ran).
     probe_selection_reason: Mapped[str | None] = mapped_column(
         String(32), nullable=True,
     )
@@ -157,7 +158,10 @@ class IntegrityCheckProblem(Base):
     ai_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Why this problem was selected as a probe target. One of
-    # highest_differentiation / anomaly_copied / anomaly_wrong_method.
+    # verified_hardest_correct / struggling_easiest. Mirrors
+    # IntegrityCheckSubmission.probe_selection_reason on the row
+    # the pipeline picked first (sample_position 0). Null on the
+    # unreadable path (no selection ran).
     selected_reason: Mapped[str | None] = mapped_column(
         String(32), nullable=True,
     )
