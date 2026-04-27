@@ -1291,21 +1291,23 @@ async def _load_problems_for_prompt(
 
     # Look up the 1-based homework position for each sampled bank
     # item — same source the slicer + the student's chat panel use.
-    # We do this by joining through the submission row to the
-    # assignment, picking up `problem_ids` once for the whole batch.
+    # `problem_ids` lives inside `Assignment.content` (JSON), so we
+    # fetch the content blob and unpack via the bank service helper
+    # rather than projecting a non-existent column.
     hw_position_by_bank_id: dict[uuid.UUID, int] = {}
     if problems:
-        problem_ids_row = (await db.execute(
-            select(Assignment.problem_ids)
+        content = (await db.execute(
+            select(Assignment.content)
+            .join(Submission, Submission.assignment_id == Assignment.id)
             .join(
                 IntegrityCheckSubmission,
                 IntegrityCheckSubmission.submission_id == Submission.id,
             )
-            .join(Submission, Submission.assignment_id == Assignment.id)
             .where(IntegrityCheckSubmission.id == check_id)
-        )).scalar_one_or_none() or []
+        )).scalar_one_or_none()
         hw_position_by_bank_id = {
-            bid: i + 1 for i, bid in enumerate(problem_ids_row)
+            uuid.UUID(bid): i + 1
+            for i, bid in enumerate(problem_ids_in_content(content))
         }
 
     out: list[dict[str, Any]] = []
