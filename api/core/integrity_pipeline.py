@@ -467,6 +467,14 @@ async def start_integrity_check(
         {
             "problem_id": str(r.id),
             "sample_position": r.sample_position,
+            # 1-based homework position — what the student sees in the
+            # chat reference panel as "Problem N". Same dict the
+            # extraction slicer uses (hw_position_by_id above), so the
+            # agent's labeling is end-to-end consistent with what the
+            # student is shown.
+            "hw_position": hw_position_by_id.get(
+                r.bank_item_id, r.sample_position + 1,
+            ),
             "question": items_by_id[r.bank_item_id].question,
             "correct_final_answer": items_by_id[r.bank_item_id].final_answer,
             "extraction": r.student_work_extraction,
@@ -478,8 +486,8 @@ async def start_integrity_check(
     kickoff_user_message = (
         briefing
         + "\n\nNow begin the conversation. Greet the student warmly and ask "
-        "your first question about problem 1, referencing a specific step "
-        "they wrote."
+        "your first question about the sampled problem above, referencing a "
+        "specific step they wrote."
     )
 
     # Try to generate an opening. Fall back to a canned opener if the
@@ -1281,6 +1289,25 @@ async def _load_problems_for_prompt(
     for it in item_rows:
         items_by_id[it.id] = it
 
+    # Look up the 1-based homework position for each sampled bank
+    # item — same source the slicer + the student's chat panel use.
+    # We do this by joining through the submission row to the
+    # assignment, picking up `problem_ids` once for the whole batch.
+    hw_position_by_bank_id: dict[uuid.UUID, int] = {}
+    if problems:
+        problem_ids_row = (await db.execute(
+            select(Assignment.problem_ids)
+            .join(
+                IntegrityCheckSubmission,
+                IntegrityCheckSubmission.submission_id == Submission.id,
+            )
+            .join(Submission, Submission.assignment_id == Assignment.id)
+            .where(IntegrityCheckSubmission.id == check_id)
+        )).scalar_one_or_none() or []
+        hw_position_by_bank_id = {
+            bid: i + 1 for i, bid in enumerate(problem_ids_row)
+        }
+
     out: list[dict[str, Any]] = []
     for p in problems:
         item = items_by_id.get(p.bank_item_id)
@@ -1289,6 +1316,9 @@ async def _load_problems_for_prompt(
         out.append({
             "problem_id": str(p.id),
             "sample_position": p.sample_position,
+            "hw_position": hw_position_by_bank_id.get(
+                p.bank_item_id, p.sample_position + 1,
+            ),
             "question": question_text,
             "correct_final_answer": correct_final_answer,
             "extraction": p.student_work_extraction,

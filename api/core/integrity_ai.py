@@ -323,7 +323,11 @@ def build_problems_briefing(
 
     `problems` is a list of dicts with keys:
       - problem_id: UUID string (what the agent passes to submit_problem_verdict)
-      - sample_position: 0-based index
+      - sample_position: 0-based index in the sampled list (internal)
+      - hw_position: 1-based position on the homework (what the
+        student sees in the chat reference panel as "Problem N").
+        The agent labels problems by this so any "let's talk about
+        Problem 3" reference matches the student's view.
       - question: bank item question text
       - correct_final_answer: the bank item's authoritative final answer
         (string). The agent compares the student's extracted answer
@@ -341,8 +345,13 @@ def build_problems_briefing(
     ]
     for p in problems:
         lines.append("")
+        # Use hw_position so the agent's labeling matches what the
+        # student sees in the chat reference panel. Defensive
+        # fallback to sample_position+1 for older callers that
+        # haven't been migrated yet.
+        position = p.get("hw_position", p.get("sample_position", 0) + 1)
         lines.append(
-            f"--- Problem {p['sample_position'] + 1} "
+            f"--- Problem {position} "
             f"(problem_id: {p['problem_id']}) ---",
         )
         lines.append(f"Question: {p['question']}")
