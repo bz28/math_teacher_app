@@ -1529,7 +1529,7 @@ function ProblemGradeRow({
             ) : (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
                 <span aria-hidden>⚠</span>
-                Couldn&apos;t extract — check the student&apos;s work
+                No answer extracted — refer to submitted work
               </span>
             )}
           </div>

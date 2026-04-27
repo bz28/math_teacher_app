@@ -73,7 +73,8 @@ work steps for that problem + student's final answer).
 give full credit.
 - If the student's approach is correct but they made an arithmetic or sign error, give \
 partial credit.
-- If no extracted answer exists for a problem (student skipped it), give zero.
+- If no extracted answer exists for a problem (student skipped it), give zero \
+AND set `student_answer` to null. Do not invent placeholder prose for the answer field.
 - Keep reasoning concise (1-2 sentences per problem)."""
 
 
@@ -384,7 +385,7 @@ async def run_ai_grading_for_submission(
             "percent": percent,
             "confidence": g.get("confidence"),
             "feedback": g.get("reasoning"),
-            "student_answer": g.get("student_answer", ""),
+            "student_answer": g.get("student_answer"),
         })
         total_percent += percent
 
