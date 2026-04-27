@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   schoolStudent,
+  type IntegrityExtraction,
+  type IntegrityProblemSummary,
   type IntegrityStateResponse,
   type IntegrityTurn,
 } from "@/lib/api";
@@ -259,109 +261,108 @@ export function IntegrityCheckChat({
   const canSend =
     !sending && !isComplete && message.trim().length >= MIN_MESSAGE_CHARS;
 
+  const hasReference = state && state.problems.length > 0;
+
   return (
-    <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-2xl flex-col">
-      <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
-        <div className="flex items-baseline gap-2">
-          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Quick understanding check
+    // Outer wrapper holds both columns at full viewport height. On
+    // mobile (default) only the chat column renders, capped at
+    // max-w-2xl and centered — same UX as before. On md+ a 320px
+    // reference column sits to the left, always visible, so the
+    // student can read the problem and their extracted work side-by-
+    // side with the chat instead of toggling a panel up and down.
+    <div className="mx-auto h-[calc(100dvh-4rem)] w-full max-w-5xl">
+      <div
+        className={cn(
+          "grid h-full",
+          hasReference && "md:grid-cols-[320px_1fr]",
+        )}
+      >
+        {hasReference && (
+          <aside className="hidden h-full flex-col overflow-hidden border-r border-border-light bg-bg-subtle/40 md:flex">
+            <div className="flex items-center justify-between border-b border-border-light px-3 py-3">
+              <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                Reference
+              </div>
+              <div className="text-[10px] text-text-muted">
+                Problem &amp; your work
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              <ReferencePanel
+                problems={state.problems}
+                extraction={state.extraction}
+              />
+            </div>
+          </aside>
+        )}
+
+        <div className="mx-auto flex h-full w-full max-w-2xl flex-col md:mx-0 md:max-w-none">
+          <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
+            <div className="flex items-baseline gap-2">
+              <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                Quick understanding check
+              </div>
+              {!isComplete && (
+                <div className="text-[11px] font-medium text-text-muted">
+                  · {BUDGET_LABEL[device]}
+                </div>
+              )}
+            </div>
+            {totalProblems > 0 && (
+              <div className="text-xs font-medium text-text-muted">
+                {problemsVerdicted} of {totalProblems}
+              </div>
+            )}
           </div>
-          {!isComplete && (
-            <div className="text-[11px] font-medium text-text-muted">
-              · {BUDGET_LABEL[device]}
+          {totalProblems > 0 && (
+            <div className="h-1 w-full bg-border-light">
+              <div
+                className="h-1 bg-primary transition-all"
+                style={{
+                  width: `${
+                    totalProblems === 0
+                      ? 0
+                      : (problemsVerdicted / totalProblems) * 100
+                  }%`,
+                }}
+              />
             </div>
           )}
-        </div>
-        {totalProblems > 0 && (
-          <div className="text-xs font-medium text-text-muted">
-            {problemsVerdicted} of {totalProblems}
-          </div>
-        )}
-      </div>
-      {totalProblems > 0 && (
-        <div className="h-1 w-full bg-border-light">
-          <div
-            className="h-1 bg-primary transition-all"
-            style={{
-              width: `${
-                totalProblems === 0
-                  ? 0
-                  : (problemsVerdicted / totalProblems) * 100
-              }%`,
-            }}
-          />
-        </div>
-      )}
 
-      {/* Reference panel: the agent is asking about specific steps
-          the student wrote, so give them a way to see the original
-          problem + what the reader extracted. Collapsed by default
-          to keep chat focused; students tap "View my work" to pop
-          it open, tap again to close. */}
-      {state && state.problems.length > 0 && (
-        <div className="border-b border-border-light px-2">
-          <button
-            type="button"
-            onClick={() => setReferenceOpen((v) => !v)}
-            aria-expanded={referenceOpen}
-            aria-controls="integrity-chat-reference-panel"
-            className="flex w-full items-center gap-2 py-2 text-xs font-semibold text-text-secondary hover:text-primary"
-          >
-            <span className="text-[10px]" aria-hidden>
-              {referenceOpen ? "▼" : "▶"}
-            </span>
-            {referenceOpen ? "Hide my work" : "View my work"}
-          </button>
-          {referenceOpen && (
-            // Cap the panel height so a long extraction can't push
-            // the chat off the bottom of the viewport. Student
-            // scrolls inside the panel; the chat stays in place
-            // below. ~40dvh (dynamic viewport, matching the outer
-            // container) is enough to show the problem question plus
-            // a few steps before scrolling kicks in. tabIndex + role
-            // give keyboard / screen-reader users a handle on the
-            // scrollable region.
-            <div
-              id="integrity-chat-reference-panel"
-              role="region"
-              aria-label="Your submitted work"
-              tabIndex={0}
-              className="max-h-[40dvh] overflow-y-auto space-y-3 pb-3"
-            >
-              {state.problems.map((p) => (
+          {/* Mobile-only reference toggle. md+ surfaces the same
+              content as a sticky left column instead, so this
+              collapsible exists purely for the narrow viewport where
+              a side panel would crowd the chat. */}
+          {hasReference && (
+            <div className="border-b border-border-light px-2 md:hidden">
+              <button
+                type="button"
+                onClick={() => setReferenceOpen((v) => !v)}
+                aria-expanded={referenceOpen}
+                aria-controls="integrity-chat-reference-panel"
+                className="flex w-full items-center gap-2 py-2 text-xs font-semibold text-text-secondary hover:text-primary"
+              >
+                <span className="text-[10px]" aria-hidden>
+                  {referenceOpen ? "▼" : "▶"}
+                </span>
+                {referenceOpen ? "Hide problem & work" : "Show problem & work"}
+              </button>
+              {referenceOpen && (
                 <div
-                  key={p.problem_id}
-                  className="space-y-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2"
+                  id="integrity-chat-reference-panel"
+                  role="region"
+                  aria-label="Problem and your submitted work"
+                  tabIndex={0}
+                  className="max-h-[40dvh] overflow-y-auto pb-3"
                 >
-                  {p.question && (
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                        Problem {p.sample_position + 1}
-                      </div>
-                      <div className="mt-0.5 text-sm text-text-primary">
-                        <MathText text={p.question} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {state.extraction && (
-                <div className="rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                    Your work (as we read it)
-                  </div>
-                  <div className="mt-1">
-                    <ExtractionView
-                      extraction={state.extraction}
-                      variant="compact"
-                    />
-                  </div>
+                  <ReferencePanel
+                    problems={state.problems}
+                    extraction={state.extraction}
+                  />
                 </div>
               )}
             </div>
           )}
-        </div>
-      )}
 
       <div
         ref={scrollRef}
@@ -497,6 +498,73 @@ export function IntegrityCheckChat({
               Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
             </p>
           )}
+        </div>
+      )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Reference panel — what the student is referring to while chatting.
+// Single source of truth shared by the desktop sticky-left column and
+// the mobile collapsible panel above the transcript. The active
+// problem (next pending) is highlighted so the student knows which
+// problem the agent is currently asking about; the rest read as
+// secondary context.
+// ────────────────────────────────────────────────────────────────────
+
+function ReferencePanel({
+  problems,
+  extraction,
+}: {
+  problems: IntegrityProblemSummary[];
+  extraction: IntegrityExtraction | null;
+}) {
+  // Active = first pending problem. The agent works through them in
+  // order, so this matches what the student is being asked about
+  // right now. -1 if all are verdicted (chat is wrapping up).
+  const activeIdx = problems.findIndex((p) => p.status === "pending");
+  return (
+    <div className="space-y-3">
+      {problems.map((p, i) => {
+        if (!p.question) return null;
+        const isActive = i === activeIdx;
+        return (
+          <div
+            key={p.problem_id}
+            className={cn(
+              "rounded-[--radius-sm] border px-3 py-2",
+              isActive
+                ? "border-primary/60 bg-primary-bg/40"
+                : "border-border-light bg-bg-subtle",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                Problem {p.sample_position + 1}
+              </div>
+              {isActive && (
+                <div className="text-[10px] font-bold uppercase tracking-wide text-primary">
+                  · current
+                </div>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-text-primary">
+              <MathText text={p.question} />
+            </div>
+          </div>
+        );
+      })}
+      {extraction && (
+        <div className="rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+            Your work (as we read it)
+          </div>
+          <div className="mt-1">
+            <ExtractionView extraction={extraction} variant="compact" />
+          </div>
         </div>
       )}
     </div>
