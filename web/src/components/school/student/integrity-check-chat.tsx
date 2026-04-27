@@ -278,7 +278,10 @@ export function IntegrityCheckChat({
         )}
       >
         {hasReference && (
-          <aside className="hidden h-full flex-col overflow-hidden border-r border-border-light bg-bg-subtle/40 md:flex">
+          <aside
+            aria-label="Reference: problem and your submitted work"
+            className="hidden h-full flex-col overflow-hidden border-r border-border-light bg-bg-subtle/40 md:flex"
+          >
             <div className="flex items-center justify-between border-b border-border-light px-3 py-3">
               <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
                 Reference
@@ -287,7 +290,17 @@ export function IntegrityCheckChat({
                 Problem &amp; your work
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-3 py-3">
+            {/* tabIndex/role/aria-label on the inner scroller mirror
+             *  the mobile collapsible — a keyboard user lands on this
+             *  region with Tab and can scroll it with arrow keys.
+             *  The outer <aside> is a landmark; this inner div is
+             *  the focusable scroll container. */}
+            <div
+              role="region"
+              aria-label="Problem and your submitted work"
+              tabIndex={0}
+              className="flex-1 overflow-y-auto px-3 py-3"
+            >
               <ReferencePanel
                 problems={state.problems}
                 extraction={state.extraction}
