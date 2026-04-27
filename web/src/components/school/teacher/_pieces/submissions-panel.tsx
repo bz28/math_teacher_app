@@ -360,7 +360,7 @@ export function ActivityDigest({
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-3 text-xs">
       <p className="text-[11px] font-bold uppercase tracking-wide text-text-primary">
-        Activity during this conversation
+        Activity during integrity check
       </p>
       <div className="mt-2.5 border-t border-border-light pt-2" />
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-text-primary">
@@ -379,7 +379,7 @@ export function ActivityDigest({
         </dd>
       </dl>
       <p className="mt-2.5 text-[10px] text-text-muted">
-        Reflects behavior during this conversation only — not the
+        Reflects behavior during the integrity check only — not the
         original homework session.
       </p>
     </div>
