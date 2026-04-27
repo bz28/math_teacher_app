@@ -1856,24 +1856,15 @@ function IntegrityBanner({
                 {style.icon}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-base font-bold text-text-primary">
-                    {style.label}
-                  </p>
-                  {/* Activity pill sits next to the disposition label
-                   * so the teacher reads understanding + behavior as
-                   * two equally-prominent axes, not one fused score.
-                   * alwaysShow so the "clean" pill renders here even
-                   * when there's nothing notable — inside the detail
-                   * view the teacher wants explicit reassurance that
-                   * behavior was checked, not silent absence. */}
-                  {activitySummary && (
-                    <ActivityPill
-                      count={activitySummary.notable_turns.length}
-                      alwaysShow
-                    />
-                  )}
-                </div>
+                {/* Activity pill lives only on the sidebar student row,
+                 * where it carries unique scan-path signal (passing
+                 * student with flagged activity vs clean). Inside the
+                 * focused detail view the disposition label and the
+                 * Activity panel below already convey understanding +
+                 * behavior; an extra pill here was redundant. */}
+                <p className="text-base font-bold text-text-primary">
+                  {style.label}
+                </p>
                 {summary && (
                   <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
                     {summary}
