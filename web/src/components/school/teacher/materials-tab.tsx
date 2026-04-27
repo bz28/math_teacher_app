@@ -405,14 +405,23 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     rowState.kind === "deletingFolder"
       ? units.find((u) => u.id === rowState.id) ?? null
       : null;
-  const folderDeleteFileCount = folderBeingDeleted
-    ? docs.filter((d) => {
-        if (d.unit_id === folderBeingDeleted.id) return true;
-        // Include files inside subfolders.
-        const sub = units.find((u) => u.id === d.unit_id);
-        return sub?.parent_id === folderBeingDeleted.id;
-      }).length
-    : 0;
+  // Roll up own counts + direct-subfolder counts so the dialog matches
+  // the backend's `affected_unit_ids` scope in
+  // api/routes/teacher_units.py:delete_unit (this unit + its subfolders).
+  const folderDeleteCounts = folderBeingDeleted
+    ? units.reduce(
+        (acc, u) => {
+          if (u.id !== folderBeingDeleted.id && u.parent_id !== folderBeingDeleted.id) {
+            return acc;
+          }
+          return {
+            documents: acc.documents + u.document_count,
+            questions: acc.questions + u.question_count,
+          };
+        },
+        { documents: 0, questions: 0 },
+      )
+    : { documents: 0, questions: 0 };
 
   return (
     <div>
@@ -544,7 +553,8 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       <DeleteFolderDialog
         open={rowState.kind === "deletingFolder"}
         folderName={folderBeingDeleted?.name ?? ""}
-        fileCount={folderDeleteFileCount}
+        documentCount={folderDeleteCounts.documents}
+        questionCount={folderDeleteCounts.questions}
         busy={busy}
         onClose={() => setRowState({ kind: "idle" })}
         onConfirm={() => {
