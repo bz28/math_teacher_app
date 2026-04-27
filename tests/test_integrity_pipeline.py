@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from api.core.integrity_ai import build_problems_briefing
 from api.core.integrity_pipeline import (
@@ -25,7 +28,9 @@ from api.core.integrity_pipeline import (
     ACTIVITY_REASON_LONG_TAB_OUT,
     SELECTION_REASON_HIGHEST_DIFFERENTIATION,
     _build_agent_messages,
+    _normalize_answer_for_trivial_match,
     _validate_rubric,
+    check_answer_correctness,
     compute_activity_summary,
     select_probe_problems,
 )
@@ -35,11 +40,12 @@ from api.models.integrity_check import IntegrityConversationTurn
 @dataclass
 class _FakeItem:
     """Stand-in for QuestionBankItem that carries just the fields
-    select_probe_problems looks at. Spares these tests from the full
-    ORM + DB setup."""
+    select_probe_problems + check_answer_correctness look at. Spares
+    these tests from the full ORM + DB setup."""
     id: uuid.UUID
-    difficulty: str | None
-    solution_steps: list[Any] | None
+    difficulty: str | None = "medium"
+    solution_steps: list[Any] | None = field(default_factory=list)
+    final_answer: str | None = None
 
 
 def _turn(ordinal: int, role: str, content: str, **kw: Any) -> IntegrityConversationTurn:
@@ -275,6 +281,210 @@ class TestSelectProbeProblems:
         picked, reason = select_probe_problems({}, [], max_picks=1)
         assert picked == []
         assert reason == SELECTION_REASON_HIGHEST_DIFFERENTIATION
+
+
+class TestNormalizeAnswerForTrivialMatch:
+    def test_strips_whitespace_and_double_dollar_wrapper(self) -> None:
+        assert _normalize_answer_for_trivial_match("  $$ 6 $$  ") == "6"
+
+    def test_strips_single_dollar_wrapper(self) -> None:
+        assert _normalize_answer_for_trivial_match("$x = 5$") == "x = 5"
+
+    def test_leaves_unwrapped_strings_alone(self) -> None:
+        assert _normalize_answer_for_trivial_match("6") == "6"
+        assert _normalize_answer_for_trivial_match("\\frac{1}{2}") == "\\frac{1}{2}"
+
+    def test_strips_double_dollar_when_both_ends_match(self) -> None:
+        # Single $ sandwich inside a $$ wrapper: outer $$ wins, inner
+        # $...$ stays. We're not trying to be a full LaTeX parser —
+        # only the trivial fast path.
+        assert _normalize_answer_for_trivial_match("$$x = 5$$") == "x = 5"
+
+    def test_does_not_strip_unbalanced_wrapper(self) -> None:
+        assert _normalize_answer_for_trivial_match("$5") == "$5"
+        assert _normalize_answer_for_trivial_match("5$") == "5$"
+
+
+class TestCheckAnswerCorrectness:
+    def _setup(self, items_with_answers: list[tuple[str | None, int]]) -> tuple[
+        dict[uuid.UUID, _FakeItem], dict[uuid.UUID, int]
+    ]:
+        """Build (items_by_id, hw_position_by_id) from a list of
+        (final_answer, hw_position) pairs. Each item gets a fresh UUID."""
+        items: dict[uuid.UUID, _FakeItem] = {}
+        positions: dict[uuid.UUID, int] = {}
+        for answer, pos in items_with_answers:
+            item = _FakeItem(id=uuid.uuid4(), final_answer=answer)
+            items[item.id] = item
+            positions[item.id] = pos
+        return items, positions
+
+    @pytest.mark.asyncio
+    async def test_trivial_match_skips_llm(self) -> None:
+        # Both wrapper styles + plain numerics: all should match
+        # without hitting the LLM at all.
+        items, positions = self._setup([
+            ("$6$", 1),
+            ("$$x = 5$$", 2),
+            ("7", 3),
+        ])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "6"},
+                {"problem_position": 2, "answer_latex": "x = 5"},
+                {"problem_position": 3, "answer_latex": "7"},
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(),
+        ) as mock_llm:
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        assert all(correct.values())
+        mock_llm.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_llm_called_for_uncertain_pairs(self) -> None:
+        # Bank "1/2" vs student "0.5" — trivial match fails, LLM
+        # decides equivalence.
+        items, positions = self._setup([
+            ("$\\frac{1}{2}$", 1),
+        ])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "0.5"},
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(return_value={
+                "results": [{"problem_position": 1, "equivalent": True}],
+            }),
+        ) as mock_llm:
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        assert all(correct.values())
+        mock_llm.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_llm_returns_not_equivalent(self) -> None:
+        items, positions = self._setup([
+            ("$5$", 1),
+        ])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "7"},
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(return_value={
+                "results": [{"problem_position": 1, "equivalent": False}],
+            }),
+        ):
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        assert list(correct.values()) == [False]
+
+    @pytest.mark.asyncio
+    async def test_null_bank_answer_is_false_no_llm(self) -> None:
+        # Proof-style problem with no canonical final answer in the
+        # bank — should mark False without calling the LLM.
+        items, positions = self._setup([(None, 1)])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "QED"},
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(),
+        ) as mock_llm:
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        assert list(correct.values()) == [False]
+        mock_llm.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_missing_student_answer_is_false_no_llm(self) -> None:
+        # Bank has an answer; Vision didn't extract one for this
+        # problem (kid skipped it or answer was unreadable).
+        items, positions = self._setup([("$6$", 1)])
+        extraction = {"final_answers": []}
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(),
+        ) as mock_llm:
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        assert list(correct.values()) == [False]
+        mock_llm.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_treats_uncertain_as_wrong(self) -> None:
+        # If the LLM call raises, we degrade gracefully — every
+        # uncertain pair is False, system never wedges.
+        items, positions = self._setup([
+            ("$\\frac{1}{2}$", 1),
+            ("$6$", 2),
+        ])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "0.5"},
+                {"problem_position": 2, "answer_latex": "6"},  # trivial-match True
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(side_effect=RuntimeError("circuit open")),
+        ):
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        # Trivial match still wins for problem 2; problem 1 falls
+        # through to "false" because the LLM failed.
+        true_count = sum(correct.values())
+        assert true_count == 1
+
+    @pytest.mark.asyncio
+    async def test_mixed_results(self) -> None:
+        # One trivial-True, one LLM-True, one LLM-False.
+        items, positions = self._setup([
+            ("$6$", 1),
+            ("$\\frac{1}{2}$", 2),
+            ("$5$", 3),
+        ])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "6"},
+                {"problem_position": 2, "answer_latex": "0.5"},
+                {"problem_position": 3, "answer_latex": "7"},
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(return_value={
+                "results": [
+                    {"problem_position": 2, "equivalent": True},
+                    {"problem_position": 3, "equivalent": False},
+                ],
+            }),
+        ):
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        # Order isn't guaranteed by dict, so check by item.
+        item_ids = list(items.keys())
+        # Problems are at positions 1, 2, 3 in registration order
+        assert correct[item_ids[0]] is True   # trivial match
+        assert correct[item_ids[1]] is True   # LLM equivalent
+        assert correct[item_ids[2]] is False  # LLM not-equivalent
 
 
 class TestValidateRubric:
