@@ -168,6 +168,12 @@ interface MathTextProps {
   className?: string;
 }
 
+/**
+ * IMPORTANT: must be wrapped in a block-level container (div, section,
+ * etc.) — NEVER inside a <p>. Display math (matrices, fractions) emits
+ * a top-level <div> here, and the HTML spec forbids <div> inside <p>.
+ * Browsers auto-close the <p> on hydration → React mismatch error.
+ */
 export function MathText({ text, className }: MathTextProps) {
   const segments = useMemo(() => parse(text), [text]);
 

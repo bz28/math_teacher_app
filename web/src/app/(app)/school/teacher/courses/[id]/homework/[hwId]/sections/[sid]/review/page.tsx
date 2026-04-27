@@ -2084,13 +2084,17 @@ function PerProblemVerdict({
       >
         {pill.label}
       </span>
-      <p className="mt-2 text-sm leading-relaxed text-text-primary">
+      {/* div, not p — MathText emits a top-level <div> for display
+        * math (matrices, fractions), which can't legally nest inside
+        * a <p>. Browsers auto-close the <p> on hydration and React
+        * throws a hydration mismatch. */}
+      <div className="mt-2 text-sm leading-relaxed text-text-primary">
         <MathText text={problem.question} />
-      </p>
+      </div>
       {problem.ai_reasoning && (
-        <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+        <div className="mt-2 text-xs leading-relaxed text-text-secondary">
           <MathText text={problem.ai_reasoning} />
-        </p>
+        </div>
       )}
     </div>
   );
