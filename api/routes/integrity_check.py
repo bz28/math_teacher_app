@@ -536,6 +536,12 @@ class TeacherIntegrityProblemRow(BaseModel):
     bank_item_id: str
     question: str
     sample_position: int
+    # 1-based HW position (the label the student saw as "Problem N" in
+    # the chat). The teacher panel renders this so what the teacher
+    # reviews matches what the student experienced. Defensive fallback
+    # to sample_position+1 if the bank item is no longer in the
+    # assignment's problem_ids (problem removed mid-flight).
+    hw_position: int
     status: str
     # Six-dimension rubric dict, or null when the agent hasn't
     # verdicted this problem yet (e.g. pending or turn-cap-force-finalize).
@@ -645,6 +651,11 @@ async def teacher_get_integrity_detail(
         for it in item_rows:
             items_by_id[it.id] = it
 
+    # 1-based HW position per bank item — same map the student-facing
+    # state endpoint uses, so the teacher sees the same "Problem N"
+    # label the student saw in chat.
+    hw_positions = await _load_hw_positions(db, submission_id)
+
     problem_rows: list[TeacherIntegrityProblemRow] = []
     for p in problems:
         item = items_by_id.get(p.bank_item_id)
@@ -653,6 +664,9 @@ async def teacher_get_integrity_detail(
             bank_item_id=str(p.bank_item_id),
             question=item.question if item else "(problem text unavailable)",
             sample_position=p.sample_position,
+            hw_position=hw_positions.get(
+                p.bank_item_id, p.sample_position + 1,
+            ),
             status=p.status,
             rubric=p.rubric,
             ai_reasoning=p.ai_reasoning,
