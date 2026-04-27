@@ -48,7 +48,7 @@ from api.models.integrity_check import IntegrityConversationTurn
 @dataclass
 class _FakeItem:
     """Stand-in for QuestionBankItem that carries just the fields
-    select_probe_problems + check_answer_correctness look at. Spares
+    select_probe_problem + check_answer_correctness look at. Spares
     these tests from the full ORM + DB setup."""
     id: uuid.UUID
     difficulty: str | None = "medium"

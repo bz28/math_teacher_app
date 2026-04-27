@@ -188,15 +188,17 @@ def _problem_difficulty_score(item: QuestionBankItem) -> tuple[int, int]:
     authoritative signal for "how hard is this problem" (set by the
     teacher or the generating AI).
 
-    Tiebreak within tier: count of canonical solution_steps — more
-    steps = more decision points for the agent to probe ("why this
-    step?"). NOT a difficulty measure — a long arithmetic problem
-    has many steps but isn't conceptually hard. Only used after
-    difficulty ties.
+    Tiebreak within tier: count of canonical solution_steps. NOT a
+    difficulty measure — a long arithmetic problem has many steps but
+    isn't conceptually hard. Only used after difficulty ties, and the
+    direction follows the same comparator as the primary key:
 
-    Used by select_probe_problem in both directions: max() to pick
-    the hardest correct (verified tier), min() to pick the easiest
-    (struggling tier).
+      - verified tier (max): picks the problem with MORE canonical
+        steps among same-difficulty candidates — more decision points
+        for the agent to probe ("why this step?").
+      - struggling tier (min): picks the problem with FEWER canonical
+        steps among same-difficulty candidates — the simpler-looking
+        problem to start the diagnostic.
     """
     difficulty_rank = _DIFFICULTY_RANK.get(
         (item.difficulty or "medium").lower(), 1,
@@ -887,11 +889,7 @@ async def start_integrity_check(
         # Posture-keyed canned fallback so the opener never lands a
         # kid in the wrong tone. hw_position keeps "Problem N" matching
         # what the student sees in the chat reference panel.
-        first_hw_position = (
-            problems_for_prompt[0]["hw_position"]
-            if problems_for_prompt
-            else 1
-        )
+        first_hw_position = hw_position_by_id.get(selection.bank_item_id, 1)
         opening_text = build_fallback_opener(posture, first_hw_position)
 
     db.add(IntegrityConversationTurn(
