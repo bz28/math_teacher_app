@@ -1245,11 +1245,23 @@ export const teacher = {
   },
 };
 
+export type IntegrityActivityLevel = "clean" | "notable" | "heavy";
+
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
   disposition: IntegrityDisposition | null;
   problem_count: number;
   complete_count: number;
+  /** Behavioral activity level rolled up from the integrity chat.
+   *  Frontend stopped rendering the level directly (renders the
+   *  notable_count instead) but the field remains for filtering /
+   *  sorting. Null when in_progress / no telemetry / pre-shipping. */
+  activity_level: IntegrityActivityLevel | null;
+  /** How many student turns in this conversation were flagged as
+   *  notable. Drives the queue-row Activity pill text — "Activity:
+   *  clean" (0), "Activity: 1 notable moment" (1), "Activity: N
+   *  notable moments" (≥2). Null when activity_level is null. */
+  notable_count: number | null;
 }
 
 export interface TeacherSubmissionRow {
@@ -1920,6 +1932,33 @@ export interface TeacherIntegrityProblemRow {
   student_work_extraction: IntegrityExtraction | null;
 }
 
+export type IntegrityActivityReason =
+  | "large_paste"
+  | "full_paste"
+  | "long_tab_out"
+  | "dominant_tab_out";
+
+export interface IntegrityActivityNotableTurn {
+  ordinal: number;
+  reasons: IntegrityActivityReason[];
+}
+
+/** Precomputed rollup of student-turn telemetry — what the teacher
+ *  panel renders. Null when no student turn carried telemetry, the
+ *  check hasn't finalized, or the row predates activity_summary. */
+export interface IntegrityActivitySummary {
+  level: IntegrityActivityLevel;
+  totals: {
+    tab_out_count: number;
+    tab_out_total_ms: number;
+    paste_count: number;
+    paste_total_chars: number;
+    paste_largest_chars: number;
+    long_pause_count: number;
+  };
+  notable_turns: IntegrityActivityNotableTurn[];
+}
+
 export interface TeacherIntegrityDetail {
   submission_id: string;
   overall_status: string;
@@ -1928,6 +1967,7 @@ export interface TeacherIntegrityDetail {
   probe_selection_reason: IntegrityProbeSelectionReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
+  activity_summary: IntegrityActivitySummary | null;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
 }

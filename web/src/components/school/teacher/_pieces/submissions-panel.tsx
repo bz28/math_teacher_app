@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   teacher,
+  type IntegrityActivityReason,
+  type IntegrityActivitySummary,
   type IntegrityDisposition,
   type IntegrityOverview,
   type IntegrityRubric,
@@ -128,7 +130,7 @@ function RubricDisplay({ rubric }: { rubric: IntegrityRubric }) {
   );
 }
 
-// ── Behavioral evidence summary (aggregated telemetry) ──
+// ── Activity surface (level pill + session digest + per-turn markers) ──
 
 /** Format milliseconds as "Xm Ys" or "Ys" for short intervals. */
 function formatMs(ms: number): string {
@@ -139,107 +141,274 @@ function formatMs(ms: number): string {
   return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
 
-/**
- * Aggregates behavioral telemetry across all student turns into a
- * compact summary: total tab-outs + away-time, paste count + largest,
- * cadence anomalies, need-more-time signal, device hint. Hides
- * entirely when no student turn carries telemetry (older submissions
- * from pre-telemetry, or checks that completed via skipped_unreadable
- * / turn cap with no student messages).
- *
- * Visual treatment: neutral-styled for non-flag dispositions (signals
- * are context), amber-tinted border for flag_for_review (signals are
- * evidence the teacher is there to evaluate).
- */
-function BehavioralEvidence({
-  transcript,
-  disposition,
-}: {
-  transcript: TeacherIntegrityTranscriptTurn[];
-  disposition: IntegrityDisposition | null;
-}) {
-  const studentTurns = transcript.filter((t) => t.role === "student");
-  const withTelemetry = studentTurns.filter((t) => t.telemetry != null);
-  if (withTelemetry.length === 0) return null;
-
-  // Aggregate across all student turns.
-  let blurCount = 0;
-  let blurTotalMs = 0;
-  let pasteCount = 0;
-  let largestPaste = 0;
-  let cadencePauses = 0;
-  let cadenceEdits = 0;
-  let needMoreTime = false;
-  let device: "desktop" | "mobile" | null = null;
-
-  for (const t of withTelemetry) {
-    const tel = t.telemetry;
-    if (!tel) continue;
-    for (const ev of tel.focus_blur_events) {
-      blurCount += 1;
-      blurTotalMs += ev.duration_ms;
-    }
-    for (const ev of tel.paste_events) {
-      pasteCount += 1;
-      if (ev.byte_count > largestPaste) largestPaste = ev.byte_count;
-    }
-    if (tel.typing_cadence) {
-      cadencePauses += tel.typing_cadence.pauses_over_3s;
-      cadenceEdits += tel.typing_cadence.edits;
-    }
-    if (tel.need_more_time_used) needMoreTime = true;
-    if (tel.device_type) device = tel.device_type;
+// Filled-style pills (solid bg + white text) so the count is legible
+// regardless of where the pill sits — queue row hover bg, amber
+// flag-for-review banner, neutral submission detail. Color thresholds:
+// 0 = clean (muted gray), 1 = notable (yellow), ≥2 = heavy (orange).
+// Yellow→orange keeps Activity in its own channel; amber/red are
+// reserved for the disposition pill so the two surfaces don't
+// collide visually.
+function activityPillCopy(count: number): { text: string; style: string } {
+  if (count <= 0) {
+    return {
+      text: "Activity: clean",
+      style: "bg-gray-500 text-white dark:bg-gray-600",
+    };
   }
+  if (count === 1) {
+    return {
+      text: "Activity: 1 notable moment",
+      style: "bg-yellow-500 text-white dark:bg-yellow-400 dark:text-gray-900",
+    };
+  }
+  return {
+    text: `Activity: ${count} notable moments`,
+    style: "bg-orange-600 text-white dark:bg-orange-500",
+  };
+}
 
-  const flagged = disposition === "flag_for_review";
+/** Compact pill for the queue row + the IntegritySection header +
+ *  the digest. Renders nothing on null (older sessions, no
+ *  telemetry, in-progress check) or on count=0 — clean rows stay
+ *  quiet so loud rows actually stand out. Shows the count directly
+ *  so a teacher doesn't have to interpret a severity word. */
+export function ActivityPill({
+  count,
+  className,
+  alwaysShow,
+}: {
+  count: number | null;
+  className?: string;
+  /** Force-render even on count=0. Used inside the digest panel
+   *  where "Activity: clean" is the whole reason the panel exists;
+   *  on the queue row we hide it instead. */
+  alwaysShow?: boolean;
+}) {
+  if (count == null) return null;
+  if (count === 0 && !alwaysShow) return null;
+  const { text, style } = activityPillCopy(count);
   return (
-    <div
+    <span
       className={cn(
-        "rounded-[--radius-sm] border px-3 py-2 text-xs",
-        flagged
-          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
-          : "border-border-light bg-bg-subtle text-text-secondary",
+        "rounded-full px-2 py-0.5 text-[11px] font-bold",
+        style,
+        className,
       )}
     >
-      <div className="mb-1 text-[11px] font-bold uppercase tracking-wide">
-        Behavioral signals
+      {text}
+    </span>
+  );
+}
+
+// Loud, filled disposition pill for the queue row. Only renders for
+// states that demand teacher action — flag-for-review (red),
+// tutor_pivot (amber), and inconclusive complete-with-no-disposition
+// (gray). pass / needs_practice render nothing so quiet rows stay
+// quiet. Color weights match ActivityPill so they sit visually as
+// siblings on the row. Red is reserved for this disposition channel
+// alone — Activity heavy stays orange so the eye doesn't conflate
+// "behavior" with "AI verdict".
+const ROW_DISPOSITION_COPY: Partial<
+  Record<IntegrityDisposition, { text: string; style: string }>
+> = {
+  flag_for_review: {
+    text: "Review",
+    style: "bg-red-600 text-white dark:bg-red-500",
+  },
+  tutor_pivot: {
+    text: "Tutored",
+    style: "bg-amber-600 text-white dark:bg-amber-500",
+  },
+};
+
+const ROW_INCONCLUSIVE_STYLE =
+  "bg-gray-500 text-white dark:bg-gray-600";
+
+/** Queue-row disposition pill. Shows only on actionable verdicts
+ *  (flag / tutored / inconclusive). Pass / needs_practice / in-
+ *  progress render null, keeping clean rows visually quiet. */
+export function RowDispositionPill({
+  overview,
+  className,
+}: {
+  overview: IntegrityOverview | null;
+  className?: string;
+}) {
+  if (!overview) return null;
+  if (overview.overall_status !== "complete") return null;
+  if (!overview.disposition) {
+    return (
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-[11px] font-bold",
+          ROW_INCONCLUSIVE_STYLE,
+          className,
+        )}
+        title="Integrity check inconclusive — review"
+      >
+        Inconclusive
+      </span>
+    );
+  }
+  const cfg = ROW_DISPOSITION_COPY[overview.disposition];
+  if (!cfg) return null;
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[11px] font-bold",
+        cfg.style,
+        className,
+      )}
+    >
+      {cfg.text}
+    </span>
+  );
+}
+
+const ACTIVITY_REASON_COPY: Record<
+  IntegrityActivityReason,
+  (turn: TeacherIntegrityTranscriptTurn) => string
+> = {
+  large_paste: (turn) => {
+    const largest = Math.max(
+      0,
+      ...((turn.telemetry?.paste_events ?? []).map((p) => p.byte_count)),
+    );
+    return `pasted ${largest} chars before sending`;
+  },
+  full_paste: (turn) => {
+    const total = (turn.telemetry?.paste_events ?? []).reduce(
+      (s, p) => s + p.byte_count,
+      0,
+    );
+    return `pasted ${total} chars; no typing on this turn`;
+  },
+  long_tab_out: (turn) => {
+    const longest = Math.max(
+      0,
+      ...((turn.telemetry?.focus_blur_events ?? []).map((b) => b.duration_ms)),
+    );
+    return `tabbed out ${formatMs(longest)} during this turn`;
+  },
+  dominant_tab_out: (turn) => {
+    const total = (turn.telemetry?.focus_blur_events ?? []).reduce(
+      (s, b) => s + b.duration_ms,
+      0,
+    );
+    return `tabbed out ${formatMs(total)} of this turn`;
+  },
+};
+
+/** Lite shape: just the per-turn entry from activity_summary.notable_turns. */
+export type IntegrityActivityNotableTurnLite = {
+  ordinal: number;
+  reasons: IntegrityActivityReason[];
+};
+
+/** Renders the gray inline note tucked under a notable student turn.
+ *  Returns null if the turn has no notable reasons in this summary,
+ *  or if the turn carries no telemetry — defensive bail-out so a
+ *  drift between backend (which flagged the ordinal) and the
+ *  per-turn telemetry blob doesn't render misleading "0 chars"
+ *  / "0s" copy. Backend is currently lockstep, but this guards
+ *  against future divergence. */
+export function ActivityTurnMarker({
+  turn,
+  notable,
+}: {
+  turn: TeacherIntegrityTranscriptTurn;
+  notable: IntegrityActivityNotableTurnLite | undefined;
+}) {
+  if (!notable || notable.reasons.length === 0) return null;
+  if (!turn.telemetry) return null;
+  return (
+    <div className="mt-0.5 flex flex-wrap gap-1.5 text-[10px] text-text-muted">
+      {notable.reasons.map((r) => (
+        <span
+          key={r}
+          className="rounded-full bg-bg-subtle px-1.5 py-0.5 italic"
+        >
+          ↳ {ACTIVITY_REASON_COPY[r](turn)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Session-level digest at the top of the integrity section. Reads the
+ * precomputed activity_summary off the detail payload — single source
+ * of truth, same data that drives the queue pill and per-turn markers.
+ *
+ * Visual treatment: always neutral. The disposition banner above
+ * already carries the verdict color; the digest is supporting
+ * evidence and shouldn't shout. The Activity pill is the only colored
+ * element here, which is what makes the level scannable.
+ */
+export function ActivityDigest({
+  summary,
+}: {
+  summary: IntegrityActivitySummary | null;
+}) {
+  if (!summary) return null;
+
+  const t = summary.totals;
+  const notableCount = summary.notable_turns.length;
+
+  // Subtitle below the header that translates the level into something
+  // a teacher can act on without thinking about thresholds. Phrased as
+  // "X moments" because the marker is per-turn but the unit a teacher
+  // cares about is the event itself.
+  const subtitle =
+    notableCount === 0
+      ? "Nothing notable observed."
+      : notableCount === 1
+        ? "1 notable moment in this conversation."
+        : `${notableCount} notable moments in this conversation.`;
+
+  // The digest stays neutral regardless of disposition. The banner
+  // above already carries the verdict color (red/amber/green); making
+  // the digest match would stack two big colored panels and wash out
+  // both. Neutral here = "supporting evidence", not a second alarm.
+  // The Activity pill is the only color in this panel — that's what
+  // makes the level scannable.
+  return (
+    <div className="rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-3 text-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-text-primary">
+            Activity during this conversation
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-secondary">
+            {subtitle}
+          </p>
+        </div>
+        <ActivityPill
+          count={summary.notable_turns.length}
+          alwaysShow
+          className="shrink-0"
+        />
       </div>
-      <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5">
-        <dt className="opacity-70">Tabbed away</dt>
-        <dd className="font-medium">
-          {blurCount === 0
+      <div className="mt-2.5 border-t border-border-light pt-2" />
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-text-primary">
+        <dt className="text-text-muted">Tabbed out</dt>
+        <dd className="font-semibold">
+          {t.tab_out_count === 0
             ? "never"
-            : `${blurCount}× (${formatMs(blurTotalMs)} total)`}
+            : `${t.tab_out_count}× (${formatMs(t.tab_out_total_ms)} total)`}
         </dd>
 
-        <dt className="opacity-70">Paste events</dt>
-        <dd className="font-medium">
-          {pasteCount === 0
+        <dt className="text-text-muted">Paste events</dt>
+        <dd className="font-semibold">
+          {t.paste_count === 0
             ? "none"
-            : `${pasteCount} (largest ${largestPaste} chars)`}
+            : `${t.paste_count} (largest ${t.paste_largest_chars} chars, ${t.paste_total_chars} total)`}
         </dd>
-
-        <dt className="opacity-70">Cadence</dt>
-        <dd className="font-medium">
-          {cadencePauses === 0 && cadenceEdits === 0
-            ? "steady typing"
-            : `${cadencePauses} long pauses, ${cadenceEdits} edits`}
-        </dd>
-
-        {needMoreTime && (
-          <>
-            <dt className="opacity-70">Asked for more time</dt>
-            <dd className="font-medium">yes</dd>
-          </>
-        )}
-
-        {device && (
-          <>
-            <dt className="opacity-70">Device</dt>
-            <dd className="font-medium">{device}</dd>
-          </>
-        )}
       </dl>
+      <p className="mt-2.5 text-[10px] text-text-muted">
+        Reflects behavior during this conversation only — not the
+        original homework session.
+      </p>
     </div>
   );
 }
@@ -255,6 +424,16 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [dismissReason, setDismissReason] = useState("");
   const [dismissConfirm, setDismissConfirm] = useState<string | null>(null);
+
+  // Index notable turns by ordinal so the transcript can render an
+  // inline marker on the matching student bubble in O(1) per turn.
+  const notableByOrdinal = useMemo(() => {
+    const out = new Map<number, IntegrityActivityNotableTurnLite>();
+    for (const nt of data?.activity_summary?.notable_turns ?? []) {
+      out.set(nt.ordinal, nt);
+    }
+    return out;
+  }, [data?.activity_summary?.notable_turns]);
 
   async function load() {
     setLoading(true);
@@ -311,6 +490,21 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
               Needs review
             </span>
           )}
+        {/* Activity pill sits next to whichever right-aligned status
+           * badge is showing (disposition or "Needs review"). Both
+           * carry ml-auto, so this pill chains rightward without
+           * needing its own. activity_summary is only populated when
+           * status=complete, which is the same gate as those badges.
+           * alwaysShow so the header pill matches ActivityDigest below
+           * — both surfaces sit inside the same detail panel and the
+           * teacher should get the "Activity: clean" reassurance from
+           * each. */}
+        {data?.activity_summary && (
+          <ActivityPill
+            count={data.activity_summary.notable_turns.length}
+            alwaysShow
+          />
+        )}
       </button>
 
       {open && loading && <p className="text-xs text-text-muted">Loading…</p>}
@@ -347,10 +541,7 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
             </p>
           )}
 
-          <BehavioralEvidence
-            transcript={data.transcript}
-            disposition={data.disposition}
-          />
+          <ActivityDigest summary={data.activity_summary} />
 
           {data.problems.map((p) => (
             <ProblemCard
@@ -379,7 +570,10 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
                 Full conversation ({data.transcript.length} turns)
               </button>
               {transcriptOpen && (
-                <TranscriptView transcript={data.transcript} />
+                <TranscriptView
+                  transcript={data.transcript}
+                  notableByOrdinal={notableByOrdinal}
+                />
               )}
             </div>
           )}
@@ -536,19 +730,31 @@ function ProblemCard({
 
 function TranscriptView({
   transcript,
+  notableByOrdinal,
 }: {
   transcript: TeacherIntegrityTranscriptTurn[];
+  notableByOrdinal: Map<number, IntegrityActivityNotableTurnLite>;
 }) {
   return (
     <div className="mt-2 space-y-2 rounded-[--radius-sm] border border-border-light bg-background p-3">
       {transcript.map((t) => (
-        <TranscriptTurn key={`${t.ordinal}-${t.role}`} turn={t} />
+        <TranscriptTurn
+          key={`${t.ordinal}-${t.role}`}
+          turn={t}
+          notable={notableByOrdinal.get(t.ordinal)}
+        />
       ))}
     </div>
   );
 }
 
-function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
+function TranscriptTurn({
+  turn,
+  notable,
+}: {
+  turn: TeacherIntegrityTranscriptTurn;
+  notable: IntegrityActivityNotableTurnLite | undefined;
+}) {
   const ts = new Date(turn.created_at);
   const stamp = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -571,26 +777,29 @@ function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
 
   const isStudent = turn.role === "student";
   return (
-    <div className={cn("flex gap-2", isStudent ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "max-w-[85%] rounded-[--radius-sm] px-2 py-1 text-xs",
-          isStudent
-            ? "bg-primary/10 text-text-primary"
-            : "bg-surface text-text-primary",
-        )}
-      >
-        <div className="font-semibold">
-          {isStudent ? "Student" : "Agent"}
-          <span className="ml-2 font-normal text-text-muted">{stamp}</span>
-          {turn.seconds_on_turn != null && isStudent && (
-            <span className="ml-2 font-normal text-text-muted">
-              · {turn.seconds_on_turn}s
-            </span>
+    <div className={cn("flex flex-col gap-0.5", isStudent ? "items-end" : "items-start")}>
+      <div className={cn("flex gap-2", isStudent ? "justify-end" : "justify-start")}>
+        <div
+          className={cn(
+            "max-w-[85%] rounded-[--radius-sm] px-2 py-1 text-xs",
+            isStudent
+              ? "bg-primary/10 text-text-primary"
+              : "bg-surface text-text-primary",
           )}
+        >
+          <div className="font-semibold">
+            {isStudent ? "Student" : "Agent"}
+            <span className="ml-2 font-normal text-text-muted">{stamp}</span>
+            {turn.seconds_on_turn != null && isStudent && (
+              <span className="ml-2 font-normal text-text-muted">
+                · {turn.seconds_on_turn}s
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 whitespace-pre-wrap">{turn.content}</div>
         </div>
-        <div className="mt-0.5 whitespace-pre-wrap">{turn.content}</div>
       </div>
+      {isStudent && <ActivityTurnMarker turn={turn} notable={notable} />}
     </div>
   );
 }

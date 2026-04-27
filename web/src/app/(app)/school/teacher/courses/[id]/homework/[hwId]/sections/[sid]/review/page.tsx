@@ -5,6 +5,13 @@ import Link from "next/link";
 import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
+  ActivityDigest,
+  ActivityPill,
+  ActivityTurnMarker,
+  RowDispositionPill,
+  type IntegrityActivityNotableTurnLite,
+} from "@/components/school/teacher/_pieces/submissions-panel";
+import {
   teacher,
   type AiGradeEntry,
   type GradeBreakdownEntry,
@@ -1064,76 +1071,76 @@ function StudentRow({
   const sub = entry.submission;
   const statusLabel = rowStatusLabel(entry);
   const mutedName = sub === null;
+  const overview = sub?.integrity_overview ?? null;
+  const showsDispositionPill =
+    overview?.overall_status === "complete" &&
+    (overview.disposition === "flag_for_review" ||
+      overview.disposition === "tutor_pivot" ||
+      !overview.disposition);
+  const showsActivityPill = (overview?.notable_count ?? 0) > 0;
+  const hasScore = sub?.final_score != null;
+  const hasAnyPill = showsDispositionPill || showsActivityPill;
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center justify-between gap-2 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
+      className={`flex w-full flex-col gap-1.5 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
         selected ? "bg-primary-bg/40" : "hover:bg-bg-subtle"
       }`}
     >
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 items-baseline justify-between gap-2">
+        {/* Score sits next to the name on the header row — it answers
+         * "how did they do?", which is the natural pairing with
+         * student identity. Pulling it out of the pill row keeps that
+         * row exclusively for filled pills, so we don't have a plain
+         * number sandwiched between two colored pills. */}
         <div
-          className={`truncate font-semibold ${
+          className={`min-w-0 flex-1 truncate font-semibold ${
             mutedName ? "text-text-muted" : "text-text-primary"
           }`}
         >
           {entry.student_name}
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+        {hasScore && (
           <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${statusLabel.dotClass}`}
-          />
-          {statusLabel.text}
-          {sub?.is_late && (
-            <span className="ml-1 font-semibold text-red-600 dark:text-red-400">
-              · late
-            </span>
-          )}
-        </div>
-      </div>
-      {sub?.final_score != null && (
-        <span
-          className={`shrink-0 text-xs font-bold ${
-            sub.grade_published_at && !sub.grade_dirty
-              ? "text-green-700 dark:text-green-400"
-              : "text-amber-700 dark:text-amber-400"
-          }`}
-        >
-          {Math.round(sub.final_score)}%
-        </span>
-      )}
-      {sub?.integrity_overview?.disposition === "flag_for_review" && (
-        <span
-          className="shrink-0 text-[11px] font-bold text-red-600 dark:text-red-400"
-          role="img"
-          aria-label="Integrity flag: review needed"
-          title="Integrity flag: review needed"
-        >
-          🔴
-        </span>
-      )}
-      {sub?.integrity_overview?.disposition === "tutor_pivot" && (
-        <span
-          className="shrink-0 text-[11px] font-bold text-amber-600 dark:text-amber-400"
-          role="img"
-          aria-label="Student got tutored through this"
-          title="Student got tutored through this"
-        >
-          🟡
-        </span>
-      )}
-      {sub?.integrity_overview?.overall_status === "complete" &&
-        !sub?.integrity_overview?.disposition && (
-          <span
-            className="shrink-0 text-[11px] font-bold text-text-muted"
-            role="img"
-            aria-label="Integrity check inconclusive — review"
-            title="Integrity check inconclusive — review"
+            className={`shrink-0 text-xs font-bold ${
+              sub!.grade_published_at && !sub!.grade_dirty
+                ? "text-green-700 dark:text-green-400"
+                : "text-text-secondary"
+            }`}
           >
-            📄
+            {Math.round(sub!.final_score!)}%
           </span>
         )}
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
+        <span
+          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusLabel.dotClass}`}
+        />
+        <span className="truncate">{statusLabel.text}</span>
+        {sub?.is_late && (
+          <span className="ml-1 shrink-0 font-semibold text-red-600 dark:text-red-400">
+            · late
+          </span>
+        )}
+      </div>
+      {/* Disposition + activity pills on their own row, right-aligned.
+       * The 280px-wide side panel can fit them together in the common
+       * case ("Review" + "Activity: N notable moments"); rare wide
+       * combinations (e.g. "Inconclusive" + long activity copy) wrap,
+       * but each wrapped line is then a single semantically-coherent
+       * pill, which reads cleaner than mixing pills with bare text.
+       *
+       * Order: disposition first (most urgent — "should I look at this
+       * row?"), then activity (supporting behavior context). Quiet
+       * rows (pass / needs_practice / clean activity) render no pill
+       * row at all so loud rows actually pop. */}
+      {hasAnyPill && (
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <RowDispositionPill overview={overview} />
+          <ActivityPill count={overview?.notable_count ?? null} />
+        </div>
+      )}
     </button>
   );
 }
@@ -1830,48 +1837,72 @@ function IntegrityBanner({
   const style = INTEGRITY_STYLE[key];
   const hasTranscript = !!integrity && integrity.transcript.length > 0;
 
+  const activitySummary = integrity?.activity_summary ?? null;
+
   return (
     <>
-      <div
-        className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <span
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${style.iconBg}`}
-              aria-hidden
-            >
-              {style.icon}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-base font-bold text-text-primary">
-                {style.label}
-              </p>
-              {summary && (
-                <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  {summary}
-                </p>
-              )}
-              {inProgress && overviewFallback && (
-                <p className="mt-1.5 text-xs text-text-muted">
-                  {overviewFallback.complete_count} of{" "}
-                  {overviewFallback.problem_count} sampled problems graded.
-                </p>
-              )}
+      <div className="space-y-2">
+        <div
+          className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${style.iconBg}`}
+                aria-hidden
+              >
+                {style.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-bold text-text-primary">
+                    {style.label}
+                  </p>
+                  {/* Activity pill sits next to the disposition label
+                   * so the teacher reads understanding + behavior as
+                   * two equally-prominent axes, not one fused score.
+                   * alwaysShow so the "clean" pill renders here even
+                   * when there's nothing notable — inside the detail
+                   * view the teacher wants explicit reassurance that
+                   * behavior was checked, not silent absence. */}
+                  {activitySummary && (
+                    <ActivityPill
+                      count={activitySummary.notable_turns.length}
+                      alwaysShow
+                    />
+                  )}
+                </div>
+                {summary && (
+                  <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                    {summary}
+                  </p>
+                )}
+                {inProgress && overviewFallback && (
+                  <p className="mt-1.5 text-xs text-text-muted">
+                    {overviewFallback.complete_count} of{" "}
+                    {overviewFallback.problem_count} sampled problems graded.
+                  </p>
+                )}
+              </div>
             </div>
+            {hasTranscript && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+              >
+                View conversation →
+              </button>
+            )}
           </div>
-          {hasTranscript && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
-            >
-              View conversation →
-            </button>
-          )}
         </div>
+        {/* Session digest sits below the banner so the totals don't
+         * crowd the disposition label. Hides itself on null.
+         * Always neutral-styled — banner above carries the verdict
+         * color; digest is supporting evidence, not a second alarm. */}
+        <ActivityDigest summary={activitySummary} />
       </div>
       {integrity && (
         <ConversationModal
@@ -1900,6 +1931,16 @@ function ConversationModal({
   onClose: () => void;
   integrity: TeacherIntegrityDetail;
 }) {
+  // Index notable turns by ordinal so each TranscriptTurn can render
+  // its inline marker in O(1).
+  const notableByOrdinal = useMemo(() => {
+    const out = new Map<number, IntegrityActivityNotableTurnLite>();
+    for (const nt of integrity.activity_summary?.notable_turns ?? []) {
+      out.set(nt.ordinal, nt);
+    }
+    return out;
+  }, [integrity.activity_summary?.notable_turns]);
+
   return (
     <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0">
       <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
@@ -1925,7 +1966,11 @@ function ConversationModal({
       </div>
       <div className="max-h-[70vh] space-y-3 overflow-y-auto px-5 py-4">
         {integrity.transcript.map((t) => (
-          <TranscriptTurn key={t.ordinal} turn={t} />
+          <TranscriptTurn
+            key={t.ordinal}
+            turn={t}
+            notable={notableByOrdinal.get(t.ordinal)}
+          />
         ))}
         {integrity.problems.length > 0 && (
           <div className="mt-4 border-t border-border-light pt-4">
@@ -1944,7 +1989,13 @@ function ConversationModal({
   );
 }
 
-function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
+function TranscriptTurn({
+  turn,
+  notable,
+}: {
+  turn: TeacherIntegrityTranscriptTurn;
+  notable: IntegrityActivityNotableTurnLite | undefined;
+}) {
   // Tool turns are AI internals; kept collapsed by default so teachers
   // see the human-readable conversation first. An expander reveals them
   // when the teacher wants to audit exactly what the agent did.
@@ -1969,31 +2020,40 @@ function TranscriptTurn({ turn }: { turn: TeacherIntegrityTranscriptTurn }) {
   }
   const isAgent = turn.role === "agent";
   return (
-    <div className={`flex gap-2 ${isAgent ? "" : "flex-row-reverse"}`}>
-      <div
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-          isAgent
-            ? "bg-primary text-white"
-            : "bg-bg-subtle text-text-secondary"
-        }`}
-        aria-hidden
-      >
-        {isAgent ? "AI" : "S"}
+    <div className="flex flex-col gap-0.5">
+      <div className={`flex gap-2 ${isAgent ? "" : "flex-row-reverse"}`}>
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+            isAgent
+              ? "bg-primary text-white"
+              : "bg-bg-subtle text-text-secondary"
+          }`}
+          aria-hidden
+        >
+          {isAgent ? "AI" : "S"}
+        </div>
+        <div
+          className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
+            isAgent
+              ? "bg-primary-bg text-text-primary"
+              : "bg-bg-subtle text-text-primary"
+          }`}
+        >
+          <MathText text={turn.content} />
+          {turn.seconds_on_turn != null && !isAgent && (
+            <span className="mt-1 block text-[10px] text-text-muted">
+              · {Math.round(turn.seconds_on_turn)}s to reply
+            </span>
+          )}
+        </div>
       </div>
-      <div
-        className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
-          isAgent
-            ? "bg-primary-bg text-text-primary"
-            : "bg-bg-subtle text-text-primary"
-        }`}
-      >
-        <MathText text={turn.content} />
-        {turn.seconds_on_turn != null && !isAgent && (
-          <span className="mt-1 block text-[10px] text-text-muted">
-            · {Math.round(turn.seconds_on_turn)}s to reply
-          </span>
-        )}
-      </div>
+      {/* Marker hangs under the right-aligned student bubble. ml-auto
+        * on a flex-col child pushes it horizontally to the right. */}
+      {!isAgent && (
+        <div className="ml-auto">
+          <ActivityTurnMarker turn={turn} notable={notable} />
+        </div>
+      )}
     </div>
   );
 }
