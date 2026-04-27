@@ -1,23 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type SchoolOverviewData } from "../lib/api";
+import { fmtCost, fmtPercent } from "../lib/format";
+import { colorForFunction } from "../lib/llm_modes";
 import StatCard from "../components/StatCard";
-
-// Color palette tracks LLM-call function categories so the same
-// function reads consistently across the by-function bar and any
-// future per-function drill-down. Hues picked to stay distinguishable
-// for deutan/protan color vision: integrity_agent and
-// integrity_answer_equivalence don't sit on adjacent indigo/violet
-// values that are commonly confused. Function names match LLMMode
-// in api/core/llm_client.py.
-const FUNCTION_COLORS: Record<string, string> = {
-  image_extract: "#0ea5e9",
-  integrity_extract: "#22d3ee",
-  bank_extract: "#06b6d4",
-  ai_grading: "#10b981",
-  integrity_agent: "#6366f1",
-  integrity_answer_equivalence: "#ec4899",
-};
 
 // Disposition palette spaces out the two warning buckets
 // (needs_practice, flag_for_review) on opposite sides of the wheel
@@ -38,18 +24,8 @@ const DISPOSITION_LABELS: Record<string, string> = {
   skipped_unreadable: "Unreadable",
 };
 
-function fmtCost(n: number): string {
-  if (n >= 1000) return `$${n.toFixed(0)}`;
-  if (n >= 10) return `$${n.toFixed(2)}`;
-  return `$${n.toFixed(4)}`;
-}
-
-function fmtPercent(n: number, digits = 1): string {
-  return `${(n * 100).toFixed(digits)}%`;
-}
-
-function colorFor(palette: Record<string, string>, key: string): string {
-  return palette[key] ?? "#94a3b8";
+function colorForDisposition(key: string): string {
+  return DISPOSITION_COLORS[key] ?? "#94a3b8";
 }
 
 function HealthCell({
@@ -95,7 +71,7 @@ function ByFunctionBar({
               className="stack-bar-seg"
               style={{
                 width: `${pct}%`,
-                background: colorFor(FUNCTION_COLORS, r.function),
+                background: colorForFunction(r.function),
               }}
               title={`${r.function} — ${fmtCost(r.cost)} (${pct.toFixed(1)}%)`}
             />
@@ -107,7 +83,7 @@ function ByFunctionBar({
           <div key={r.function} className="legend-item">
             <span
               className="legend-swatch"
-              style={{ background: colorFor(FUNCTION_COLORS, r.function) }}
+              style={{ background: colorForFunction(r.function) }}
             />
             <span className="legend-label">{r.function}</span>
             <span className="legend-value">{fmtCost(r.cost)}</span>
@@ -205,7 +181,7 @@ function DispositionBar({
               className="stack-bar-seg"
               style={{
                 width: `${pct}%`,
-                background: colorFor(DISPOSITION_COLORS, r.disposition),
+                background: colorForDisposition(r.disposition),
               }}
               title={`${
                 DISPOSITION_LABELS[r.disposition] ?? r.disposition
@@ -219,7 +195,7 @@ function DispositionBar({
           <div key={r.disposition} className="legend-item">
             <span
               className="legend-swatch"
-              style={{ background: colorFor(DISPOSITION_COLORS, r.disposition) }}
+              style={{ background: colorForDisposition(r.disposition) }}
             />
             <span className="legend-label">
               {DISPOSITION_LABELS[r.disposition] ?? r.disposition}
