@@ -1325,7 +1325,9 @@ export interface TeacherSubmissionDetail {
 
 export interface AiGradeEntry {
   problem_position: number;
-  student_answer: string;
+  /** Null when the student left the problem blank or the extraction
+   *  couldn't recover an answer — see grading_ai schema. */
+  student_answer: string | null;
   score_status: "full" | "partial" | "zero";
   percent: number;
   /** Calibrated 0.0-1.0 from the AI grader. Null on historical rows
