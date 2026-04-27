@@ -717,7 +717,11 @@ const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.white,
   },
   bubbleTutor: {
-    maxWidth: "85%",
+    // Explicit width (not maxWidth) so the WebView inside MathText resolves
+    // its width:100% against a definite parent. With only maxWidth, the
+    // parent width was content-determined → 0 → MathText rendered each
+    // character on its own line and exploded the bubble height.
+    width: "85%",
     backgroundColor: colors.white,
     borderRadius: 18,
     borderBottomLeftRadius: 4,
