@@ -323,7 +323,7 @@ export default function SchoolOverview() {
             <div className="overview-card">
               <div className="overview-card-title">Top 5 classes (this month)</div>
               {top_spenders.classes.length === 0 ? (
-                <div className="empty-mini">No graded submissions yet.</div>
+                <div className="empty-mini">No tracked spend yet.</div>
               ) : (
                 <table className="mini-table">
                   <tbody>
