@@ -387,6 +387,15 @@ async def school_overview(
         )
     )).scalar() or 0
 
+    # ---------- Health row ----------
+    last_week_start = week_start - timedelta(days=7)
+    health_this_week = await _health_counts(
+        db, school_id, week_start, week_start + timedelta(days=7), is_internal,
+    )
+    health_last_week = await _health_counts(
+        db, school_id, last_week_start, week_start, is_internal,
+    )
+
     return {
         "school_id": school_id,
         "school_name": school_name,
@@ -425,4 +434,98 @@ async def school_overview(
             "failed_calls_24h": failed_24h,
             "failed_calls_7d": failed_7d,
         },
+        "health": {
+            "this_week": health_this_week,
+            "last_week": health_last_week,
+        },
+    }
+
+
+async def _health_counts(
+    db: AsyncSession,
+    school_id: str,
+    window_start: datetime,
+    window_end: datetime,
+    is_internal: bool,
+) -> dict[str, int]:
+    """Compute the Health row for a single time window.
+
+    Returns active classes/teachers/students plus HWs published and
+    submissions counts. Used twice — once for this week, once for last
+    week — so the page can render delta arrows.
+    """
+    # Active counts derive from "did this entity show up in a
+    # submission this week". The internal scope has no school
+    # submissions, so everything but failed-LLM rows comes back zero.
+    if is_internal:
+        return {
+            "active_classes": 0,
+            "active_teachers": 0,
+            "active_students": 0,
+            "hws_published": 0,
+            "submissions": 0,
+        }
+
+    active_classes = (await db.execute(
+        select(func.count(func.distinct(Submission.section_id)))
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(
+            Course.school_id == school_id,
+            Submission.submitted_at >= window_start,
+            Submission.submitted_at < window_end,
+        )
+    )).scalar() or 0
+
+    active_teachers = (await db.execute(
+        select(func.count(func.distinct(Assignment.teacher_id)))
+        .join(Submission, Submission.assignment_id == Assignment.id)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(
+            Course.school_id == school_id,
+            Submission.submitted_at >= window_start,
+            Submission.submitted_at < window_end,
+        )
+    )).scalar() or 0
+
+    active_students = (await db.execute(
+        select(func.count(func.distinct(Submission.student_id)))
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(
+            Course.school_id == school_id,
+            Submission.submitted_at >= window_start,
+            Submission.submitted_at < window_end,
+        )
+    )).scalar() or 0
+
+    hws_published = (await db.execute(
+        select(func.count())
+        .select_from(Assignment)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(
+            Course.school_id == school_id,
+            Assignment.created_at >= window_start,
+            Assignment.created_at < window_end,
+        )
+    )).scalar() or 0
+
+    submissions = (await db.execute(
+        select(func.count())
+        .select_from(Submission)
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(
+            Course.school_id == school_id,
+            Submission.submitted_at >= window_start,
+            Submission.submitted_at < window_end,
+        )
+    )).scalar() or 0
+
+    return {
+        "active_classes": active_classes,
+        "active_teachers": active_teachers,
+        "active_students": active_students,
+        "hws_published": hws_published,
+        "submissions": submissions,
     }
