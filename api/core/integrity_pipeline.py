@@ -984,14 +984,11 @@ async def process_student_turn(
             break
 
         # Apply tool calls, persisting tool_call + tool_result turns.
-        # Pass text_reply through so finish_check can detect the
-        # "asked a question AND finalized in one response" pattern.
         for block in tool_uses:
             await _record_tool_call(check.id, block, db)
             result_text = await _apply_tool_call(
                 check, block, db,
                 user_id=user_id,
-                current_turn_text=text_reply,
             )
             await _record_tool_result(
                 check.id, getattr(block, "id", ""), result_text, db,
@@ -1094,15 +1091,9 @@ async def _apply_tool_call(
     db: AsyncSession,
     *,
     user_id: str | None = None,
-    current_turn_text: str | None = None,
 ) -> str:
     """Validate + apply a single tool call. Returns the tool_result
     text to persist (and echo back to the agent on the next loop).
-
-    `current_turn_text` is the text reply the agent emitted alongside
-    this tool call in the same response (None if the response was
-    tool_use-only). Used by finish_check to detect the agent asking
-    a question and finalizing in the same breath.
     """
     tool_name = getattr(block, "name", "")
     raw_input = getattr(block, "input", {}) or {}
@@ -1114,9 +1105,7 @@ async def _apply_tool_call(
             check, raw_input, db, user_id=user_id,
         )
     if tool_name == TOOL_FINISH_CHECK:
-        return await _apply_finish_check(
-            check, raw_input, db, current_turn_text=current_turn_text,
-        )
+        return await _apply_finish_check(check, raw_input, db)
     return f"rejected: unknown tool '{tool_name}'"
 
 
@@ -1335,29 +1324,50 @@ async def _apply_finish_check(
     check: IntegrityCheckSubmission,
     raw_input: dict[str, Any],
     db: AsyncSession,
-    *,
-    current_turn_text: str | None = None,
 ) -> str:
     disposition = raw_input.get("disposition")
     summary = raw_input.get("summary") or ""
     variant_result = raw_input.get("inline_variant_result")
 
-    # Guard against the "ask a question AND finalize" bug. If the
-    # agent's text in this same response ends with a question mark,
-    # there's an outstanding question the student hasn't answered —
-    # don't let the agent finalize underneath it. Force the agent to
-    # either drop the question or wait for the reply. The trailing "?"
-    # heuristic is coarse but catches the real failure mode cleanly
-    # (the alternative is an LLM judging whether prose contains a
-    # question, which is overkill for this guard).
-    if current_turn_text and current_turn_text.rstrip().endswith("?"):
-        return (
-            "rejected: you just asked the student a question in this "
-            "same response. finish_check is terminal — don't call it "
-            "while you have an outstanding question. Either wait for "
-            "the student's reply (no finish_check this turn) or drop "
-            "the question from your response before finalizing."
+    # Guard against the "ask a question AND finalize" bug. Look at the
+    # latest persisted agent turn — if its content ends with "?" and
+    # there's no student turn at a higher ordinal, the student hasn't
+    # answered the question yet and finalizing would close the check
+    # underneath it. Force the agent to either drop the question or
+    # wait for the reply. We check persisted turns (not just this
+    # iteration's text) because the agent can split the question and
+    # finish_check across multiple iterations of the agent loop in a
+    # single process_student_turn call. The trailing "?" heuristic is
+    # coarse but catches the real failure mode cleanly (the alternative
+    # is an LLM judging whether prose contains a question, which is
+    # overkill for this guard).
+    latest_agent_turn = (await db.execute(
+        select(IntegrityConversationTurn)
+        .where(
+            IntegrityConversationTurn.integrity_check_submission_id == check.id,
+            IntegrityConversationTurn.role == ROLE_AGENT,
         )
+        .order_by(IntegrityConversationTurn.ordinal.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if latest_agent_turn is not None and latest_agent_turn.content.rstrip().endswith("?"):
+        later_student_turn = (await db.execute(
+            select(IntegrityConversationTurn.id)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == ROLE_STUDENT,
+                IntegrityConversationTurn.ordinal > latest_agent_turn.ordinal,
+            )
+            .limit(1)
+        )).scalar_one_or_none()
+        if later_student_turn is None:
+            return (
+                "rejected: your latest message to the student ends with "
+                "a question. finish_check is terminal — don't call it "
+                "while you have an outstanding question. Either wait for "
+                "the student's reply (no finish_check this turn) or drop "
+                "the question from your response before finalizing."
+            )
 
     if disposition not in DISPOSITION_VALUES:
         return (
