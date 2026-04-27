@@ -36,6 +36,8 @@ from api.core.integrity_ai import (
     extract_student_work,
     run_agent_turn,
 )
+from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_json
+from api.core.llm_schemas import INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import (
     IntegrityCheckProblem,
@@ -200,6 +202,192 @@ def _differentiation_score(item: QuestionBankItem) -> tuple[int, int]:
     )
     steps_count = len(item.solution_steps or [])
     return (difficulty_rank, steps_count)
+
+
+# ── Final-answer correctness check ──────────────────────────────────
+# Used pre-selection to drive the upcoming tier-aware probe selector
+# (verified vs struggling). AI grading also runs an equivalence check
+# on the same inputs, but it gates on full grading (~30s); we run a
+# faster Haiku call here so the integrity chat can pick a problem
+# without waiting on grading. Two readers of the same upstream data
+# (Vision's extraction + bank items' final_answer), not two competing
+# sources of truth.
+
+# Drop these wrappers before doing a literal compare, so a bank
+# answer of "$6$" matches a student answer of "6" without an LLM call.
+# Anything more elaborate (LaTeX command synonyms, fraction-vs-decimal,
+# implicit multiplication) falls through to the LLM equivalence call.
+# Order matters: longer wrappers must come first so `$$x$$` strips both
+# dollars in one pass instead of leaving the inner `$x$`.
+_TRIVIAL_LATEX_WRAPPERS: tuple[str, ...] = ("$$", "$")
+
+
+def _normalize_answer_for_trivial_match(answer: str) -> str:
+    """Strip whitespace + the outermost balanced LaTeX delimiter pair.
+
+    Only matched, balanced wrappers are stripped (one pass, longest
+    wrapper wins via _TRIVIAL_LATEX_WRAPPERS ordering). Anything fancier
+    is left for the LLM equivalence call to compare.
+    """
+    answer = answer.strip()
+    for wrapper in _TRIVIAL_LATEX_WRAPPERS:
+        if (
+            answer.startswith(wrapper)
+            and answer.endswith(wrapper)
+            and len(answer) > 2 * len(wrapper)
+        ):
+            answer = answer[len(wrapper):-len(wrapper)].strip()
+            break
+    return answer
+
+
+def _student_answer_by_position(extraction: dict[str, Any]) -> dict[int, str]:
+    """Index Vision's per-problem final answers by `problem_position`.
+
+    Skips entries with a null position or empty `answer_latex`. If
+    Vision tagged multiple answers to the same position (rare —
+    schema doesn't forbid it), the last one wins. Caller treats a
+    missing position as "no answer extracted" (correctness=False).
+    """
+    out: dict[int, str] = {}
+    for fa in extraction.get("final_answers") or []:
+        pos = fa.get("problem_position")
+        latex = (fa.get("answer_latex") or "").strip()
+        if not isinstance(pos, int) or isinstance(pos, bool) or not latex:
+            continue
+        out[pos] = latex
+    return out
+
+
+def _build_equivalence_user_message(
+    pairs: list[tuple[int, str, str]],
+) -> str:
+    """Render the user message for the batched equivalence LLM call.
+
+    `pairs` is a list of (problem_position, student_answer, answer_key)
+    triples that didn't trivially match — one entry per problem.
+    """
+    lines = [
+        "For each problem below, decide whether the student's answer is "
+        "mathematically equivalent to the answer key. Equivalent forms "
+        "(1/2 == 0.5, x = 5 == 5, matrices with or without a leading "
+        "variable label) count as equivalent. Different numeric values "
+        "or different mathematical objects do not.",
+        "",
+    ]
+    for pos, student, key in pairs:
+        lines.append(f"Problem {pos}:")
+        lines.append(f"  Student answer: {student}")
+        lines.append(f"  Answer key: {key}")
+        lines.append("")
+    lines.append(
+        "Return one entry per problem in the `results` array. Tag each "
+        "entry with its `problem_position` field; entries may appear in "
+        "any order."
+    )
+    return "\n".join(lines)
+
+
+async def check_answer_correctness(
+    extraction: dict[str, Any],
+    candidates: dict[uuid.UUID, QuestionBankItem],
+    hw_position_by_id: dict[uuid.UUID, int],
+    *,
+    user_id: str | None = None,
+) -> dict[uuid.UUID, bool]:
+    """Per-bank-item correctness, anchored on Vision's extracted final
+    answers vs the bank items' `final_answer`.
+
+    Two-stage:
+      1. Trivial-normalization fast path (strip whitespace + outer
+         `$...$` / `$$...$$`). Matches numerics + single-token answers
+         for free.
+      2. Batched Haiku equivalence call for everything that didn't
+         trivially match. Cheap (~$0.005/HW typical) and tolerates the
+         long tail of LaTeX synonyms.
+
+    Returns `{bank_item_id: bool}` for every candidate. False on:
+      - Bank item has no `final_answer` (proof-style)
+      - Vision didn't extract a final answer for that problem
+      - LLM call fails (treat all uncertain pairs as wrong; system
+        falls through to the struggling tier rather than wedging)
+
+    Pure-ish: makes one LLM call but no DB / state mutation.
+    """
+    student_by_position = _student_answer_by_position(extraction)
+
+    is_correct_by_bank_id: dict[uuid.UUID, bool] = {
+        bid: False for bid in candidates
+    }
+    uncertain: list[tuple[uuid.UUID, int, str, str]] = []
+
+    for bid, item in candidates.items():
+        bank_answer = (item.final_answer or "").strip()
+        hw_pos = hw_position_by_id.get(bid)
+        if hw_pos is None or not bank_answer:
+            continue
+        student_answer = student_by_position.get(hw_pos, "").strip()
+        if not student_answer:
+            continue
+
+        if (
+            _normalize_answer_for_trivial_match(student_answer)
+            == _normalize_answer_for_trivial_match(bank_answer)
+        ):
+            is_correct_by_bank_id[bid] = True
+            continue
+
+        uncertain.append((bid, hw_pos, student_answer, bank_answer))
+
+    if not uncertain:
+        return is_correct_by_bank_id
+
+    user_message = _build_equivalence_user_message(
+        [(pos, student, key) for _, pos, student, key in uncertain],
+    )
+    try:
+        result = await call_claude_json(
+            system_prompt=(
+                "You are a math grader checking equivalence of final "
+                "answers. Return one entry per problem, tagging each "
+                "with its `problem_position` field. Entries may be in "
+                "any order."
+            ),
+            user_message=user_message,
+            mode=LLMMode.INTEGRITY_ANSWER_EQUIVALENCE,
+            tool_schema=INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
+            user_id=user_id,
+            model=MODEL_HAIKU,
+        )
+    except Exception:
+        logger.exception(
+            "answer-equivalence LLM call failed; treating uncertain "
+            "pairs as wrong (tier may downgrade to struggling)",
+        )
+        return is_correct_by_bank_id
+
+    # Defensive parse: a malformed response degrades to "all uncertain
+    # pairs stay False" rather than wedging the check.
+    raw_results = result.get("results")
+    equivalent_by_position: dict[int, bool] = {}
+    if isinstance(raw_results, list):
+        for entry in raw_results:
+            if not isinstance(entry, dict):
+                continue
+            pos = entry.get("problem_position")
+            eq = entry.get("equivalent")
+            if (
+                isinstance(pos, int)
+                and not isinstance(pos, bool)
+                and isinstance(eq, bool)
+            ):
+                equivalent_by_position[pos] = eq
+
+    for bid, pos, _, _ in uncertain:
+        if equivalent_by_position.get(pos):
+            is_correct_by_bank_id[bid] = True
+
+    return is_correct_by_bank_id
 
 
 def select_probe_problems(
