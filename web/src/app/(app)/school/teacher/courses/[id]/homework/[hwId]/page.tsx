@@ -41,9 +41,9 @@ interface AssignmentProblem {
 }
 
 const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "penalty_per_day", label: "10% per day" },
-  { value: "no_credit", label: "No credit after due" },
+  { value: "none", label: "Accept any time, no penalty" },
+  { value: "penalty_per_day", label: "−10% per day after due" },
+  { value: "no_credit", label: "Closed after due date" },
 ];
 
 // Inline-editable fields with their own SaveState — a saving units

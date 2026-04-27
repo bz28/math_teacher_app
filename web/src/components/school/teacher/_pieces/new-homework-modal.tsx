@@ -54,7 +54,10 @@ export function NewHomeworkModal({
     defaultUnitIds[0] ?? null,
   );
   const [count, setCount] = useState<number>(10);
-  const [countDraft, setCountDraft] = useState("10");
+  // Empty by default because the matching preset chip already shows
+  // the value — we only put text in the input when the teacher picks
+  // a non-preset.
+  const [countDraft, setCountDraft] = useState("");
   const [topicHint, setTopicHint] = useState("");
 
   const [units, setUnits] = useState<TeacherUnit[] | null>(null);
@@ -125,8 +128,16 @@ export function NewHomeworkModal({
 
   const handleCountBlur = () => {
     const v = parseInt(countDraft, 10);
-    if (Number.isNaN(v)) setCountDraft(String(count));
-    else setCountDraft(String(clamp(v)));
+    if (Number.isNaN(v)) {
+      // Empty/invalid — fall back to the current count, but leave
+      // the input blank when that count is one of the chips (the
+      // chip is already showing it).
+      setCountDraft(
+        (QUANTITY_CHIPS as readonly number[]).includes(count) ? "" : String(count),
+      );
+      return;
+    }
+    setCountDraft(String(clamp(v)));
   };
 
   const createDraft = async (): Promise<string> => {
@@ -264,7 +275,9 @@ export function NewHomeworkModal({
                   type="button"
                   onClick={() => {
                     setCount(n);
-                    setCountDraft(String(n));
+                    // Clear the input so a preset chip and the custom
+                    // field don't both display the same number.
+                    setCountDraft("");
                   }}
                   disabled={busy}
                   aria-pressed={count === n}
@@ -283,11 +296,12 @@ export function NewHomeworkModal({
                 value={countDraft}
                 min={1}
                 max={50}
+                placeholder="custom"
                 aria-label="Custom problem count"
                 onChange={(e) => handleCountChange(e.target.value)}
                 onBlur={handleCountBlur}
                 disabled={busy}
-                className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+                className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
               />
             </div>
           </div>
