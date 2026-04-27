@@ -56,18 +56,43 @@ async def list_units(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    from api.models.question_bank import QuestionBankItem
     await get_teacher_course(db, course_id, current_user.user_id)
-    units = (await db.execute(
-        select(Unit.id, Unit.name, Unit.position, Unit.parent_unit_id, Unit.created_at)
+
+    # Per-unit counts powered the delete-folder dialog (and any future
+    # "this folder has X items" surface). Subqueries scoped to the course
+    # so a unit with no docs/items still gets a 0 via the LEFT-JOIN-style
+    # correlated count.
+    doc_counts = (
+        select(Document.unit_id, func.count().label("n"))
+        .where(Document.unit_id.is_not(None))
+        .group_by(Document.unit_id)
+        .subquery()
+    )
+    item_counts = (
+        select(QuestionBankItem.unit_id, func.count().label("n"))
+        .group_by(QuestionBankItem.unit_id)
+        .subquery()
+    )
+    rows = (await db.execute(
+        select(
+            Unit.id, Unit.name, Unit.position, Unit.parent_unit_id, Unit.created_at,
+            func.coalesce(doc_counts.c.n, 0).label("document_count"),
+            func.coalesce(item_counts.c.n, 0).label("question_count"),
+        )
+        .outerjoin(doc_counts, doc_counts.c.unit_id == Unit.id)
+        .outerjoin(item_counts, item_counts.c.unit_id == Unit.id)
         .where(Unit.course_id == course_id)
         .order_by(Unit.position, Unit.created_at)
     )).all()
     return {"units": [{
-        "id": str(u.id), "name": u.name,
-        "position": u.position,
-        "parent_id": str(u.parent_unit_id) if u.parent_unit_id else None,
-        "created_at": u.created_at.isoformat(),
-    } for u in units]}
+        "id": str(r.id), "name": r.name,
+        "position": r.position,
+        "parent_id": str(r.parent_unit_id) if r.parent_unit_id else None,
+        "created_at": r.created_at.isoformat(),
+        "document_count": int(r.document_count),
+        "question_count": int(r.question_count),
+    } for r in rows]}
 
 
 @router.post("/courses/{course_id}/units", status_code=status.HTTP_201_CREATED)
