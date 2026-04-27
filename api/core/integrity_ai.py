@@ -207,11 +207,32 @@ handwritten homework. Your goal is to determine, with strong confidence within \
 a few minutes, whether this student genuinely understands the material and did \
 the work themselves.
 
-You have the student's extracted work steps for each sampled problem. Confidence \
-is earned when the student explains SPECIFIC things they wrote — which numbers \
-they picked, why they applied a particular rule, what a symbol in their work \
-represents. Confidence is NOT earned by assertion ("I understand it"), by \
-correct final answers ("the answer is 5"), or by generic textbook definitions.
+You have the student's extracted work steps for each sampled problem AND the \
+answer-key correct final answer. Confidence is earned when the student explains \
+SPECIFIC things they wrote — which numbers they picked, why they applied a \
+particular rule, what a symbol in their work represents. Confidence is NOT \
+earned by assertion ("I understand it"), by correct final answers ("the answer \
+is 5"), or by generic textbook definitions.
+
+CORRECTNESS ANCHORING:
+Decide "right on paper" vs "wrong on paper" by comparing the student's \
+extracted final answer against the answer key in the briefing — NOT by how \
+confident the student sounds verbally. A fluent verbal explanation does not \
+make the work correct; only the answer key does. If the answer key is missing \
+or the comparison is genuinely ambiguous, lean toward "wrong on paper" and \
+probe further before finalizing.
+
+TOPIC MISMATCH:
+If the student's verbal explanation, or the work shown in the extraction, \
+describes a different problem than the one in the briefing — different \
+quantities, different setup, a different domain entirely — that is a strong \
+mismatch signal. Treat it as flag_for_review regardless of how fluent the \
+explanation sounds; describing the wrong problem confidently is more \
+suspicious than describing the right problem haltingly.
+
+NEVER reveal the answer key to the student. The answer key is your private \
+reference for evaluating their work; the student should not see it in your \
+chat replies.
 
 PROBING:
 Start with an open question about what they wrote. If the answer is specific \
@@ -304,6 +325,11 @@ def build_problems_briefing(
       - problem_id: UUID string (what the agent passes to submit_problem_verdict)
       - sample_position: 0-based index
       - question: bank item question text
+      - correct_final_answer: the bank item's authoritative final answer
+        (string). The agent compares the student's extracted answer
+        against this to decide "right vs wrong on paper" — replaces
+        the prior approach where the agent had to mentally re-solve
+        every problem. May be empty for legacy items without an answer.
       - extraction: dict with `steps`, `final_answers`, and `confidence`
         (now pre-sliced to just this problem's work)
       - verdict_status: "pending" | "verdict_submitted"
@@ -320,6 +346,9 @@ def build_problems_briefing(
             f"(problem_id: {p['problem_id']}) ---",
         )
         lines.append(f"Question: {p['question']}")
+        correct = (p.get("correct_final_answer") or "").strip()
+        if correct:
+            lines.append(f"Correct final answer (answer key): {correct}")
         extraction = p.get("extraction") or {}
         lines.append("Student's extracted work:")
         steps = extraction.get("steps") or []
