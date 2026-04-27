@@ -148,17 +148,24 @@ const ACTIVITY_LEVEL_LABELS: Record<IntegrityActivityLevel, string> = {
   heavy: "heavy",
 };
 
+// Filled-style pills (solid bg + white text) so the level is legible
+// regardless of where the pill sits — queue row hover bg, amber
+// flag-for-review banner, neutral submission detail. The earlier
+// light-on-light treatment washed out against the amber banner. Clean
+// stays muted (gray-500) so a green-light row doesn't visually scream.
 const ACTIVITY_LEVEL_STYLES: Record<IntegrityActivityLevel, string> = {
-  // Low-contrast gray for clean — informational, not alarming.
-  clean:
-    "bg-gray-100 text-gray-500 dark:bg-gray-500/15 dark:text-gray-400",
-  // Amber and orange escalate without being accusatory ("activity",
-  // never "suspicious"). Same palette family as disposition pills so
-  // they sit visually next to each other on the queue row.
-  notable:
-    "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
-  heavy:
-    "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
+  clean: "bg-gray-500 text-white dark:bg-gray-600",
+  notable: "bg-amber-600 text-white dark:bg-amber-500",
+  heavy: "bg-orange-600 text-white dark:bg-orange-500",
+};
+
+// Tooltip copy on the pill — explains what a teacher is seeing. The
+// label by itself ("notable", "heavy") doesn't reveal what triggered
+// it; this fills in the gap on hover.
+const ACTIVITY_LEVEL_TOOLTIPS: Record<IntegrityActivityLevel, string> = {
+  clean: "Clean: nothing unusual observed during this conversation.",
+  notable: "Notable: one moment in this conversation stood out.",
+  heavy: "Heavy: multiple notable moments in this conversation.",
 };
 
 /** Compact pill for the queue row + the IntegritySection header.
@@ -178,7 +185,7 @@ export function ActivityLevelPill({
         ACTIVITY_LEVEL_STYLES[level],
         className,
       )}
-      title={`Behavioral activity: ${ACTIVITY_LEVEL_LABELS[level]}`}
+      title={ACTIVITY_LEVEL_TOOLTIPS[level]}
     >
       Activity: {ACTIVITY_LEVEL_LABELS[level]}
     </span>
@@ -276,45 +283,87 @@ export function ActivityDigest({
 
   const t = summary.totals;
   const flagged = disposition === "flag_for_review";
+  const notableCount = summary.notable_turns.length;
+
+  // Subtitle below the header that translates the level into something
+  // a teacher can act on without thinking about thresholds. Phrased as
+  // "X moments" rather than "X turns" because the marker is per-turn
+  // but the unit a teacher cares about is the event itself.
+  const subtitle =
+    notableCount === 0
+      ? "Nothing notable observed."
+      : notableCount === 1
+        ? "1 notable moment in this conversation."
+        : `${notableCount} notable moments in this conversation.`;
 
   return (
     <div
       className={cn(
-        "rounded-[--radius-sm] border px-3 py-2 text-xs",
+        "rounded-[--radius-md] border px-3 py-2.5 text-xs",
+        // Flagged: stronger amber so the digest visually backs up the
+        // disposition. Non-flagged: neutral surface that lets the
+        // banner above carry the disposition color, and the digest
+        // sits as supporting evidence.
         flagged
-          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
-          : "border-border-light bg-bg-subtle text-text-secondary",
+          ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30"
+          : "border-border-light bg-surface",
       )}
     >
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wide">
-          Activity during this conversation
-        </span>
-        <ActivityLevelPill level={summary.level} />
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p
+            className={cn(
+              "text-[11px] font-bold uppercase tracking-wide",
+              flagged
+                ? "text-amber-900 dark:text-amber-200"
+                : "text-text-primary",
+            )}
+          >
+            Activity during this conversation
+          </p>
+          <p
+            className={cn(
+              "text-[11px]",
+              flagged
+                ? "text-amber-800/80 dark:text-amber-300/80"
+                : "text-text-muted",
+            )}
+          >
+            {subtitle}
+          </p>
+        </div>
+        <ActivityLevelPill level={summary.level} className="shrink-0" />
       </div>
-      <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5">
-        <dt className="opacity-70">Tabbed out</dt>
-        <dd className="font-medium">
+      <dl
+        className={cn(
+          "mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5",
+          flagged
+            ? "text-amber-900 dark:text-amber-200"
+            : "text-text-secondary",
+        )}
+      >
+        <dt className="opacity-60">Tabbed out</dt>
+        <dd className="font-semibold">
           {t.tab_out_count === 0
             ? "never"
             : `${t.tab_out_count}× (${formatMs(t.tab_out_total_ms)} total)`}
         </dd>
 
-        <dt className="opacity-70">Paste events</dt>
-        <dd className="font-medium">
+        <dt className="opacity-60">Paste events</dt>
+        <dd className="font-semibold">
           {t.paste_count === 0
             ? "none"
             : `${t.paste_count} (largest ${t.paste_largest_chars} chars, ${t.paste_total_chars} total)`}
         </dd>
-
-        <dt className="opacity-70">Long pauses</dt>
-        <dd className="font-medium">
-          {t.long_pause_count === 0
-            ? "steady typing"
-            : `${t.long_pause_count} pauses over 3s`}
-        </dd>
       </dl>
-      <p className="mt-1.5 text-[10px] italic opacity-60">
+      <p
+        className={cn(
+          "mt-2 text-[10px] italic",
+          flagged
+            ? "text-amber-800/70 dark:text-amber-300/60"
+            : "text-text-muted",
+        )}
+      >
         Reflects behavior during this conversation only — not the
         original homework session.
       </p>
