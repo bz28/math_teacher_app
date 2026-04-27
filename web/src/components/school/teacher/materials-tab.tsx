@@ -464,7 +464,16 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             onStartRename={(id) => setRowState({ kind: "renaming", id })}
             onSubmitRename={renameUnit}
             onCancelRow={() => setRowState({ kind: "idle" })}
-            onStartDeleteFolder={(id) => setRowState({ kind: "deletingFolder", id })}
+            onStartDeleteFolder={(id) => {
+              // Refresh counts before opening so the dialog can't show
+              // "empty" against stale data (e.g. question-bank items
+              // generated outside this tab). The dialog renders against
+              // whatever's in `units` at paint time and will update when
+              // reload resolves; if it under-counted, the user sees the
+              // blocked state appear shortly after open.
+              setRowState({ kind: "deletingFolder", id });
+              void reload();
+            }}
             onAddSub={(parentId) => setShowNewUnit({ parentId })}
           />
 
