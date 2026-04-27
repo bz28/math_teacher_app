@@ -341,9 +341,8 @@ export function ActivityTurnMarker({
  * of truth, same data that drives the queue pill and per-turn markers.
  *
  * Visual treatment: always neutral. The disposition banner above
- * already carries the verdict color; the digest is supporting
- * evidence and shouldn't shout. The Activity pill is the only colored
- * element here, which is what makes the level scannable.
+ * already carries the verdict color and the at-a-glance Activity pill;
+ * the digest is supporting evidence and shouldn't shout.
  */
 export function ActivityDigest({
   summary,
@@ -353,42 +352,16 @@ export function ActivityDigest({
   if (!summary) return null;
 
   const t = summary.totals;
-  const notableCount = summary.notable_turns.length;
 
-  // Subtitle below the header that translates the level into something
-  // a teacher can act on without thinking about thresholds. Phrased as
-  // "X moments" because the marker is per-turn but the unit a teacher
-  // cares about is the event itself.
-  const subtitle =
-    notableCount === 0
-      ? "Nothing notable observed."
-      : notableCount === 1
-        ? "1 notable moment in this conversation."
-        : `${notableCount} notable moments in this conversation.`;
-
-  // The digest stays neutral regardless of disposition. The banner
-  // above already carries the verdict color (red/amber/green); making
-  // the digest match would stack two big colored panels and wash out
-  // both. Neutral here = "supporting evidence", not a second alarm.
-  // The Activity pill is the only color in this panel — that's what
-  // makes the level scannable.
+  // Digest is the detail view — title + per-event body lines tell the
+  // teacher exactly what happened. The chip on the parent header card
+  // already carries the at-a-glance "notable moments" signal, so we
+  // don't restate count or chip here (would be 3× redundant).
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-3 text-xs">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-text-primary">
-            Activity during this conversation
-          </p>
-          <p className="mt-0.5 text-[11px] text-text-secondary">
-            {subtitle}
-          </p>
-        </div>
-        <ActivityPill
-          count={summary.notable_turns.length}
-          alwaysShow
-          className="shrink-0"
-        />
-      </div>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-text-primary">
+        Activity during this conversation
+      </p>
       <div className="mt-2.5 border-t border-border-light pt-2" />
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-text-primary">
         <dt className="text-text-muted">Tabbed out</dt>
@@ -495,10 +468,9 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
            * carry ml-auto, so this pill chains rightward without
            * needing its own. activity_summary is only populated when
            * status=complete, which is the same gate as those badges.
-           * alwaysShow so the header pill matches ActivityDigest below
-           * — both surfaces sit inside the same detail panel and the
-           * teacher should get the "Activity: clean" reassurance from
-           * each. */}
+           * alwaysShow renders the "clean" pill when nothing is
+           * notable so the teacher gets explicit reassurance that
+           * behavior was checked, not silent absence. */}
         {data?.activity_summary && (
           <ActivityPill
             count={data.activity_summary.notable_turns.length}
