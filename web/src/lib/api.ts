@@ -1791,7 +1791,14 @@ export type IntegrityProblemStatus =
 
 export interface IntegrityProblemSummary {
   problem_id: string;
+  /** 0-based index in the *sampled* problem list. Internal — useful
+   *  for ordering, NOT what to label the student. With MAX_SAMPLE=1
+   *  this is always 0. */
   sample_position: number;
+  /** 1-based position on the *homework* (i.e., 3 if it's the third
+   *  problem on the assignment). What to show the student as
+   *  "Problem N". Server computes from assignment.problem_ids. */
+  hw_position: number;
   status: IntegrityProblemStatus;
   /** Question text the student is being asked about — rendered in the
    *  chat's reference panel so the student can see the original

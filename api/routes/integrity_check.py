@@ -57,7 +57,17 @@ class ProblemSummary(BaseModel):
     reasoning — those are teacher-only.
     """
     problem_id: str
+    # 0-based index in the *sampled* problem list. Internal — useful
+    # for ordering but NOT what to show the student. With MAX_SAMPLE=1
+    # this is always 0, so labeling off it gives every student
+    # "Problem 1" regardless of which HW problem they actually got
+    # sampled on.
     sample_position: int
+    # 1-based position on the *homework* (i.e., "Problem 3" if it's
+    # the third problem on the assignment). What to show the student.
+    # Computed from the assignment's problem_ids list — same source
+    # the pipeline uses to slice extractions per problem.
+    hw_position: int
     status: str
     # Question prompt the student is being asked about. Null as a
     # fallback when the bank item has been deleted between publish and
@@ -283,16 +293,43 @@ def _student_facing_transcript(
 def _problem_summaries(
     problems: list[IntegrityCheckProblem],
     questions_by_bank_id: dict[uuid.UUID, str],
+    hw_position_by_bank_id: dict[uuid.UUID, int],
 ) -> list[ProblemSummary]:
     return [
         ProblemSummary(
             problem_id=str(p.id),
             sample_position=p.sample_position,
+            # Defensive fallback to sample_position+1 if the bank
+            # item somehow isn't in the assignment's problem_ids
+            # list (problem removed from HW between sample time and
+            # state fetch — pathological). Matches the same
+            # fallback pipeline.py:426 uses.
+            hw_position=hw_position_by_bank_id.get(
+                p.bank_item_id, p.sample_position + 1,
+            ),
             status=p.status,
             question=questions_by_bank_id.get(p.bank_item_id),
         )
         for p in problems
     ]
+
+
+async def _load_hw_positions(
+    db: AsyncSession, submission_id: uuid.UUID,
+) -> dict[uuid.UUID, int]:
+    """Return {bank_item_id: 1-based HW position} for the assignment
+    behind this submission. Same logic as pipeline.py:376 — the
+    1-based index in the assignment's problem_ids list. Used by
+    `_problem_summaries` so the student-facing chat labels the actual
+    HW problem number ("Problem 3") instead of the 1-based sample
+    index (which is always 1 when MAX_SAMPLE=1).
+    """
+    problem_ids = (await db.execute(
+        select(Assignment.problem_ids)
+        .join(Submission, Submission.assignment_id == Assignment.id)
+        .where(Submission.id == submission_id)
+    )).scalar_one_or_none() or []
+    return {bid: i + 1 for i, bid in enumerate(problem_ids)}
 
 
 async def _load_problem_questions(
@@ -359,12 +396,13 @@ async def _build_state_response(
             transcript=[],
         )
     questions = await _load_problem_questions(db, problems)
+    hw_positions = await _load_hw_positions(db, submission_id)
     return IntegrityStateResponse(
         submission_id=str(submission_id),
         overall_status=check.status,
         disposition=check.disposition,
         extraction=_first_extraction(problems),
-        problems=_problem_summaries(problems, questions),
+        problems=_problem_summaries(problems, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
     )
 
