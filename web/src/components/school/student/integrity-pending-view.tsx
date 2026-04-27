@@ -41,6 +41,25 @@ const TIMEOUT_MS = 90_000;
  * 20–60s of real LLM work and can't run inline in the submit
  * request without timing out Railway.
  */
+// Phase-aware copy. The view runs through two distinct waits with
+// very different operations in flight, so the spinner copy should
+// tell the student what's actually happening — generic "preparing"
+// is a missed signpost. Detected off `extraction_confirmed_at` (same
+// gate the poll uses to decide its done-signal).
+type Phase = "pre_confirm" | "post_confirm";
+
+const PHASE_COPY: Record<Phase, { title: string; subtitle: string }> = {
+  pre_confirm: {
+    title: "Analyzing your work",
+    subtitle:
+      "Reading your steps so you can confirm we got them right.",
+  },
+  post_confirm: {
+    title: "Setting up your chat",
+    subtitle: "Writing some questions about your steps.",
+  },
+};
+
 export function IntegrityPendingView({
   submissionId,
   assignmentId,
@@ -48,6 +67,12 @@ export function IntegrityPendingView({
   onTimeout,
 }: Props) {
   const [elapsedMs, setElapsedMs] = useState(0);
+  // Default to pre-confirm copy until the first poll tells us
+  // otherwise — the most common entry into this view is right after
+  // submit (phase 1), and "Analyzing your work" is also harmless
+  // copy if we briefly mislabel a phase-2 entry while the first poll
+  // is in flight.
+  const [phase, setPhase] = useState<Phase>("pre_confirm");
 
   // Refs for stable callback identities inside the interval closure —
   // we don't want React re-running the poll effect every time a
@@ -96,6 +121,9 @@ export function IntegrityPendingView({
         // state was still "extracting" → polling stopped, student
         // stranded until refresh.
         const confirmed = sub?.extraction_confirmed_at != null;
+        // Update the rendered copy as soon as we know the phase.
+        // Cheap setState — bails out if value is unchanged.
+        setPhase(confirmed ? "post_confirm" : "pre_confirm");
         if (!confirmed) {
           // Pre-confirm: Vision is extracting. Done = extraction
           // lands on the submission row.
@@ -139,18 +167,16 @@ export function IntegrityPendingView({
   }, [submissionId, assignmentId]);
 
   const seconds = Math.floor(elapsedMs / 1000);
+  const copy = PHASE_COPY[phase];
 
   return (
     <div className="mx-auto max-w-2xl py-12 text-center">
       {/* Pure CSS spinner — no dependency weight on low-end Android */}
       <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-border border-t-primary" />
       <h1 className="mt-6 text-2xl font-bold text-text-primary">
-        Preparing your check…
+        {copy.title}…
       </h1>
-      <p className="mt-3 text-sm text-text-secondary">
-        Your work has been submitted. We&apos;re just reviewing it so we can
-        chat with you about it.
-      </p>
+      <p className="mt-3 text-sm text-text-secondary">{copy.subtitle}</p>
       <p className="mt-4 text-xs text-text-muted">
         This usually takes about 20 seconds.
         {seconds >= 10 && ` (${seconds}s)`}
