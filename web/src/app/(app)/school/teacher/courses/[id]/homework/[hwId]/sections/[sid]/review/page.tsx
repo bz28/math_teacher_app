@@ -1070,15 +1070,29 @@ function StudentRow({
   const sub = entry.submission;
   const statusLabel = rowStatusLabel(entry);
   const mutedName = sub === null;
+  const hasFlagPill =
+    sub?.integrity_overview?.disposition === "flag_for_review";
+  const hasTutorPivot = sub?.integrity_overview?.disposition === "tutor_pivot";
+  const hasInconclusive =
+    sub?.integrity_overview?.overall_status === "complete" &&
+    !sub?.integrity_overview?.disposition;
+  const hasActivityPill = sub?.integrity_overview?.notable_count != null;
+  const hasScore = sub?.final_score != null;
+  const hasAnyPill =
+    hasScore ||
+    hasFlagPill ||
+    hasTutorPivot ||
+    hasInconclusive ||
+    hasActivityPill;
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-start justify-between gap-2 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
+      className={`flex w-full flex-col gap-1.5 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
         selected ? "bg-primary-bg/40" : "hover:bg-bg-subtle"
       }`}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div
           className={`truncate font-semibold ${
             mutedName ? "text-text-muted" : "text-text-primary"
@@ -1086,12 +1100,7 @@ function StudentRow({
         >
           {entry.student_name}
         </div>
-        {/* truncate so the status doesn't wrap to 3 narrow lines when
-         * the pill stack on the right squeezes this column. The pill
-         * stack itself is also wrap-friendly (see below), so on a
-         * really tight width pills flow to a second row instead of
-         * overlapping this status text. */}
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[11px] text-text-muted">
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-text-muted">
           <span
             className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusLabel.dotClass}`}
           />
@@ -1103,44 +1112,45 @@ function StudentRow({
           )}
         </div>
       </div>
-      {/* Right-side pill stack. flex-wrap + justify-end means a too-
-       * narrow row pushes the Activity pill (the widest item) onto a
-       * second line below the score + disposition glyph instead of
-       * overlapping the student status on the left. */}
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-        {sub?.final_score != null && (
-          <span
-            className={`text-xs font-bold ${
-              sub.grade_published_at && !sub.grade_dirty
-                ? "text-green-700 dark:text-green-400"
-                : "text-amber-700 dark:text-amber-400"
-            }`}
-          >
-            {Math.round(sub.final_score)}%
-          </span>
-        )}
-        {sub?.integrity_overview?.disposition === "flag_for_review" && (
-          <span
-            className="text-[11px] font-bold text-red-600 dark:text-red-400"
-            role="img"
-            aria-label="Integrity flag: review needed"
-            title="Integrity flag: review needed"
-          >
-            🔴
-          </span>
-        )}
-        {sub?.integrity_overview?.disposition === "tutor_pivot" && (
-          <span
-            className="text-[11px] font-bold text-amber-600 dark:text-amber-400"
-            role="img"
-            aria-label="Student got tutored through this"
-            title="Student got tutored through this"
-          >
-            🟡
-          </span>
-        )}
-        {sub?.integrity_overview?.overall_status === "complete" &&
-          !sub?.integrity_overview?.disposition && (
+      {/* Pills live on their own row beneath the name + status. The
+       * side panel is fixed at 280px and the Activity pill alone can
+       * eat 200px+, so any attempt to share a row with the status
+       * forced overlap or aggressive truncation. Stacking pills under
+       * gives each surface its full natural width. */}
+      {hasAnyPill && (
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {hasScore && (
+            <span
+              className={`text-xs font-bold ${
+                sub!.grade_published_at && !sub!.grade_dirty
+                  ? "text-green-700 dark:text-green-400"
+                  : "text-amber-700 dark:text-amber-400"
+              }`}
+            >
+              {Math.round(sub!.final_score!)}%
+            </span>
+          )}
+          {hasFlagPill && (
+            <span
+              className="text-[11px] font-bold text-red-600 dark:text-red-400"
+              role="img"
+              aria-label="Integrity flag: review needed"
+              title="Integrity flag: review needed"
+            >
+              🔴
+            </span>
+          )}
+          {hasTutorPivot && (
+            <span
+              className="text-[11px] font-bold text-amber-600 dark:text-amber-400"
+              role="img"
+              aria-label="Student got tutored through this"
+              title="Student got tutored through this"
+            >
+              🟡
+            </span>
+          )}
+          {hasInconclusive && (
             <span
               className="text-[11px] font-bold text-text-muted"
               role="img"
@@ -1150,10 +1160,11 @@ function StudentRow({
               📄
             </span>
           )}
-        {sub?.integrity_overview?.notable_count != null && (
-          <ActivityPill count={sub.integrity_overview.notable_count} />
-        )}
-      </div>
+          {hasActivityPill && (
+            <ActivityPill count={sub!.integrity_overview!.notable_count} />
+          )}
+        </div>
+      )}
     </button>
   );
 }
