@@ -5,7 +5,7 @@ import Purchases, {
   type CustomerInfo,
 } from "react-native-purchases";
 
-const REVENUECAT_IOS_KEY = "test_EARIAgUMbdOpwbkzpSUsbgREBus";
+const REVENUECAT_IOS_KEY = "appl_eWnxtAHCMBerWjeemxhxlVcCdFu";
 const REVENUECAT_ANDROID_KEY = "goog_XXXXXXXX"; // TODO: set real Android API key
 
 /**
