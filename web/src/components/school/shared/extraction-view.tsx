@@ -7,14 +7,24 @@ import { cn } from "@/lib/utils";
 /**
  * Renders what Vision read from a student's handwritten work.
  *
- * Shared between:
- *   - the student's post-extraction confirm screen (variant="full") —
- *     shows only the literal LaTeX transcription, since the student is
- *     verifying what we *read*, not the agent's description of what
- *     they *did*.
- *   - the teacher's "What the agent saw" collapsible (variant="compact")
- *     — shows both plain-English description and LaTeX, since the
- *     interpretation is useful context for grading.
+ * Two orthogonal axes:
+ *
+ *   `variant` controls *sizing* only:
+ *     - "full"    — student's confirm screen, larger padding & text.
+ *     - "compact" — teacher's tiny in-card version, the chat reference
+ *                   column, and other small surfaces.
+ *
+ *   `showProse` controls *content*:
+ *     - true  → prose description + LaTeX (the teacher's "interpretation
+ *               + transcription" view, useful context for grading).
+ *     - false → literal LaTeX only, with plain_english only as a
+ *               fallback when no LaTeX (e.g. a written sentence).
+ *               This is the right view for any *student-facing* surface
+ *               — the question is "did we read your page right?", not
+ *               "do you agree with our description of what you did?".
+ *
+ * Defaults preserve the original semantics (student confirm = literal,
+ * teacher card = prose+LaTeX) so existing callers don't change.
  *
  * Same source data (`student_work_extraction` JSON). Keep this
  * presentational — no data fetching, no actions.
@@ -22,16 +32,20 @@ import { cn } from "@/lib/utils";
 export function ExtractionView({
   extraction,
   variant = "compact",
+  showProse,
 }: {
   extraction: IntegrityExtraction;
-  /**
-   * "compact" is the teacher's tiny in-card version.
-   * "full" is the student's confirm screen — larger type, more padding,
-   * easier to read at arm's length.
-   */
+  /** Sizing only — see component doc. */
   variant?: "compact" | "full";
+  /** Content control — see component doc. Defaults to false on
+   *  variant="full" (student confirm) and true on variant="compact"
+   *  (teacher card), matching the original behavior. Pass explicitly
+   *  to mix size and content (e.g. compact + literal for the chat's
+   *  student-facing reference column). */
+  showProse?: boolean;
 }) {
   const isFull = variant === "full";
+  const renderProse = showProse ?? !isFull;
   return (
     <div
       className={cn(
@@ -65,18 +79,33 @@ export function ExtractionView({
         >
           {extraction.steps.map((s, i) => (
             <li key={`${s.step_num}-${i}`}>
-              {isFull ? (
-                // Student confirm view: show only the literal LaTeX
-                // transcription so the question is purely "did we
-                // read your page right?" — not "do you agree with
-                // the AI's description of what you did?". Fall back
-                // to plain_english only when there's no LaTeX
-                // (e.g. a written sentence like "let x = apples").
+              {renderProse ? (
+                // Prose + LaTeX. The narrative description carries the
+                // AI's interpretation of what the student did, which
+                // is useful context when an adult is reading this to
+                // grade or debug.
+                <>
+                  <span className="font-medium text-text-primary">
+                    {s.plain_english}
+                  </span>
+                  {s.latex && (
+                    <div className="mt-1 text-xs text-text-muted">
+                      {/* Wrap in $$…$$ (display math) so matrices and
+                          fractions render as proper blocks rather than
+                          squished inline expressions. */}
+                      <MathText text={`$$${s.latex}$$`} />
+                    </div>
+                  )}
+                </>
+              ) : (
+                // Literal LaTeX only. The student already confirmed
+                // we read the page right; the panel's job is to be a
+                // reference of what they actually wrote, not what the
+                // AI thinks they did. Fall back to plain_english only
+                // when there's no LaTeX (e.g. a written sentence like
+                // "let x = apples").
                 s.latex ? (
                   <div className="text-text-primary">
-                    {/* Wrap in $$…$$ (display math) so matrices and
-                        fractions render as proper blocks rather than
-                        squished inline expressions. */}
                     <MathText text={`$$${s.latex}$$`} />
                   </div>
                 ) : (
@@ -84,17 +113,6 @@ export function ExtractionView({
                     {s.plain_english}
                   </span>
                 )
-              ) : (
-                <>
-                  <span className="font-medium text-text-primary">
-                    {s.plain_english}
-                  </span>
-                  {s.latex && (
-                    <div className="mt-1 text-xs text-text-muted">
-                      <MathText text={`$$${s.latex}$$`} />
-                    </div>
-                  )}
-                </>
               )}
             </li>
           ))}

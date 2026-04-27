@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   schoolStudent,
+  type IntegrityExtraction,
+  type IntegrityProblemSummary,
   type IntegrityStateResponse,
   type IntegrityTurn,
 } from "@/lib/api";
@@ -259,244 +261,348 @@ export function IntegrityCheckChat({
   const canSend =
     !sending && !isComplete && message.trim().length >= MIN_MESSAGE_CHARS;
 
+  const hasReference = state.problems.length > 0;
+
   return (
-    <div className="mx-auto flex h-[calc(100dvh-4rem)] max-w-2xl flex-col">
-      <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
-        <div className="flex items-baseline gap-2">
-          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Quick understanding check
+    // Outer wrapper holds both columns at full viewport height. On
+    // mobile (default) only the chat column renders, capped at
+    // max-w-2xl and centered — same UX as before. On md+ a 320px
+    // reference column sits to the left, always visible, so the
+    // student can read the problem and their extracted work side-by-
+    // side with the chat instead of toggling a panel up and down.
+    <div className="mx-auto h-[calc(100dvh-4rem)] w-full max-w-5xl">
+      {/* grid-rows-1 forces the single row track to fill the grid's
+       *  height. Without it the implicit row defaults to `auto` and
+       *  sizes to its tallest child — when the reference column has
+       *  a long problem + extraction, the row stretches past the
+       *  viewport, h-full on children resolves against the stretched
+       *  row, the inner overflow-y-auto scrollers get no constrained
+       *  height to overflow against, and the whole page scrolls
+       *  instead of each column scrolling independently. */}
+      <div
+        className={cn(
+          "grid h-full grid-rows-1",
+          hasReference && "md:grid-cols-[320px_1fr]",
+        )}
+      >
+        {hasReference && (
+          <aside
+            aria-label="Reference: problem and your submitted work"
+            className="hidden h-full flex-col overflow-hidden border-r border-border-light bg-bg-subtle/40 md:flex"
+          >
+            <div className="flex items-center justify-between border-b border-border-light px-3 py-3">
+              <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                Reference
+              </div>
+              <div className="text-[10px] text-text-muted">
+                Problem &amp; your work
+              </div>
+            </div>
+            {/* tabIndex on the inner scroller lets a keyboard user
+             *  tab into the panel and scroll it with arrow keys.
+             *  The outer <aside> is the labeled landmark; the inner
+             *  div is just a focusable scroll container, so we don't
+             *  duplicate the aria-label here. */}
+            <div
+              tabIndex={0}
+              className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+            >
+              <ReferencePanel
+                problems={state.problems}
+                extraction={state.extraction}
+              />
+            </div>
+          </aside>
+        )}
+
+        <div
+          className={cn(
+            "mx-auto flex h-full w-full max-w-2xl flex-col",
+            // When the reference column is present, let the chat
+            // fill the grid track. When it's absent (mobile, or no
+            // problems on the session), keep the original centered
+            // max-w-2xl so the chat doesn't blow out to 5xl wide.
+            hasReference && "md:mx-0 md:max-w-none",
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-border-light px-2 py-3">
+            <div className="flex items-baseline gap-2">
+              <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                Quick understanding check
+              </div>
+              {!isComplete && (
+                <div className="text-[11px] font-medium text-text-muted">
+                  · {BUDGET_LABEL[device]}
+                </div>
+              )}
+            </div>
+            {totalProblems > 0 && (
+              <div className="text-xs font-medium text-text-muted">
+                {problemsVerdicted} of {totalProblems}
+              </div>
+            )}
           </div>
-          {!isComplete && (
-            <div className="text-[11px] font-medium text-text-muted">
-              · {BUDGET_LABEL[device]}
+          {totalProblems > 0 && (
+            <div className="h-1 w-full bg-border-light">
+              <div
+                className="h-1 bg-primary transition-all"
+                style={{
+                  width: `${
+                    totalProblems === 0
+                      ? 0
+                      : (problemsVerdicted / totalProblems) * 100
+                  }%`,
+                }}
+              />
             </div>
           )}
-        </div>
-        {totalProblems > 0 && (
-          <div className="text-xs font-medium text-text-muted">
-            {problemsVerdicted} of {totalProblems}
-          </div>
-        )}
-      </div>
-      {totalProblems > 0 && (
-        <div className="h-1 w-full bg-border-light">
-          <div
-            className="h-1 bg-primary transition-all"
-            style={{
-              width: `${
-                totalProblems === 0
-                  ? 0
-                  : (problemsVerdicted / totalProblems) * 100
-              }%`,
-            }}
-          />
-        </div>
-      )}
 
-      {/* Reference panel: the agent is asking about specific steps
-          the student wrote, so give them a way to see the original
-          problem + what the reader extracted. Collapsed by default
-          to keep chat focused; students tap "View my work" to pop
-          it open, tap again to close. */}
-      {state && state.problems.length > 0 && (
-        <div className="border-b border-border-light px-2">
-          <button
-            type="button"
-            onClick={() => setReferenceOpen((v) => !v)}
-            aria-expanded={referenceOpen}
-            aria-controls="integrity-chat-reference-panel"
-            className="flex w-full items-center gap-2 py-2 text-xs font-semibold text-text-secondary hover:text-primary"
-          >
-            <span className="text-[10px]" aria-hidden>
-              {referenceOpen ? "▼" : "▶"}
-            </span>
-            {referenceOpen ? "Hide my work" : "View my work"}
-          </button>
-          {referenceOpen && (
-            // Cap the panel height so a long extraction can't push
-            // the chat off the bottom of the viewport. Student
-            // scrolls inside the panel; the chat stays in place
-            // below. ~40dvh (dynamic viewport, matching the outer
-            // container) is enough to show the problem question plus
-            // a few steps before scrolling kicks in. tabIndex + role
-            // give keyboard / screen-reader users a handle on the
-            // scrollable region.
-            <div
-              id="integrity-chat-reference-panel"
-              role="region"
-              aria-label="Your submitted work"
-              tabIndex={0}
-              className="max-h-[40dvh] overflow-y-auto space-y-3 pb-3"
-            >
-              {state.problems.map((p) => (
+          {/* Mobile-only reference toggle. md+ surfaces the same
+              content as a sticky left column instead, so this
+              collapsible exists purely for the narrow viewport where
+              a side panel would crowd the chat. */}
+          {hasReference && (
+            <div className="border-b border-border-light px-2 md:hidden">
+              <button
+                type="button"
+                onClick={() => setReferenceOpen((v) => !v)}
+                aria-expanded={referenceOpen}
+                aria-controls="integrity-chat-reference-panel"
+                className="flex w-full items-center gap-2 py-2 text-xs font-semibold text-text-secondary hover:text-primary"
+              >
+                <span className="text-[10px]" aria-hidden>
+                  {referenceOpen ? "▼" : "▶"}
+                </span>
+                {referenceOpen ? "Hide problem & work" : "Show problem & work"}
+              </button>
+              {referenceOpen && (
                 <div
-                  key={p.problem_id}
-                  className="space-y-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2"
+                  id="integrity-chat-reference-panel"
+                  role="region"
+                  aria-label="Problem and your submitted work"
+                  tabIndex={0}
+                  className="max-h-[40dvh] overflow-y-auto pb-3"
                 >
-                  {p.question && (
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                        Problem {p.sample_position + 1}
-                      </div>
-                      <div className="mt-0.5 text-sm text-text-primary">
-                        <MathText text={p.question} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {state.extraction && (
-                <div className="rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                    Your work (as we read it)
-                  </div>
-                  <div className="mt-1">
-                    <ExtractionView
-                      extraction={state.extraction}
-                      variant="compact"
-                    />
-                  </div>
+                  <ReferencePanel
+                    problems={state.problems}
+                    extraction={state.extraction}
+                  />
                 </div>
               )}
             </div>
           )}
-        </div>
-      )}
 
-      <div
-        ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto px-2 py-4"
-      >
-        {visibleTranscript.map((t) => (
-          <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
-        ))}
-        {/* Animated "AI is thinking" indicator shown while we're
-            waiting on the /turn round-trip. Appears right after the
-            optimistic student message so the chat flow reads
-            student → thinking → agent reply. Matches the pattern
-            used in the teacher workshop agent. */}
-        {sending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
-              <span className="inline-flex gap-1">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
-              </span>
-              AI is thinking…
-            </div>
-          </div>
-        )}
-      </div>
-
-      {isComplete ? (
-        <div className="border-t border-border-light px-2 py-4 text-center">
-          <div className="text-sm text-text-secondary">
-            Thanks — your work is with your teacher.
-          </div>
-          {/* Practice nudge — only renders when the agent's disposition
-              suggests more study would help AND a practice set is
-              actually linked to this HW. Any other combination stays
-              silent so the terminal matches what was there before. */}
-          <PracticeNudge
-            disposition={state?.disposition ?? null}
-            courseId={courseId}
-            linkedPracticeId={linkedPracticeId}
-          />
-          <button
-            onClick={onDone}
-            className="mt-3 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-4"
           >
-            Back to homework
-          </button>
-        </div>
-      ) : (
-        <div className="border-t border-border-light px-2 py-3">
-          {nudgeVisible && !timeoutDoubled && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
-            >
-              <span>Still there? Take your time.</span>
+            {visibleTranscript.map((t) => (
+              <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
+            ))}
+            {/* Animated "AI is thinking" indicator shown while we're
+                waiting on the /turn round-trip. Appears right after the
+                optimistic student message so the chat flow reads
+                student → thinking → agent reply. Matches the pattern
+                used in the teacher workshop agent. */}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
+                  <span className="inline-flex gap-1">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+                  </span>
+                  AI is thinking…
+                </div>
+              </div>
+            )}
+          </div>
+
+          {isComplete ? (
+            <div className="border-t border-border-light px-2 py-4 text-center">
+              <div className="text-sm text-text-secondary">
+                Thanks — your work is with your teacher.
+              </div>
+              {/* Practice nudge — only renders when the agent's disposition
+                  suggests more study would help AND a practice set is
+                  actually linked to this HW. Any other combination stays
+                  silent so the terminal matches what was there before. */}
+              <PracticeNudge
+                disposition={state?.disposition ?? null}
+                courseId={courseId}
+                linkedPracticeId={linkedPracticeId}
+              />
               <button
-                type="button"
-                onClick={handleNeedMoreTime}
-                className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+                onClick={onDone}
+                className="mt-3 rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90"
               >
-                I need more time
+                Back to homework
               </button>
             </div>
+          ) : (
+            <div className="border-t border-border-light px-2 py-3">
+              {nudgeVisible && !timeoutDoubled && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+                >
+                  <span>Still there? Take your time.</span>
+                  <button
+                    type="button"
+                    onClick={handleNeedMoreTime}
+                    className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+                  >
+                    I need more time
+                  </button>
+                </div>
+              )}
+              {error && <p className="mb-2 text-xs text-error">{error}</p>}
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Activity resets on ANY keydown — CJK IME composition
+                    // keystrokes, Shift+Arrow text selection, and Cmd/Ctrl
+                    // shortcuts all count as "student is engaged" even
+                    // though they don't count as typing for the cadence
+                    // signal.
+                    markActivity();
+
+                    // Typing-cadence tracking is stricter: Backspace/Delete
+                    // count as "edits", everything else as a normal
+                    // keystroke. Skip when it's not really text entry:
+                    //   - Modifier-only keys (shift/ctrl/alt/meta) don't
+                    //     produce characters.
+                    //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
+                    //     ⌘A select-all) — the paste gesture is counted
+                    //     separately via onPaste; logging the "v" keystroke
+                    //     too would double-count a single user action.
+                    //   - IME composition (Chinese/Japanese/Korean input)
+                    //     fires many intermediate keydowns per character;
+                    //     counting them inflates cadence for i18n users.
+                    const isEdit = e.key === "Backspace" || e.key === "Delete";
+                    const isModifier =
+                      e.key === "Shift" ||
+                      e.key === "Control" ||
+                      e.key === "Alt" ||
+                      e.key === "Meta";
+                    const isShortcut = e.metaKey || e.ctrlKey;
+                    const isComposing =
+                      e.nativeEvent.isComposing || e.keyCode === 229;
+                    if (!isModifier && !isShortcut && !isComposing) {
+                      telemetry.recordKeystroke(isEdit);
+                    }
+
+                    // Cmd/Ctrl + Enter sends so phone typers don't hit it
+                    // by accident. Plain Enter just adds a newline.
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    // Size only — content is never captured.
+                    const pasted = e.clipboardData.getData("text");
+                    telemetry.recordPaste(pasted.length);
+                    markActivity();
+                  }}
+                  placeholder="Type your answer…"
+                  rows={2}
+                  disabled={sending}
+                  className="flex-1 resize-none rounded-[--radius-sm] border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
+                />
+                <button
+                  onClick={() => void handleSend()}
+                  disabled={!canSend}
+                  className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {sending ? "…" : "Send"}
+                </button>
+              </div>
+              {message.length > 0 && message.trim().length < MIN_MESSAGE_CHARS && (
+                <p className="mt-1 text-xs text-text-muted">
+                  Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
+                </p>
+              )}
+            </div>
           )}
-          {error && <p className="mb-2 text-xs text-error">{error}</p>}
-          <div className="flex items-end gap-2">
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                // Activity resets on ANY keydown — CJK IME composition
-                // keystrokes, Shift+Arrow text selection, and Cmd/Ctrl
-                // shortcuts all count as "student is engaged" even
-                // though they don't count as typing for the cadence
-                // signal.
-                markActivity();
+        </div>
+      </div>
+    </div>
+  );
+}
 
-                // Typing-cadence tracking is stricter: Backspace/Delete
-                // count as "edits", everything else as a normal
-                // keystroke. Skip when it's not really text entry:
-                //   - Modifier-only keys (shift/ctrl/alt/meta) don't
-                //     produce characters.
-                //   - Shortcut combos with Cmd/Ctrl (e.g. ⌘V paste,
-                //     ⌘A select-all) — the paste gesture is counted
-                //     separately via onPaste; logging the "v" keystroke
-                //     too would double-count a single user action.
-                //   - IME composition (Chinese/Japanese/Korean input)
-                //     fires many intermediate keydowns per character;
-                //     counting them inflates cadence for i18n users.
-                const isEdit = e.key === "Backspace" || e.key === "Delete";
-                const isModifier =
-                  e.key === "Shift" ||
-                  e.key === "Control" ||
-                  e.key === "Alt" ||
-                  e.key === "Meta";
-                const isShortcut = e.metaKey || e.ctrlKey;
-                const isComposing =
-                  e.nativeEvent.isComposing || e.keyCode === 229;
-                if (!isModifier && !isShortcut && !isComposing) {
-                  telemetry.recordKeystroke(isEdit);
-                }
+// ────────────────────────────────────────────────────────────────────
+// Reference panel — what the student is referring to while chatting.
+// Single source of truth shared by the desktop sticky-left column and
+// the mobile collapsible panel above the transcript. The active
+// problem (next pending) is highlighted so the student knows which
+// problem the agent is currently asking about; the rest read as
+// secondary context.
+// ────────────────────────────────────────────────────────────────────
 
-                // Cmd/Ctrl + Enter sends so phone typers don't hit it
-                // by accident. Plain Enter just adds a newline.
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              onPaste={(e) => {
-                // Size only — content is never captured.
-                const pasted = e.clipboardData.getData("text");
-                telemetry.recordPaste(pasted.length);
-                markActivity();
-              }}
-              placeholder="Type your answer…"
-              rows={2}
-              disabled={sending}
-              className="flex-1 resize-none rounded-[--radius-sm] border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
-            />
-            <button
-              onClick={() => void handleSend()}
-              disabled={!canSend}
-              className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              {sending ? "…" : "Send"}
-            </button>
+function ReferencePanel({
+  problems,
+  extraction,
+}: {
+  problems: IntegrityProblemSummary[];
+  extraction: IntegrityExtraction | null;
+}) {
+  // Active = first pending problem. The agent works through them in
+  // order, so this matches what the student is being asked about
+  // right now. -1 if all are verdicted (chat is wrapping up).
+  const activeIdx = problems.findIndex((p) => p.status === "pending");
+  return (
+    <div className="space-y-3">
+      {problems.map((p, i) => {
+        if (!p.question) return null;
+        const isActive = i === activeIdx;
+        return (
+          <div
+            key={p.problem_id}
+            className={cn(
+              "rounded-[--radius-sm] border px-3 py-2",
+              isActive
+                ? "border-primary/60 bg-primary-bg/40"
+                : "border-border-light bg-bg-subtle",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                Problem {p.sample_position + 1}
+              </div>
+              {isActive && (
+                <div className="text-[10px] font-bold uppercase tracking-wide text-primary">
+                  · current
+                </div>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-text-primary">
+              <MathText text={p.question} />
+            </div>
           </div>
-          {message.length > 0 && message.trim().length < MIN_MESSAGE_CHARS && (
-            <p className="mt-1 text-xs text-text-muted">
-              Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
-            </p>
-          )}
+        );
+      })}
+      {extraction && (
+        <div className="rounded-[--radius-sm] border border-border-light bg-bg-subtle px-3 py-2">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+            Your work (as we read it)
+          </div>
+          <div className="mt-1">
+            {/* Student-facing surface: show only the literal LaTeX
+             *  transcription, not the AI's narrative interpretation.
+             *  The student already confirmed we read the page right
+             *  on the prior screen; this panel's job is a reference
+             *  of what they actually wrote, not what we think they
+             *  did. Same principle as the confirm screen. */}
+            <ExtractionView
+              extraction={extraction}
+              variant="compact"
+              showProse={false}
+            />
+          </div>
         </div>
       )}
     </div>
