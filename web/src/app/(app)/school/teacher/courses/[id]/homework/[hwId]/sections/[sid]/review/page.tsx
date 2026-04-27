@@ -1285,15 +1285,23 @@ function SubmissionDetailPanel({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onSelectNext}
-          disabled={!nextStudent}
-          title={!nextStudent ? "No more students to review" : undefined}
-          className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
-        >
-          {nextStudent ? "Next student →" : "No more students"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Image stays one click away — promoted to the page header
+              so it's findable without scrolling to the problems card.
+              Lightbox markup lives inside the button component. */}
+          {detail.image_data && (
+            <StudentWorkThumbButton imageData={detail.image_data} />
+          )}
+          <button
+            type="button"
+            onClick={onSelectNext}
+            disabled={!nextStudent}
+            title={!nextStudent ? "No more students to review" : undefined}
+            className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
+          >
+            {nextStudent ? "Next student →" : "No more students"}
+          </button>
+        </div>
       </div>
 
       {/* Integrity verdict — the #1 trust signal. First full content
@@ -1315,17 +1323,13 @@ function SubmissionDetailPanel({
         onRegrade={onRegradeRequest}
       />
 
-      {/* Per-problem grading — the main scan-unit. Image thumbnail
-          lives inline in the header as a reference at point-of-use. */}
+      {/* Per-problem grading — the main scan-unit. The student-work
+          lightbox lives in the page header (one click away from any
+          problem). */}
       <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Problems · {totalProblems}
-          </p>
-          {detail.image_data && (
-            <StudentWorkThumbButton imageData={detail.image_data} />
-          )}
-        </div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Problems · {totalProblems}
+        </p>
         <div className="mt-3">
           <RubricSection
             rubric={rubric}
@@ -1503,6 +1507,26 @@ function ProblemGradeRow({
   // thrown away.
   const teacherOverrode =
     aiGrade !== null && current !== null && !isAiMatch;
+
+  // Question truncation. Long prompts (multi-paragraph word problems,
+  // big LaTeX matrices) push the actually-useful content (student
+  // work + answer key + AI verdict) below the fold and slow the
+  // teacher's per-problem scan. Default to a 3-line clamp; surface a
+  // "Show full prompt" toggle only when the rendered text actually
+  // overflows so short questions stay frictionless.
+  const [questionExpanded, setQuestionExpanded] = useState(false);
+  const [questionOverflows, setQuestionOverflows] = useState(false);
+  const questionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = questionRef.current;
+    if (!el) return;
+    // Wait one frame so MathText/KaTeX layout settles before we
+    // measure scrollHeight against the clamped clientHeight.
+    const raf = requestAnimationFrame(() => {
+      setQuestionOverflows(el.scrollHeight > el.clientHeight + 1);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [problem.question]);
   const aiGradeLabel = aiGrade
     ? aiGrade.score_status === "partial"
       ? `Partial ${Math.round(aiGrade.percent)}%`
@@ -1515,8 +1539,24 @@ function ProblemGradeRow({
     <div className="rounded-[--radius-md] border border-border-light bg-bg-base/40 p-4">
       <div className="flex items-baseline gap-2">
         <span className="text-xs font-bold text-text-muted">{problem.position}.</span>
-        <div className="min-w-0 flex-1 text-sm text-text-primary">
-          <MathText text={problem.question} />
+        <div className="min-w-0 flex-1">
+          <div
+            ref={questionRef}
+            className={`text-sm text-text-primary ${
+              questionExpanded ? "" : "line-clamp-3"
+            }`}
+          >
+            <MathText text={problem.question} />
+          </div>
+          {questionOverflows && (
+            <button
+              type="button"
+              onClick={() => setQuestionExpanded((v) => !v)}
+              className="mt-1 inline-flex items-center text-[11px] font-semibold text-primary hover:underline"
+            >
+              {questionExpanded ? "Hide full prompt ▴" : "Show full prompt ▾"}
+            </button>
+          )}
         </div>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
