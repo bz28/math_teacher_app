@@ -1897,11 +1897,10 @@ function IntegrityBanner({
           </div>
         </div>
         {/* Session digest sits below the banner so the totals don't
-         * crowd the disposition label. Hides itself on null. */}
-        <ActivityDigest
-          summary={activitySummary}
-          disposition={integrity?.disposition ?? null}
-        />
+         * crowd the disposition label. Hides itself on null.
+         * Always neutral-styled — banner above carries the verdict
+         * color; digest is supporting evidence, not a second alarm. */}
+        <ActivityDigest summary={activitySummary} />
       </div>
       {integrity && (
         <ConversationModal

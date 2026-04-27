@@ -267,28 +267,25 @@ export function ActivityTurnMarker({
  * precomputed activity_summary off the detail payload — single source
  * of truth, same data that drives the queue pill and per-turn markers.
  *
- * Visual treatment: neutral-styled for non-flag dispositions (signals
- * are context), amber-tinted border for flag_for_review (signals are
- * evidence the teacher is there to evaluate). The Activity pill is
- * separate (always shown) and carries the level color independently.
+ * Visual treatment: always neutral. The disposition banner above
+ * already carries the verdict color; the digest is supporting
+ * evidence and shouldn't shout. The Activity pill is the only colored
+ * element here, which is what makes the level scannable.
  */
 export function ActivityDigest({
   summary,
-  disposition,
 }: {
   summary: IntegrityActivitySummary | null;
-  disposition: IntegrityDisposition | null;
 }) {
   if (!summary) return null;
 
   const t = summary.totals;
-  const flagged = disposition === "flag_for_review";
   const notableCount = summary.notable_turns.length;
 
   // Subtitle below the header that translates the level into something
   // a teacher can act on without thinking about thresholds. Phrased as
-  // "X moments" rather than "X turns" because the marker is per-turn
-  // but the unit a teacher cares about is the event itself.
+  // "X moments" because the marker is per-turn but the unit a teacher
+  // cares about is the event itself.
   const subtitle =
     notableCount === 0
       ? "Nothing notable observed."
@@ -296,74 +293,42 @@ export function ActivityDigest({
         ? "1 notable moment in this conversation."
         : `${notableCount} notable moments in this conversation.`;
 
+  // The digest stays neutral regardless of disposition. The banner
+  // above already carries the verdict color (red/amber/green); making
+  // the digest match would stack two big colored panels and wash out
+  // both. Neutral here = "supporting evidence", not a second alarm.
+  // The Activity pill is the only color in this panel — that's what
+  // makes the level scannable.
   return (
-    <div
-      className={cn(
-        "rounded-[--radius-md] border px-3 py-2.5 text-xs",
-        // Flagged: stronger amber so the digest visually backs up the
-        // disposition. Non-flagged: neutral surface that lets the
-        // banner above carry the disposition color, and the digest
-        // sits as supporting evidence.
-        flagged
-          ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30"
-          : "border-border-light bg-surface",
-      )}
-    >
-      <div className="mb-1 flex items-start justify-between gap-2">
+    <div className="rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-3 text-xs">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p
-            className={cn(
-              "text-[11px] font-bold uppercase tracking-wide",
-              flagged
-                ? "text-amber-900 dark:text-amber-200"
-                : "text-text-primary",
-            )}
-          >
+          <p className="text-[11px] font-bold uppercase tracking-wide text-text-primary">
             Activity during this conversation
           </p>
-          <p
-            className={cn(
-              "text-[11px]",
-              flagged
-                ? "text-amber-800/80 dark:text-amber-300/80"
-                : "text-text-muted",
-            )}
-          >
+          <p className="mt-0.5 text-[11px] text-text-secondary">
             {subtitle}
           </p>
         </div>
         <ActivityLevelPill level={summary.level} className="shrink-0" />
       </div>
-      <dl
-        className={cn(
-          "mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5",
-          flagged
-            ? "text-amber-900 dark:text-amber-200"
-            : "text-text-secondary",
-        )}
-      >
-        <dt className="opacity-60">Tabbed out</dt>
+      <div className="mt-2.5 border-t border-border-light pt-2" />
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-text-primary">
+        <dt className="text-text-muted">Tabbed out</dt>
         <dd className="font-semibold">
           {t.tab_out_count === 0
             ? "never"
             : `${t.tab_out_count}× (${formatMs(t.tab_out_total_ms)} total)`}
         </dd>
 
-        <dt className="opacity-60">Paste events</dt>
+        <dt className="text-text-muted">Paste events</dt>
         <dd className="font-semibold">
           {t.paste_count === 0
             ? "none"
             : `${t.paste_count} (largest ${t.paste_largest_chars} chars, ${t.paste_total_chars} total)`}
         </dd>
       </dl>
-      <p
-        className={cn(
-          "mt-2 text-[10px] italic",
-          flagged
-            ? "text-amber-800/70 dark:text-amber-300/60"
-            : "text-text-muted",
-        )}
-      >
+      <p className="mt-2.5 text-[10px] text-text-muted">
         Reflects behavior during this conversation only — not the
         original homework session.
       </p>
@@ -492,10 +457,7 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
             </p>
           )}
 
-          <ActivityDigest
-            summary={data.activity_summary}
-            disposition={data.disposition}
-          />
+          <ActivityDigest summary={data.activity_summary} />
 
           {data.problems.map((p) => (
             <ProblemCard
