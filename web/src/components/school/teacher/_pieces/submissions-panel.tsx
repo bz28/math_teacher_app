@@ -494,9 +494,16 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
            * badge is showing (disposition or "Needs review"). Both
            * carry ml-auto, so this pill chains rightward without
            * needing its own. activity_summary is only populated when
-           * status=complete, which is the same gate as those badges. */}
+           * status=complete, which is the same gate as those badges.
+           * alwaysShow so the header pill matches ActivityDigest below
+           * — both surfaces sit inside the same detail panel and the
+           * teacher should get the "Activity: clean" reassurance from
+           * each. */}
         {data?.activity_summary && (
-          <ActivityPill count={data.activity_summary.notable_turns.length} />
+          <ActivityPill
+            count={data.activity_summary.notable_turns.length}
+            alwaysShow
+          />
         )}
       </button>
 
