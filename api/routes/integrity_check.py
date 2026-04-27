@@ -40,6 +40,7 @@ from api.models.integrity_check import (
 from api.models.question_bank import QuestionBankItem
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
+from api.services.bank import problem_ids_in_content
 
 router = APIRouter(tags=["integrity"])
 
@@ -319,17 +320,24 @@ async def _load_hw_positions(
 ) -> dict[uuid.UUID, int]:
     """Return {bank_item_id: 1-based HW position} for the assignment
     behind this submission. Same logic as pipeline.py:376 — the
-    1-based index in the assignment's problem_ids list. Used by
-    `_problem_summaries` so the student-facing chat labels the actual
-    HW problem number ("Problem 3") instead of the 1-based sample
-    index (which is always 1 when MAX_SAMPLE=1).
+    1-based index in the assignment's content.problem_ids list. Used
+    by `_problem_summaries` so the student-facing chat labels the
+    actual HW problem number ("Problem 3") instead of the 1-based
+    sample index (which is always 1 when MAX_SAMPLE=1).
+
+    `problem_ids` is stored inside `Assignment.content` (JSON, two
+    legacy shapes) — read it through `problem_ids_in_content` rather
+    than projecting a non-existent column.
     """
-    problem_ids = (await db.execute(
-        select(Assignment.problem_ids)
+    content = (await db.execute(
+        select(Assignment.content)
         .join(Submission, Submission.assignment_id == Assignment.id)
         .where(Submission.id == submission_id)
-    )).scalar_one_or_none() or []
-    return {bid: i + 1 for i, bid in enumerate(problem_ids)}
+    )).scalar_one_or_none()
+    return {
+        uuid.UUID(bid): i + 1
+        for i, bid in enumerate(problem_ids_in_content(content))
+    }
 
 
 async def _load_problem_questions(

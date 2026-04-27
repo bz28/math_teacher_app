@@ -238,10 +238,23 @@ async def bulk_assignment_stats(
     )).all()
     totals = {r.assignment_id: r.c for r in totals_rows}
 
-    # 2. Submission counts per assignment.
+    # 2. Submission counts per assignment. The SectionEnrollment join
+    # is load-bearing: a student can submit, then be unenrolled from
+    # the section. Their Submission row stays (we don't cascade the
+    # delete), but `total_students` (computed via SectionEnrollment
+    # above) drops them. Without this guard, submitted > total
+    # students — surfaced as "Submitted 3/2" on the inbox card.
+    # Same enrollment scope on both sides keeps the ratio honest.
     submitted_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
         .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
         .where(Submission.assignment_id.in_(assignment_ids), User.is_preview.is_(False))
         .group_by(Submission.assignment_id)
     )).all()
@@ -252,10 +265,19 @@ async def bulk_assignment_stats(
     # via Submission.status == "teacher_reviewed", but status now
     # tracks only the upload lifecycle; final_score is the honest
     # grading signal (written by teacher today, by AI in a future PR).
+    # Same SectionEnrollment guard as `submitted` above so the
+    # numerator stays in scope with `total_students`.
     graded_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
         .where(
             Submission.assignment_id.in_(assignment_ids),
             SubmissionGrade.final_score.is_not(None),
@@ -304,11 +326,21 @@ async def bulk_assignment_stats(
     )).all()
     approved = {r.originating_assignment_id: r.c for r in approved_rows}
 
-    # 5. Average final_score per assignment (ignores nulls).
+    # 5. Average final_score per assignment (ignores nulls). Same
+    # SectionEnrollment guard so the average reflects only currently
+    # enrolled students — an unenrolled student's score shouldn't
+    # skew the class average.
     avg_rows = (await db.execute(
         select(Submission.assignment_id, func.avg(SubmissionGrade.final_score).label("avg"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
         .where(
             Submission.assignment_id.in_(assignment_ids),
             SubmissionGrade.final_score.isnot(None),
@@ -1067,6 +1099,14 @@ async def submissions_inbox(
         ),
     ).cast(Integer).label("flagged")
 
+    # SectionEnrollment guard mirrors the assignment-level stats: a
+    # student who submitted then got unenrolled from the section
+    # should drop out of all per-section aggregates so submitted /
+    # graded / published / flagged stay in scope with `roster`
+    # (which is computed via SectionEnrollment above). Without this,
+    # the inbox card shows "Submitted 3/2" — numerator outpaces
+    # denominator because the unenrolled student's Submission row
+    # still exists.
     agg_rows = (await db.execute(
         select(
             Submission.assignment_id,
@@ -1084,6 +1124,13 @@ async def submissions_inbox(
             IntegrityCheckSubmission.submission_id == Submission.id,
         )
         .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
         .where(
             Submission.assignment_id.in_(assignment_ids),
             User.is_preview.is_(False),
