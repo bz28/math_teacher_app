@@ -72,7 +72,8 @@ class IntegrityCheckSubmission(Base):
 
     # Why the pipeline picked the problem it did — one of
     # verified_hardest_correct / struggling_easiest. Drives the
-    # agent's posture (see derive_agent_posture). For audit.
+    # agent's posture (see derive_agent_posture). For audit. Null
+    # when the submission was unreadable (no real selection ran).
     probe_selection_reason: Mapped[str | None] = mapped_column(
         String(32), nullable=True,
     )
@@ -159,7 +160,8 @@ class IntegrityCheckProblem(Base):
     # Why this problem was selected as a probe target. One of
     # verified_hardest_correct / struggling_easiest. Mirrors
     # IntegrityCheckSubmission.probe_selection_reason on the row
-    # the pipeline picked first (sample_position 0).
+    # the pipeline picked first (sample_position 0). Null on the
+    # unreadable path (no selection ran).
     selected_reason: Mapped[str | None] = mapped_column(
         String(32), nullable=True,
     )

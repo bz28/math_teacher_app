@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -201,12 +201,19 @@ async def extract_student_work(
 
 # ── Conversational agent ────────────────────────────────────────────
 
-# Posture fragments interpolated into AGENT_SYSTEM_PROMPT per chat.
-# The selector classifies the submission into a tier + posture (see
+# Local mirror of integrity_pipeline.AgentPosture. Duplicated to avoid
+# the circular import (integrity_pipeline imports from this module),
+# and kept in lockstep with POSTURE_PROMPT_FRAGMENTS' keys below.
+_AgentPosture = Literal["verified", "struggling_attempted", "struggling_blank"]
+
+
+# Posture fragments interpolated into AGENT_SYSTEM_PROMPT per chat at
+# the {student_signal} placeholder. The selector classifies the
+# submission into a tier + posture (see
 # api.core.integrity_pipeline.derive_agent_posture); the right fragment
 # tells the agent which lane it's in so its tone, expected dispositions,
 # and approach to probing all match the student's actual signal.
-POSTURE_PROMPT_FRAGMENTS: dict[str, str] = {
+POSTURE_PROMPT_FRAGMENTS: dict[_AgentPosture, str] = {
     "verified": (
         "STUDENT SIGNAL — VERIFIED:\n"
         "The student got at least one final answer correct on this homework, "
@@ -240,6 +247,9 @@ POSTURE_PROMPT_FRAGMENTS: dict[str, str] = {
 }
 
 
+# {student_signal} is filled by build_agent_system_prompt with one of
+# POSTURE_PROMPT_FRAGMENTS above. Any other literal `{...}` token in
+# this string would crash str.format — escape with `{{ }}` if needed.
 AGENT_SYSTEM_PROMPT = """\
 You are a math teacher meeting one-on-one with a student who just turned in \
 handwritten homework. Your goal is to determine, with strong confidence within \
@@ -357,13 +367,11 @@ AGENT_TOOL_SCHEMAS = [
 ]
 
 
-def build_agent_system_prompt(posture: str) -> str:
+def build_agent_system_prompt(posture: _AgentPosture) -> str:
     """Render AGENT_SYSTEM_PROMPT with the posture fragment slotted in.
 
-    `posture` is a value from the AgentPosture literal in
-    integrity_pipeline. Falls back to "verified" if the value is
-    unrecognized, since "verify the win" is the closest to neutral
-    teacher framing.
+    Falls back to "verified" if the value is unrecognized, since
+    "verify the win" is the closest to neutral teacher framing.
     """
     fragment = POSTURE_PROMPT_FRAGMENTS.get(
         posture, POSTURE_PROMPT_FRAGMENTS["verified"],

@@ -258,7 +258,7 @@ ATTEMPTED_STEP_THRESHOLD = 2
 # start the conversation. Lifted out of the inline string in
 # start_integrity_check so test cases can pin behavior to the right
 # template per posture.
-OPENER_TEMPLATES: dict[str, str] = {
+OPENER_TEMPLATES: dict[AgentPosture, str] = {
     "verified": (
         "Greet the student warmly and ask your first question about the "
         "sampled problem above, referencing a specific step they wrote."
@@ -282,7 +282,7 @@ OPENER_TEMPLATES: dict[str, str] = {
 # misbehaved. One variant per posture so the fallback never lands a
 # kid in the wrong tone. {hw_position} is the 1-based HW position of
 # the chosen problem.
-FALLBACK_OPENER_TEMPLATES: dict[str, str] = {
+FALLBACK_OPENER_TEMPLATES: dict[AgentPosture, str] = {
     "verified": (
         "Hi! I just took a look at your homework. Can you walk me through "
         "the first step you took on problem {hw_position}?"
@@ -298,7 +298,7 @@ FALLBACK_OPENER_TEMPLATES: dict[str, str] = {
 }
 
 
-def build_kickoff_message(posture: str, briefing: str) -> str:
+def build_kickoff_message(posture: AgentPosture, briefing: str) -> str:
     """Compose the agent's first user message: per-problem briefing
     plus the posture-specific opener instruction. Falls back to the
     verified opener for unrecognized postures."""
@@ -306,7 +306,7 @@ def build_kickoff_message(posture: str, briefing: str) -> str:
     return briefing + "\n\nNow begin the conversation. " + template
 
 
-def build_fallback_opener(posture: str, hw_position: int) -> str:
+def build_fallback_opener(posture: AgentPosture, hw_position: int) -> str:
     """Posture-keyed canned opener for the agent-error fallback path."""
     template = FALLBACK_OPENER_TEMPLATES.get(
         posture, FALLBACK_OPENER_TEMPLATES["verified"],
@@ -755,23 +755,44 @@ async def start_integrity_check(
         )
 
     confidence = extraction.get("confidence", 0.0)
-    is_unreadable = confidence < UNREADABLE_THRESHOLD
 
-    # Tier-aware probe selection. On unreadable submissions there's
-    # no usable signal for correctness, so we short-circuit to an
-    # empty correctness map — the selector falls into the struggling
-    # tier and picks the easiest problem. The per-problem row gets
-    # marked SKIPPED_UNREADABLE below regardless, so the chat doesn't
-    # actually run for unreadable; selection_reason is just for the
-    # teacher record.
-    correct_by_id: dict[uuid.UUID, bool] = (
-        {bid: False for bid in items_by_id}
-        if is_unreadable
-        else await check_answer_correctness(
-            extraction, items_by_id, hw_position_by_id, user_id=user_id,
+    # Unreadable submissions short-circuit before tier classification:
+    # no usable correctness signal means there's nothing to probe and
+    # the chat will never start. Persist a SKIPPED_UNREADABLE row scoped
+    # to one (arbitrary, deterministic) candidate so the teacher's
+    # "What the reader got" panel still has something to render, then
+    # bail. selection_reason is null — there was no real selection.
+    if confidence < UNREADABLE_THRESHOLD:
+        logger.info(
+            "Handwriting unreadable (confidence=%.2f) for submission %s",
+            confidence, submission_id,
         )
+        check = IntegrityCheckSubmission(
+            submission_id=submission_id,
+            status=STATUS_SKIPPED_UNREADABLE,
+            overall_summary="Handwriting was unreadable — no questions asked.",
+        )
+        db.add(check)
+        await db.flush()
+        chosen_bid = candidate_uuids[0]
+        problem_slice = _slice_extraction_for_problem(
+            extraction, hw_position_by_id[chosen_bid],
+        )
+        db.add(IntegrityCheckProblem(
+            integrity_check_submission_id=check.id,
+            bank_item_id=chosen_bid,
+            sample_position=0,
+            status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
+            student_work_extraction=problem_slice,
+        ))
+        return
+
+    is_correct_by_bank_id = await check_answer_correctness(
+        extraction, items_by_id, hw_position_by_id, user_id=user_id,
     )
-    selection = select_probe_problem(items_by_id, candidate_uuids, correct_by_id)
+    selection = select_probe_problem(
+        items_by_id, candidate_uuids, is_correct_by_bank_id,
+    )
     if selection is None:
         # Every primary id was deleted between publish and submit.
         # Don't create a stuck row — let the teacher handle the
@@ -786,87 +807,43 @@ async def start_integrity_check(
     db.add(check)
     await db.flush()
 
-    # Single-problem path (MAX_SAMPLE=1). Wrapped in a list so the
-    # MAX_SAMPLE > 1 v2 escalation can return multiple picks without
-    # changing this surrounding shape. sample_position 0 is the
-    # tier-aware pick; future sibling picks would be 1, 2.
-    picked_ids: list[uuid.UUID] = [selection.bank_item_id]
-
-    if is_unreadable:
-        logger.info(
-            "Handwriting unreadable (confidence=%.2f) for submission %s",
-            confidence, submission_id,
-        )
-        for sample_position, bid in enumerate(picked_ids):
-            # Unreadable path: still persist an extraction slice on
-            # the row for the teacher's "What the reader got" panel,
-            # but scoped to this problem.
-            problem_slice = _slice_extraction_for_problem(
-                extraction, hw_position_by_id.get(bid, sample_position + 1),
-            )
-            db.add(IntegrityCheckProblem(
-                integrity_check_submission_id=check.id,
-                bank_item_id=bid,
-                sample_position=sample_position,
-                status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
-                student_work_extraction=problem_slice,
-                selected_reason=selection.selection_reason,
-            ))
-        # Unreadable: status carries the meaning, disposition stays
-        # null. Teacher dashboard surfaces this bucket separately
-        # from the four integrity dispositions.
-        check.status = STATUS_SKIPPED_UNREADABLE
-        check.overall_summary = "Handwriting was unreadable — no questions asked."
-        return
-
-    problem_rows: list[IntegrityCheckProblem] = []
-    for sample_position, bid in enumerate(picked_ids):
-        # Slice the extraction down to just this problem's work
-        # before persisting. Row carries only the sampled problem's
-        # steps + final answer, plus any unattributed scratchwork.
-        problem_slice = _slice_extraction_for_problem(
-            extraction, hw_position_by_id.get(bid, sample_position + 1),
-        )
-        row = IntegrityCheckProblem(
-            integrity_check_submission_id=check.id,
-            bank_item_id=bid,
-            sample_position=sample_position,
-            status=PROBLEM_STATUS_PENDING,
-            student_work_extraction=problem_slice,
-            selected_reason=selection.selection_reason,
-        )
-        db.add(row)
-        problem_rows.append(row)
+    # Slice the extraction down to just the chosen problem's work
+    # before persisting. Row carries only the sampled problem's steps +
+    # final answer, plus any unattributed scratchwork.
+    chosen_hw_position = hw_position_by_id[selection.bank_item_id]
+    problem_slice = _slice_extraction_for_problem(extraction, chosen_hw_position)
+    chosen_row = IntegrityCheckProblem(
+        integrity_check_submission_id=check.id,
+        bank_item_id=selection.bank_item_id,
+        sample_position=0,
+        status=PROBLEM_STATUS_PENDING,
+        student_work_extraction=problem_slice,
+        selected_reason=selection.selection_reason,
+    )
+    db.add(chosen_row)
     await db.flush()
 
     # Derive the agent's posture from the tier + how much real work
     # the student wrote on the chosen problem. Posture conditions the
     # agent's tone (system prompt fragment) and the opener template
     # — see derive_agent_posture + the kickoff message below.
-    chosen_slice = problem_rows[0].student_work_extraction or {}
-    attempted_step_count = len(chosen_slice.get("steps") or [])
+    attempted_step_count = len(problem_slice.get("steps") or [])
     posture = derive_agent_posture(selection.tier, attempted_step_count)
 
-    problems_for_prompt = [
+    briefing = build_problems_briefing([
         {
-            "problem_id": str(r.id),
-            "sample_position": r.sample_position,
+            "problem_id": str(chosen_row.id),
+            "sample_position": 0,
             # 1-based homework position — what the student sees in the
-            # chat reference panel as "Problem N". Same dict the
-            # extraction slicer uses (hw_position_by_id above), so the
-            # agent's labeling is end-to-end consistent with what the
-            # student is shown.
-            "hw_position": hw_position_by_id.get(
-                r.bank_item_id, r.sample_position + 1,
-            ),
-            "question": items_by_id[r.bank_item_id].question,
-            "correct_final_answer": items_by_id[r.bank_item_id].final_answer,
-            "extraction": r.student_work_extraction,
+            # chat reference panel as "Problem N". Keeps the agent's
+            # labeling end-to-end consistent with the student's view.
+            "hw_position": chosen_hw_position,
+            "question": items_by_id[selection.bank_item_id].question,
+            "correct_final_answer": items_by_id[selection.bank_item_id].final_answer,
+            "extraction": problem_slice,
             "verdict_status": "pending",
         }
-        for r in problem_rows
-    ]
-    briefing = build_problems_briefing(problems_for_prompt)
+    ])
     kickoff_user_message = build_kickoff_message(posture, briefing)
 
     # Try to generate an opening. Fall back to a canned opener if the
@@ -889,8 +866,7 @@ async def start_integrity_check(
         # Posture-keyed canned fallback so the opener never lands a
         # kid in the wrong tone. hw_position keeps "Problem N" matching
         # what the student sees in the chat reference panel.
-        first_hw_position = hw_position_by_id.get(selection.bank_item_id, 1)
-        opening_text = build_fallback_opener(posture, first_hw_position)
+        opening_text = build_fallback_opener(posture, chosen_hw_position)
 
     db.add(IntegrityConversationTurn(
         integrity_check_submission_id=check.id,
