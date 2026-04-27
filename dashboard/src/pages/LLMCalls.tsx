@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -366,6 +366,16 @@ export default function LLMCalls() {
                             submissionId={c.submission_id}
                             onSubmissionClick={handleSubmissionChipClick}
                           />
+                          {c.submission_id && (
+                            <div style={{ marginTop: 8 }}>
+                              <Link
+                                to={`/admin/submissions/${c.submission_id}/trace`}
+                                style={{ fontSize: 13, fontWeight: 600 }}
+                              >
+                                Open flight recorder for this submission →
+                              </Link>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
