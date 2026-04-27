@@ -217,17 +217,28 @@ def _differentiation_score(item: QuestionBankItem) -> tuple[int, int]:
 # answer of "$6$" matches a student answer of "6" without an LLM call.
 # Anything more elaborate (LaTeX command synonyms, fraction-vs-decimal,
 # implicit multiplication) falls through to the LLM equivalence call.
+# Order matters: longer wrappers must come first so `$$x$$` strips both
+# dollars in one pass instead of leaving the inner `$x$`.
 _TRIVIAL_LATEX_WRAPPERS: tuple[str, ...] = ("$$", "$")
 
 
-def _normalize_answer_for_trivial_match(s: str) -> str:
-    """Strip whitespace and the simplest LaTeX delimiters."""
-    s = s.strip()
+def _normalize_answer_for_trivial_match(answer: str) -> str:
+    """Strip whitespace + the outermost balanced LaTeX delimiter pair.
+
+    Only matched, balanced wrappers are stripped (one pass, longest
+    wrapper wins via _TRIVIAL_LATEX_WRAPPERS ordering). Anything fancier
+    is left for the LLM equivalence call to compare.
+    """
+    answer = answer.strip()
     for wrapper in _TRIVIAL_LATEX_WRAPPERS:
-        if s.startswith(wrapper) and s.endswith(wrapper) and len(s) > 2 * len(wrapper):
-            s = s[len(wrapper):-len(wrapper)].strip()
+        if (
+            answer.startswith(wrapper)
+            and answer.endswith(wrapper)
+            and len(answer) > 2 * len(wrapper)
+        ):
+            answer = answer[len(wrapper):-len(wrapper)].strip()
             break
-    return s
+    return answer
 
 
 def _student_answer_by_position(extraction: dict[str, Any]) -> dict[int, str]:
@@ -270,8 +281,9 @@ def _build_equivalence_user_message(
         lines.append(f"  Answer key: {key}")
         lines.append("")
     lines.append(
-        "Return one entry per problem in the `results` array, using the "
-        "problem position as the key."
+        "Return one entry per problem in the `results` array. Tag each "
+        "entry with its `problem_position` field; entries may appear in "
+        "any order."
     )
     return "\n".join(lines)
 
@@ -304,7 +316,9 @@ async def check_answer_correctness(
     """
     student_by_position = _student_answer_by_position(extraction)
 
-    correct: dict[uuid.UUID, bool] = {bid: False for bid in candidates}
+    is_correct_by_bank_id: dict[uuid.UUID, bool] = {
+        bid: False for bid in candidates
+    }
     uncertain: list[tuple[uuid.UUID, int, str, str]] = []
 
     for bid, item in candidates.items():
@@ -320,13 +334,13 @@ async def check_answer_correctness(
             _normalize_answer_for_trivial_match(student_answer)
             == _normalize_answer_for_trivial_match(bank_answer)
         ):
-            correct[bid] = True
+            is_correct_by_bank_id[bid] = True
             continue
 
         uncertain.append((bid, hw_pos, student_answer, bank_answer))
 
     if not uncertain:
-        return correct
+        return is_correct_by_bank_id
 
     user_message = _build_equivalence_user_message(
         [(pos, student, key) for _, pos, student, key in uncertain],
@@ -335,8 +349,9 @@ async def check_answer_correctness(
         result = await call_claude_json(
             system_prompt=(
                 "You are a math grader checking equivalence of final "
-                "answers. Return one entry per problem in the order "
-                "given, using the problem_position as the key."
+                "answers. Return one entry per problem, tagging each "
+                "with its `problem_position` field. Entries may be in "
+                "any order."
             ),
             user_message=user_message,
             mode=LLMMode.INTEGRITY_ANSWER_EQUIVALENCE,
@@ -349,13 +364,10 @@ async def check_answer_correctness(
             "answer-equivalence LLM call failed; treating uncertain "
             "pairs as wrong (tier may downgrade to struggling)",
         )
-        return correct
+        return is_correct_by_bank_id
 
-    # call_claude_json returns dict[str, object]; guard each layer so
-    # a malformed response (missing key, non-list, non-dict entries,
-    # bools-as-ints from a future schema slip) drops cleanly instead
-    # of throwing — uncertain pairs stay False and the tier degrades
-    # to struggling rather than wedging the check.
+    # Defensive parse: a malformed response degrades to "all uncertain
+    # pairs stay False" rather than wedging the check.
     raw_results = result.get("results")
     equivalent_by_position: dict[int, bool] = {}
     if isinstance(raw_results, list):
@@ -373,9 +385,9 @@ async def check_answer_correctness(
 
     for bid, pos, _, _ in uncertain:
         if equivalent_by_position.get(pos):
-            correct[bid] = True
+            is_correct_by_bank_id[bid] = True
 
-    return correct
+    return is_correct_by_bank_id
 
 
 def select_probe_problems(
