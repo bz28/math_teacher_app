@@ -1,27 +1,29 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  api,
-  type HealthCounts,
-  type SchoolOverviewData,
-} from "../lib/api";
+import { api, type SchoolOverviewData } from "../lib/api";
 import StatCard from "../components/StatCard";
 
 // Color palette tracks LLM-call function categories so the same
 // function reads consistently across the by-function bar and any
-// future per-function drill-down.
+// future per-function drill-down. Hues picked to stay distinguishable
+// for deutan/protan color vision: integrity_agent and
+// integrity_answer_equivalence don't sit on adjacent indigo/violet
+// values that are commonly confused.
 const FUNCTION_COLORS: Record<string, string> = {
   vision_extract: "#0ea5e9",
   ai_grading: "#10b981",
   integrity_agent: "#6366f1",
-  integrity_answer_equivalence: "#8b5cf6",
+  integrity_answer_equivalence: "#ec4899",
 };
 
+// Disposition palette spaces out the two warning buckets
+// (needs_practice, flag_for_review) on opposite sides of the wheel
+// so the deutan/protan red-amber pair isn't adjacent in the bar.
 const DISPOSITION_COLORS: Record<string, string> = {
   pass: "#10b981",
-  needs_practice: "#f59e0b",
-  tutor_pivot: "#3b82f6",
-  flag_for_review: "#ef4444",
+  needs_practice: "#0ea5e9",
+  tutor_pivot: "#a855f7",
+  flag_for_review: "#dc2626",
   skipped_unreadable: "#64748b",
 };
 
@@ -47,23 +49,6 @@ function colorFor(palette: Record<string, string>, key: string): string {
   return palette[key] ?? "#94a3b8";
 }
 
-function Delta({ now, prev }: { now: number; prev: number }) {
-  if (prev === 0 && now === 0) {
-    return <span className="delta delta-neutral">—</span>;
-  }
-  const diff = now - prev;
-  if (diff === 0) return <span className="delta delta-neutral">flat</span>;
-  const sign = diff > 0 ? "↑" : "↓";
-  // We deliberately render the magnitude (not the percent) for small
-  // counts — going from 1 to 2 active classes is more informative as
-  // "+1" than as "+100%".
-  return (
-    <span className={`delta ${diff > 0 ? "delta-up" : "delta-down"}`}>
-      {sign} {Math.abs(diff)}
-    </span>
-  );
-}
-
 function HealthCell({
   label,
   now,
@@ -71,20 +56,19 @@ function HealthCell({
 }: {
   label: string;
   now: number;
-  prev: HealthCounts[keyof HealthCounts];
+  prev: number;
 }) {
-  return (
-    <StatCard
-      label={label}
-      value={now}
-      sub={
-        // StatCard's `sub` is a string; React node would need a
-        // bigger refactor. We render the delta inline as text so it
-        // stays one component.
-        prev === undefined ? undefined : `vs ${prev} last week`
-      }
-    />
-  );
+  // Embed the directional delta directly under the value so the user
+  // gets "active classes 5 ↑ +1 vs last week" in one read — this is
+  // why we don't render a separate trend-summary card below.
+  let sub: string;
+  if (prev === 0 && now === 0) sub = "no activity last week";
+  else if (now === prev) sub = `flat vs ${prev} last week`;
+  else {
+    const arrow = now > prev ? "↑" : "↓";
+    sub = `${arrow} ${Math.abs(now - prev)} vs ${prev} last week`;
+  }
+  return <StatCard label={label} value={now} sub={sub} />;
 }
 
 function ByFunctionBar({
@@ -150,23 +134,50 @@ function Sparkline({
       return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
+  const first = points[0];
+  const last = points[points.length - 1];
+  const ariaLabel =
+    `12-week spend trend: ${points.length} weeks, ` +
+    `${first.week_start ?? "earliest"} ${fmtCost(first.cost)} → ` +
+    `${last.week_start ?? "latest"} ${fmtCost(last.cost)}, ` +
+    `peak ${fmtCost(max)}.`;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="sparkline">
-      <path d={path} fill="none" stroke="#6366f1" strokeWidth={2} />
-      {points.map((p, i) => (
-        <circle
-          key={i}
-          cx={i * dx}
-          cy={h - (p.cost / max) * h}
-          r={2}
-          fill="#6366f1"
-        >
-          <title>
-            {p.week_start ?? "?"} — {fmtCost(p.cost)}
-          </title>
-        </circle>
-      ))}
-    </svg>
+    <>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="sparkline"
+        role="img"
+        aria-label={ariaLabel}
+      >
+        <path d={path} fill="none" stroke="#6366f1" strokeWidth={2} />
+        {points.map((p, i) => (
+          <circle
+            key={i}
+            cx={i * dx}
+            cy={h - (p.cost / max) * h}
+            r={2}
+            fill="#6366f1"
+          >
+            <title>
+              {p.week_start ?? "?"} — {fmtCost(p.cost)}
+            </title>
+          </circle>
+        ))}
+      </svg>
+      <details className="sparkline-table">
+        <summary>Show weekly values</summary>
+        <table className="mini-table">
+          <tbody>
+            {points.map((p, i) => (
+              <tr key={i}>
+                <td>{p.week_start ?? "?"}</td>
+                <td className="mini-table-value">{fmtCost(p.cost)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </>
   );
 }
 
@@ -253,8 +264,6 @@ export default function SchoolOverview() {
   const { cost, top_spenders, quality, health, is_internal } = data;
   const monthDelta = cost.this_month - cost.last_month;
   const monthDeltaSign = monthDelta > 0 ? "↑" : monthDelta < 0 ? "↓" : "→";
-  const monthDeltaClass =
-    monthDelta > 0 ? "delta-up" : monthDelta < 0 ? "delta-down" : "delta-neutral";
 
   return (
     <div>
@@ -300,7 +309,7 @@ export default function SchoolOverview() {
         <div className="overview-card">
           <div className="overview-card-title">Spend trend (12 weeks)</div>
           <Sparkline points={cost.trend_12_weeks} />
-          <div className={`delta ${monthDeltaClass}`} style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>
             {cost.trend_12_weeks.length} weeks of data
           </div>
         </div>
@@ -438,7 +447,7 @@ export default function SchoolOverview() {
             <button
               className="link-btn"
               onClick={() =>
-                navigate(`/school/${schoolId}/llm-calls`)
+                navigate(`/school/${schoolId}/llm-calls?tab=failures`)
               }
               style={{ marginTop: 8 }}
             >
@@ -473,6 +482,11 @@ export default function SchoolOverview() {
                       fontWeight: t.rate >= 0.1 ? 700 : 400,
                     }}
                   >
+                    {t.rate >= 0.1 && (
+                      <span aria-label="High unreadable rate" title="High unreadable rate">
+                        ⚠️{" "}
+                      </span>
+                    )}
                     {fmtPercent(t.rate)}
                   </td>
                 </tr>
@@ -512,46 +526,6 @@ export default function SchoolOverview() {
               now={health.this_week.submissions}
               prev={health.last_week.submissions}
             />
-          </div>
-          <div className="overview-card" style={{ marginTop: 12 }}>
-            <div className="overview-card-title">Trend vs last week</div>
-            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <div>
-                Classes:{" "}
-                <Delta
-                  now={health.this_week.active_classes}
-                  prev={health.last_week.active_classes}
-                />
-              </div>
-              <div>
-                Teachers:{" "}
-                <Delta
-                  now={health.this_week.active_teachers}
-                  prev={health.last_week.active_teachers}
-                />
-              </div>
-              <div>
-                Students:{" "}
-                <Delta
-                  now={health.this_week.active_students}
-                  prev={health.last_week.active_students}
-                />
-              </div>
-              <div>
-                HWs:{" "}
-                <Delta
-                  now={health.this_week.hws_published}
-                  prev={health.last_week.hws_published}
-                />
-              </div>
-              <div>
-                Submissions:{" "}
-                <Delta
-                  now={health.this_week.submissions}
-                  prev={health.last_week.submissions}
-                />
-              </div>
-            </div>
           </div>
         </>
       )}

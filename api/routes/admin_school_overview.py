@@ -15,6 +15,7 @@ the no-school bucket.
 """
 
 import calendar
+import uuid as uuid_lib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -24,7 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
-from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.course import Course
 from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.llm_call import LLMCall
@@ -77,6 +83,15 @@ async def school_overview(
     if is_internal:
         school_name = "Internal (no-school)"
     else:
+        # Reject malformed UUIDs up front so the lookup returns a
+        # clean 404 instead of bubbling asyncpg's invalid-text-
+        # representation error as a 500.
+        try:
+            uuid_lib.UUID(school_id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=404, detail="School not found",
+            ) from e
         row = (await db.execute(
             select(School.name).where(School.id == school_id)
         )).first()
@@ -141,16 +156,25 @@ async def school_overview(
         .order_by("week")
     )).all()
 
-    # Cost per submission (this month, school-wide).
-    distinct_subs_this_month = (await db.execute(
-        select(func.count(func.distinct(LLMCall.submission_id))).where(
+    # Cost per submission (this month, school-wide). Both sides of
+    # the ratio are scoped to calls with a non-null submission_id —
+    # otherwise non-submission calls (admin tools, prompt tests)
+    # would inflate the numerator without contributing to the
+    # denominator.
+    submission_cost_stats = (await db.execute(
+        select(
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
+            func.count(func.distinct(LLMCall.submission_id)).label("subs"),
+        ).where(
             llm_school,
             LLMCall.created_at >= this_month_start,
             LLMCall.submission_id.isnot(None),
         )
-    )).scalar() or 0
+    )).first()
+    submission_cost = submission_cost_stats.cost if submission_cost_stats else 0.0
+    distinct_subs_this_month = submission_cost_stats.subs if submission_cost_stats else 0
     cost_per_submission = (
-        this_month_cost / distinct_subs_this_month
+        submission_cost / distinct_subs_this_month
         if distinct_subs_this_month
         else 0.0
     )
@@ -499,14 +523,20 @@ async def _health_counts(
         )
     )).scalar() or 0
 
+    # "Published" = AssignmentSection.published_at is set in the
+    # window. Counting Assignment.created_at would include drafts that
+    # never went out and miss assignments created weeks ago that
+    # finally got published this week. We dedupe assignment_id so an
+    # assignment published to multiple sections counts once.
     hws_published = (await db.execute(
-        select(func.count())
-        .select_from(Assignment)
+        select(func.count(func.distinct(AssignmentSection.assignment_id)))
+        .select_from(AssignmentSection)
+        .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
         .join(Course, Course.id == Assignment.course_id)
         .where(
             Course.school_id == school_id,
-            Assignment.created_at >= window_start,
-            Assignment.created_at < window_end,
+            AssignmentSection.published_at >= window_start,
+            AssignmentSection.published_at < window_end,
         )
     )).scalar() or 0
 
