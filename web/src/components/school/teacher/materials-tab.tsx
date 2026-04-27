@@ -405,14 +405,23 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     rowState.kind === "deletingFolder"
       ? units.find((u) => u.id === rowState.id) ?? null
       : null;
-  const folderDeleteFileCount = folderBeingDeleted
-    ? docs.filter((d) => {
-        if (d.unit_id === folderBeingDeleted.id) return true;
-        // Include files inside subfolders.
-        const sub = units.find((u) => u.id === d.unit_id);
-        return sub?.parent_id === folderBeingDeleted.id;
-      }).length
-    : 0;
+  // Roll up own counts + direct-subfolder counts so the dialog matches
+  // the backend's `affected_unit_ids` scope in
+  // api/routes/teacher_units.py:delete_unit (this unit + its subfolders).
+  const folderDeleteCounts = folderBeingDeleted
+    ? units.reduce(
+        (acc, u) => {
+          if (u.id !== folderBeingDeleted.id && u.parent_id !== folderBeingDeleted.id) {
+            return acc;
+          }
+          return {
+            documents: acc.documents + u.document_count,
+            questions: acc.questions + u.question_count,
+          };
+        },
+        { documents: 0, questions: 0 },
+      )
+    : { documents: 0, questions: 0 };
 
   return (
     <div>
@@ -455,7 +464,16 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             onStartRename={(id) => setRowState({ kind: "renaming", id })}
             onSubmitRename={renameUnit}
             onCancelRow={() => setRowState({ kind: "idle" })}
-            onStartDeleteFolder={(id) => setRowState({ kind: "deletingFolder", id })}
+            onStartDeleteFolder={(id) => {
+              // Refresh counts before opening so the dialog can't show
+              // "empty" against stale data (e.g. question-bank items
+              // generated outside this tab). The dialog renders against
+              // whatever's in `units` at paint time and will update when
+              // reload resolves; if it under-counted, the user sees the
+              // blocked state appear shortly after open.
+              setRowState({ kind: "deletingFolder", id });
+              void reload();
+            }}
             onAddSub={(parentId) => setShowNewUnit({ parentId })}
           />
 
@@ -544,7 +562,8 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       <DeleteFolderDialog
         open={rowState.kind === "deletingFolder"}
         folderName={folderBeingDeleted?.name ?? ""}
-        fileCount={folderDeleteFileCount}
+        documentCount={folderDeleteCounts.documents}
+        questionCount={folderDeleteCounts.questions}
         busy={busy}
         onClose={() => setRowState({ kind: "idle" })}
         onConfirm={() => {

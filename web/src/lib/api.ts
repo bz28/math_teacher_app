@@ -671,6 +671,13 @@ export interface TeacherUnit {
   position: number;
   parent_id: string | null;
   created_at: string;
+  /** Number of documents directly attached to this unit. The teacher's
+   *  delete-folder dialog rolls up own + direct subfolders to mirror
+   *  the backend's "block delete if any descendant has content" check. */
+  document_count: number;
+  /** Number of question-bank items directly attached to this unit.
+   *  Same rollup story as document_count. */
+  question_count: number;
 }
 
 export interface TeacherAssignment {

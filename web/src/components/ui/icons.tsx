@@ -88,6 +88,16 @@ export function XIcon({ className, strokeWidth = 2.5 }: IconProps) {
   );
 }
 
+export function AlertTriangleIcon({ className, strokeWidth = 2.5 }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 1.5 21h21z" />
+      <line x1="12" y1="10" x2="12" y2="15" />
+      <line x1="12" y1="18" x2="12.01" y2="18" />
+    </svg>
+  );
+}
+
 export function UploadIcon({ className, strokeWidth = 2 }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
