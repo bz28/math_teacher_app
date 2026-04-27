@@ -9,6 +9,7 @@ import { api, type LLMCallsData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
 import { Pagination } from "../components/Pagination";
+import { useScope } from "../lib/scope";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
@@ -17,6 +18,8 @@ const PAGE_SIZE = 25;
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { apiSchoolFilter } = useScope();
+  const schoolFilter = apiSchoolFilter() ?? "";
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
@@ -32,10 +35,17 @@ export default function LLMCalls() {
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
+      school_id: schoolFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then(setData);
-  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
+
+  // Reset offset when scope flips so we don't land past the end of
+  // the new scope's row count.
+  useEffect(() => {
+    setOffset(0);
+  }, [schoolFilter]);
 
   // Reset to first page when filters change
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };

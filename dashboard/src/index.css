@@ -50,6 +50,54 @@ body {
   margin-top: 2px;
 }
 
+/* Scope picker — top of the sidebar, drives every page's filtering.
+   "Admin" = god-view, "Internal" = no-school bucket, real schools
+   below. Sticks visually to the brand strip above so it reads as
+   "what slice of the world am I looking at right now". */
+.scope-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 4px 16px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scope-picker-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.scope-picker-select {
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'><path d='M3 4.5l3 3 3-3' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.scope-picker-select:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.scope-picker-select option,
+.scope-picker-select optgroup {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
 .nav-link {
   display: flex;
   align-items: center;
