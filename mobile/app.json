@@ -21,11 +21,14 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.veradicai.app",
-      "buildNumber": "1",
+      "buildNumber": "4",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
@@ -43,6 +46,11 @@
           "photosPermission": "Allow Veradic to access your photos to scan math problems and handwritten work for tutoring feedback."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f5c95a79-de77-4e57-910c-bcd8ba2a805e"
+      }
+    }
   }
 }
