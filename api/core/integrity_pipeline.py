@@ -24,14 +24,14 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Literal, NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_ai import (
-    AGENT_SYSTEM_PROMPT,
     UNREADABLE_THRESHOLD,
+    build_agent_system_prompt,
     build_problems_briefing,
     extract_student_work,
     run_agent_turn,
@@ -111,14 +111,11 @@ DISPOSITION_VALUES = frozenset({
     DISPOSITION_FLAG_FOR_REVIEW,
 })
 
-# Why the pipeline picked the problem(s) it did (stored on the
-# submission + the per-problem selected_reason). v1 only uses the
-# first two — the anomaly_* values are reserved for a v2 copy-smell
-# detector (see plan section on deferred anomaly detection).
-SELECTION_REASON_HIGHEST_DIFFERENTIATION = "highest_differentiation"
-SELECTION_REASON_SKIP_ALL_WRONG = "skip_all_wrong"
-SELECTION_REASON_ANOMALY_COPIED = "anomaly_copied"           # v2
-SELECTION_REASON_ANOMALY_WRONG_METHOD = "anomaly_wrong_method"  # v2
+# Why the pipeline picked the problem it did (stored on the submission
+# + the per-problem selected_reason). The two reasons map to the two
+# selector tiers — see select_probe_problem.
+SELECTION_REASON_VERIFIED_HARDEST_CORRECT = "verified_hardest_correct"
+SELECTION_REASON_STRUGGLING_EASIEST = "struggling_easiest"
 
 # Inline variant disambiguator result, set by finish_check when the
 # agent used generate_variant to resolve an ambiguous case.
@@ -184,8 +181,8 @@ _DIFFICULTY_RANK: dict[str, int] = {
 }
 
 
-def _differentiation_score(item: QuestionBankItem) -> tuple[int, int]:
-    """Higher score = better probe target.
+def _problem_difficulty_score(item: QuestionBankItem) -> tuple[int, int]:
+    """Higher score = harder problem.
 
     Primary: difficulty tier — hard > medium > easy. This is the
     authoritative signal for "how hard is this problem" (set by the
@@ -196,12 +193,123 @@ def _differentiation_score(item: QuestionBankItem) -> tuple[int, int]:
     step?"). NOT a difficulty measure — a long arithmetic problem
     has many steps but isn't conceptually hard. Only used after
     difficulty ties.
+
+    Used by select_probe_problem in both directions: max() to pick
+    the hardest correct (verified tier), min() to pick the easiest
+    (struggling tier).
     """
     difficulty_rank = _DIFFICULTY_RANK.get(
         (item.difficulty or "medium").lower(), 1,
     )
     steps_count = len(item.solution_steps or [])
     return (difficulty_rank, steps_count)
+
+
+# ── Tier-aware probe selection ──────────────────────────────────────
+# Drives WHICH problem the integrity chat will probe + downstream
+# WHICH tone the agent takes.
+
+SubmissionTier = Literal["verified", "struggling"]
+"""Classifies the submission shape — drives probe selection.
+
+  - verified: student got at least one final answer correct. Probe
+    the hardest correct one to verify they actually understand.
+  - struggling: zero correct final answers. Probe the easiest problem
+    to find where the foundation cracks.
+"""
+
+
+AgentPosture = Literal[
+    "verified",
+    "struggling_attempted",
+    "struggling_blank",
+]
+"""Refines the tier with the student's effort level — drives the
+agent's tone (system prompt fragment + opener template).
+
+  - verified: maps 1-1 from SubmissionTier="verified".
+  - struggling_attempted: tier="struggling" + the student wrote
+    real work (>= ATTEMPTED_STEP_THRESHOLD steps tagged to the
+    chosen problem). Agent anchors on the attempt.
+  - struggling_blank: tier="struggling" + the student barely
+    engaged. Agent anchors on the problem text, not non-existent
+    steps.
+"""
+
+
+class ProbeSelection(NamedTuple):
+    """Result of select_probe_problem — the chosen bank item, the
+    submission tier that drove the choice, and the selection_reason
+    persisted on IntegrityCheckSubmission for the teacher panel."""
+    bank_item_id: uuid.UUID
+    tier: SubmissionTier
+    selection_reason: str
+
+
+# Min steps written for the chosen problem to count as "attempted"
+# rather than "blank/minimal." Sub-variant within the struggling tier.
+ATTEMPTED_STEP_THRESHOLD = 2
+
+
+# Opening-question templates appended to the agent's first user
+# message (after the briefing). Each template tells the agent how to
+# start the conversation. Lifted out of the inline string in
+# start_integrity_check so test cases can pin behavior to the right
+# template per posture.
+OPENER_TEMPLATES: dict[str, str] = {
+    "verified": (
+        "Greet the student warmly and ask your first question about the "
+        "sampled problem above, referencing a specific step they wrote."
+    ),
+    "struggling_attempted": (
+        "Greet the student. They got this problem wrong but tried — anchor "
+        "on what they wrote and ask what they were trying to do at a "
+        "specific step."
+    ),
+    "struggling_blank": (
+        "Greet the student. They didn't get far on this problem. Don't "
+        "ask about steps they didn't write. Ask what part of the problem "
+        "itself feels confusing or where they got stuck before they "
+        "could write anything."
+    ),
+}
+
+
+# Canned fallback opener used when the agent's first turn errors out
+# — the check must not get stuck in "extracting" because the model
+# misbehaved. One variant per posture so the fallback never lands a
+# kid in the wrong tone. {hw_position} is the 1-based HW position of
+# the chosen problem.
+FALLBACK_OPENER_TEMPLATES: dict[str, str] = {
+    "verified": (
+        "Hi! I just took a look at your homework. Can you walk me through "
+        "the first step you took on problem {hw_position}?"
+    ),
+    "struggling_attempted": (
+        "Hi! I took a look at your homework. Could you tell me what you "
+        "were trying to do on problem {hw_position}?"
+    ),
+    "struggling_blank": (
+        "Hi! I took a look at your homework. What part of problem "
+        "{hw_position} is feeling confusing?"
+    ),
+}
+
+
+def build_kickoff_message(posture: str, briefing: str) -> str:
+    """Compose the agent's first user message: per-problem briefing
+    plus the posture-specific opener instruction. Falls back to the
+    verified opener for unrecognized postures."""
+    template = OPENER_TEMPLATES.get(posture, OPENER_TEMPLATES["verified"])
+    return briefing + "\n\nNow begin the conversation. " + template
+
+
+def build_fallback_opener(posture: str, hw_position: int) -> str:
+    """Posture-keyed canned opener for the agent-error fallback path."""
+    template = FALLBACK_OPENER_TEMPLATES.get(
+        posture, FALLBACK_OPENER_TEMPLATES["verified"],
+    )
+    return template.format(hw_position=hw_position)
 
 
 # ── Final-answer correctness check ──────────────────────────────────
@@ -390,36 +498,107 @@ async def check_answer_correctness(
     return is_correct_by_bank_id
 
 
-def select_probe_problems(
+def select_probe_problem(
     items_by_id: dict[uuid.UUID, QuestionBankItem],
     candidate_ids: list[uuid.UUID],
-    *,
-    max_picks: int = MAX_SAMPLE,
-) -> tuple[list[uuid.UUID], str]:
-    """Pick up to `max_picks` probe targets, ordered best-first.
+    correct_by_bank_id: dict[uuid.UUID, bool],
+) -> ProbeSelection | None:
+    """Pick the single problem the integrity chat will probe.
 
-    v1 selection = highest differentiation value: rank by
-    `_differentiation_score`, pick the top `max_picks`. No correctness
-    filter (would require AI equivalence check pre-grading, which
-    doubles cost/latency for marginal benefit — the agent's rubric +
-    TUTOR_PIVOT disposition already handles the "student didn't get it"
-    case naturally). No anomaly/copy-smell detection (v2).
+    Two tiers, driven by the per-bank-item correctness map from
+    check_answer_correctness:
 
-    Returns (picked_ids_in_order, selection_reason). `candidate_ids`
-    is filtered through `items_by_id` so callers don't have to
-    pre-drop missing bank items.
+      - verified: the student got at least one final answer correct.
+        Pick the *hardest* correct problem so the chat verifies their
+        win (cheating-detection target).
+      - struggling: zero correct final answers. Pick the *easiest*
+        problem so the chat can find where the foundation cracks
+        (diagnostic / tutor-pivot target).
+
+    `_problem_difficulty_score` is the same scoring used for both
+    directions — `max` for verified, `min` for struggling.
+
+    Returns None when there are no candidates (every problem deleted
+    between publish and submit). Caller bails cleanly.
     """
-    candidates = [
-        items_by_id[bid] for bid in candidate_ids
-        if bid in items_by_id
-    ]
-    if not candidates:
-        return ([], SELECTION_REASON_HIGHEST_DIFFERENTIATION)
-    # max() gives the single best; sorted() + slice would let us
-    # return the top-N for a future multi-probe escalation path.
-    ranked = sorted(candidates, key=_differentiation_score, reverse=True)
-    picked = ranked[:max_picks]
-    return ([p.id for p in picked], SELECTION_REASON_HIGHEST_DIFFERENTIATION)
+    valid_ids = [bid for bid in candidate_ids if bid in items_by_id]
+    if not valid_ids:
+        return None
+
+    correct_ids = [bid for bid in valid_ids if correct_by_bank_id.get(bid)]
+    if correct_ids:
+        pick = max(correct_ids, key=lambda b: _problem_difficulty_score(items_by_id[b]))
+        return ProbeSelection(
+            bank_item_id=pick,
+            tier="verified",
+            selection_reason=SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
+        )
+    pick = min(valid_ids, key=lambda b: _problem_difficulty_score(items_by_id[b]))
+    return ProbeSelection(
+        bank_item_id=pick,
+        tier="struggling",
+        selection_reason=SELECTION_REASON_STRUGGLING_EASIEST,
+    )
+
+
+def derive_agent_posture(
+    tier: SubmissionTier,
+    attempted_step_count: int,
+) -> AgentPosture:
+    """Refine the tier with the student's effort level.
+
+    Verified always maps 1-1. Struggling splits two ways: if the
+    student wrote real work for the chosen problem (>= ATTEMPTED_STEP_THRESHOLD
+    steps), the agent will anchor on their attempt; otherwise it
+    anchors on the problem text itself, since there's nothing
+    student-written to discuss.
+    """
+    if tier == "verified":
+        return "verified"
+    if attempted_step_count >= ATTEMPTED_STEP_THRESHOLD:
+        return "struggling_attempted"
+    return "struggling_blank"
+
+
+def _tier_from_reason(reason: str | None) -> SubmissionTier:
+    """Recover the SubmissionTier from a persisted selection_reason.
+
+    Reverse of select_probe_problem's reason-setting. Used by
+    `_agent_posture_for_check` so process_student_turn can re-derive
+    the posture without re-running correctness or storing a new
+    column on the submission row.
+    """
+    if reason == SELECTION_REASON_VERIFIED_HARDEST_CORRECT:
+        return "verified"
+    return "struggling"
+
+
+async def _agent_posture_for_check(
+    check: IntegrityCheckSubmission,
+    db: AsyncSession,
+) -> AgentPosture:
+    """Re-derive the agent's posture for an in-progress check.
+
+    Reads the tier from `check.probe_selection_reason` and the
+    attempted-step count from the chosen problem's persisted slice.
+    Cheap — no LLM, one DB query for the lowest-sample-position
+    problem row. Mirrors the derivation `start_integrity_check`
+    runs once at chat start so per-turn calls land the same posture.
+    """
+    tier = _tier_from_reason(check.probe_selection_reason)
+    row = (await db.execute(
+        select(IntegrityCheckProblem)
+        .where(
+            IntegrityCheckProblem.integrity_check_submission_id == check.id,
+        )
+        .order_by(IntegrityCheckProblem.sample_position)
+        .limit(1)
+    )).scalar_one_or_none()
+    if row is None:
+        return derive_agent_posture(tier, 0)
+    chosen_slice = row.student_work_extraction or {}
+    attempted_step_count = len(chosen_slice.get("steps") or [])
+    return derive_agent_posture(tier, attempted_step_count)
 
 
 def _slice_extraction_for_problem(
@@ -531,8 +710,9 @@ async def start_integrity_check(
     if not candidate_uuids:
         return
 
-    # Hydrate candidates in one query so the selection algorithm can
-    # score by difficulty + solution_step count.
+    # Hydrate candidates in one query so the selector can score by
+    # difficulty + solution_step count and check_answer_correctness
+    # can read each item's final_answer.
     items_by_id: dict[uuid.UUID, QuestionBankItem] = {}
     rows = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.id.in_(candidate_uuids))
@@ -540,32 +720,13 @@ async def start_integrity_check(
     for it in rows:
         items_by_id[it.id] = it
 
-    picked_ids, selection_reason = select_probe_problems(
-        items_by_id, candidate_uuids,
-    )
-    if not picked_ids:
-        # Every primary id was deleted between publish and submit.
-        # Don't create a stuck row — just return and let the teacher
-        # handle the submission without an integrity trace.
-        return
-
     # Map bank_item_id → 1-based HW position. Position = index in the
     # assignment's problem_ids list + 1 (matching `problem_position`
-    # on the extraction). Used below to slice the extraction down to
-    # just the sampled problem's work before persisting — the agent
-    # should see only the problem it's probing, not noise from other
-    # problems on the page.
+    # on the extraction). Used by check_answer_correctness, the
+    # extraction slicer, and the agent's briefing.
     hw_position_by_id: dict[uuid.UUID, int] = {
         cid: idx + 1 for idx, cid in enumerate(candidate_uuids)
     }
-
-    check = IntegrityCheckSubmission(
-        submission_id=submission_id,
-        status=STATUS_EXTRACTING,
-        probe_selection_reason=selection_reason,
-    )
-    db.add(check)
-    await db.flush()
 
     # Attribute LLM calls to the student so the admin dashboard doesn't
     # show "Deleted User" against every integrity extraction + agent
@@ -574,13 +735,10 @@ async def start_integrity_check(
 
     if extraction is None:
         # Fallback extraction (caller didn't pre-extract). Build the
-        # problems briefing from the candidate pool the selection
-        # algorithm just scored — same bank items, already hydrated —
-        # so Vision sees the HW's problem list and tags each step with
-        # a problem_position without a second DB round-trip through
-        # load_problems_for_assignment. Position matches the 1-based
-        # index of the bank id in the assignment's primary list, i.e.
-        # hw_position_by_id above.
+        # problems briefing from the candidate pool — same bank items,
+        # already hydrated — so Vision sees the HW's problem list and
+        # tags each step with a problem_position without a second DB
+        # round-trip. Position matches hw_position_by_id above.
         problems_for_briefing = [
             {
                 "position": hw_position_by_id[cid],
@@ -593,17 +751,54 @@ async def start_integrity_check(
         extraction = await extract_student_work(
             submission_id, db, problems=problems_for_briefing, user_id=user_id,
         )
+
     confidence = extraction.get("confidence", 0.0)
-    if confidence < UNREADABLE_THRESHOLD:
+    is_unreadable = confidence < UNREADABLE_THRESHOLD
+
+    # Tier-aware probe selection. On unreadable submissions there's
+    # no usable signal for correctness, so we short-circuit to an
+    # empty correctness map — the selector falls into the struggling
+    # tier and picks the easiest problem. The per-problem row gets
+    # marked SKIPPED_UNREADABLE below regardless, so the chat doesn't
+    # actually run for unreadable; selection_reason is just for the
+    # teacher record.
+    correct_by_id: dict[uuid.UUID, bool] = (
+        {bid: False for bid in items_by_id}
+        if is_unreadable
+        else await check_answer_correctness(
+            extraction, items_by_id, hw_position_by_id, user_id=user_id,
+        )
+    )
+    selection = select_probe_problem(items_by_id, candidate_uuids, correct_by_id)
+    if selection is None:
+        # Every primary id was deleted between publish and submit.
+        # Don't create a stuck row — let the teacher handle the
+        # submission without an integrity trace.
+        return
+
+    check = IntegrityCheckSubmission(
+        submission_id=submission_id,
+        status=STATUS_EXTRACTING,
+        probe_selection_reason=selection.selection_reason,
+    )
+    db.add(check)
+    await db.flush()
+
+    # Single-problem path (MAX_SAMPLE=1). Wrapped in a list so the
+    # MAX_SAMPLE > 1 v2 escalation can return multiple picks without
+    # changing this surrounding shape. sample_position 0 is the
+    # tier-aware pick; future sibling picks would be 1, 2.
+    picked_ids: list[uuid.UUID] = [selection.bank_item_id]
+
+    if is_unreadable:
         logger.info(
             "Handwriting unreadable (confidence=%.2f) for submission %s",
             confidence, submission_id,
         )
         for sample_position, bid in enumerate(picked_ids):
-            # Unreadable path: we still persist the extraction slice
-            # on the row for the teacher's "What the reader got" panel,
-            # but scoped to this problem — matches readable-path
-            # behavior and keeps the teacher view consistent.
+            # Unreadable path: still persist an extraction slice on
+            # the row for the teacher's "What the reader got" panel,
+            # but scoped to this problem.
             problem_slice = _slice_extraction_for_problem(
                 extraction, hw_position_by_id.get(bid, sample_position + 1),
             )
@@ -613,11 +808,11 @@ async def start_integrity_check(
                 sample_position=sample_position,
                 status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
                 student_work_extraction=problem_slice,
-                selected_reason=selection_reason,
+                selected_reason=selection.selection_reason,
             ))
-        # Unreadable submissions: status carries the meaning, disposition
-        # stays null. Teacher dashboard surfaces the skipped-unreadable
-        # bucket separately from the four integrity dispositions.
+        # Unreadable: status carries the meaning, disposition stays
+        # null. Teacher dashboard surfaces this bucket separately
+        # from the four integrity dispositions.
         check.status = STATUS_SKIPPED_UNREADABLE
         check.overall_summary = "Handwriting was unreadable — no questions asked."
         return
@@ -625,10 +820,7 @@ async def start_integrity_check(
     problem_rows: list[IntegrityCheckProblem] = []
     for sample_position, bid in enumerate(picked_ids):
         # Slice the extraction down to just this problem's work
-        # before persisting. Before slicing, every sampled problem
-        # row stored the full extraction (all problems' steps), so
-        # the agent's briefing fed it work from problems it wasn't
-        # probing. Now the row carries only the sampled problem's
+        # before persisting. Row carries only the sampled problem's
         # steps + final answer, plus any unattributed scratchwork.
         problem_slice = _slice_extraction_for_problem(
             extraction, hw_position_by_id.get(bid, sample_position + 1),
@@ -639,11 +831,19 @@ async def start_integrity_check(
             sample_position=sample_position,
             status=PROBLEM_STATUS_PENDING,
             student_work_extraction=problem_slice,
-            selected_reason=selection_reason,
+            selected_reason=selection.selection_reason,
         )
         db.add(row)
         problem_rows.append(row)
     await db.flush()
+
+    # Derive the agent's posture from the tier + how much real work
+    # the student wrote on the chosen problem. Posture conditions the
+    # agent's tone (system prompt fragment) and the opener template
+    # — see derive_agent_posture + the kickoff message below.
+    chosen_slice = problem_rows[0].student_work_extraction or {}
+    attempted_step_count = len(chosen_slice.get("steps") or [])
+    posture = derive_agent_posture(selection.tier, attempted_step_count)
 
     problems_for_prompt = [
         {
@@ -665,18 +865,13 @@ async def start_integrity_check(
         for r in problem_rows
     ]
     briefing = build_problems_briefing(problems_for_prompt)
-    kickoff_user_message = (
-        briefing
-        + "\n\nNow begin the conversation. Greet the student warmly and ask "
-        "your first question about the sampled problem above, referencing a "
-        "specific step they wrote."
-    )
+    kickoff_user_message = build_kickoff_message(posture, briefing)
 
     # Try to generate an opening. Fall back to a canned opener if the
     # model misbehaves — the check must not get stuck in "extracting".
     try:
         content_blocks = await run_agent_turn(
-            AGENT_SYSTEM_PROMPT,
+            build_agent_system_prompt(posture),
             [{"role": "user", "content": kickoff_user_message}],
             user_id=user_id,
         )
@@ -689,20 +884,15 @@ async def start_integrity_check(
         opening_text = None
 
     if not opening_text:
-        # Parameterize on the first sampled problem's hw_position so the
-        # canned fallback matches the labels the student sees in the
-        # reference panel ("Problem N"). Hardcoding "problem 1" was
-        # wrong on every check that didn't sample problem 1.
+        # Posture-keyed canned fallback so the opener never lands a
+        # kid in the wrong tone. hw_position keeps "Problem N" matching
+        # what the student sees in the chat reference panel.
         first_hw_position = (
             problems_for_prompt[0]["hw_position"]
             if problems_for_prompt
             else 1
         )
-        opening_text = (
-            "Hi! I just took a look at your homework. "
-            f"Can you walk me through the first step you took on problem "
-            f"{first_hw_position}?"
-        )
+        opening_text = build_fallback_opener(posture, first_hw_position)
 
     db.add(IntegrityConversationTurn(
         integrity_check_submission_id=check.id,
@@ -767,6 +957,14 @@ async def process_student_turn(
 
     student_turn_count = await count_student_turns(check.id, db)
 
+    # Re-derive the posture from persisted state — same source data
+    # as start_integrity_check used (selection_reason → tier; chosen
+    # problem's slice → attempted_step_count). One read once per
+    # process_student_turn call so every agent loop iteration below
+    # uses a consistent system prompt.
+    posture = await _agent_posture_for_check(check, db)
+    system_prompt = build_agent_system_prompt(posture)
+
     # Agent loop.
     for _ in range(MAX_AGENT_LOOPS_PER_TURN):
         problems = await _load_problems_for_prompt(check.id, db)
@@ -776,7 +974,7 @@ async def process_student_turn(
 
         try:
             content_blocks = await run_agent_turn(
-                AGENT_SYSTEM_PROMPT, messages, user_id=user_id,
+                system_prompt, messages, user_id=user_id,
             )
         except Exception:
             logger.exception(

@@ -201,11 +201,52 @@ async def extract_student_work(
 
 # ── Conversational agent ────────────────────────────────────────────
 
+# Posture fragments interpolated into AGENT_SYSTEM_PROMPT per chat.
+# The selector classifies the submission into a tier + posture (see
+# api.core.integrity_pipeline.derive_agent_posture); the right fragment
+# tells the agent which lane it's in so its tone, expected dispositions,
+# and approach to probing all match the student's actual signal.
+POSTURE_PROMPT_FRAGMENTS: dict[str, str] = {
+    "verified": (
+        "STUDENT SIGNAL — VERIFIED:\n"
+        "The student got at least one final answer correct on this homework, "
+        "and we picked the hardest one they got right to discuss with you. "
+        "Your job is to verify they actually understand it — strong "
+        "comprehension earns `pass`; correct answer with no real explanation "
+        "is the `flag_for_review` lane. `tutor_pivot` and `needs_practice` "
+        "should be rare here."
+    ),
+    "struggling_attempted": (
+        "STUDENT SIGNAL — STRUGGLING (attempted):\n"
+        "The student got every final answer wrong on this homework, but they "
+        "wrote real work for the problem we picked. Your job is to find "
+        "where the approach broke down. Anchor on what they wrote. Tutoring "
+        "mid-chat is welcome — explain a concept if it helps. Likely "
+        "dispositions: `needs_practice` if they have procedural understanding "
+        "but conceptual gaps; `tutor_pivot` if they're genuinely lost on the "
+        "underlying concept. `flag_for_review` is unlikely — they got it "
+        "wrong, not suspiciously right."
+    ),
+    "struggling_blank": (
+        "STUDENT SIGNAL — STRUGGLING (blank):\n"
+        "The student got every final answer wrong on this homework AND "
+        "barely wrote anything for the problem we picked — so don't ask "
+        "them to walk through steps that don't exist. Anchor on the problem "
+        "itself: 'what part of this feels confusing?' or 'where would you "
+        "start?' Pivot to tutoring early. Likely disposition: `tutor_pivot`. "
+        "`flag_for_review` does not apply here — there's nothing on paper "
+        "to be suspicious about."
+    ),
+}
+
+
 AGENT_SYSTEM_PROMPT = """\
 You are a math teacher meeting one-on-one with a student who just turned in \
 handwritten homework. Your goal is to determine, with strong confidence within \
 a few minutes, whether this student genuinely understands the material and did \
 the work themselves.
+
+{student_signal}
 
 You have the student's extracted work steps for each sampled problem AND the \
 answer-key correct final answer. Confidence is earned when the student explains \
@@ -314,6 +355,20 @@ AGENT_TOOL_SCHEMAS = [
     INTEGRITY_GENERATE_VARIANT_SCHEMA,
     INTEGRITY_FINISH_CHECK_SCHEMA,
 ]
+
+
+def build_agent_system_prompt(posture: str) -> str:
+    """Render AGENT_SYSTEM_PROMPT with the posture fragment slotted in.
+
+    `posture` is a value from the AgentPosture literal in
+    integrity_pipeline. Falls back to "verified" if the value is
+    unrecognized, since "verify the win" is the closest to neutral
+    teacher framing.
+    """
+    fragment = POSTURE_PROMPT_FRAGMENTS.get(
+        posture, POSTURE_PROMPT_FRAGMENTS["verified"],
+    )
+    return AGENT_SYSTEM_PROMPT.format(student_signal=fragment)
 
 
 def build_problems_briefing(
