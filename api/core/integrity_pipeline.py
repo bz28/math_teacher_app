@@ -170,12 +170,6 @@ ACTIVITY_REASON_VALUES = frozenset({
     ACTIVITY_REASON_DOMINANT_TAB_OUT,
 })
 
-# Session-level levels.
-ACTIVITY_LEVEL_CLEAN = "clean"
-ACTIVITY_LEVEL_NOTABLE = "notable"
-ACTIVITY_LEVEL_HEAVY = "heavy"
-
-
 # ── Adaptive probe selection ────────────────────────────────────────
 
 # Difficulty tiers from the QuestionBankItem.difficulty column, ranked
@@ -1197,7 +1191,6 @@ def compute_activity_summary(
     paste_count = 0
     paste_total_chars = 0
     paste_largest_chars = 0
-    long_pause_count = 0
     notable_turns: list[dict[str, Any]] = []
 
     for t in student_turns:
@@ -1211,35 +1204,18 @@ def compute_activity_summary(
             paste_total_chars += byte_count
             if byte_count > paste_largest_chars:
                 paste_largest_chars = byte_count
-        cadence = tel.get("typing_cadence") or {}
-        long_pause_count += int(cadence.get("pauses_over_3s") or 0)
 
         reasons = _notable_reasons_for_turn(t)
         if reasons:
             notable_turns.append({"ordinal": t.ordinal, "reasons": reasons})
 
-    # Level rule: clean = no notable turns. heavy = 2+ notable turns OR
-    # any full_paste turn (full_paste alone is severe enough to skip
-    # the "notable" middle ground). notable = 1 notable turn.
-    has_full_paste = any(
-        ACTIVITY_REASON_FULL_PASTE in nt["reasons"] for nt in notable_turns
-    )
-    if not notable_turns:
-        level = ACTIVITY_LEVEL_CLEAN
-    elif len(notable_turns) >= 2 or has_full_paste:
-        level = ACTIVITY_LEVEL_HEAVY
-    else:
-        level = ACTIVITY_LEVEL_NOTABLE
-
     return {
-        "level": level,
         "totals": {
             "tab_out_count": tab_out_count,
             "tab_out_total_ms": tab_out_total_ms,
             "paste_count": paste_count,
             "paste_total_chars": paste_total_chars,
             "paste_largest_chars": paste_largest_chars,
-            "long_pause_count": long_pause_count,
         },
         "notable_turns": notable_turns,
     }

@@ -319,11 +319,14 @@ async def _load_hw_positions(
     db: AsyncSession, submission_id: uuid.UUID,
 ) -> dict[uuid.UUID, int]:
     """Return {bank_item_id: 1-based HW position} for the assignment
-    behind this submission. Same logic as pipeline.py:376 — the
-    1-based index in the assignment's content.problem_ids list. Used
-    by `_problem_summaries` so the student-facing chat labels the
-    actual HW problem number ("Problem 3") instead of the 1-based
-    sample index (which is always 1 when MAX_SAMPLE=1).
+    behind this submission. Mirrors the survivor-list numbering in
+    pipeline.py:340-378 — invalid UUIDs are skipped, and positions
+    are numbered off survivors, so the student-chat / teacher-panel
+    label matches the agent's briefing end-to-end even when the
+    assignment.content blob is malformed. Used by `_problem_summaries`
+    so the student-facing chat labels the actual HW problem number
+    ("Problem 3") instead of the 1-based sample index (which is
+    always 1 when MAX_SAMPLE=1).
 
     `problem_ids` is stored inside `Assignment.content` (JSON, two
     legacy shapes) — read it through `problem_ids_in_content` rather
@@ -334,10 +337,14 @@ async def _load_hw_positions(
         .join(Submission, Submission.assignment_id == Assignment.id)
         .where(Submission.id == submission_id)
     )).scalar_one_or_none()
-    return {
-        uuid.UUID(bid): i + 1
-        for i, bid in enumerate(problem_ids_in_content(content))
-    }
+    positions: dict[uuid.UUID, int] = {}
+    for s in problem_ids_in_content(content):
+        try:
+            bid = uuid.UUID(str(s))
+        except (ValueError, TypeError):
+            continue
+        positions[bid] = len(positions) + 1
+    return positions
 
 
 async def _load_problem_questions(
@@ -560,7 +567,6 @@ class IntegrityActivityTotals(BaseModel):
     paste_count: int
     paste_total_chars: int
     paste_largest_chars: int
-    long_pause_count: int
 
 
 class IntegrityActivityNotableTurn(BaseModel):
@@ -583,7 +589,6 @@ class IntegrityActivitySummary(BaseModel):
     on integrity_check_submissions.activity_summary; this Pydantic
     model is the canonical API contract for both endpoints that
     surface it. See api.core.integrity_pipeline.compute_activity_summary."""
-    level: Literal["clean", "notable", "heavy"]
     totals: IntegrityActivityTotals
     notable_turns: list[IntegrityActivityNotableTurn]
 
