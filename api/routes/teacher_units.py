@@ -59,13 +59,14 @@ async def list_units(
     from api.models.question_bank import QuestionBankItem
     await get_teacher_course(db, course_id, current_user.user_id)
 
-    # Per-unit counts powered the delete-folder dialog (and any future
-    # "this folder has X items" surface). Subqueries scoped to the course
-    # so a unit with no docs/items still gets a 0 via the LEFT-JOIN-style
-    # correlated count.
+    # Per-unit counts power the delete-folder dialog (and any future
+    # "this folder has X items" surface). LEFT JOIN against the grouped
+    # subqueries + COALESCE means units with zero docs/items get 0 instead
+    # of being dropped from the result. The subqueries aren't filtered by
+    # course because the outer query is — unit_id is globally unique, so a
+    # cross-course join row is impossible.
     doc_counts = (
         select(Document.unit_id, func.count().label("n"))
-        .where(Document.unit_id.is_not(None))
         .group_by(Document.unit_id)
         .subquery()
     )
