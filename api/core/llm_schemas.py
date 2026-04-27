@@ -758,3 +758,53 @@ INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
         "additionalProperties": False,
     },
 }
+
+
+INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA: ToolSchema = {
+    "name": "return_answer_equivalence",
+    "description": (
+        "Decide, per problem, whether the student's final answer is "
+        "mathematically equivalent to the answer key. Used by the "
+        "integrity checker before the chat starts to pick which problem "
+        "to probe — see api.core.integrity_pipeline.check_answer_correctness."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "results": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "problem_position": {
+                            "type": "integer",
+                            "description": (
+                                "1-based homework position, matching the "
+                                "problem list in the user message."
+                            ),
+                        },
+                        "equivalent": {
+                            "type": "boolean",
+                            "description": (
+                                "True iff the student's answer is "
+                                "mathematically equivalent to the answer "
+                                "key. Equivalent forms (1/2 == 0.5 == "
+                                "\\frac{1}{2}, x=5 == 5, matrices written "
+                                "with or without a leading variable label) "
+                                "are equivalent. Different numeric values "
+                                "or different mathematical objects are not."
+                            ),
+                        },
+                    },
+                    "required": ["problem_position", "equivalent"],
+                    "additionalProperties": False,
+                },
+                "description": (
+                    "One entry per problem in the user message, in any order."
+                ),
+            },
+        },
+        "required": ["results"],
+        "additionalProperties": False,
+    },
+}

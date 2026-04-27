@@ -46,6 +46,7 @@ class LLMMode:
     BANK_CHAT = "bank_chat"
     INTEGRITY_EXTRACT = "integrity_extract"
     INTEGRITY_AGENT = "integrity_agent"
+    INTEGRITY_ANSWER_EQUIVALENCE = "integrity_answer_equivalence"
     BANK_EXTRACT = "bank_extract"
     AI_GRADING = "ai_grading"
 
