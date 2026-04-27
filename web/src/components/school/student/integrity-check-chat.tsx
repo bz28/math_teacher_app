@@ -271,9 +271,17 @@ export function IntegrityCheckChat({
     // student can read the problem and their extracted work side-by-
     // side with the chat instead of toggling a panel up and down.
     <div className="mx-auto h-[calc(100dvh-4rem)] w-full max-w-5xl">
+      {/* grid-rows-1 forces the single row track to fill the grid's
+       *  height. Without it the implicit row defaults to `auto` and
+       *  sizes to its tallest child — when the reference column has
+       *  a long problem + extraction, the row stretches past the
+       *  viewport, h-full on children resolves against the stretched
+       *  row, the inner overflow-y-auto scrollers get no constrained
+       *  height to overflow against, and the whole page scrolls
+       *  instead of each column scrolling independently. */}
       <div
         className={cn(
-          "grid h-full",
+          "grid h-full grid-rows-1",
           hasReference && "md:grid-cols-[320px_1fr]",
         )}
       >
@@ -299,7 +307,7 @@ export function IntegrityCheckChat({
               role="region"
               aria-label="Problem and your submitted work"
               tabIndex={0}
-              className="flex-1 overflow-y-auto px-3 py-3"
+              className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
             >
               <ReferencePanel
                 problems={state.problems}
@@ -379,7 +387,7 @@ export function IntegrityCheckChat({
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-3 overflow-y-auto px-2 py-4"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-4"
       >
         {visibleTranscript.map((t) => (
           <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
@@ -576,7 +584,17 @@ function ReferencePanel({
             Your work (as we read it)
           </div>
           <div className="mt-1">
-            <ExtractionView extraction={extraction} variant="compact" />
+            {/* Student-facing surface: show only the literal LaTeX
+             *  transcription, not the AI's narrative interpretation.
+             *  The student already confirmed we read the page right
+             *  on the prior screen; this panel's job is a reference
+             *  of what they actually wrote, not what we think they
+             *  did. Same principle as the confirm screen. */}
+            <ExtractionView
+              extraction={extraction}
+              variant="compact"
+              showProse={false}
+            />
           </div>
         </div>
       )}
