@@ -24,7 +24,7 @@ import {
  *     Problems flow (reusing AssignmentDetailsStep/ProblemsStep).
  *
  * Step 2 (scratch only) — Details:  title, units, due, late policy, sections
- * Step 3 (scratch only) — Problems: count, topic hint, source docs
+ * Step 3 (scratch only) — Problems: count, focus hint, source docs
  *
  * Creating either way calls the existing create-assignment + generate
  * infrastructure; only the source step is new.

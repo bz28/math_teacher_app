@@ -11,7 +11,7 @@ import { SourceMaterialPicker } from "./source-material-picker";
  * Shared wizard step components used by the New Homework and New
  * Practice creation flows. Both flows collect identical metadata for
  * the scratch path (title, units, due, late policy, sections, count,
- * topic hint, source docs); factoring the two steps here keeps the
+ * focus hint, source docs); factoring the two steps here keeps the
  * UI strictly in lockstep while letting each modal wrap them in its
  * own orchestration.
  */
@@ -80,7 +80,7 @@ export function AssignmentDetailsStep({
           Units <span className="font-normal text-text-muted">· required</span>
         </label>
         <p className="mt-1 text-[11px] text-text-muted">
-          Pick one. Multi-select for midterms or review sets that span topics.
+          Pick one. Multi-select for midterms or review sets that span units.
         </p>
         <div className="mt-2">
           <UnitMultiSelect
@@ -141,7 +141,7 @@ export function AssignmentDetailsStep({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Step — Problems (count, topic hint, source docs)
+// Step — Problems (count, focus hint, source docs)
 // ────────────────────────────────────────────────────────────────────
 
 export function AssignmentProblemsStep({
@@ -248,13 +248,16 @@ export function AssignmentProblemsStep({
 
       <div>
         <label className="block text-sm font-bold text-text-primary">
-          Topic hint <span className="font-normal text-text-muted">· optional</span>
+          Focus <span className="font-normal text-text-muted">· optional</span>
         </label>
+        <p className="mt-1 text-[11px] text-text-muted">
+          Tell the AI what to emphasize.
+        </p>
         <input
           type="text"
           value={topicHint}
           onChange={(e) => onTopicHintChange(e.target.value)}
-          placeholder="e.g. Focus on word problems with real-world contexts"
+          placeholder="e.g. word problems, real-world contexts, no calculators"
           disabled={disabled}
           className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
         />
