@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -32,7 +33,6 @@ def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
     if metadata is None:
         return None
     try:
-        import json
         encoded = json.dumps(metadata, default=str)
     except (TypeError, ValueError) as e:
         logger.warning("LLM call metadata not JSON-serializable: %s", e)

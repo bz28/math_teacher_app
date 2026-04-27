@@ -516,6 +516,15 @@ tr.clickable:hover {
   font-style: italic;
 }
 
+/* Internal-bucket chip — distinct from a real "school: <name>" chip
+   so they don't visually blur together when scanning. */
+.metadata-chip-internal {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+  font-weight: 500;
+}
+
 .metadata-chip-clickable {
   cursor: pointer;
   border-color: #c7d2fe;

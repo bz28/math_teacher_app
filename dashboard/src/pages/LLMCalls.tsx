@@ -47,6 +47,12 @@ export default function LLMCalls() {
     setSearchParams(next);
     setOffset(0);
   };
+  const handleSubmissionChipClick = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("submission", id);
+    setSearchParams(next);
+    setOffset(0);
+  };
 
   if (!data) return <p>Loading...</p>;
 
@@ -319,14 +325,6 @@ export default function LLMCalls() {
                   <tr key={`${c.id}-detail`}>
                     <td colSpan={9} style={{ padding: 0 }}>
                       <div className="call-detail">
-                        <div className="call-detail-metadata">
-                          <strong>Metadata</strong>
-                          <MetadataChips
-                            metadata={c.metadata}
-                            schoolId={c.school_id}
-                            submissionId={c.submission_id}
-                          />
-                        </div>
                         <div className="call-detail-row">
                           <div className="call-detail-section">
                             <strong>Input</strong>
@@ -336,6 +334,15 @@ export default function LLMCalls() {
                             <strong>{c.success ? "Output" : "Error"}</strong>
                             <pre>{c.output_text || "(not captured)"}</pre>
                           </div>
+                        </div>
+                        <div className="call-detail-metadata">
+                          <strong>Metadata</strong>
+                          <MetadataChips
+                            metadata={c.metadata}
+                            schoolId={c.school_id}
+                            submissionId={c.submission_id}
+                            onSubmissionClick={handleSubmissionChipClick}
+                          />
                         </div>
                       </div>
                     </td>
@@ -379,19 +386,13 @@ function MetadataChips({
   metadata,
   schoolId,
   submissionId,
+  onSubmissionClick,
 }: {
   metadata: Record<string, unknown> | null;
   schoolId: string | null;
   submissionId: string | null;
+  onSubmissionClick: (id: string) => void;
 }) {
-  const [, setSearchParams] = useSearchParams();
-  const handleSubmissionClick = () => {
-    if (!submissionId) return;
-    const next = new URLSearchParams(window.location.search);
-    next.set("submission", submissionId);
-    setSearchParams(next);
-  };
-
   // Deduplicate metadata keys against the promoted columns we render
   // explicitly. Some callers also stamp submission_id inside metadata
   // for redundancy; the indexed column is the source of truth.
@@ -406,22 +407,30 @@ function MetadataChips({
 
   return (
     <div className="metadata-chips">
-      {schoolId && (
+      {schoolId ? (
         <Chip label="school" value={shortId(schoolId)} title={schoolId} />
-      )}
-      {!schoolId && (
-        <Chip label="school" value="(internal)" muted />
+      ) : (
+        // No school = "internal" bucket. Render with a different
+        // pill shape (no label segment, distinct color) so it
+        // can't be visually confused with a normal school chip
+        // when scanning a column of expanded rows.
+        <span
+          className="metadata-chip metadata-chip-internal"
+          title="school_id IS NULL — founder, test, or non-school user"
+        >
+          🏷️ internal
+        </span>
       )}
       {submissionId && (
         <Chip
           label="submission"
           value={shortId(submissionId)}
           title={`Click to filter to this submission's calls\n${submissionId}`}
-          onClick={handleSubmissionClick}
+          onClick={() => onSubmissionClick(submissionId)}
         />
       )}
       {entries.map(([k, v]) => (
-        <Chip key={k} label={k} value={String(v)} />
+        <Chip key={k} label={k} value={renderChipValue(v)} />
       ))}
     </div>
   );
@@ -431,17 +440,18 @@ function Chip({
   label,
   value,
   title,
-  muted,
   onClick,
 }: {
   label: string;
   value: string;
   title?: string;
-  muted?: boolean;
   onClick?: () => void;
 }) {
-  const truncated = value.length > 32 ? `${value.slice(0, 30)}…` : value;
-  const className = `metadata-chip${muted ? " metadata-chip-muted" : ""}${onClick ? " metadata-chip-clickable" : ""}`;
+  // 30-char visual cap with ellipsis. Same threshold as the JS
+  // truncation so the CSS max-width doesn't double-clip a value
+  // that the JS already shortened.
+  const truncated = value.length > 30 ? `${value.slice(0, 29)}…` : value;
+  const className = `metadata-chip${onClick ? " metadata-chip-clickable" : ""}`;
   const fullTitle = title ?? value;
   return (
     <span
@@ -463,5 +473,21 @@ function shortId(id: string): string {
   // to scan visually while keeping chips compact.
   const idx = id.indexOf("-");
   return idx > 0 ? id.slice(0, idx) : id.slice(0, 8);
+}
+
+function renderChipValue(v: unknown): string {
+  // Stringify nested objects/arrays as JSON so the chip never shows
+  // "[object Object]" for a structured metadata value (e.g. a future
+  // caller stamping {tool_calls: {...}}). Primitives go through
+  // String() unchanged.
+  if (v === null || v === undefined) return String(v);
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return "[unserializable]";
+    }
+  }
+  return String(v);
 }
 
