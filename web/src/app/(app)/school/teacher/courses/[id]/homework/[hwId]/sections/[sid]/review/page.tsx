@@ -1292,7 +1292,7 @@ function SubmissionDetailPanel({
           title={!nextStudent ? "No more students to review" : undefined}
           className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
         >
-          {nextStudent ? "Next student →" : "All reviewed"}
+          {nextStudent ? "Next student →" : "No more students"}
         </button>
       </div>
 
