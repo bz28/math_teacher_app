@@ -11,6 +11,7 @@ import PromoCodes from "./pages/PromoCodes";
 import Leads from "./pages/Leads";
 import Schools from "./pages/Schools";
 import SchoolOverview from "./pages/SchoolOverview";
+import SubmissionTrace from "./pages/SubmissionTrace";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />;
@@ -40,6 +41,10 @@ export default function App() {
           <Route path="/admin/promo-codes" element={<PromoCodes />} />
           <Route path="/admin/schools" element={<Schools />} />
           <Route path="/admin/leads" element={<Leads />} />
+          <Route
+            path="/admin/submissions/:submissionId/trace"
+            element={<SubmissionTrace />}
+          />
 
           {/* School scope — every page filtered to one school
               (or to the internal/no-school bucket). Real metric
@@ -52,6 +57,10 @@ export default function App() {
           <Route
             path="/school/:schoolId/llm-calls"
             element={<LLMCalls />}
+          />
+          <Route
+            path="/school/:schoolId/submissions/:submissionId/trace"
+            element={<SubmissionTrace />}
           />
           {/* /school/:id with no subpath lands on Overview rather
               than rendering an empty Layout. */}
