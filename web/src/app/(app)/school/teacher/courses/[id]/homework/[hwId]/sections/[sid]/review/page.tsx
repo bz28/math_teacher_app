@@ -1722,7 +1722,7 @@ function GradeBtn({
           className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold leading-none ${
             active ? "bg-white/30 text-white" : "bg-primary/15 text-primary"
           }`}
-          aria-label="AI's suggestion"
+          aria-label="AI suggestion"
         >
           AI
         </span>
