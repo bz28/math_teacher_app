@@ -13,10 +13,15 @@ interface Props {
    *  row and fire onReady so the parent can route to the confirm
    *  screen instead of spinning the full 90s timeout. */
   assignmentId: string;
-  /** Called when the pipeline has moved past "extracting" OR when
-   *  Vision's extraction has landed on the submission row — whichever
-   *  comes first. The parent re-fetches and decides whether to open
-   *  the confirm screen, the chat, or the submitted view. */
+  /** Called when the wait this view is responsible for has ended:
+   *
+   *    Pre-confirm:  Vision's extraction has landed on the submission
+   *                  row → parent routes to the confirm screen.
+   *    Post-confirm: integrity state has moved past "extracting" →
+   *                  parent routes to the chat (or wherever the new
+   *                  state dictates).
+   *
+   *  Phase is detected automatically off `extraction_confirmed_at`. */
   onReady: () => void;
   /** Called when the pipeline has not finished within the timeout
    *  window. The parent should show an error with a refresh action. */
@@ -72,15 +77,40 @@ export function IntegrityPendingView({
           schoolStudent.getMySubmission(assignmentId).catch(() => null),
         ]);
         if (cancelled) return;
-        const extractionArrived = sub?.extraction != null;
-        const flagged = sub?.extraction_flagged_at != null;
-        if (
-          state.overall_status !== "extracting"
-          || extractionArrived
-          || flagged
-        ) {
+
+        // Flag is terminal regardless of phase — the submission is
+        // headed to the teacher for manual grading and there's no
+        // further pipeline to wait for.
+        if (sub?.extraction_flagged_at != null) {
           onReadyRef.current();
           return;
+        }
+
+        // The view serves two distinct waits with different "done"
+        // signals. Conflating them (the previous behavior — fire on
+        // EITHER extraction-arrived OR state-out-of-extracting) caused
+        // a stuck-on-Preparing bug post-confirm: extraction was
+        // already on the submission row from the pre-confirm phase,
+        // so the very first poll of the post-confirm phase fired
+        // onReady → parent re-routed to integrity_pending because
+        // state was still "extracting" → polling stopped, student
+        // stranded until refresh.
+        const confirmed = sub?.extraction_confirmed_at != null;
+        if (!confirmed) {
+          // Pre-confirm: Vision is extracting. Done = extraction
+          // lands on the submission row.
+          if (sub?.extraction != null) {
+            onReadyRef.current();
+            return;
+          }
+        } else {
+          // Post-confirm: integrity worker is generating questions.
+          // Done = state transitions out of "extracting" (to
+          // "awaiting_student" / "in_progress" / a terminal).
+          if (state.overall_status !== "extracting") {
+            onReadyRef.current();
+            return;
+          }
         }
       } catch {
         // Transient network errors during polling are fine — we
