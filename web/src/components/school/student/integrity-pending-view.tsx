@@ -45,7 +45,10 @@ const TIMEOUT_MS = 90_000;
 // very different operations in flight, so the spinner copy should
 // tell the student what's actually happening — generic "preparing"
 // is a missed signpost. Detected off `extraction_confirmed_at` (same
-// gate the poll uses to decide its done-signal).
+// gate the poll uses to decide its done-signal). Until the first
+// poll lands we don't know which phase we're in (a refresh on
+// post-confirm hits this view too), so we render a phase-neutral
+// fallback rather than mislabeling.
 type Phase = "pre_confirm" | "post_confirm";
 
 const PHASE_COPY: Record<Phase, { title: string; subtitle: string }> = {
@@ -60,6 +63,11 @@ const PHASE_COPY: Record<Phase, { title: string; subtitle: string }> = {
   },
 };
 
+const NEUTRAL_COPY = {
+  title: "Preparing your check",
+  subtitle: "Hang tight while we get things ready.",
+};
+
 export function IntegrityPendingView({
   submissionId,
   assignmentId,
@@ -67,12 +75,12 @@ export function IntegrityPendingView({
   onTimeout,
 }: Props) {
   const [elapsedMs, setElapsedMs] = useState(0);
-  // Default to pre-confirm copy until the first poll tells us
-  // otherwise — the most common entry into this view is right after
-  // submit (phase 1), and "Analyzing your work" is also harmless
-  // copy if we briefly mislabel a phase-2 entry while the first poll
-  // is in flight.
-  const [phase, setPhase] = useState<Phase>("pre_confirm");
+  // Until the first poll tells us which wait we're in, render a
+  // phase-neutral fallback. Defaulting to pre_confirm misleads on
+  // a post-confirm refresh while the first poll is in flight (and
+  // worse if the first poll fails: the student sees "Reading your
+  // steps so you can confirm we got them right" forever).
+  const [phase, setPhase] = useState<Phase | null>(null);
 
   // Refs for stable callback identities inside the interval closure —
   // we don't want React re-running the poll effect every time a
@@ -167,7 +175,7 @@ export function IntegrityPendingView({
   }, [submissionId, assignmentId]);
 
   const seconds = Math.floor(elapsedMs / 1000);
-  const copy = PHASE_COPY[phase];
+  const copy = phase == null ? NEUTRAL_COPY : PHASE_COPY[phase];
 
   return (
     <div className="mx-auto max-w-2xl py-12 text-center">
