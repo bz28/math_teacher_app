@@ -486,6 +486,44 @@ class TestCheckAnswerCorrectness:
         assert correct[item_ids[1]] is True   # LLM equivalent
         assert correct[item_ids[2]] is False  # LLM not-equivalent
 
+    @pytest.mark.asyncio
+    async def test_malformed_llm_response_treats_uncertain_as_wrong(
+        self,
+    ) -> None:
+        # Pin the parser contract: if the LLM returns nonsense (missing
+        # `results`, non-list, non-dict entries, or wrong field types),
+        # all uncertain pairs stay False — the call MUST NOT raise.
+        items, positions = self._setup([
+            ("$\\frac{1}{2}$", 1),
+            ("$5$", 2),
+        ])
+        extraction = {
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "0.5"},
+                {"problem_position": 2, "answer_latex": "five"},
+            ],
+        }
+        malformed_payloads: list[dict[str, Any]] = [
+            {},  # missing `results` entirely
+            {"results": "not-a-list"},
+            {"results": ["not-a-dict", 42, None]},
+            {"results": [{"problem_position": "1", "equivalent": True}]},
+            {"results": [{"problem_position": 1, "equivalent": "yes"}]},
+            {"results": [{"problem_position": True, "equivalent": True}]},
+        ]
+        for payload in malformed_payloads:
+            with patch(
+                "api.core.integrity_pipeline.call_claude_json",
+                new=AsyncMock(return_value=payload),
+            ):
+                correct = await check_answer_correctness(
+                    extraction, items, positions,
+                )
+            assert all(v is False for v in correct.values()), (
+                f"malformed payload {payload!r} should leave all "
+                "candidates as False"
+            )
+
 
 class TestValidateRubric:
     def test_accepts_minimal_rubric(self) -> None:

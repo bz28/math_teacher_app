@@ -351,12 +351,25 @@ async def check_answer_correctness(
         )
         return correct
 
+    # call_claude_json returns dict[str, object]; guard each layer so
+    # a malformed response (missing key, non-list, non-dict entries,
+    # bools-as-ints from a future schema slip) drops cleanly instead
+    # of throwing — uncertain pairs stay False and the tier degrades
+    # to struggling rather than wedging the check.
+    raw_results = result.get("results")
     equivalent_by_position: dict[int, bool] = {}
-    for entry in result.get("results", []) or []:
-        pos = entry.get("problem_position")
-        eq = entry.get("equivalent")
-        if isinstance(pos, int) and isinstance(eq, bool):
-            equivalent_by_position[pos] = eq
+    if isinstance(raw_results, list):
+        for entry in raw_results:
+            if not isinstance(entry, dict):
+                continue
+            pos = entry.get("problem_position")
+            eq = entry.get("equivalent")
+            if (
+                isinstance(pos, int)
+                and not isinstance(pos, bool)
+                and isinstance(eq, bool)
+            ):
+                equivalent_by_position[pos] = eq
 
     for bid, pos, _, _ in uncertain:
         if equivalent_by_position.get(pos):
