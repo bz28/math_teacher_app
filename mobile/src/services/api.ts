@@ -7,7 +7,7 @@ const API_BASE = __DEV__
   ? isNgrok
     ? `https://${DEV_HOST}/v1`
     : `http://${DEV_HOST}:${DEV_PORT}/v1`
-  : "https://math-teacher-api.up.railway.app/v1";
+  : "https://mathteacherapp-production.up.railway.app/v1";
 
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
