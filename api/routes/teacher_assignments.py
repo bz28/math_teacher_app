@@ -1233,20 +1233,13 @@ async def list_submissions(
         else:
             total, done = problem_count_by_check.get(check.id, (0, 0))
             terminal = check.status in (INTEGRITY_COMPLETE, INTEGRITY_SKIPPED)
-            # Pull `level` (severity tier) and `notable_count` (the
-            # number of notable turns) out of the precomputed
-            # activity_summary blob so the queue row's Activity pill can
-            # render the count directly ("Activity: 3 notable moments")
-            # instead of an opaque severity word ("Activity: heavy").
-            # Full totals + per-turn detail is loaded by the detail
-            # endpoint when the teacher opens a submission. Keeps list
-            # payloads compact across many rows.
+            # Pull notable_count (the number of notable turns) out of
+            # the precomputed activity_summary blob so the queue row's
+            # Activity pill can render the count directly ("Activity:
+            # 3 notable moments"). Full totals + per-turn detail is
+            # loaded by the detail endpoint when the teacher opens a
+            # submission. Keeps list payloads compact across many rows.
             activity_summary = check.activity_summary or None
-            activity_level = (
-                activity_summary.get("level")
-                if isinstance(activity_summary, dict)
-                else None
-            )
             notable_turns = (
                 activity_summary.get("notable_turns")
                 if isinstance(activity_summary, dict)
@@ -1260,7 +1253,6 @@ async def list_submissions(
                 "disposition": check.disposition if terminal else None,
                 "problem_count": total,
                 "complete_count": done,
-                "activity_level": activity_level if terminal else None,
                 "notable_count": notable_count if terminal else None,
             }
 
