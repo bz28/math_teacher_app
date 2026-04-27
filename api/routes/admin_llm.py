@@ -21,6 +21,7 @@ async def llm_calls(
     function: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
     submission_id: str | None = Query(default=None),
+    school_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -38,6 +39,14 @@ async def llm_calls(
         # admin dashboard can render the full pipeline trace in one
         # place. Indexed on submission_id, instant.
         base_filters.append(LLMCall.submission_id == submission_id)
+    if school_id == "internal":
+        # The "Internal" pseudo-school — calls from users with
+        # school_id IS NULL (founder, test accounts, non-school
+        # learners). Drives the school-scope picker's Internal entry.
+        base_filters.append(LLMCall.school_id.is_(None))
+    elif school_id:
+        # Scope to a specific school. Indexed; instant.
+        base_filters.append(LLMCall.school_id == school_id)
 
     # Aggregated stats
     stats_query = (
@@ -127,13 +136,24 @@ async def llm_calls(
         .limit(10)
     )).all()
 
-    # Users who have LLM calls in this period (for filter dropdown)
+    # Users who have LLM calls in this period (for filter dropdown).
+    # Honors the school scope so the dropdown only lists users whose
+    # calls are visible under the current filter — otherwise picking
+    # a school would still surface every founder/test account.
+    user_dropdown_filters = [
+        LLMCall.created_at >= since,
+        LLMCall.user_id.isnot(None),
+    ]
+    if school_id == "internal":
+        user_dropdown_filters.append(LLMCall.school_id.is_(None))
+    elif school_id:
+        user_dropdown_filters.append(LLMCall.school_id == school_id)
     user_rows = (await db.execute(
         select(User.id, User.email)
         .where(
             User.id.in_(
                 select(func.distinct(LLMCall.user_id))
-                .where(LLMCall.created_at >= since, LLMCall.user_id.isnot(None))
+                .where(*user_dropdown_filters)
             )
         )
         .order_by(User.email)

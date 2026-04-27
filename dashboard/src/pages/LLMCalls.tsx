@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -9,6 +9,7 @@ import { api, type LLMCallsData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
 import { Pagination } from "../components/Pagination";
+import { useScope } from "../lib/scope";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
@@ -17,6 +18,8 @@ const PAGE_SIZE = 25;
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { apiSchoolFilter } = useScope();
+  const schoolFilter = apiSchoolFilter() ?? "";
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
@@ -27,31 +30,44 @@ export default function LLMCalls() {
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     api.llmCalls({
       hours,
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
+      school_id: schoolFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
-    }).then(setData);
-  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
+    }).then((d) => { if (!cancelled) setData(d); });
+    return () => { cancelled = true; };
+  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
 
-  // Reset to first page when filters change
-  const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
-  const handleUserFilter = (v: string) => { setUserFilter(v); setOffset(0); };
-  const handleFnFilter = (v: string) => { setFnFilter(fnFilter === v ? "" : v); setOffset(0); };
+  // Reset offset whenever any non-pagination filter changes so a deep
+  // link (?submission=…, ?user=…) or a scope flip never lands past the
+  // end of the new result set. We do this in an effect rather than
+  // per-handler because submissionFilter/schoolFilter/tab are URL-
+  // driven (no handler to hook), and keeping every reset path in one
+  // place stops the two from drifting.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOffset(0);
+  }, [schoolFilter, userFilter, submissionFilter, fnFilter, hours]);
+
+  // Local-state handlers — offset reset is handled by the effect
+  // above, so we don't duplicate it here.
+  const handleHoursChange = (v: string) => setHours(v);
+  const handleUserFilter = (v: string) => setUserFilter(v);
+  const handleFnFilter = (v: string) => setFnFilter(fnFilter === v ? "" : v);
   const clearSubmissionFilter = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("submission");
     setSearchParams(next);
-    setOffset(0);
   };
   const handleSubmissionChipClick = (id: string) => {
     const next = new URLSearchParams(searchParams);
     next.set("submission", id);
     setSearchParams(next);
-    setOffset(0);
   };
 
   if (!data) return <p>Loading...</p>;
@@ -304,9 +320,8 @@ export default function LLMCalls() {
           </thead>
           <tbody>
             {callsToShow.map((c) => (
-              <>
+              <Fragment key={c.id}>
                 <tr
-                  key={c.id}
                   className="clickable"
                   onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
                   style={!c.success ? { background: "#fef2f2" } : undefined}
@@ -322,7 +337,7 @@ export default function LLMCalls() {
                   <td title={new Date(c.created_at).toLocaleString()}>{formatRelativeDate(c.created_at)}</td>
                 </tr>
                 {expandedId === c.id && (
-                  <tr key={`${c.id}-detail`}>
+                  <tr>
                     <td colSpan={9} style={{ padding: 0 }}>
                       <div className="call-detail">
                         <div className="call-detail-row">
@@ -348,7 +363,7 @@ export default function LLMCalls() {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
             {callsToShow.length === 0 && (
               <tr><td colSpan={9} style={{ textAlign: "center", color: "#94a3b8", padding: 24 }}>
