@@ -226,9 +226,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           ← My Courses
         </Link>
         <div className="mt-2 flex items-baseline justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{course.name}</h1>
-          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{course.name}</h1>
           <button
             type="button"
             onClick={() => setTab("settings")}

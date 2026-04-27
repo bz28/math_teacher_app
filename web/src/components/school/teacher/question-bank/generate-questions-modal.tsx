@@ -271,7 +271,7 @@ export function GenerateQuestionsModal({
               onChange={(e) => setConstraint(e.target.value)}
               rows={3}
               maxLength={500}
-              placeholder='e.g. "word problems with friendly numbers, mostly medium difficulty"'
+              placeholder="e.g. word problems, real-world contexts, no calculators"
               disabled={submitting}
               className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
             />
