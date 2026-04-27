@@ -1941,6 +1941,29 @@ function ConversationModal({
     return out;
   }, [integrity.activity_summary?.notable_turns]);
 
+  // Tool calls and tool results are AI internals — filter before render
+  // so the teacher sees only natural-language turns. Turn count in the
+  // header reflects the visible count, not the raw transcript length.
+  const visibleTurns = useMemo(
+    () =>
+      integrity.transcript.filter(
+        (t) => t.role !== "tool_call" && t.role !== "tool_result",
+      ),
+    [integrity.transcript],
+  );
+
+  // Subtitle telegraphs scope before the teacher reads the dialogue:
+  // "Discussing Problem 3" / "Discussing Problems 3, 5". Uses HW
+  // position so the label matches what the student saw in chat.
+  const discussedLabel = useMemo(() => {
+    if (integrity.problems.length === 0) return null;
+    const positions = integrity.problems
+      .map((p) => p.hw_position)
+      .sort((a, b) => a - b);
+    const noun = positions.length === 1 ? "Problem" : "Problems";
+    return `Discussing ${noun} ${positions.join(", ")}`;
+  }, [integrity.problems]);
+
   return (
     <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0">
       <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
@@ -1949,10 +1972,8 @@ function ConversationModal({
             AI ↔ student conversation
           </h3>
           <p className="text-[11px] text-text-muted">
-            {integrity.transcript.length} turns
-            {integrity.problems.length > 0 && (
-              <> · {integrity.problems.length} problems verified</>
-            )}
+            {visibleTurns.length} turns
+            {discussedLabel && <> · {discussedLabel}</>}
           </p>
         </div>
         <button
@@ -1965,25 +1986,13 @@ function ConversationModal({
         </button>
       </div>
       <div className="max-h-[70vh] space-y-3 overflow-y-auto px-5 py-4">
-        {integrity.transcript.map((t) => (
+        {visibleTurns.map((t) => (
           <TranscriptTurn
             key={t.ordinal}
             turn={t}
             notable={notableByOrdinal.get(t.ordinal)}
           />
         ))}
-        {integrity.problems.length > 0 && (
-          <div className="mt-4 border-t border-border-light pt-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              Per-problem verdicts
-            </p>
-            <div className="space-y-2">
-              {integrity.problems.map((p) => (
-                <PerProblemVerdict key={p.problem_id} problem={p} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </Modal>
   );
@@ -1996,28 +2005,6 @@ function TranscriptTurn({
   turn: TeacherIntegrityTranscriptTurn;
   notable: IntegrityActivityNotableTurnLite | undefined;
 }) {
-  // Tool turns are AI internals; kept collapsed by default so teachers
-  // see the human-readable conversation first. An expander reveals them
-  // when the teacher wants to audit exactly what the agent did.
-  const isTool = turn.role === "tool_call" || turn.role === "tool_result";
-  const [expanded, setExpanded] = useState(false);
-  if (isTool) {
-    return (
-      <details
-        open={expanded}
-        onToggle={(e) => setExpanded((e.target as HTMLDetailsElement).open)}
-        className="rounded-[--radius-sm] border border-dashed border-border-light bg-bg-subtle px-3 py-1.5 text-[11px] text-text-muted"
-      >
-        <summary className="cursor-pointer font-semibold">
-          {turn.role === "tool_call" ? "↳ tool call" : "↲ tool result"}
-          {turn.tool_name && <span className="ml-1 opacity-70">· {turn.tool_name}</span>}
-        </summary>
-        <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px]">
-          {turn.content}
-        </pre>
-      </details>
-    );
-  }
   const isAgent = turn.role === "agent";
   return (
     <div className="flex flex-col gap-0.5">
@@ -2052,48 +2039,6 @@ function TranscriptTurn({
       {!isAgent && (
         <div className="ml-auto">
           <ActivityTurnMarker turn={turn} notable={notable} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PerProblemVerdict({
-  problem,
-}: {
-  problem: TeacherIntegrityDetail["problems"][number];
-}) {
-  // Per-problem display is driven by rubric presence, not a per-problem
-  // disposition (which lives at session level). The card stays neutral
-  // regardless of rubric content — a small status pill carries the
-  // categorical info ("Verdicted" / "Dismissed" / "Skipped" / "Pending")
-  // and the AI reasoning below carries the actual signal. Previously the
-  // card used the pass-disposition green tint on every verdicted problem
-  // which incorrectly implied "good" for shallow rubrics too.
-  const pill = problem.rubric
-    ? { label: "Verdicted", cls: "bg-green-100 text-green-900 dark:bg-green-500/20 dark:text-green-200" }
-    : problem.status === "dismissed"
-      ? { label: "Dismissed by teacher", cls: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-200" }
-      : problem.status === "skipped_unreadable"
-        ? { label: "Skipped — unreadable", cls: "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-200" }
-        : { label: "Pending", cls: "bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-300" };
-  return (
-    <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2">
-      <span
-        className={`inline-flex items-center gap-1 rounded-[--radius-pill] px-2 py-0.5 text-[11px] font-bold ${pill.cls}`}
-      >
-        {pill.label}
-      </span>
-      {/* div, not p — MathText emits a top-level <div> for display
-        * math (matrices, fractions), which can't legally nest inside
-        * a <p>. Browsers auto-close the <p> on hydration and React
-        * throws a hydration mismatch. */}
-      <div className="mt-2 text-sm leading-relaxed text-text-primary">
-        <MathText text={problem.question} />
-      </div>
-      {problem.ai_reasoning && (
-        <div className="mt-2 text-xs leading-relaxed text-text-secondary">
-          <MathText text={problem.ai_reasoning} />
         </div>
       )}
     </div>
