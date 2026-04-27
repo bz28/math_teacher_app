@@ -19,13 +19,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.course import Course
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.llm_call import LLMCall
 from api.models.school import School
+from api.models.section import Section
+from api.models.user import User
 
 router = APIRouter()
 
@@ -150,6 +155,238 @@ async def school_overview(
         else 0.0
     )
 
+    # ---------- Top spenders ----------
+    # The internal scope has no class/teacher/integrity surface — those
+    # tables only exist for school users — so skip the joins and return
+    # empty arrays. The frontend renders the "no data" state.
+    top_classes: list[dict[str, Any]] = []
+    top_teachers: list[dict[str, Any]] = []
+    top_submissions_this_week: list[dict[str, Any]] = []
+    integrity_disposition: list[dict[str, Any]] = []
+    ai_override_rate: float | None = None
+    unreadable_per_teacher: list[dict[str, Any]] = []
+
+    week_start = (
+        now - timedelta(days=now.weekday())
+    ).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if not is_internal:
+        # Top 5 classes by spend this month. We go LLMCall → Submission →
+        # Section → Course so we can present the section name + course
+        # name (a class is "Algebra I · Period 3" not just "Period 3").
+        top_classes_rows = (await db.execute(
+            select(
+                Section.id.label("section_id"),
+                Section.name.label("section_name"),
+                Course.name.label("course_name"),
+                func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
+            )
+            .join(Submission, Submission.id == LLMCall.submission_id)
+            .join(Section, Section.id == Submission.section_id)
+            .join(Course, Course.id == Section.course_id)
+            .where(
+                llm_school,
+                LLMCall.created_at >= this_month_start,
+            )
+            .group_by(Section.id, Section.name, Course.name)
+            .order_by(func.sum(LLMCall.cost_usd).desc())
+            .limit(5)
+        )).all()
+        top_classes = [
+            {
+                "section_id": str(r.section_id),
+                "section_name": r.section_name,
+                "course_name": r.course_name,
+                "cost": round(r.cost, 4),
+            }
+            for r in top_classes_rows
+        ]
+
+        # Top 5 teachers by spend this month — Assignment.teacher_id is
+        # the source of truth for "who owns this HW", so we group by it.
+        top_teachers_rows = (await db.execute(
+            select(
+                User.id.label("teacher_id"),
+                User.name.label("teacher_name"),
+                User.email.label("teacher_email"),
+                func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
+            )
+            .join(Submission, Submission.id == LLMCall.submission_id)
+            .join(Assignment, Assignment.id == Submission.assignment_id)
+            .join(User, User.id == Assignment.teacher_id)
+            .where(
+                llm_school,
+                LLMCall.created_at >= this_month_start,
+            )
+            .group_by(User.id, User.name, User.email)
+            .order_by(func.sum(LLMCall.cost_usd).desc())
+            .limit(5)
+        )).all()
+        top_teachers = [
+            {
+                "teacher_id": str(r.teacher_id),
+                "teacher_name": r.teacher_name or r.teacher_email,
+                "teacher_email": r.teacher_email,
+                "cost": round(r.cost, 4),
+            }
+            for r in top_teachers_rows
+        ]
+
+        # Top 5 most expensive submissions this week — drives the
+        # flight-recorder drill-down (PR E). Until then the row at
+        # least surfaces the offender by id.
+        top_subs_rows = (await db.execute(
+            select(
+                LLMCall.submission_id,
+                func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
+                func.count().label("call_count"),
+            )
+            .where(
+                llm_school,
+                LLMCall.created_at >= week_start,
+                LLMCall.submission_id.isnot(None),
+            )
+            .group_by(LLMCall.submission_id)
+            .order_by(func.sum(LLMCall.cost_usd).desc())
+            .limit(5)
+        )).all()
+        top_submissions_this_week = [
+            {
+                "submission_id": str(r.submission_id),
+                "cost": round(r.cost, 4),
+                "call_count": r.call_count,
+            }
+            for r in top_subs_rows
+        ]
+
+        # ---------- Quality row ----------
+        # Integrity disposition mix — count IntegrityCheckSubmission
+        # rows joined to the school via submission → section → course.
+        # `skipped_unreadable` lives on `status`, not `disposition`, so
+        # we union the two columns into one bucket label for the bar.
+        bucket = case(
+            (
+                IntegrityCheckSubmission.status == "skipped_unreadable",
+                "skipped_unreadable",
+            ),
+            else_=IntegrityCheckSubmission.disposition,
+        ).label("bucket")
+        disposition_rows = (await db.execute(
+            select(
+                bucket,
+                func.count().label("count"),
+            )
+            .join(Submission, Submission.id == IntegrityCheckSubmission.submission_id)
+            .join(Section, Section.id == Submission.section_id)
+            .join(Course, Course.id == Section.course_id)
+            .where(Course.school_id == school_id)
+            .group_by("bucket")
+        )).all()
+        integrity_disposition = [
+            {"disposition": r.bucket or "unknown", "count": r.count}
+            for r in disposition_rows
+        ]
+
+        # AI override rate: of teacher-reviewed grades, how many had
+        # final_score != ai_score. Both columns nullable; require
+        # non-null on both so we don't count "teacher reviewed but AI
+        # never ran" as an override.
+        override_stats = (await db.execute(
+            select(
+                func.count().label("reviewed"),
+                func.sum(
+                    case(
+                        (SubmissionGrade.final_score != SubmissionGrade.ai_score, 1),
+                        else_=0,
+                    )
+                ).label("overrides"),
+            )
+            .join(Submission, Submission.id == SubmissionGrade.submission_id)
+            .join(Section, Section.id == Submission.section_id)
+            .join(Course, Course.id == Section.course_id)
+            .where(
+                Course.school_id == school_id,
+                SubmissionGrade.reviewed_by.isnot(None),
+                SubmissionGrade.ai_score.isnot(None),
+                SubmissionGrade.final_score.isnot(None),
+            )
+        )).first()
+        if override_stats and override_stats.reviewed:
+            ai_override_rate = round(
+                (override_stats.overrides or 0) / override_stats.reviewed, 4,
+            )
+        else:
+            ai_override_rate = None
+
+        # Unreadable rate per teacher: of submissions on each teacher's
+        # HWs, what fraction had the integrity check flip to
+        # `skipped_unreadable`. Sort desc so the worst teachers
+        # surface first; cap at 10.
+        unreadable_rows = (await db.execute(
+            select(
+                User.id.label("teacher_id"),
+                User.name.label("teacher_name"),
+                User.email.label("teacher_email"),
+                func.count(Submission.id).label("total_subs"),
+                func.sum(
+                    case(
+                        (
+                            IntegrityCheckSubmission.status == "skipped_unreadable",
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("unreadable"),
+            )
+            .select_from(Assignment)
+            .join(User, User.id == Assignment.teacher_id)
+            .join(Submission, Submission.assignment_id == Assignment.id)
+            .join(Course, Course.id == Assignment.course_id)
+            .outerjoin(
+                IntegrityCheckSubmission,
+                IntegrityCheckSubmission.submission_id == Submission.id,
+            )
+            .where(Course.school_id == school_id)
+            .group_by(User.id, User.name, User.email)
+            .having(func.count(Submission.id) > 0)
+            .order_by(
+                (func.coalesce(func.sum(case(
+                    (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+                    else_=0,
+                )), 0) * 1.0 / func.count(Submission.id)).desc()
+            )
+            .limit(10)
+        )).all()
+        unreadable_per_teacher = [
+            {
+                "teacher_id": str(r.teacher_id),
+                "teacher_name": r.teacher_name or r.teacher_email,
+                "total_submissions": r.total_subs,
+                "unreadable_count": int(r.unreadable or 0),
+                "rate": round(
+                    (r.unreadable or 0) / r.total_subs, 4,
+                ) if r.total_subs else 0.0,
+            }
+            for r in unreadable_rows
+        ]
+
+    # Failed LLM calls — simple count, works in both real-school and
+    # internal scopes.
+    failed_24h = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            llm_school,
+            LLMCall.success.is_(False),
+            LLMCall.created_at >= now - timedelta(hours=24),
+        )
+    )).scalar() or 0
+    failed_7d = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            llm_school,
+            LLMCall.success.is_(False),
+            LLMCall.created_at >= now - timedelta(days=7),
+        )
+    )).scalar() or 0
+
     return {
         "school_id": school_id,
         "school_name": school_name,
@@ -175,5 +412,17 @@ async def school_overview(
                 }
                 for r in weekly_rows
             ],
+        },
+        "top_spenders": {
+            "classes": top_classes,
+            "teachers": top_teachers,
+            "submissions_this_week": top_submissions_this_week,
+        },
+        "quality": {
+            "integrity_disposition": integrity_disposition,
+            "ai_override_rate": ai_override_rate,
+            "unreadable_per_teacher": unreadable_per_teacher,
+            "failed_calls_24h": failed_24h,
+            "failed_calls_7d": failed_7d,
         },
     }
