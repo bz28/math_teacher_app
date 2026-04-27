@@ -18,9 +18,6 @@ import { api } from "./api";
 //
 // The scope is derived from the URL (`/admin/...` or
 // `/school/:id/...`) so it survives reload, deep-links, and shares.
-// We also persist a "last-picked" school id in localStorage purely
-// so that re-entering School scope from Admin lands on the most
-// recent school the user was looking at.
 
 export type Scope =
   | { kind: "admin" }
@@ -52,8 +49,6 @@ interface ScopeContextValue {
 
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
-const LAST_SCHOOL_KEY = "admin_last_school_id";
-
 function parseScopeFromPath(pathname: string): Scope {
   // Match /school/<id>/... where id can be a UUID or the special
   // "internal" sentinel for the school_id IS NULL bucket.
@@ -73,15 +68,6 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     () => parseScopeFromPath(location.pathname),
     [location.pathname],
   );
-
-  // Remember the most recently visited real school so the picker can
-  // restore context if the user pops back up to Admin and then re-
-  // enters School without going through the Schools list page first.
-  useEffect(() => {
-    if (scope.kind === "school" && scope.schoolId !== INTERNAL_SCHOOL_ID) {
-      localStorage.setItem(LAST_SCHOOL_KEY, scope.schoolId);
-    }
-  }, [scope]);
 
   // Load the schools list once for the picker dropdown. Cheap query
   // (no per-row aggregates) and rarely changes; refetched on mount.

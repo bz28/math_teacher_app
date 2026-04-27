@@ -136,13 +136,24 @@ async def llm_calls(
         .limit(10)
     )).all()
 
-    # Users who have LLM calls in this period (for filter dropdown)
+    # Users who have LLM calls in this period (for filter dropdown).
+    # Honors the school scope so the dropdown only lists users whose
+    # calls are visible under the current filter — otherwise picking
+    # a school would still surface every founder/test account.
+    user_dropdown_filters = [
+        LLMCall.created_at >= since,
+        LLMCall.user_id.isnot(None),
+    ]
+    if school_id == "internal":
+        user_dropdown_filters.append(LLMCall.school_id.is_(None))
+    elif school_id:
+        user_dropdown_filters.append(LLMCall.school_id == school_id)
     user_rows = (await db.execute(
         select(User.id, User.email)
         .where(
             User.id.in_(
                 select(func.distinct(LLMCall.user_id))
-                .where(LLMCall.created_at >= since, LLMCall.user_id.isnot(None))
+                .where(*user_dropdown_filters)
             )
         )
         .order_by(User.email)

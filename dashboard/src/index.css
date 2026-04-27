@@ -67,14 +67,14 @@ body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  color: #cbd5e1;
 }
 
 .scope-picker-select {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 23, 42, 0.85);
   color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 13px;
@@ -96,6 +96,51 @@ body {
 .scope-picker-select optgroup {
   background: #0f172a;
   color: #e2e8f0;
+}
+
+/* Scope banner — top of every content page so the user always sees
+   which world they are in without having to read the small dropdown
+   in the sidebar. Color tracks the picker's vocabulary. */
+.scope-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.scope-banner-eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.scope-banner-value {
+  letter-spacing: 0.1px;
+}
+
+.scope-banner-admin {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+
+.scope-banner-internal {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.scope-banner-school {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
 }
 
 .nav-link {
