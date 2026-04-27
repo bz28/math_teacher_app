@@ -285,10 +285,11 @@ const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.text,
   },
   bubble: {
-    // maxWidth gives Yoga a definite cross-axis cap so MathText's
-    // width:100% wrapper resolves predictably; without it the bubble +
-    // WebView width depend on each other circularly and collapse weirdly.
-    maxWidth: "85%",
+    // Explicit width (not maxWidth) so MathText's WebView wrapper resolves
+    // its width:100% against a definite parent. With only maxWidth, the
+    // parent width was content-determined → 0 → MathText rendered each
+    // character on its own line and exploded the bubble height.
+    width: "85%",
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
