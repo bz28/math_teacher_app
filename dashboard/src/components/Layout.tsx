@@ -32,13 +32,15 @@ function buildSchoolNav(schoolId: string): NavItem[] {
 }
 
 export default function Layout() {
-  const { scope, schools } = useScope();
+  const { scope } = useScope();
   const nav =
     scope.kind === "admin" ? ADMIN_NAV : buildSchoolNav(scope.schoolId);
 
   // Top-of-content scope chip so the user can see which world they
-  // are in without having to read the small picker label. The chip
-  // matches the dropdown's vocabulary so the two surfaces reinforce.
+  // are in without having to read the small picker label. We render
+  // the scope *kind* (Admin / Internal / School) only — the page's
+  // own h1 carries the specific school name when relevant, so naming
+  // the school here would just duplicate the h1.
   let scopeChipLabel: string;
   let scopeChipKind: "admin" | "internal" | "school";
   if (scope.kind === "admin") {
@@ -48,8 +50,7 @@ export default function Layout() {
     scopeChipLabel = "Internal · no-school";
     scopeChipKind = "internal";
   } else {
-    const name = schools.find((s) => s.id === scope.schoolId)?.name;
-    scopeChipLabel = name ? `School · ${name}` : "School";
+    scopeChipLabel = "School";
     scopeChipKind = "school";
   }
 

@@ -10,7 +10,7 @@ import Users from "./pages/Users";
 import PromoCodes from "./pages/PromoCodes";
 import Leads from "./pages/Leads";
 import Schools from "./pages/Schools";
-import SchoolOverviewPlaceholder from "./pages/SchoolOverviewPlaceholder";
+import SchoolOverview from "./pages/SchoolOverview";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />;
@@ -47,7 +47,7 @@ export default function App() {
               placeholder Overview. */}
           <Route
             path="/school/:schoolId/overview"
-            element={<SchoolOverviewPlaceholder />}
+            element={<SchoolOverview />}
           />
           <Route
             path="/school/:schoolId/llm-calls"
@@ -57,7 +57,7 @@ export default function App() {
               than rendering an empty Layout. */}
           <Route
             path="/school/:schoolId"
-            element={<SchoolOverviewPlaceholder />}
+            element={<SchoolOverview />}
           />
 
           {/* Anything else under the protected layout (including

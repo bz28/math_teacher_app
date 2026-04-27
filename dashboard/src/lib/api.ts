@@ -85,6 +85,8 @@ export const api = {
   // Schools
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
+  schoolOverview: (schoolId: string) =>
+    request<SchoolOverviewData>(`/admin/schools/${schoolId}/overview`),
   createSchool: (body: CreateSchoolBody) => mutate<{ id: string; status: string }>("/admin/schools", "POST", body),
   updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
   inviteTeacher: (schoolId: string, email: string) =>
@@ -274,6 +276,65 @@ export interface SchoolListItem {
   created_at: string;
   updated_at: string | null;
   updated_by: string | null;
+}
+
+export interface SchoolOverviewData {
+  school_id: string;
+  school_name: string;
+  is_internal: boolean;
+  generated_at: string;
+  cost: {
+    this_month: number;
+    last_month: number;
+    projected_month_end: number;
+    cost_per_submission: number;
+    by_function: { function: string; cost: number; count: number }[];
+    trend_12_weeks: { week_start: string | null; cost: number }[];
+  };
+  top_spenders: {
+    classes: {
+      section_id: string;
+      section_name: string;
+      course_name: string;
+      cost: number;
+    }[];
+    teachers: {
+      teacher_id: string;
+      teacher_name: string;
+      teacher_email: string;
+      cost: number;
+    }[];
+    submissions_this_week: {
+      submission_id: string;
+      cost: number;
+      call_count: number;
+    }[];
+  };
+  quality: {
+    integrity_disposition: { disposition: string; count: number }[];
+    ai_override_rate: number | null;
+    unreadable_per_teacher: {
+      teacher_id: string;
+      teacher_name: string;
+      total_submissions: number;
+      unreadable_count: number;
+      rate: number;
+    }[];
+    failed_calls_24h: number;
+    failed_calls_7d: number;
+  };
+  health: {
+    this_week: HealthCounts;
+    last_week: HealthCounts;
+  };
+}
+
+export interface HealthCounts {
+  active_classes: number;
+  active_teachers: number;
+  active_students: number;
+  hws_published: number;
+  submissions: number;
 }
 
 export interface SchoolDetail {

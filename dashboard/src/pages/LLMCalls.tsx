@@ -25,7 +25,15 @@ export default function LLMCalls() {
   const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
   const submissionFilter = searchParams.get("submission") ?? "";
-  const [tab, setTab] = useState<Tab>("all");
+  // Tab is URL-driven so deep links like ?tab=failures from the
+  // Overview "View failures →" link land on the right view.
+  const tab: Tab = searchParams.get("tab") === "failures" ? "failures" : "all";
+  const setTab = (next: Tab) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "failures") params.set("tab", "failures");
+    else params.delete("tab");
+    setSearchParams(params);
+  };
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
 
