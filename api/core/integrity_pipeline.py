@@ -1329,45 +1329,19 @@ async def _apply_finish_check(
     summary = raw_input.get("summary") or ""
     variant_result = raw_input.get("inline_variant_result")
 
-    # Guard against the "ask a question AND finalize" bug. Look at the
-    # latest persisted agent turn — if its content ends with "?" and
-    # there's no student turn at a higher ordinal, the student hasn't
-    # answered the question yet and finalizing would close the check
-    # underneath it. Force the agent to either drop the question or
-    # wait for the reply. We check persisted turns (not just this
-    # iteration's text) because the agent can split the question and
-    # finish_check across multiple iterations of the agent loop in a
-    # single process_student_turn call. The trailing "?" heuristic is
-    # coarse but catches the real failure mode cleanly (the alternative
-    # is an LLM judging whether prose contains a question, which is
-    # overkill for this guard).
-    latest_agent_turn = (await db.execute(
-        select(IntegrityConversationTurn)
-        .where(
-            IntegrityConversationTurn.integrity_check_submission_id == check.id,
-            IntegrityConversationTurn.role == ROLE_AGENT,
+    # Guard against the "ask a question AND finalize" bug — see
+    # _has_unanswered_agent_question. The agent can split the question
+    # and finish_check across iterations of the agent loop within one
+    # process_student_turn call, so the guard inspects persisted turns
+    # rather than just this iteration's text.
+    if await _has_unanswered_agent_question(check.id, db):
+        return (
+            "rejected: your latest message to the student contains a "
+            "question. finish_check is terminal — don't call it while "
+            "you have an outstanding question. Either wait for the "
+            "student's reply (no finish_check this turn) or drop the "
+            "question from your response before finalizing."
         )
-        .order_by(IntegrityConversationTurn.ordinal.desc())
-        .limit(1)
-    )).scalar_one_or_none()
-    if latest_agent_turn is not None and latest_agent_turn.content.rstrip().endswith("?"):
-        later_student_turn = (await db.execute(
-            select(IntegrityConversationTurn.id)
-            .where(
-                IntegrityConversationTurn.integrity_check_submission_id == check.id,
-                IntegrityConversationTurn.role == ROLE_STUDENT,
-                IntegrityConversationTurn.ordinal > latest_agent_turn.ordinal,
-            )
-            .limit(1)
-        )).scalar_one_or_none()
-        if later_student_turn is None:
-            return (
-                "rejected: your latest message to the student ends with "
-                "a question. finish_check is terminal — don't call it "
-                "while you have an outstanding question. Either wait for "
-                "the student's reply (no finish_check this turn) or drop "
-                "the question from your response before finalizing."
-            )
 
     if disposition not in DISPOSITION_VALUES:
         return (
@@ -1462,6 +1436,45 @@ async def _force_finalize_turn_cap(
 
 
 _SOFT_NUDGE_MARKER = "(Wrap up:"
+
+
+async def _has_unanswered_agent_question(
+    check_id: uuid.UUID, db: AsyncSession,
+) -> bool:
+    """True if the latest persisted agent turn contains a `?` and no
+    student turn has landed since.
+
+    Used by `_apply_finish_check` to reject finalization when the agent
+    asked a question that's still on the student's screen — including
+    the cross-iteration split where the question is in turn N and
+    finish_check is fired in turn N+M of the same process_student_turn
+    call. We use `"?" in content` (not `endswith("?")`) so patterns like
+    "got it??", "really?!", and "what did you get? take your time"
+    still trip the guard. The cost of a false positive (agent quotes a
+    student question while finalizing) is just the agent rephrasing —
+    the cost of a false negative is the bug we're guarding against.
+    """
+    latest_agent_turn = (await db.execute(
+        select(IntegrityConversationTurn)
+        .where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == ROLE_AGENT,
+        )
+        .order_by(IntegrityConversationTurn.ordinal.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if latest_agent_turn is None or "?" not in latest_agent_turn.content:
+        return False
+    later_student_turn = (await db.execute(
+        select(IntegrityConversationTurn.id)
+        .where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == ROLE_STUDENT,
+            IntegrityConversationTurn.ordinal > latest_agent_turn.ordinal,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    return later_student_turn is None
 
 
 async def _soft_nudge_already_sent(

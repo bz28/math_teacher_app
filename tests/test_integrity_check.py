@@ -1734,6 +1734,16 @@ async def test_finish_check_rejects_when_agent_asked_question_prior_iteration(
         assert check.status != "complete"
         assert check.disposition is None
 
+        # Pin that iter-1 actually ran (verdict landed) before iter-2
+        # tried to finalize. Without this, a regression that broke the
+        # iter-1 path would still let the test pass on the rejection
+        # alone, masking the very split this test is meant to cover.
+        problem_after = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalar_one()
+        assert problem_after.rubric is not None
+
         tool_results = (await s.execute(
             select(IntegrityConversationTurn)
             .where(IntegrityConversationTurn.role == "tool_result")
