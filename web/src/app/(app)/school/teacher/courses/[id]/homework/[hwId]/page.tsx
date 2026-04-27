@@ -681,7 +681,7 @@ export default function HomeworkDetailPage({
           {hw.type !== "practice" && (
             <>
               <span className={hw.due_at ? "" : "italic"}>
-                {hw.due_at ? `Due ${formatDue(hw.due_at)}` : "No due date"}
+                {hw.due_at ? formatDue(hw.due_at) : "No due date"}
               </span>
               <span aria-hidden>·</span>
             </>
