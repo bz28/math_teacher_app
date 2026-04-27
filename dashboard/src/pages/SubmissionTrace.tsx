@@ -108,6 +108,10 @@ export default function SubmissionTrace() {
   const otherCount = bucketCounts.get("Other");
   if (otherCount) orderedBuckets.push({ label: "Other", count: otherCount });
 
+  // Backend caps at limit=200; surface truncation explicitly so a
+  // pathological 200+-call submission isn't silently clipped.
+  const truncated = data.total_count > calls.length;
+
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
@@ -115,6 +119,12 @@ export default function SubmissionTrace() {
         <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
           <code>{submissionId}</code>
         </p>
+        {truncated && (
+          <p style={{ color: "#b45309", fontSize: 12, marginTop: 6 }}>
+            ⚠️ Showing {calls.length} of {data.total_count} calls — only
+            the most recent slice is rendered.
+          </p>
+        )}
       </div>
 
       <div className="trace-summary">
@@ -134,7 +144,9 @@ export default function SubmissionTrace() {
         </div>
         <div className="trace-summary-cell">
           <div className="trace-summary-label">Wall time</div>
-          <div className="trace-summary-value">{fmtWallTime(wallMs)}</div>
+          <div className="trace-summary-value">
+            {calls.length === 1 ? "—" : fmtWallTime(wallMs)}
+          </div>
         </div>
         <div
           className={`trace-summary-cell ${
