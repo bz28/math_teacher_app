@@ -1739,8 +1739,22 @@ function GradeBtn({
 // `text-text-primary` so it's always unambiguously readable — we
 // learned from two prior passes that light colored text on tinted
 // bg reads as washed-out regardless of contrast math.
+type IntegrityBannerKey =
+  | IntegrityDisposition
+  | "extracting"
+  | "awaiting_student"
+  | "in_progress"
+  | "skipped_unreadable"
+  | "needs_review";
+
+const NEUTRAL_STYLE = {
+  bg: "bg-bg-subtle",
+  border: "border-border-light",
+  iconBg: "bg-gray-400 text-white dark:bg-gray-500",
+};
+
 const INTEGRITY_STYLE: Record<
-  IntegrityDisposition | "in_progress" | "needs_review" | "none",
+  IntegrityBannerKey,
   { bg: string; border: string; iconBg: string; icon: string; label: string }
 > = {
   pass: {
@@ -1772,25 +1786,29 @@ const INTEGRITY_STYLE: Record<
     label: "Review — correct work but couldn't explain it",
   },
   needs_review: {
-    bg: "bg-bg-subtle",
-    border: "border-border-light",
-    iconBg: "bg-gray-400 text-white dark:bg-gray-500",
+    ...NEUTRAL_STYLE,
     icon: "◌",
     label: "Inconclusive — teacher review",
   },
+  extracting: {
+    ...NEUTRAL_STYLE,
+    icon: "…",
+    label: "Preparing the integrity check…",
+  },
+  awaiting_student: {
+    ...NEUTRAL_STYLE,
+    icon: "·",
+    label: "Integrity check hasn't been started yet",
+  },
   in_progress: {
-    bg: "bg-bg-subtle",
-    border: "border-border-light",
-    iconBg: "bg-gray-400 text-white dark:bg-gray-500",
+    ...NEUTRAL_STYLE,
     icon: "…",
     label: "Integrity check running",
   },
-  none: {
-    bg: "bg-bg-subtle",
-    border: "border-border-light",
-    iconBg: "bg-gray-400 text-white dark:bg-gray-500",
+  skipped_unreadable: {
+    ...NEUTRAL_STYLE,
     icon: "·",
-    label: "Couldn't determine",
+    label: "Couldn't read student's work — review their submission",
   },
 };
 
@@ -1812,30 +1830,42 @@ function IntegrityBanner({
   const [open, setOpen] = useState(false);
 
   // Prefer full detail. If it's missing (fetch pending / 404), use
-  // the overview so the "in progress" and disposition signals still
-  // surface without waiting for a second round-trip.
+  // the overview so the disposition signal still surfaces without
+  // waiting for a second round-trip.
   const disposition =
     integrity?.disposition ?? overviewFallback?.disposition ?? null;
-  const inProgress =
-    !integrity && overviewFallback?.overall_status === "in_progress";
   const summary = integrity?.overall_summary ?? null;
-  // Terminal-but-no-disposition = unreadable or turn-cap fallback —
-  // teacher needs to take a look but it's not a verdict.
-  const needsReview =
-    !!integrity && !disposition && integrity.overall_status === "complete";
+  // Detail is the canonical source of the granular status (extracting
+  // / awaiting_student / in_progress / complete / skipped_unreadable).
+  // Overview only carries "in_progress" or "complete" — fine as a
+  // fallback while detail is fetching, but detail wins when present.
+  const status = integrity?.overall_status ?? overviewFallback?.overall_status ?? null;
 
-  // Nothing to show: no integrity data and not in progress. Bail so
-  // the layout doesn't reserve a phantom row.
-  if (!disposition && !inProgress && !needsReview && !integrity) return null;
-
-  const key: IntegrityDisposition | "in_progress" | "needs_review" | "none" =
-    inProgress
-      ? "in_progress"
-      : needsReview
-        ? "needs_review"
-        : (disposition ?? "none");
+  // Disposition wins when the AI reached a verdict. Otherwise route
+  // each status to its own copy so a teacher gets actionable info,
+  // not a generic "couldn't determine."
+  const key = ((): IntegrityBannerKey | null => {
+    if (disposition) return disposition;
+    switch (status) {
+      case "extracting":
+      case "awaiting_student":
+      case "in_progress":
+      case "skipped_unreadable":
+        return status;
+      // Complete + no disposition = turn cap hit without conclusion.
+      case "complete":
+        return "needs_review";
+      default:
+        return null;
+    }
+  })();
+  if (!key) return null;
   const style = INTEGRITY_STYLE[key];
-  const hasTranscript = !!integrity && integrity.transcript.length > 0;
+  // Hide "View conversation" until at least one student turn exists.
+  // For awaiting_student the transcript may carry the AI opener alone;
+  // there's nothing meaningful for the teacher to read yet.
+  const hasMeaningfulTranscript =
+    !!integrity && integrity.transcript.some((t) => t.role === "student");
 
   const activitySummary = integrity?.activity_summary ?? null;
 
@@ -1870,7 +1900,7 @@ function IntegrityBanner({
                     {summary}
                   </p>
                 )}
-                {inProgress && overviewFallback && (
+                {key === "in_progress" && overviewFallback && (
                   <p className="mt-1.5 text-xs text-text-muted">
                     {overviewFallback.complete_count} of{" "}
                     {overviewFallback.problem_count} sampled problems graded.
@@ -1878,7 +1908,7 @@ function IntegrityBanner({
                 )}
               </div>
             </div>
-            {hasTranscript && (
+            {hasMeaningfulTranscript && (
               <button
                 type="button"
                 onClick={() => setOpen(true)}
