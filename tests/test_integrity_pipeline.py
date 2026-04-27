@@ -18,9 +18,6 @@ from api.core.integrity_ai import build_problems_briefing
 from api.core.integrity_pipeline import (
     ACTIVITY_DOMINANT_TAB_OUT_RATIO,
     ACTIVITY_LARGE_PASTE_CHARS,
-    ACTIVITY_LEVEL_CLEAN,
-    ACTIVITY_LEVEL_HEAVY,
-    ACTIVITY_LEVEL_NOTABLE,
     ACTIVITY_LONG_TAB_OUT_MS,
     ACTIVITY_REASON_DOMINANT_TAB_OUT,
     ACTIVITY_REASON_FULL_PASTE,
@@ -377,7 +374,6 @@ class TestComputeActivitySummary:
         )]
         summary = compute_activity_summary(turns)
         assert summary is not None
-        assert summary["level"] == ACTIVITY_LEVEL_CLEAN
         assert summary["notable_turns"] == []
         # Totals are still populated for display, just zeros.
         assert summary["totals"]["paste_count"] == 0
@@ -392,7 +388,6 @@ class TestComputeActivitySummary:
         )]
         summary = compute_activity_summary(turns)
         assert summary is not None
-        assert summary["level"] == ACTIVITY_LEVEL_NOTABLE
         assert len(summary["notable_turns"]) == 1
         nt = summary["notable_turns"][0]
         assert nt["ordinal"] == 0
@@ -419,7 +414,6 @@ class TestComputeActivitySummary:
         )]
         summary = compute_activity_summary(turns)
         assert summary is not None
-        assert summary["level"] == ACTIVITY_LEVEL_HEAVY
         nt = summary["notable_turns"][0]
         assert ACTIVITY_REASON_FULL_PASTE in nt["reasons"]
         # Below the large_paste byte threshold — only full_paste fires.
@@ -442,7 +436,6 @@ class TestComputeActivitySummary:
         ]
         summary = compute_activity_summary(turns)
         assert summary is not None
-        assert summary["level"] == ACTIVITY_LEVEL_HEAVY
         assert len(summary["notable_turns"]) == 2
 
     def test_long_tab_out_flags_single_long_blur(self) -> None:
@@ -455,9 +448,6 @@ class TestComputeActivitySummary:
         assert summary is not None
         nt = summary["notable_turns"][0]
         assert ACTIVITY_REASON_LONG_TAB_OUT in nt["reasons"]
-        # Long blur alone is one notable signal, not full_paste — the
-        # session lands at notable, not heavy.
-        assert summary["level"] == ACTIVITY_LEVEL_NOTABLE
 
     def test_dominant_tab_out_flags_proportional_blur_without_single_long_event(self) -> None:
         # Many short blurs that cumulatively dominate a long turn.
@@ -518,7 +508,6 @@ class TestComputeActivitySummary:
         assert totals["paste_largest_chars"] == 75
         assert totals["tab_out_count"] == 2
         assert totals["tab_out_total_ms"] == 13_000
-        assert totals["long_pause_count"] == 3
 
     # ── Threshold boundary cases ────────────────────────────────────
     # Pin the >= semantic at the exact threshold value so a future

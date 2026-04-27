@@ -235,13 +235,8 @@ export function SubmissionExtractionConfirmView({
         </div>
 
         <div>
-          <div className="flex items-baseline justify-between">
-            <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-              What we read
-            </div>
-            <div className="text-[10px] text-text-muted">
-              Reader confidence: {Math.round((extraction.confidence ?? 0) * 100)}%
-            </div>
+          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            What we read
           </div>
 
           {groups.length === 0 ? (

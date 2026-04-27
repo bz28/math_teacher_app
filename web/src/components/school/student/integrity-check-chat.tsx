@@ -570,8 +570,14 @@ function ReferencePanel({
             )}
           >
             <div className="flex items-center gap-2">
+              {/* hw_position is the actual 1-based position on the
+               *  homework — server computes it from assignment.problem_ids
+               *  so a student who got sampled on HW problem 3 sees
+               *  "Problem 3", not "Problem 1" (which is what we'd
+               *  show with sample_position+1 since MAX_SAMPLE=1
+               *  pins sample_position to 0). */}
               <div className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                Problem {p.sample_position + 1}
+                Problem {p.hw_position}
               </div>
               {isActive && (
                 <div className="text-[10px] font-bold uppercase tracking-wide text-primary">

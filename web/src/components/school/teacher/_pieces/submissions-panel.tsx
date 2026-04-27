@@ -633,7 +633,7 @@ function ProblemCard({
     >
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-text-secondary">
-          Problem {p.sample_position + 1}
+          Problem {p.hw_position}
         </span>
         <div className="flex items-center gap-2">
           {isDismissed && (

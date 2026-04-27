@@ -40,6 +40,7 @@ from api.models.integrity_check import (
 from api.models.question_bank import QuestionBankItem
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
+from api.services.bank import problem_ids_in_content
 
 router = APIRouter(tags=["integrity"])
 
@@ -57,7 +58,17 @@ class ProblemSummary(BaseModel):
     reasoning — those are teacher-only.
     """
     problem_id: str
+    # 0-based index in the *sampled* problem list. Internal — useful
+    # for ordering but NOT what to show the student. With MAX_SAMPLE=1
+    # this is always 0, so labeling off it gives every student
+    # "Problem 1" regardless of which HW problem they actually got
+    # sampled on.
     sample_position: int
+    # 1-based position on the *homework* (i.e., "Problem 3" if it's
+    # the third problem on the assignment). What to show the student.
+    # Computed from the assignment's problem_ids list — same source
+    # the pipeline uses to slice extractions per problem.
+    hw_position: int
     status: str
     # Question prompt the student is being asked about. Null as a
     # fallback when the bank item has been deleted between publish and
@@ -283,16 +294,57 @@ def _student_facing_transcript(
 def _problem_summaries(
     problems: list[IntegrityCheckProblem],
     questions_by_bank_id: dict[uuid.UUID, str],
+    hw_position_by_bank_id: dict[uuid.UUID, int],
 ) -> list[ProblemSummary]:
     return [
         ProblemSummary(
             problem_id=str(p.id),
             sample_position=p.sample_position,
+            # Defensive fallback to sample_position+1 if the bank
+            # item somehow isn't in the assignment's problem_ids
+            # list (problem removed from HW between sample time and
+            # state fetch — pathological). Matches the same
+            # fallback pipeline.py:426 uses.
+            hw_position=hw_position_by_bank_id.get(
+                p.bank_item_id, p.sample_position + 1,
+            ),
             status=p.status,
             question=questions_by_bank_id.get(p.bank_item_id),
         )
         for p in problems
     ]
+
+
+async def _load_hw_positions(
+    db: AsyncSession, submission_id: uuid.UUID,
+) -> dict[uuid.UUID, int]:
+    """Return {bank_item_id: 1-based HW position} for the assignment
+    behind this submission. Mirrors the survivor-list numbering in
+    pipeline.py:340-378 — invalid UUIDs are skipped, and positions
+    are numbered off survivors, so the student-chat / teacher-panel
+    label matches the agent's briefing end-to-end even when the
+    assignment.content blob is malformed. Used by `_problem_summaries`
+    so the student-facing chat labels the actual HW problem number
+    ("Problem 3") instead of the 1-based sample index (which is
+    always 1 when MAX_SAMPLE=1).
+
+    `problem_ids` is stored inside `Assignment.content` (JSON, two
+    legacy shapes) — read it through `problem_ids_in_content` rather
+    than projecting a non-existent column.
+    """
+    content = (await db.execute(
+        select(Assignment.content)
+        .join(Submission, Submission.assignment_id == Assignment.id)
+        .where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    positions: dict[uuid.UUID, int] = {}
+    for s in problem_ids_in_content(content):
+        try:
+            bid = uuid.UUID(str(s))
+        except (ValueError, TypeError):
+            continue
+        positions[bid] = len(positions) + 1
+    return positions
 
 
 async def _load_problem_questions(
@@ -359,12 +411,13 @@ async def _build_state_response(
             transcript=[],
         )
     questions = await _load_problem_questions(db, problems)
+    hw_positions = await _load_hw_positions(db, submission_id)
     return IntegrityStateResponse(
         submission_id=str(submission_id),
         overall_status=check.status,
         disposition=check.disposition,
         extraction=_first_extraction(problems),
-        problems=_problem_summaries(problems, questions),
+        problems=_problem_summaries(problems, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
     )
 
@@ -490,6 +543,12 @@ class TeacherIntegrityProblemRow(BaseModel):
     bank_item_id: str
     question: str
     sample_position: int
+    # 1-based HW position (the label the student saw as "Problem N" in
+    # the chat). The teacher panel renders this so what the teacher
+    # reviews matches what the student experienced. Defensive fallback
+    # to sample_position+1 if the bank item is no longer in the
+    # assignment's problem_ids (problem removed mid-flight).
+    hw_position: int
     status: str
     # Six-dimension rubric dict, or null when the agent hasn't
     # verdicted this problem yet (e.g. pending or turn-cap-force-finalize).
@@ -508,7 +567,6 @@ class IntegrityActivityTotals(BaseModel):
     paste_count: int
     paste_total_chars: int
     paste_largest_chars: int
-    long_pause_count: int
 
 
 class IntegrityActivityNotableTurn(BaseModel):
@@ -531,7 +589,6 @@ class IntegrityActivitySummary(BaseModel):
     on integrity_check_submissions.activity_summary; this Pydantic
     model is the canonical API contract for both endpoints that
     surface it. See api.core.integrity_pipeline.compute_activity_summary."""
-    level: Literal["clean", "notable", "heavy"]
     totals: IntegrityActivityTotals
     notable_turns: list[IntegrityActivityNotableTurn]
 
@@ -599,6 +656,11 @@ async def teacher_get_integrity_detail(
         for it in item_rows:
             items_by_id[it.id] = it
 
+    # 1-based HW position per bank item — same map the student-facing
+    # state endpoint uses, so the teacher sees the same "Problem N"
+    # label the student saw in chat.
+    hw_positions = await _load_hw_positions(db, submission_id)
+
     problem_rows: list[TeacherIntegrityProblemRow] = []
     for p in problems:
         item = items_by_id.get(p.bank_item_id)
@@ -607,6 +669,9 @@ async def teacher_get_integrity_detail(
             bank_item_id=str(p.bank_item_id),
             question=item.question if item else "(problem text unavailable)",
             sample_position=p.sample_position,
+            hw_position=hw_positions.get(
+                p.bank_item_id, p.sample_position + 1,
+            ),
             status=p.status,
             rubric=p.rubric,
             ai_reasoning=p.ai_reasoning,

@@ -1245,22 +1245,15 @@ export const teacher = {
   },
 };
 
-export type IntegrityActivityLevel = "clean" | "notable" | "heavy";
-
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
   disposition: IntegrityDisposition | null;
   problem_count: number;
   complete_count: number;
-  /** Behavioral activity level rolled up from the integrity chat.
-   *  Frontend stopped rendering the level directly (renders the
-   *  notable_count instead) but the field remains for filtering /
-   *  sorting. Null when in_progress / no telemetry / pre-shipping. */
-  activity_level: IntegrityActivityLevel | null;
   /** How many student turns in this conversation were flagged as
    *  notable. Drives the queue-row Activity pill text — "Activity:
    *  clean" (0), "Activity: 1 notable moment" (1), "Activity: N
-   *  notable moments" (≥2). Null when activity_level is null. */
+   *  notable moments" (≥2). Null on in-progress / no telemetry. */
   notable_count: number | null;
 }
 
@@ -1791,7 +1784,14 @@ export type IntegrityProblemStatus =
 
 export interface IntegrityProblemSummary {
   problem_id: string;
+  /** 0-based index in the *sampled* problem list. Internal — useful
+   *  for ordering, NOT what to label the student. With MAX_SAMPLE=1
+   *  this is always 0. */
   sample_position: number;
+  /** 1-based position on the *homework* (i.e., 3 if it's the third
+   *  problem on the assignment). What to show the student as
+   *  "Problem N". Server computes from assignment.problem_ids. */
+  hw_position: number;
   status: IntegrityProblemStatus;
   /** Question text the student is being asked about — rendered in the
    *  chat's reference panel so the student can see the original
@@ -1923,6 +1923,10 @@ export interface TeacherIntegrityProblemRow {
   bank_item_id: string;
   question: string;
   sample_position: number;
+  /** 1-based HW position — what the student saw as "Problem N" in
+   *  chat. Render this on the teacher panel so the label matches the
+   *  student's experience. */
+  hw_position: number;
   status: IntegrityProblemStatus;
   rubric: IntegrityRubric | null;
   ai_reasoning: string | null;
@@ -1947,14 +1951,12 @@ export interface IntegrityActivityNotableTurn {
  *  panel renders. Null when no student turn carried telemetry, the
  *  check hasn't finalized, or the row predates activity_summary. */
 export interface IntegrityActivitySummary {
-  level: IntegrityActivityLevel;
   totals: {
     tab_out_count: number;
     tab_out_total_ms: number;
     paste_count: number;
     paste_total_chars: number;
     paste_largest_chars: number;
-    long_pause_count: number;
   };
   notable_turns: IntegrityActivityNotableTurn[];
 }

@@ -170,12 +170,6 @@ ACTIVITY_REASON_VALUES = frozenset({
     ACTIVITY_REASON_DOMINANT_TAB_OUT,
 })
 
-# Session-level levels.
-ACTIVITY_LEVEL_CLEAN = "clean"
-ACTIVITY_LEVEL_NOTABLE = "notable"
-ACTIVITY_LEVEL_HEAVY = "heavy"
-
-
 # ── Adaptive probe selection ────────────────────────────────────────
 
 # Difficulty tiers from the QuestionBankItem.difficulty column, ranked
@@ -467,6 +461,14 @@ async def start_integrity_check(
         {
             "problem_id": str(r.id),
             "sample_position": r.sample_position,
+            # 1-based homework position — what the student sees in the
+            # chat reference panel as "Problem N". Same dict the
+            # extraction slicer uses (hw_position_by_id above), so the
+            # agent's labeling is end-to-end consistent with what the
+            # student is shown.
+            "hw_position": hw_position_by_id.get(
+                r.bank_item_id, r.sample_position + 1,
+            ),
             "question": items_by_id[r.bank_item_id].question,
             "correct_final_answer": items_by_id[r.bank_item_id].final_answer,
             "extraction": r.student_work_extraction,
@@ -478,8 +480,8 @@ async def start_integrity_check(
     kickoff_user_message = (
         briefing
         + "\n\nNow begin the conversation. Greet the student warmly and ask "
-        "your first question about problem 1, referencing a specific step "
-        "they wrote."
+        "your first question about the sampled problem above, referencing a "
+        "specific step they wrote."
     )
 
     # Try to generate an opening. Fall back to a canned opener if the
@@ -499,9 +501,19 @@ async def start_integrity_check(
         opening_text = None
 
     if not opening_text:
+        # Parameterize on the first sampled problem's hw_position so the
+        # canned fallback matches the labels the student sees in the
+        # reference panel ("Problem N"). Hardcoding "problem 1" was
+        # wrong on every check that didn't sample problem 1.
+        first_hw_position = (
+            problems_for_prompt[0]["hw_position"]
+            if problems_for_prompt
+            else 1
+        )
         opening_text = (
             "Hi! I just took a look at your homework. "
-            "Can you walk me through the first step you took on problem 1?"
+            f"Can you walk me through the first step you took on problem "
+            f"{first_hw_position}?"
         )
 
     db.add(IntegrityConversationTurn(
@@ -1179,7 +1191,6 @@ def compute_activity_summary(
     paste_count = 0
     paste_total_chars = 0
     paste_largest_chars = 0
-    long_pause_count = 0
     notable_turns: list[dict[str, Any]] = []
 
     for t in student_turns:
@@ -1193,35 +1204,18 @@ def compute_activity_summary(
             paste_total_chars += byte_count
             if byte_count > paste_largest_chars:
                 paste_largest_chars = byte_count
-        cadence = tel.get("typing_cadence") or {}
-        long_pause_count += int(cadence.get("pauses_over_3s") or 0)
 
         reasons = _notable_reasons_for_turn(t)
         if reasons:
             notable_turns.append({"ordinal": t.ordinal, "reasons": reasons})
 
-    # Level rule: clean = no notable turns. heavy = 2+ notable turns OR
-    # any full_paste turn (full_paste alone is severe enough to skip
-    # the "notable" middle ground). notable = 1 notable turn.
-    has_full_paste = any(
-        ACTIVITY_REASON_FULL_PASTE in nt["reasons"] for nt in notable_turns
-    )
-    if not notable_turns:
-        level = ACTIVITY_LEVEL_CLEAN
-    elif len(notable_turns) >= 2 or has_full_paste:
-        level = ACTIVITY_LEVEL_HEAVY
-    else:
-        level = ACTIVITY_LEVEL_NOTABLE
-
     return {
-        "level": level,
         "totals": {
             "tab_out_count": tab_out_count,
             "tab_out_total_ms": tab_out_total_ms,
             "paste_count": paste_count,
             "paste_total_chars": paste_total_chars,
             "paste_largest_chars": paste_largest_chars,
-            "long_pause_count": long_pause_count,
         },
         "notable_turns": notable_turns,
     }
@@ -1281,6 +1275,27 @@ async def _load_problems_for_prompt(
     for it in item_rows:
         items_by_id[it.id] = it
 
+    # Look up the 1-based homework position for each sampled bank
+    # item — same source the slicer + the student's chat panel use.
+    # `problem_ids` lives inside `Assignment.content` (JSON), so we
+    # fetch the content blob and unpack via the bank service helper
+    # rather than projecting a non-existent column.
+    hw_position_by_bank_id: dict[uuid.UUID, int] = {}
+    if problems:
+        content = (await db.execute(
+            select(Assignment.content)
+            .join(Submission, Submission.assignment_id == Assignment.id)
+            .join(
+                IntegrityCheckSubmission,
+                IntegrityCheckSubmission.submission_id == Submission.id,
+            )
+            .where(IntegrityCheckSubmission.id == check_id)
+        )).scalar_one_or_none()
+        hw_position_by_bank_id = {
+            uuid.UUID(bid): i + 1
+            for i, bid in enumerate(problem_ids_in_content(content))
+        }
+
     out: list[dict[str, Any]] = []
     for p in problems:
         item = items_by_id.get(p.bank_item_id)
@@ -1289,6 +1304,9 @@ async def _load_problems_for_prompt(
         out.append({
             "problem_id": str(p.id),
             "sample_position": p.sample_position,
+            "hw_position": hw_position_by_bank_id.get(
+                p.bank_item_id, p.sample_position + 1,
+            ),
             "question": question_text,
             "correct_final_answer": correct_final_answer,
             "extraction": p.student_work_extraction,
