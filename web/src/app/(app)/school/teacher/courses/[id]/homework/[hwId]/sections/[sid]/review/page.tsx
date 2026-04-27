@@ -1285,10 +1285,15 @@ function SubmissionDetailPanel({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3">
           {/* Image stays one click away — promoted to the page header
               so it's findable without scrolling to the problems card.
-              Lightbox markup lives inside the button component. */}
+              Lightbox markup lives inside the button component. The
+              gap-3 (vs the default gap-2 elsewhere in the strip) buys
+              breathing room between this modal-popping affordance and
+              the adjacent "Next student →" navigation, since teachers
+              click Next student rapidly and we don't want the View
+              work button absorbing accidental hits. */}
           {detail.image_data && (
             <StudentWorkThumbButton imageData={detail.image_data} />
           )}
@@ -1340,7 +1345,12 @@ function SubmissionDetailPanel({
         <div className="mt-3 space-y-3">
           {detail.problems.map((p) => (
             <ProblemGradeRow
-              key={p.bank_item_id}
+              // Compose the key with submission_id so the row remounts
+              // per student. Without this, React reuses the same
+              // ProblemGradeRow instance across students that share
+              // bank items, and local UI state (e.g. the question
+              // expand toggle) leaks from one student into the next.
+              key={`${detail.submission_id}-${p.bank_item_id}`}
               problem={p}
               entry={breakdownByProblem.get(p.bank_item_id) ?? null}
               aiGrade={aiByPosition.get(p.position) ?? null}
@@ -1517,15 +1527,31 @@ function ProblemGradeRow({
   const [questionExpanded, setQuestionExpanded] = useState(false);
   const [questionOverflows, setQuestionOverflows] = useState(false);
   const questionRef = useRef<HTMLDivElement>(null);
+  // Mirror the expanded flag into a ref so the ResizeObserver
+  // callback (which closes over a stable element) can short-circuit
+  // measurement while the user has the prompt expanded — otherwise
+  // an unclamped element measures scrollHeight === clientHeight and
+  // we'd erroneously hide the "Hide full prompt" toggle.
+  const questionExpandedRef = useRef(questionExpanded);
+  useEffect(() => {
+    questionExpandedRef.current = questionExpanded;
+  }, [questionExpanded]);
   useEffect(() => {
     const el = questionRef.current;
     if (!el) return;
-    // Wait one frame so MathText/KaTeX layout settles before we
-    // measure scrollHeight against the clamped clientHeight.
-    const raf = requestAnimationFrame(() => {
+    const measure = () => {
+      if (questionExpandedRef.current) return;
       setQuestionOverflows(el.scrollHeight > el.clientHeight + 1);
-    });
-    return () => cancelAnimationFrame(raf);
+    };
+    measure();
+    // ResizeObserver re-fires when MathText's lazy-loaded diagrams
+    // (ChemDiagram, MathGraph via React.lazy + Suspense) mount and
+    // bump the rendered height past the clamp. A single rAF would
+    // miss them. Cross-student state leaks are handled by composing
+    // submission_id into the row's React key (see SubmissionDetailPanel).
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [problem.question]);
   const aiGradeLabel = aiGrade
     ? aiGrade.score_status === "partial"
@@ -1552,9 +1578,14 @@ function ProblemGradeRow({
             <button
               type="button"
               onClick={() => setQuestionExpanded((v) => !v)}
-              className="mt-1 inline-flex items-center text-[11px] font-semibold text-primary hover:underline"
+              aria-expanded={questionExpanded}
+              className="mt-1 inline-flex items-center rounded-[--radius-sm] text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              {questionExpanded ? "Hide full prompt ▴" : "Show full prompt ▾"}
+              {questionExpanded ? (
+                <>Hide full question <span aria-hidden>▴</span></>
+              ) : (
+                <>Show full question <span aria-hidden>▾</span></>
+              )}
             </button>
           )}
         </div>
@@ -2110,8 +2141,9 @@ function TranscriptTurn({
 /**
  * Student's handwritten work: compact thumbnail + label that opens
  * the full photo in a modal. The image is a reference the teacher
- * consults WHILE grading, so it lives inline in the Problems card
- * header — not as its own scan-path block.
+ * consults WHILE grading, so it lives in the page header strip — one
+ * click away from any scroll position — rather than as its own
+ * scan-path block.
  */
 function StudentWorkThumbButton({ imageData }: { imageData: string }) {
   const [open, setOpen] = useState(false);
