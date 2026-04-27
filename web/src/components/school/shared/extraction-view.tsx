@@ -53,14 +53,6 @@ export function ExtractionView({
         isFull ? "p-4" : "mt-2 p-2",
       )}
     >
-      <div
-        className={cn(
-          "font-semibold uppercase tracking-wide text-text-muted",
-          isFull ? "text-xs" : "text-[10px]",
-        )}
-      >
-        Reader confidence: {Math.round((extraction.confidence ?? 0) * 100)}%
-      </div>
       {extraction.steps.length === 0 ? (
         <p
           className={cn(
