@@ -1568,9 +1568,32 @@ function ProblemGradeRow({
         <div className="min-w-0 flex-1">
           <div
             ref={questionRef}
+            // max-h + overflow-hidden (vs line-clamp-3) because the
+            // -webkit-box layout that line-clamp relies on reports
+            // scrollHeight unreliably when the prompt contains
+            // block-level KaTeX (matrices, display equations) — the
+            // visual clamp would happen but our scrollHeight ===
+            // clientHeight check would miss the overflow and the
+            // "Show full question" toggle wouldn't appear. Standard
+            // overflow-hidden uses normal flow so scrollHeight
+            // correctly accounts for math blocks.
             className={`text-sm text-text-primary ${
-              questionExpanded ? "" : "line-clamp-3"
+              questionExpanded ? "" : "max-h-[5rem] overflow-hidden"
             }`}
+            style={
+              questionOverflows && !questionExpanded
+                ? {
+                    // Soft fade at the bottom so a mid-row clamp on a
+                    // matrix or display equation reads as "intentionally
+                    // cut off" rather than broken. Gradient mask works
+                    // in WebKit and modern Firefox.
+                    maskImage:
+                      "linear-gradient(to bottom, black 70%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to bottom, black 70%, transparent 100%)",
+                  }
+                : undefined
+            }
           >
             <MathText text={problem.question} />
           </div>
