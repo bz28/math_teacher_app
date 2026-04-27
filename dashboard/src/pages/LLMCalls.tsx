@@ -6,8 +6,9 @@ import {
   LineChart, Line,
 } from "recharts";
 import { api, type LLMCallsData } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
+import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
+import MetadataChips from "../components/MetadataChips";
 import { Pagination } from "../components/Pagination";
 import { useScope } from "../lib/scope";
 
@@ -407,127 +408,5 @@ export default function LLMCalls() {
       </div>
     </div>
   );
-}
-
-function shortModel(model: string): string {
-  if (model.includes("sonnet")) return "Sonnet 4";
-  if (model.includes("haiku")) return "Haiku 4.5";
-  if (model.includes("opus")) return "Opus 4";
-  // Fallback: strip date suffix and vendor prefix
-  return model.replace(/-\d{8}$/, "").replace(/^claude-/, "");
-}
-
-
-// Render the metadata blob plus the promoted school_id / submission_id
-// columns as a compact chip grid. Clicking the submission_id chip
-// deep-links into the per-submission flight-recorder filter (sets
-// ?submission=<id> on the URL); other chips are read-only labels.
-function MetadataChips({
-  metadata,
-  schoolId,
-  submissionId,
-  onSubmissionClick,
-}: {
-  metadata: Record<string, unknown> | null;
-  schoolId: string | null;
-  submissionId: string | null;
-  onSubmissionClick: (id: string) => void;
-}) {
-  // Deduplicate metadata keys against the promoted columns we render
-  // explicitly. Some callers also stamp submission_id inside metadata
-  // for redundancy; the indexed column is the source of truth.
-  const skipKeys = new Set(["submission_id", "school_id"]);
-  const entries = metadata
-    ? Object.entries(metadata).filter(([k]) => !skipKeys.has(k))
-    : [];
-
-  if (!schoolId && !submissionId && entries.length === 0) {
-    return <span className="metadata-empty">(none)</span>;
-  }
-
-  return (
-    <div className="metadata-chips">
-      {schoolId ? (
-        <Chip label="school" value={shortId(schoolId)} title={schoolId} />
-      ) : (
-        // No school = "internal" bucket. Render with a different
-        // pill shape (no label segment, distinct color) so it
-        // can't be visually confused with a normal school chip
-        // when scanning a column of expanded rows.
-        <span
-          className="metadata-chip metadata-chip-internal"
-          title="school_id IS NULL — founder, test, or non-school user"
-        >
-          🏷️ internal
-        </span>
-      )}
-      {submissionId && (
-        <Chip
-          label="submission"
-          value={shortId(submissionId)}
-          title={`Click to filter to this submission's calls\n${submissionId}`}
-          onClick={() => onSubmissionClick(submissionId)}
-        />
-      )}
-      {entries.map(([k, v]) => (
-        <Chip key={k} label={k} value={renderChipValue(v)} />
-      ))}
-    </div>
-  );
-}
-
-function Chip({
-  label,
-  value,
-  title,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  title?: string;
-  onClick?: () => void;
-}) {
-  // 30-char visual cap with ellipsis. Same threshold as the JS
-  // truncation so the CSS max-width doesn't double-clip a value
-  // that the JS already shortened.
-  const truncated = value.length > 30 ? `${value.slice(0, 29)}…` : value;
-  const className = `metadata-chip${onClick ? " metadata-chip-clickable" : ""}`;
-  const fullTitle = title ?? value;
-  return (
-    <span
-      className={className}
-      title={fullTitle}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
-    >
-      <span className="metadata-chip-label">{label}</span>
-      <span className="metadata-chip-value">{truncated}</span>
-    </span>
-  );
-}
-
-function shortId(id: string): string {
-  // First segment of a UUID (before the first hyphen) — unique enough
-  // to scan visually while keeping chips compact.
-  const idx = id.indexOf("-");
-  return idx > 0 ? id.slice(0, idx) : id.slice(0, 8);
-}
-
-function renderChipValue(v: unknown): string {
-  // Stringify nested objects/arrays as JSON so the chip never shows
-  // "[object Object]" for a structured metadata value (e.g. a future
-  // caller stamping {tool_calls: {...}}). Primitives go through
-  // String() unchanged.
-  if (v === null || v === undefined) return String(v);
-  if (typeof v === "object") {
-    try {
-      return JSON.stringify(v);
-    } catch {
-      return "[unserializable]";
-    }
-  }
-  return String(v);
 }
 
