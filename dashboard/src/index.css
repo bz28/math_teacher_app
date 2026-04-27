@@ -426,14 +426,21 @@ tr.clickable:hover {
 
 /* Call detail (expandable rows) */
 .call-detail {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 16px 12px;
   background: #f8fafc;
   border-top: 1px solid #e2e8f0;
 }
 
+.call-detail-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.call-detail-metadata strong,
 .call-detail-section strong {
   display: block;
   font-size: 11px;
@@ -455,6 +462,84 @@ tr.clickable:hover {
   word-break: break-word;
   max-height: 300px;
   overflow-y: auto;
+}
+
+/* Metadata chip grid (LLM call detail panel) */
+.metadata-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metadata-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.metadata-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 100%;
+}
+
+.metadata-chip-label {
+  color: #64748b;
+  font-weight: 500;
+  text-transform: lowercase;
+}
+
+.metadata-chip-value {
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.metadata-chip-muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.metadata-chip-muted .metadata-chip-value {
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Internal-bucket chip — distinct from a real "school: <name>" chip
+   so they don't visually blur together when scanning. */
+.metadata-chip-internal {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+  font-weight: 500;
+}
+
+.metadata-chip-clickable {
+  cursor: pointer;
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  transition: background 0.12s ease;
+}
+
+.metadata-chip-clickable:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.metadata-chip-clickable:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 
 /* Login page */

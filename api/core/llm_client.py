@@ -216,6 +216,8 @@ async def _log_and_persist(
     retry_count: int = 0,
     input_text: str | None = None,
     output_text: str | None = None,
+    submission_id: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> None:
     """Track cost, log, and persist an LLM call to the database."""
     cost = _calc_cost(model, input_tokens, output_tokens)
@@ -249,6 +251,8 @@ async def _log_and_persist(
         retry_count=retry_count,
         input_text=input_text,
         output_text=output_text,
+        submission_id=submission_id,
+        call_metadata=call_metadata,
     )
 
 
@@ -288,6 +292,8 @@ async def call_claude_json(
     max_tokens: int = 512,
     max_retries: int = MAX_RETRIES,
     thinking_budget: int | None = None,
+    submission_id: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Call Claude and return a structured JSON dict via tool use.
 
@@ -359,6 +365,7 @@ async def call_claude_json(
                 latency_ms, session_id, user_id,
                 success=True, retry_count=attempt,
                 input_text=user_message, output_text=resp_text,
+                submission_id=submission_id, call_metadata=call_metadata,
             )
             _circuit.record_success()
             return result
@@ -372,6 +379,7 @@ async def call_claude_json(
                 use_model, mode, 0, 0, latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
                 input_text=user_message, output_text=str(e),
+                submission_id=submission_id, call_metadata=call_metadata,
             )
         except ValueError as e:
             latency_ms = round((time.monotonic() - start) * 1000, 2)
@@ -383,6 +391,7 @@ async def call_claude_json(
                 latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
                 input_text=user_message, output_text=str(e),
+                submission_id=submission_id, call_metadata=call_metadata,
             )
 
         if attempt < max_retries - 1:
@@ -459,6 +468,50 @@ def _normalize_arrays(
     return result
 
 
+def _summarize_last_user_message(
+    messages: list[dict[str, Any]],
+) -> str | None:
+    """Pick the last user-role message and render it as a logged input.
+
+    Agent calls send the full transcript on every iteration; capturing
+    everything would balloon the LLM-log table. The last user message
+    is the prompt the agent's most recent decision was reacting to —
+    that's the high-signal slice. Tool_result blocks are rendered as
+    `[tool_result: <text>]` so the dashboard reader can tell the
+    difference between a student message and a tool feedback.
+    """
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text":
+                    text = block.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+                elif btype == "tool_result":
+                    raw = block.get("content")
+                    if isinstance(raw, str):
+                        parts.append(f"[tool_result: {raw}]")
+                    elif isinstance(raw, list):
+                        sub = " ".join(
+                            b.get("text", "") for b in raw
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        ).strip()
+                        if sub:
+                            parts.append(f"[tool_result: {sub}]")
+            return "\n".join(parts) if parts else None
+        return None
+    return None
+
+
 async def call_claude_conversation(
     system_prompt: str,
     messages: list[dict[str, Any]],
@@ -469,6 +522,8 @@ async def call_claude_conversation(
     user_id: str | None = None,
     model: str | None = None,
     max_tokens: int = 400,
+    submission_id: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Run one conversational turn with multiple tools available and
     `tool_choice="auto"` — the model picks between replying in text,
@@ -491,6 +546,7 @@ async def call_claude_conversation(
 
     use_model = model or MODEL_REASON
     client = get_client()
+    input_summary = _summarize_last_user_message(messages)
 
     tools: list[ToolParam] = [
         {
@@ -527,7 +583,9 @@ async def call_claude_conversation(
             response.usage.input_tokens, response.usage.output_tokens,
             latency_ms, session_id, user_id,
             success=True, retry_count=0,
-            input_text=None, output_text="\n".join(out_parts) or None,
+            input_text=input_summary,
+            output_text="\n".join(out_parts) or None,
+            submission_id=submission_id, call_metadata=call_metadata,
         )
         _circuit.record_success()
         return list(response.content)
@@ -538,6 +596,8 @@ async def call_claude_conversation(
         await _log_and_persist(
             use_model, mode, 0, 0, latency_ms, session_id, user_id,
             success=False,
+            input_text=input_summary, output_text=str(e),
+            submission_id=submission_id, call_metadata=call_metadata,
         )
         raise RuntimeError(f"Claude conversation error: {e}") from e
 
@@ -552,6 +612,8 @@ async def call_claude_vision(
     model: str | None = None,
     max_tokens: int = 1024,
     thinking_budget: int | None = None,
+    submission_id: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Call Claude with image content (Vision) and return structured JSON via tool use.
 
@@ -615,6 +677,7 @@ async def call_claude_vision(
             latency_ms, session_id=session_id, user_id=user_id,
             success=True, retry_count=0,
             input_text=input_summary, output_text=resp_text,
+            submission_id=submission_id, call_metadata=call_metadata,
         )
         _circuit.record_success()
         return result
@@ -625,6 +688,7 @@ async def call_claude_vision(
         await _log_and_persist(
             use_model, mode, 0, 0, latency_ms,
             session_id=session_id, user_id=user_id, success=False,
+            submission_id=submission_id, call_metadata=call_metadata,
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
     except ValueError as e:

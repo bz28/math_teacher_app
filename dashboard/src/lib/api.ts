@@ -177,6 +177,9 @@ export interface LLMCallsData {
     session_id: string | null;
     user_id: string | null;
     user_name: string | null;
+    school_id: string | null;
+    submission_id: string | null;
+    metadata: Record<string, unknown> | null;
     created_at: string;
   }[];
   total_count: number;
