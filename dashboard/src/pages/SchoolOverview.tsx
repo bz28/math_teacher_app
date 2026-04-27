@@ -379,12 +379,13 @@ export default function SchoolOverview() {
                       <tr key={s.submission_id}>
                         <td className="mini-table-name">
                           <Link
-                            to={`/school/${schoolId}/llm-calls?submission=${s.submission_id}`}
+                            to={`/school/${schoolId}/submissions/${s.submission_id}/trace`}
                             style={{
                               fontWeight: 600,
                               color: "#6366f1",
                               fontFamily: "ui-monospace, monospace",
                             }}
+                            title="Open flight-recorder timeline"
                           >
                             {s.submission_id.slice(0, 8)}
                           </Link>
