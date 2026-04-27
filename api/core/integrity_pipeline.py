@@ -468,6 +468,7 @@ async def start_integrity_check(
             "problem_id": str(r.id),
             "sample_position": r.sample_position,
             "question": items_by_id[r.bank_item_id].question,
+            "correct_final_answer": items_by_id[r.bank_item_id].final_answer,
             "extraction": r.student_work_extraction,
             "verdict_status": "pending",
         }
@@ -1284,10 +1285,12 @@ async def _load_problems_for_prompt(
     for p in problems:
         item = items_by_id.get(p.bank_item_id)
         question_text = item.question if item else "(problem text unavailable)"
+        correct_final_answer = item.final_answer if item else None
         out.append({
             "problem_id": str(p.id),
             "sample_position": p.sample_position,
             "question": question_text,
+            "correct_final_answer": correct_final_answer,
             "extraction": p.student_work_extraction,
             "verdict_status": p.status,
         })

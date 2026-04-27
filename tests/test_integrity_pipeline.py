@@ -117,6 +117,41 @@ class TestBuildBriefing:
         ])
         assert "(no legible steps)" in briefing
 
+    def test_includes_correct_final_answer_when_present(self) -> None:
+        # The agent uses the answer key to anchor "right vs wrong on
+        # paper" instead of mentally re-solving. Briefing surfaces it
+        # under a labeled line so the agent can find it deterministically.
+        briefing = build_problems_briefing([
+            {
+                "problem_id": "prob-1",
+                "sample_position": 0,
+                "question": "Solve x^2 - 5x + 6 = 0",
+                "correct_final_answer": "x = 2 or x = 3",
+                "extraction": {"steps": [], "confidence": 0.9},
+                "verdict_status": "pending",
+            },
+        ])
+        assert "Correct final answer (answer key): x = 2 or x = 3" in briefing
+
+    def test_omits_answer_line_when_final_answer_missing(self) -> None:
+        # Legacy bank items have null final_answer. We should not emit
+        # an empty "Correct final answer:" line — the agent would treat
+        # the empty string as a real (and absurd) ground truth.
+        for missing in (None, "", "   "):
+            briefing = build_problems_briefing([
+                {
+                    "problem_id": "prob-1",
+                    "sample_position": 0,
+                    "question": "Q",
+                    "correct_final_answer": missing,
+                    "extraction": {"steps": [], "confidence": 0.5},
+                    "verdict_status": "pending",
+                },
+            ])
+            assert "Correct final answer" not in briefing, (
+                f"expected no answer-key line when final_answer is {missing!r}"
+            )
+
 
 class TestBuildAgentMessages:
     def test_folds_student_and_agent_turns(self) -> None:
