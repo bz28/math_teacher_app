@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   teacher,
-  type IntegrityActivityLevel,
   type IntegrityActivityReason,
   type IntegrityActivitySummary,
   type IntegrityDisposition,
@@ -142,52 +141,54 @@ function formatMs(ms: number): string {
   return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
 
-const ACTIVITY_LEVEL_LABELS: Record<IntegrityActivityLevel, string> = {
-  clean: "clean",
-  notable: "notable",
-  heavy: "heavy",
-};
-
-// Filled-style pills (solid bg + white text) so the level is legible
+// Filled-style pills (solid bg + white text) so the count is legible
 // regardless of where the pill sits — queue row hover bg, amber
-// flag-for-review banner, neutral submission detail. The earlier
-// light-on-light treatment washed out against the amber banner. Clean
-// stays muted (gray-500) so a green-light row doesn't visually scream.
-const ACTIVITY_LEVEL_STYLES: Record<IntegrityActivityLevel, string> = {
-  clean: "bg-gray-500 text-white dark:bg-gray-600",
-  notable: "bg-amber-600 text-white dark:bg-amber-500",
-  heavy: "bg-orange-600 text-white dark:bg-orange-500",
-};
+// flag-for-review banner, neutral submission detail. Color thresholds
+// match the activity_level rules: 0 = clean (muted gray), 1 = notable
+// (amber), ≥2 = heavy (orange). Pill text drops the level abstraction
+// and shows the count directly so teachers don't have to learn what
+// "heavy" means.
+function activityPillCopy(count: number): { text: string; style: string } {
+  if (count <= 0) {
+    return {
+      text: "Activity: clean",
+      style: "bg-gray-500 text-white dark:bg-gray-600",
+    };
+  }
+  if (count === 1) {
+    return {
+      text: "Activity: 1 notable moment",
+      style: "bg-amber-600 text-white dark:bg-amber-500",
+    };
+  }
+  return {
+    text: `Activity: ${count} notable moments`,
+    style: "bg-orange-600 text-white dark:bg-orange-500",
+  };
+}
 
-// Tooltip copy on the pill — explains what a teacher is seeing. The
-// label by itself ("notable", "heavy") doesn't reveal what triggered
-// it; this fills in the gap on hover.
-const ACTIVITY_LEVEL_TOOLTIPS: Record<IntegrityActivityLevel, string> = {
-  clean: "Clean: nothing unusual observed during this conversation.",
-  notable: "Notable: one moment in this conversation stood out.",
-  heavy: "Heavy: multiple notable moments in this conversation.",
-};
-
-/** Compact pill for the queue row + the IntegritySection header.
- *  Renders nothing on null (older sessions, no telemetry). */
-export function ActivityLevelPill({
-  level,
+/** Compact pill for the queue row + the IntegritySection header +
+ *  the digest. Renders nothing on null (older sessions, no
+ *  telemetry, in-progress check). Shows the count directly so a
+ *  teacher doesn't have to interpret a severity word. */
+export function ActivityPill({
+  count,
   className,
 }: {
-  level: IntegrityActivityLevel | null;
+  count: number | null;
   className?: string;
 }) {
-  if (!level) return null;
+  if (count == null) return null;
+  const { text, style } = activityPillCopy(count);
   return (
     <span
       className={cn(
         "rounded-full px-2 py-0.5 text-[11px] font-bold",
-        ACTIVITY_LEVEL_STYLES[level],
+        style,
         className,
       )}
-      title={ACTIVITY_LEVEL_TOOLTIPS[level]}
     >
-      Activity: {ACTIVITY_LEVEL_LABELS[level]}
+      {text}
     </span>
   );
 }
@@ -310,7 +311,10 @@ export function ActivityDigest({
             {subtitle}
           </p>
         </div>
-        <ActivityLevelPill level={summary.level} className="shrink-0" />
+        <ActivityPill
+          count={summary.notable_turns.length}
+          className="shrink-0"
+        />
       </div>
       <div className="mt-2.5 border-t border-border-light pt-2" />
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-text-primary">
@@ -419,7 +423,7 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
            * needing its own. activity_summary is only populated when
            * status=complete, which is the same gate as those badges. */}
         {data?.activity_summary && (
-          <ActivityLevelPill level={data.activity_summary.level} />
+          <ActivityPill count={data.activity_summary.notable_turns.length} />
         )}
       </button>
 

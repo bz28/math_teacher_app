@@ -6,7 +6,7 @@ import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
   ActivityDigest,
-  ActivityLevelPill,
+  ActivityPill,
   ActivityTurnMarker,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
@@ -1140,9 +1140,9 @@ function StudentRow({
             📄
           </span>
         )}
-      {sub?.integrity_overview?.activity_level && (
-        <ActivityLevelPill
-          level={sub.integrity_overview.activity_level}
+      {sub?.integrity_overview?.notable_count != null && (
+        <ActivityPill
+          count={sub.integrity_overview.notable_count}
           className="shrink-0"
         />
       )}
@@ -1869,7 +1869,7 @@ function IntegrityBanner({
                    * so the teacher reads understanding + behavior as
                    * two equally-prominent axes, not one fused score. */}
                   {activitySummary && (
-                    <ActivityLevelPill level={activitySummary.level} />
+                    <ActivityPill count={activitySummary.notable_turns.length} />
                   )}
                 </div>
                 {summary && (

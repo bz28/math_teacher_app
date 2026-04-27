@@ -1252,12 +1252,16 @@ export interface IntegrityOverview {
   disposition: IntegrityDisposition | null;
   problem_count: number;
   complete_count: number;
-  /** Behavioral activity level rolled up from the integrity chat —
-   *  null while in_progress, when no student turn carried telemetry,
-   *  or on rows from before activity_summary shipped. Drives the
-   *  Activity pill on the queue row. Full totals + notable turns
-   *  live on TeacherIntegrityDetail.activity_summary. */
+  /** Behavioral activity level rolled up from the integrity chat.
+   *  Frontend stopped rendering the level directly (renders the
+   *  notable_count instead) but the field remains for filtering /
+   *  sorting. Null when in_progress / no telemetry / pre-shipping. */
   activity_level: IntegrityActivityLevel | null;
+  /** How many student turns in this conversation were flagged as
+   *  notable. Drives the queue-row Activity pill text — "Activity:
+   *  clean" (0), "Activity: 1 notable moment" (1), "Activity: N
+   *  notable moments" (≥2). Null when activity_level is null. */
+  notable_count: number | null;
 }
 
 export interface TeacherSubmissionRow {

@@ -1186,16 +1186,27 @@ async def list_submissions(
         else:
             total, done = problem_count_by_check.get(check.id, (0, 0))
             terminal = check.status in (INTEGRITY_COMPLETE, INTEGRITY_SKIPPED)
-            # Just the level (clean / notable / heavy) on the queue —
-            # the row pill renders that one bit. Full activity_summary
-            # (totals + notable turns) is loaded by the detail endpoint
-            # when the teacher opens a submission. Keeps list payloads
-            # compact across 30+ rows.
+            # Pull `level` (severity tier) and `notable_count` (the
+            # number of notable turns) out of the precomputed
+            # activity_summary blob so the queue row's Activity pill can
+            # render the count directly ("Activity: 3 notable moments")
+            # instead of an opaque severity word ("Activity: heavy").
+            # Full totals + per-turn detail is loaded by the detail
+            # endpoint when the teacher opens a submission. Keeps list
+            # payloads compact across many rows.
             activity_summary = check.activity_summary or None
             activity_level = (
                 activity_summary.get("level")
                 if isinstance(activity_summary, dict)
                 else None
+            )
+            notable_turns = (
+                activity_summary.get("notable_turns")
+                if isinstance(activity_summary, dict)
+                else None
+            )
+            notable_count = (
+                len(notable_turns) if isinstance(notable_turns, list) else None
             )
             integrity_overview = {
                 "overall_status": "complete" if terminal else "in_progress",
@@ -1203,6 +1214,7 @@ async def list_submissions(
                 "problem_count": total,
                 "complete_count": done,
                 "activity_level": activity_level if terminal else None,
+                "notable_count": notable_count if terminal else None,
             }
 
         submissions.append({
