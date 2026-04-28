@@ -1353,7 +1353,15 @@ export interface AiGradeEntry {
    *  before the field existed. The review UI shows a "Low confidence"
    *  badge when below 0.6. */
   confidence: number | null;
+  /** Teacher-facing explanation of why this grade was given. Drives
+   *  the AI verdict card on the review page. */
   reasoning: string;
+  /** Student-facing draft feedback, second-person, 1-2 sentences. The
+   *  teacher's textarea pre-fills from this when the AI grade is
+   *  active. Null on historical rows graded before this field shipped
+   *  — those rows fall back to `reasoning`-derived feedback in the
+   *  live breakdown copy (which is what the textarea actually reads). */
+  student_feedback: string | null;
 }
 
 export interface BankChatProposal {

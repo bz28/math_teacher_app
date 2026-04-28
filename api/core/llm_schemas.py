@@ -539,13 +539,24 @@ AI_GRADING_SCHEMA: ToolSchema = {
                             "description": (
                                 "1-2 sentence explanation of why this grade was given. "
                                 "Reference the specific rubric criterion (by name) that "
-                                "drove the decision."
+                                "drove the decision. This field is for the TEACHER — it "
+                                "drives the AI verdict card on the review page."
+                            ),
+                        },
+                        "student_feedback": {
+                            "type": "string",
+                            "description": (
+                                "Short, second-person feedback the STUDENT will see "
+                                "when the teacher publishes the grade. Distinct from "
+                                "`reasoning`, which explains your call to the teacher. "
+                                "1-2 sentences, constructive, no grading jargon. See "
+                                "the system prompt for voice rules and examples."
                             ),
                         },
                     },
                     "required": [
                         "problem_position", "student_answer", "score_status",
-                        "percent", "confidence", "reasoning",
+                        "percent", "confidence", "reasoning", "student_feedback",
                     ],
                     "additionalProperties": False,
                 },
