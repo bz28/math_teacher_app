@@ -227,6 +227,7 @@ function EditableRow({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           aria-label={`Edit ${ariaLabel}`}
+          maxLength={2000}
           className="block w-full min-h-[44px] rounded-[--radius-sm] border border-border bg-surface px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none"
           rows={2}
           autoFocus
@@ -260,7 +261,7 @@ function EditableRow({
           onClick={startEdit}
           aria-label={`Edit ${ariaLabel}`}
           title="Looks wrong? Tap to fix."
-          className="shrink-0 inline-flex h-[32px] min-w-[32px] items-center justify-center rounded-[--radius-sm] border border-border-light text-xs text-text-muted hover:border-primary hover:text-primary"
+          className="shrink-0 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[--radius-sm] border border-border-light text-xs text-text-muted hover:border-primary hover:text-primary sm:min-h-[32px] sm:min-w-[32px]"
         >
           <span aria-hidden>✎</span>
         </button>
