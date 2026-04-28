@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type GradesRosterResponse, type GradesRosterRow } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
-import { PercentBadge } from "@/components/school/shared/percent-badge";
+import {
+  PercentBadge,
+  percentTone,
+  STRONG_THRESHOLD,
+  STRUGGLING_THRESHOLD,
+} from "@/components/school/shared/percent-badge";
 import { SearchIcon } from "@/components/ui/icons";
 
 /**
@@ -33,11 +38,9 @@ type SortKey = "name" | "graded" | "avg";
 type SortDir = "asc" | "desc";
 type FilterMode = "all" | "needs_attention" | "missing";
 
-// Buckets align with PercentBadge thresholds (>=85 strong, 70-84 ok,
-// <70 struggling). One source of truth for "what counts as struggling"
-// — see web/src/components/school/shared/percent-badge.tsx.
-const STRUGGLING_THRESHOLD = 70;
-const STRONG_THRESHOLD = 85;
+// Buckets align with PercentBadge thresholds — STRONG_THRESHOLD and
+// STRUGGLING_THRESHOLD are imported from percent-badge so "what counts
+// as struggling" stays one knob across the codebase.
 
 export function GradesTab({ courseId }: { courseId: string }) {
   const router = useRouter();
@@ -80,16 +83,20 @@ export function GradesTab({ courseId }: { courseId: string }) {
 
   const summary = useMemo(() => computeSummary(sectionScoped), [sectionScoped]);
 
-  // Per-section comparison chips, only meaningful when "All sections"
-  // is selected. Each section gets its own avg so the teacher can spot
-  // a lagging period without flipping the filter.
+  // Per-section averages, used inline on the section tabs so the
+  // teacher can spot a lagging period at a glance without flipping
+  // the filter. Computed against the FULL roster (not the
+  // section-scoped subset) so each tab always reports its own
+  // section's avg regardless of which tab is currently active.
   const sectionAverages = useMemo(() => {
-    if (!data || sectionFilter !== "all") return [];
-    return data.sections.map((s) => {
+    const m = new Map<string, number | null>();
+    if (!data) return m;
+    for (const s of data.sections) {
       const rows = data.students.filter((r) => r.section_id === s.id);
-      return { id: s.id, name: s.name, avg: avgOf(rows) };
-    });
-  }, [data, sectionFilter]);
+      m.set(s.id, avgOf(rows));
+    }
+    return m;
+  }, [data]);
 
   const needsAttentionCount = useMemo(
     () =>
@@ -161,10 +168,10 @@ export function GradesTab({ courseId }: { courseId: string }) {
     setSort((s) =>
       s.key === key
         ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
-        : // Picking a new column starts at "asc" for name/graded, but
-          // "asc" for avg means low-first (struggling first) — that's
-          // the more useful default since teachers click avg to find
-          // who needs help.
+        : // Picking a new column starts at "asc". For avg this means
+          // low-first (struggling first), which is the more useful
+          // default for teachers clicking avg to find who needs help.
+          // For name and graded, asc is the conventional default too.
           { key, dir: "asc" },
     );
   }
@@ -178,10 +185,15 @@ export function GradesTab({ courseId }: { courseId: string }) {
 
       {/* Section selector as tabs (vs the old dropdown) — the page is
           fundamentally a per-section gradebook, so the section pivot
-          deserves prominence. Hidden when there's only one section. */}
+          deserves prominence. Each section tab includes its avg
+          inline so the teacher can compare periods at a glance,
+          collapsing the old separate "Sections: P1 82% · P2 78%"
+          row that listed the same labels twice. Hidden when there's
+          only one section. */}
       {showSectionTabs && (
         <SectionTabs
           sections={data.sections}
+          sectionAverages={sectionAverages}
           value={sectionFilter}
           onChange={(v) => {
             setSectionFilter(v);
@@ -191,26 +203,6 @@ export function GradesTab({ courseId }: { courseId: string }) {
             setFilterMode("all");
           }}
         />
-      )}
-
-      {/* Per-section comparison chips — only meaningful in the "All"
-          state where pooled stats can mask period-to-period gaps. */}
-      {sectionFilter === "all" && sectionAverages.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted">
-          <span className="font-bold uppercase tracking-wider">Sections</span>
-          {sectionAverages.map((s) => (
-            <span
-              key={s.id}
-              className="rounded-[--radius-pill] border border-border-light bg-surface px-2 py-0.5 font-semibold text-text-secondary"
-              title={s.avg === null ? "No graded HWs yet" : `${s.name} class average`}
-            >
-              {s.name}{" "}
-              <span className={avgChipTone(s.avg)}>
-                {s.avg === null ? "—" : `${Math.round(s.avg)}%`}
-              </span>
-            </span>
-          ))}
-        </div>
       )}
 
       {/* Search + filter chips — chips replace the old single sort
@@ -390,10 +382,12 @@ function DistributionLegend({ dot, label, count }: { dot: string; label: string;
 
 function SectionTabs({
   sections,
+  sectionAverages,
   value,
   onChange,
 }: {
   sections: { id: string; name: string }[];
+  sectionAverages: Map<string, number | null>;
   value: string;
   onChange: (v: string) => void;
 }) {
@@ -403,11 +397,17 @@ function SectionTabs({
       aria-label="Filter by section"
       className="flex flex-wrap items-center gap-1.5"
     >
+      {/* The "All sections" tab deliberately does NOT show an avg —
+          the class summary at the top already shows it, and putting
+          it on the tab would triplicate the same number. Per-section
+          tabs include their avg since that data isn't exposed
+          anywhere else. */}
       <SectionTab label="All sections" active={value === "all"} onClick={() => onChange("all")} />
       {sections.map((s) => (
         <SectionTab
           key={s.id}
           label={s.name}
+          avg={sectionAverages.get(s.id) ?? null}
           active={value === s.id}
           onClick={() => onChange(s.id)}
         />
@@ -418,26 +418,46 @@ function SectionTabs({
 
 function SectionTab({
   label,
+  avg,
   active,
   onClick,
 }: {
   label: string;
+  /** Per-section avg shown inline. Undefined for the "All" tab
+   *  (where the class summary already reports it); null for sections
+   *  with no graded HWs yet (rendered as em-dash). */
+  avg?: number | null;
   active: boolean;
   onClick: () => void;
 }) {
+  const showAvg = avg !== undefined;
   return (
     <button
       type="button"
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+      className={`inline-flex items-center gap-1.5 rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
         active
           ? "border-primary bg-primary text-white"
           : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
       }`}
     >
-      {label}
+      <span>{label}</span>
+      {showAvg && (
+        <span
+          className={`text-[10px] tabular-nums ${
+            active
+              ? "text-white/80"
+              : avg === null
+                ? "text-text-muted"
+                : percentTone(avg)
+          }`}
+          aria-hidden
+        >
+          {avg === null ? "—" : `${Math.round(avg)}%`}
+        </span>
+      )}
     </button>
   );
 }
@@ -532,17 +552,34 @@ function RosterRow({
   const href = `/school/teacher/courses/${courseId}/grades/${row.section_id}/students/${row.student_id}`;
   return (
     <tr
-      onClick={() => router.push(href)}
+      onClick={() => {
+        // Don't navigate when the user was text-selecting (drag to
+        // copy a name, e.g.). The mouseup at the end of a drag fires
+        // a click event on the tr, which without this guard would
+        // yank the user out of their selection mid-copy. Common
+        // gradebook pattern is "select cell content, copy, paste."
+        if ((window.getSelection()?.toString().length ?? 0) > 0) return;
+        router.push(href);
+      }}
       onKeyDown={(e) => {
-        if (e.key === "Enter") {
+        // Activate on both Enter and Space — Space is the standard
+        // activation key for elements with link semantics, and we
+        // expose this row as a link via aria-label below.
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           router.push(href);
         }
       }}
       tabIndex={0}
-      role="link"
+      // Deliberately NOT setting role="link" on the <tr>. ARIA's link
+      // role isn't a great fit for a table row (a row inside a table
+      // should keep its row semantics for screen readers parsing the
+      // gradebook structure), and several screen readers handle the
+      // override poorly. The `aria-label` + `cursor-pointer` +
+      // focus-visible ring + Enter/Space handlers are enough to
+      // communicate "this row is actionable."
       aria-label={`View ${row.name}'s grades`}
-      className="cursor-pointer border-t border-border-light transition-colors hover:bg-bg-subtle/60 focus:bg-bg-subtle/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+      className="cursor-pointer border-t border-border-light transition-colors hover:bg-bg-subtle/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
     >
       <td className="px-4 py-3 font-semibold text-text-primary">{row.name}</td>
       {showSection && (
@@ -613,17 +650,6 @@ function avgOf(rows: GradesRosterRow[]): number | null {
     n += 1;
   }
   return n > 0 ? sum / n : null;
-}
-
-function percentTone(percent: number): string {
-  if (percent >= STRONG_THRESHOLD) return "text-green-700 dark:text-green-400";
-  if (percent >= STRUGGLING_THRESHOLD) return "text-text-primary";
-  return "text-red-700 dark:text-red-400";
-}
-
-function avgChipTone(avg: number | null): string {
-  if (avg === null) return "text-text-muted";
-  return percentTone(avg);
 }
 
 /** "Last, First" or best-effort last-name first for sort. Users have
