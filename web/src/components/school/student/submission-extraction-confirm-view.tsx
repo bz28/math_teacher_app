@@ -203,8 +203,12 @@ function EditableRow({
     setEditing(false);
     setDraft("");
     if (!trimmed) {
-      // Empty save = no-op. v1 keeps deletion out of the UI; if a
-      // step is wholly wrong the student flags the whole submission.
+      // Empty save: on an already-edited row this is the student's
+      // "wipe my edit" gesture — drop it so the original Vision read
+      // stands again. On a never-edited row it's a no-op (we don't
+      // surface deletion of original Vision rows here; that's what
+      // the "Reader got something wrong" flag is for).
+      if (isEdited) onClearEdit(editKey);
       return;
     }
     if (trimmed === originalText.trim()) {
@@ -339,11 +343,24 @@ export function SubmissionExtractionConfirmView({
       onContinue();
     } catch (e) {
       // 409 means server state moved (someone else flagged in another
-      // tab, or the window raced past our local view). Bail out of
-      // this screen and let the parent re-fetch + route to whatever
-      // terminal matches the server's current truth.
+      // tab, or the window raced past our local view) — the student's
+      // edits will NOT have been persisted by this request.
+      //
+      // When the student had no edits, silently routing forward is
+      // the right recovery: nothing was lost. When edits were in
+      // flight, surface a clear message so the student knows their
+      // corrections didn't apply, then keep them on the screen so
+      // they can re-confirm (the second call hits already_confirmed
+      // and routes them naturally).
       if (e instanceof ApiError && e.status === 409) {
-        onContinue();
+        if (Object.keys(edits).length === 0) {
+          onContinue();
+          return;
+        }
+        setError(
+          "This submission already moved on, so your edits weren't applied — your teacher will see the original AI read. Tap Confirm to continue.",
+        );
+        setSubmitting(false);
         return;
       }
       setError("Couldn't confirm. Try again.");
