@@ -1335,13 +1335,20 @@ export interface TeacherSubmissionRow {
   extraction_flagged_at: string | null;
 }
 
-/** One Vision-extracted line of student work, attributed by the
- *  backend to a specific HW problem. Same shape the student sees on
- *  the post-submit confirm screen, sliced server-side per problem so
- *  the teacher view doesn't re-filter. */
+/** One line of student work, attributed by the backend to a specific
+ *  HW problem. `latex` and `plain_english` carry the *current* view —
+ *  the student's edit if they corrected the row on the post-submit
+ *  confirm screen, otherwise the Vision read.
+ *
+ *  When `edited` is true, `original_*` carry what Vision originally
+ *  extracted, so the review UI can offer an expandable "view
+ *  original AI read" disclosure for verification. */
 export interface TeacherSubmissionStep {
   latex: string;
   plain_english: string;
+  edited?: boolean;
+  original_latex?: string | null;
+  original_plain_english?: string | null;
 }
 
 export interface TeacherSubmissionDetailProblem {

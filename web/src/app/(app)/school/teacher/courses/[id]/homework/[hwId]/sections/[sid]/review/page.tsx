@@ -22,6 +22,7 @@ import {
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionRow,
+  type TeacherSubmissionStep,
 } from "@/lib/api";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
@@ -1419,6 +1420,77 @@ function RubricSection({
 }
 
 // ────────────────────────────────────────────────────────────────────
+// One row of student work in the review panel. Renders the canonical
+// (edited if the student corrected it on the confirm screen, else
+// original Vision) text, plus an expandable disclosure exposing the
+// original Vision read whenever the student edited the row. The
+// teacher's daily flow stays clean — the badge is a quiet signal,
+// not a diff — but verification against the original is one tap away.
+// ────────────────────────────────────────────────────────────────────
+
+function StudentStepRow({
+  step,
+  index,
+}: {
+  step: TeacherSubmissionStep;
+  index: number;
+}) {
+  const [showOriginal, setShowOriginal] = useState(false);
+  const originalLatex = step.original_latex ?? "";
+  const originalPlain = step.original_plain_english ?? "";
+  const hasOriginal =
+    !!step.edited && (originalLatex.length > 0 || originalPlain.length > 0);
+  return (
+    <div className="flex gap-2">
+      <span
+        aria-hidden
+        className="shrink-0 pt-0.5 text-xs font-semibold text-text-muted tabular-nums"
+      >
+        {index + 1}.
+      </span>
+      <div className="min-w-0 flex-1">
+        {step.latex ? (
+          <MathText text={`$$${step.latex}$$`} />
+        ) : (
+          <span className="text-text-secondary">{step.plain_english}</span>
+        )}
+        {step.edited && (
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-bg px-1.5 py-0.5 font-semibold text-primary">
+              <span aria-hidden>✎</span> edited by student
+            </span>
+            {hasOriginal && (
+              <button
+                type="button"
+                onClick={() => setShowOriginal((v) => !v)}
+                aria-expanded={showOriginal}
+                className="text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
+              >
+                {showOriginal ? "Hide original" : "View original AI read"}
+              </button>
+            )}
+          </div>
+        )}
+        {step.edited && hasOriginal && showOriginal && (
+          <div className="mt-1 rounded-[--radius-sm] border border-border-light bg-bg-subtle/40 px-2 py-1.5 text-xs">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              AI originally read
+            </div>
+            <div className="mt-0.5 text-text-secondary">
+              {originalLatex ? (
+                <MathText text={`$$${originalLatex}$$`} />
+              ) : (
+                <span>{originalPlain}</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Per-problem grading row: answer compare + Full/Partial/Zero picker.
 // Partial opens an inline number input; Enter or blur commits with
 // the typed value. Full/Zero clicks commit immediately.
@@ -1707,23 +1779,7 @@ function ProblemGradeRow({
             }
           >
             {problem.student_steps.map((step, i) => (
-              <div key={i} className="flex gap-2">
-                <span
-                  aria-hidden
-                  className="shrink-0 pt-0.5 text-xs font-semibold text-text-muted tabular-nums"
-                >
-                  {i + 1}.
-                </span>
-                <div className="min-w-0 flex-1">
-                  {step.latex ? (
-                    <MathText text={`$$${step.latex}$$`} />
-                  ) : (
-                    <span className="text-text-secondary">
-                      {step.plain_english}
-                    </span>
-                  )}
-                </div>
-              </div>
+              <StudentStepRow key={i} step={step} index={i} />
             ))}
           </div>
           {stepsOverflow && (
