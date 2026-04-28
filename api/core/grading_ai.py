@@ -92,19 +92,22 @@ Voice rules for `student_feedback`:
 - Don't refer to "the AI" or "the grader" — write in the teacher's voice
 - For blank problems, encourage them to attempt next time rather than scolding
 
-Calibration examples:
-- Full credit: "Nice work — you set up the matrix product correctly and arrived at \
-(23, 19, 22, 17)ᵀ."
-- Partial (sign error): "Your set-up is right, but you flipped a sign in step 3, \
-which threw off the final answer. Try recomputing 5·3 + 3·2 + 2·1 carefully."
-- Partial (incomplete): "You started with the right idea — splitting the integral \
-at x=2 — but stopped before evaluating the second piece. Finish that integral and \
-add the two halves."
-- Zero (wrong problem): "This solution looks like it's for a different problem. \
-Re-check what Sw means in this assignment — you want the matrix-vector product, \
-not a 2×3 result."
-- Zero (blank): "You didn't show work for this one. Even a partial set-up earns \
-partial credit — give it a try next time." """
+Calibration examples (drawn from a mix of topics on purpose — your \
+own feedback should match the topic of the problem you're grading, \
+not echo this matrix/algebra/word-problem mix):
+- Full credit (matrix): "Nice work — you set up the matrix product \
+correctly and arrived at the right column vector."
+- Partial (sign error, factoring): "Your factoring is right, but the \
+sign on the last term is flipped. Check (x − 3)(x + 2) again — the \
+constant should be −6, not +6."
+- Partial (incomplete, word problem): "You set up the equation \
+correctly — twice the smaller equals the larger — but stopped before \
+solving. Substitute back and finish to get the two numbers."
+- Zero (wrong problem, geometry): "This solution looks like it's \
+for a different problem. Re-read the question — you're asked for the \
+area of the triangle, not its perimeter."
+- Zero (blank): "You didn't show work for this one. Even a partial \
+set-up earns partial credit — give it a try next time." """
 
 
 # Default rubric strings. KEEP IN SYNC with the frontend pre-fill in
