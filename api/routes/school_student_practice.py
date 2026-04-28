@@ -147,6 +147,7 @@ async def _run_integrity_and_grading_background(
     Each phase commits independently so a grading failure doesn't
     lose integrity results. Never re-raises.
     """
+    from api.core.extraction_edits import apply_extraction_edits
     from api.core.grading_ai import run_ai_grading_for_submission
 
     try:
@@ -162,7 +163,18 @@ async def _run_integrity_and_grading_background(
             if not assignment:
                 return
             user_id = str(sub.student_id)
-            extraction = sub.extraction
+            # Overlay any student corrections captured at confirm time
+            # before either pipeline runs. Both integrity sampling and
+            # AI grading consume the overlaid view — that way the AI
+            # grades the work the student claims they wrote, and the
+            # integrity agent's per-problem briefing matches. The raw
+            # Vision read stays on Submission.extraction for the teacher
+            # review page to surface as evidence.
+            extraction = apply_extraction_edits(
+                sub.extraction, sub.extraction_edits,
+            )
+            if extraction is None:
+                return
             run_integrity = assignment.integrity_check_enabled
             run_grading = assignment.ai_grading_enabled
 
@@ -1345,9 +1357,32 @@ async def submit_homework(
     return response
 
 
+class ConfirmExtractionBody(BaseModel):
+    """Optional per-step / per-final-answer corrections the student
+    saved on the confirm screen before signing off. Sparse map: a key
+    is present only when that step or final answer was edited.
+
+    Key format:
+      "{problem_position}:{step_num}"  → step edit
+      "{problem_position}:final"       → final-answer edit
+    Value is the student's plain-English replacement text. Empty string
+    means the student cleared that row (treated as deletion). Server
+    drops keys that don't match the stored Vision extraction.
+    """
+
+    edits: dict[str, str] | None = Field(default=None, max_length=200)
+
+
+# Sanity cap on a single edited step / final-answer so a malicious or
+# runaway client can't stuff the column with a novel. Math work in a
+# single line rarely exceeds a few hundred characters.
+_MAX_EDIT_VALUE_LEN = 2_000
+
+
 @router.post("/submissions/{submission_id}/confirm-extraction")
 async def confirm_extraction(
     submission_id: uuid.UUID,
+    body: ConfirmExtractionBody | None = None,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -1356,19 +1391,27 @@ async def confirm_extraction(
     background pipeline. Idempotent: a repeated call on an already-
     confirmed submission is a no-op (returns 200).
 
+    Optional body.edits: sparse map of student corrections to the
+    Vision extraction (OCR misreads). Stored on Submission.extraction_edits
+    and overlaid before grading + teacher review render. Original Vision
+    read stays preserved on Submission.extraction for audit.
+
     Rejects:
       • 404 if the submission doesn't exist.
       • 403 if it belongs to another student.
       • 409 if extraction hasn't finished (nothing to confirm yet).
       • 409 if the submission was already flagged via
         /flag-extraction — mutually exclusive terminal states.
+      • 400 if any edit value exceeds the per-row size cap.
 
     This is the single choke-point that gates grading on student
-    confirmation. Called from "Looks right — continue" on the confirm
-    screen; "Reader got something wrong" calls /flag-extraction
+    confirmation. Called from "Confirm — this is my work" on the
+    confirm screen; "Reader got something wrong" calls /flag-extraction
     instead, which stamps extraction_flagged_at and deliberately does
     NOT spawn grading.
     """
+    from api.core.extraction_edits import validate_edits_against_extraction
+
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -1391,6 +1434,19 @@ async def confirm_extraction(
         # is a no-op so we don't double-spawn grading.
         return {"status": "ok", "already_confirmed": True}
 
+    # Validate + sanitize edits BEFORE the conditional update, so an
+    # oversized payload doesn't waste the atomic-update slot.
+    raw_edits = (body.edits if body else None) or {}
+    for value in raw_edits.values():
+        if isinstance(value, str) and len(value) > _MAX_EDIT_VALUE_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail="Edit value exceeds size limit",
+            )
+    sanitized_edits = validate_edits_against_extraction(
+        sub.extraction, raw_edits,
+    )
+
     # Atomic conditional update: only stamp confirm if flag hasn't been
     # set and confirm hasn't been set. Guards against a concurrent flag
     # landing between the SELECT above and the UPDATE — without this
@@ -1398,6 +1454,11 @@ async def confirm_extraction(
     # both stamp their timestamps, which the DB-level CHECK constraint
     # would then reject (500). rowcount==0 here means someone else won
     # the race; treat that as a 409.
+    now = datetime.now(UTC)
+    update_values: dict[str, Any] = {"extraction_confirmed_at": now}
+    if sanitized_edits:
+        update_values["extraction_edits"] = sanitized_edits
+        update_values["extraction_edited_at"] = now
     result = await db.execute(
         update(Submission)
         .where(
@@ -1405,7 +1466,7 @@ async def confirm_extraction(
             Submission.extraction_confirmed_at.is_(None),
             Submission.extraction_flagged_at.is_(None),
         )
-        .values(extraction_confirmed_at=datetime.now(UTC))
+        .values(**update_values)
     )
     if result.rowcount == 0:  # type: ignore[attr-defined]
         await db.rollback()

@@ -1637,15 +1637,23 @@ async def generate_assignment_solutions(
 # image + per-problem typed answers + answer key side-by-side). ──
 
 class TeacherSubmissionStep(BaseModel):
-    """One Vision-extracted line of student work, attributed to a
-    specific HW problem. Shape mirrors IntegrityExtractionStep; we ship
-    only the fields the teacher grading view needs (latex + plain
-    English) and drop step_num / problem_position which are housekeeping
-    used during attribution upstream.
+    """One line of student work, attributed to a specific HW problem.
+
+    `latex` and `plain_english` carry the *current* (edited if the
+    student corrected it, else original Vision) view — so the teacher
+    grading row renders the same content the AI grader saw.
+
+    When the student edited this step on the post-submit confirm
+    screen, `edited` is True and `original_plain_english` /
+    `original_latex` carry the Vision read so the review page can
+    surface a "view original" disclosure on demand.
     """
 
     latex: str
     plain_english: str
+    edited: bool = False
+    original_latex: str | None = None
+    original_plain_english: str | None = None
 
 
 class TeacherSubmissionDetailProblem(BaseModel):
@@ -1748,18 +1756,70 @@ async def get_submission_detail(
     # rather than a re-scan. None = extraction never ran (pipeline off
     # or failed); empty buckets are normal for blank problems and the
     # response carries an empty list for them.
+    #
+    # Apply any student-supplied corrections from the post-submit
+    # confirm screen on top of the Vision read. The teacher grading
+    # row should reflect what the AI graded against (the overlaid
+    # view); the original Vision read travels alongside as
+    # `original_*` so the UI can surface a "view original AI read"
+    # disclosure on edited steps.
+    edits = sub.extraction_edits or {}
     steps_by_position: dict[int, list[TeacherSubmissionStep]] = {}
     if sub.extraction:
         for step in sub.extraction.get("steps", []) or []:
             position = step.get("problem_position")
             if not isinstance(position, int):
                 continue  # cross-problem scratchwork — skip
-            latex = step.get("latex") or ""
-            plain_english = step.get("plain_english") or ""
-            if not latex and not plain_english:
+            step_num = step.get("step_num")
+            edit_key = (
+                f"{position}:{step_num}"
+                if isinstance(step_num, int) and not isinstance(step_num, bool)
+                else None
+            )
+            original_latex = step.get("latex") or ""
+            original_plain = step.get("plain_english") or ""
+            edited_text = (
+                edits.get(edit_key, "").strip()
+                if edit_key and edit_key in edits
+                else None
+            )
+            if edited_text == "":
+                # Student cleared the row — drop it entirely so the
+                # grader's view and the teacher's view stay in sync.
+                continue
+            if edited_text is not None:
+                # Student replaced this step's content. Route the edit
+                # to the field that carried the original work: math
+                # steps stay math (latex), text steps stay text. Mirrors
+                # the apply_extraction_edits helper so the teacher view
+                # renders with the same fidelity as the grader saw.
+                # Vision read is preserved on original_* for the
+                # disclosure regardless.
+                if original_latex:
+                    edited_step = TeacherSubmissionStep(
+                        latex=edited_text,
+                        plain_english="",
+                        edited=True,
+                        original_latex=original_latex,
+                        original_plain_english=original_plain,
+                    )
+                else:
+                    edited_step = TeacherSubmissionStep(
+                        latex="",
+                        plain_english=edited_text,
+                        edited=True,
+                        original_latex=original_latex,
+                        original_plain_english=original_plain,
+                    )
+                steps_by_position.setdefault(position, []).append(edited_step)
+                continue
+            if not original_latex and not original_plain:
                 continue
             steps_by_position.setdefault(position, []).append(
-                TeacherSubmissionStep(latex=latex, plain_english=plain_english)
+                TeacherSubmissionStep(
+                    latex=original_latex,
+                    plain_english=original_plain,
+                )
             )
 
     problems: list[TeacherSubmissionDetailProblem] = []
@@ -1767,11 +1827,21 @@ async def get_submission_detail(
         item = items_by_id.get(str(pid))
         if not item:
             continue
-        # Prefer the AI-extracted answer (from handwriting) over the
-        # student's optional typed answer — the extraction is the
-        # source of truth for "what the student actually wrote."
+        # Priority order for the answer the teacher sees:
+        #   1. The student's confirm-screen edit (the most explicit
+        #      claim about what they wrote — also what AI grading uses
+        #      once it runs).
+        #   2. The AI-extracted answer from `grade.breakdown` (which
+        #      already reflects the edit, since the grader reads the
+        #      overlaid extraction). Available only post-grading.
+        #   3. The student's optional typed answer at submit time.
+        # Without (1), an edited :final wouldn't surface to the
+        # teacher view in the window between confirm and AI grading
+        # completion (or at all if `ai_grading_enabled=false`).
+        edited_final = (edits.get(f"{pos}:final") or "").strip()
         student_answer = (
-            ai_answers.get(str(pid))
+            edited_final
+            or ai_answers.get(str(pid))
             or answers_map.get(str(pid))
             or None
         )

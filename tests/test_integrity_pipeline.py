@@ -538,6 +538,37 @@ class TestCheckAnswerCorrectness:
         mock_llm.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_answer_plain_used_when_latex_empty(self) -> None:
+        # Reproduces the shape `apply_extraction_edits` produces when a
+        # student corrects a final-answer OCR misread on the confirm
+        # screen: latex is cleared, plain carries the student's text.
+        # Without `answer_plain` fallthrough the integrity sampler
+        # would silently treat the answer as missing and the bank item
+        # would register as wrong (correctness=False), flipping the
+        # student into a struggling tier even though they typed the
+        # right answer. Mirrors grading_ai's _format_final_answer
+        # fallback.
+        items, positions = self._setup([("$6$", 1)])
+        extraction = {
+            "final_answers": [
+                {
+                    "problem_position": 1,
+                    "answer_latex": "",
+                    "answer_plain": "6",
+                },
+            ],
+        }
+        with patch(
+            "api.core.integrity_pipeline.call_claude_json",
+            new=AsyncMock(),
+        ) as mock_llm:
+            correct = await check_answer_correctness(
+                extraction, items, positions,
+            )
+        assert list(correct.values()) == [True]
+        mock_llm.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_llm_failure_treats_uncertain_as_wrong(self) -> None:
         # If the LLM call raises, we degrade gracefully — every
         # uncertain pair is False, system never wedges.

@@ -1335,13 +1335,20 @@ export interface TeacherSubmissionRow {
   extraction_flagged_at: string | null;
 }
 
-/** One Vision-extracted line of student work, attributed by the
- *  backend to a specific HW problem. Same shape the student sees on
- *  the post-submit confirm screen, sliced server-side per problem so
- *  the teacher view doesn't re-filter. */
+/** One line of student work, attributed by the backend to a specific
+ *  HW problem. `latex` and `plain_english` carry the *current* view —
+ *  the student's edit if they corrected the row on the post-submit
+ *  confirm screen, otherwise the Vision read.
+ *
+ *  When `edited` is true, `original_*` carry what Vision originally
+ *  extracted, so the review UI can offer an expandable "view
+ *  original AI read" disclosure for verification. */
 export interface TeacherSubmissionStep {
   latex: string;
   plain_english: string;
+  edited?: boolean;
+  original_latex?: string | null;
+  original_plain_english?: string | null;
 }
 
 export interface TeacherSubmissionDetailProblem {
@@ -1760,11 +1767,23 @@ export const schoolStudent = {
   },
   /** Student signs off on Vision's reading. Server stamps
    *  extraction_confirmed_at and spawns the integrity + grading
-   *  background pipeline — neither fires until this is called. */
-  confirmExtraction(submissionId: string) {
+   *  background pipeline — neither fires until this is called.
+   *
+   *  Optional `edits`: a sparse map of student corrections to the
+   *  Vision extraction (OCR misreads). Keys are
+   *  `"{problem_position}:{step_num}"` for steps and
+   *  `"{problem_position}:final"` for final answers; values are the
+   *  student's plain-English replacement text. Empty string clears
+   *  that row. The server overlays edits onto the stored extraction
+   *  before grading runs, and preserves the Vision original on the
+   *  submission row for the teacher review view. */
+  confirmExtraction(submissionId: string, edits?: Record<string, string>) {
+    const hasEdits = edits && Object.keys(edits).length > 0;
     return apiFetch<{ status: string; already_confirmed?: boolean }>(
       `/school/student/submissions/${submissionId}/confirm-extraction`,
-      { method: "POST" },
+      hasEdits
+        ? { method: "POST", body: JSON.stringify({ edits }) }
+        : { method: "POST" },
     );
   },
   /** Student said "Reader got something wrong" — routes submission
