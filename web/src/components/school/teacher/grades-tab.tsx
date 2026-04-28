@@ -305,8 +305,14 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
   // jumping when the teacher switches to an empty section, and the
   // "0 students" label gives explicit feedback ("yes, this section
   // is empty") instead of the strip silently disappearing.
+  //
+  // Deliberately NO card chrome (border/shadow) on the wrapper —
+  // when there's no distribution bar to anchor (withAvg === 0) the
+  // chrome wraps nothing but a sparse label and looks like an
+  // empty placeholder. Inline text + optional bar reads cleaner in
+  // both populated and empty states.
   return (
-    <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 shadow-sm">
+    <div>
       {/* No headline avg here. The active section's avg is already
           inline on its tab below, and pooling across sections in
           "All sections" mode produces a "course avg" — not the
@@ -317,7 +323,7 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
           NOT showing an "X not yet graded" callout here — that's
           grading-queue framing and lives on the Submissions tab. */}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-sm font-bold text-text-primary">
+        <span className="text-sm font-semibold text-text-primary">
           {total} student{total === 1 ? "" : "s"}
         </span>
       </div>
