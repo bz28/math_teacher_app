@@ -352,20 +352,28 @@ def _normalize_answer_for_trivial_match(answer: str) -> str:
 
 
 def _student_answer_by_position(extraction: dict[str, Any]) -> dict[int, str]:
-    """Index Vision's per-problem final answers by `problem_position`.
+    """Index per-problem final answers by `problem_position`.
 
-    Skips entries with a null position or empty `answer_latex`. If
-    Vision tagged multiple answers to the same position (rare —
-    schema doesn't forbid it), the last one wins. Caller treats a
-    missing position as "no answer extracted" (correctness=False).
+    Prefers `answer_latex` and falls back to `answer_plain` so the
+    student-edit overlay (which clears latex and writes to plain when
+    a student corrects an OCR misread on the confirm screen) is still
+    visible to the integrity sampler. Mirrors the same fallthrough
+    grading_ai uses (`_format_final_answer`). Skips entries with a
+    null position or both fields empty. If multiple answers share a
+    position (rare — schema doesn't forbid it), the last one wins.
     """
     out: dict[int, str] = {}
     for fa in extraction.get("final_answers") or []:
         pos = fa.get("problem_position")
-        latex = (fa.get("answer_latex") or "").strip()
-        if not isinstance(pos, int) or isinstance(pos, bool) or not latex:
+        if not isinstance(pos, int) or isinstance(pos, bool):
             continue
-        out[pos] = latex
+        text = (
+            (fa.get("answer_latex") or "").strip()
+            or (fa.get("answer_plain") or "").strip()
+        )
+        if not text:
+            continue
+        out[pos] = text
     return out
 
 
