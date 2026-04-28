@@ -500,7 +500,9 @@ async def export_course_grades_csv(
         writer.writerow(row)
 
     csv_text = output.getvalue()
-    filename = f"grades-{_slug(course.title)}-{datetime.now(UTC).date().isoformat()}.csv"
+    # Course exposes `name`, not `title` — different convention from
+    # Assignment.title. Slug it for filename safety.
+    filename = f"grades-{_slug(course.name)}-{datetime.now(UTC).date().isoformat()}.csv"
     return Response(
         content=csv_text,
         media_type="text/csv; charset=utf-8",
