@@ -1636,12 +1636,30 @@ async def generate_assignment_solutions(
 # and powers the teacher's per-submission panel with the student's
 # image + per-problem typed answers + answer key side-by-side). ──
 
+class TeacherSubmissionStep(BaseModel):
+    """One Vision-extracted line of student work, attributed to a
+    specific HW problem. Shape mirrors IntegrityExtractionStep; we ship
+    only the fields the teacher grading view needs (latex + plain
+    English) and drop step_num / problem_position which are housekeeping
+    used during attribution upstream.
+    """
+
+    latex: str
+    plain_english: str
+
+
 class TeacherSubmissionDetailProblem(BaseModel):
     bank_item_id: str
     position: int
     question: str
     final_answer: str | None  # the teacher-side answer key (correct answer)
     student_answer: str | None  # what the student typed for this problem
+    # Full step-by-step extraction filtered to this problem's
+    # position. Empty list when the student left this problem blank or
+    # the extractor couldn't attribute any step. The whole-submission
+    # extraction lives on Submission.extraction; we slice it here so
+    # the frontend doesn't need to filter client-side.
+    student_steps: list[TeacherSubmissionStep] = []
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -1725,6 +1743,25 @@ async def get_submission_detail(
                 ai_answers[pid] = sa
 
     answers_map = sub.final_answers or {}
+    # Group the Vision extraction's per-line steps by problem_position
+    # once, so each problem's slice is an O(1) dict lookup below
+    # rather than a re-scan. None = extraction never ran (pipeline off
+    # or failed); empty buckets are normal for blank problems and the
+    # response carries an empty list for them.
+    steps_by_position: dict[int, list[TeacherSubmissionStep]] = {}
+    if sub.extraction:
+        for step in sub.extraction.get("steps", []) or []:
+            position = step.get("problem_position")
+            if not isinstance(position, int):
+                continue  # cross-problem scratchwork — skip
+            latex = step.get("latex") or ""
+            plain_english = step.get("plain_english") or ""
+            if not latex and not plain_english:
+                continue
+            steps_by_position.setdefault(position, []).append(
+                TeacherSubmissionStep(latex=latex, plain_english=plain_english)
+            )
+
     problems: list[TeacherSubmissionDetailProblem] = []
     for pos, pid in enumerate(primary_ids, start=1):
         item = items_by_id.get(str(pid))
@@ -1744,6 +1781,7 @@ async def get_submission_detail(
             question=item.question,
             final_answer=item.final_answer,
             student_answer=student_answer,
+            student_steps=steps_by_position.get(pos, []),
         ))
 
     # Surface ai_breakdown's grades array for the frontend to show

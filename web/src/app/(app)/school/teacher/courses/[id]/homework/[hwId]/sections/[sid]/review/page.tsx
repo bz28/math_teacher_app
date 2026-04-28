@@ -1553,6 +1553,32 @@ function ProblemGradeRow({
     ro.observe(el);
     return () => ro.disconnect();
   }, [problem.question]);
+
+  // Student work step list. Same clamp-and-expand pattern as the
+  // question — long extracted work (15+ steps from a verbose student)
+  // would otherwise push the AI verdict and grade buttons way down
+  // the page. Default to a max-h cap that fits ~4-5 steps; surface a
+  // "Show all N steps" toggle when content overflows.
+  const stepCount = problem.student_steps.length;
+  const [stepsExpanded, setStepsExpanded] = useState(false);
+  const [stepsOverflow, setStepsOverflow] = useState(false);
+  const stepsRef = useRef<HTMLDivElement>(null);
+  const stepsExpandedRef = useRef(stepsExpanded);
+  useEffect(() => {
+    stepsExpandedRef.current = stepsExpanded;
+  }, [stepsExpanded]);
+  useEffect(() => {
+    const el = stepsRef.current;
+    if (!el) return;
+    const measure = () => {
+      if (stepsExpandedRef.current) return;
+      setStepsOverflow(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stepCount]);
   const aiGradeLabel = aiGrade
     ? aiGrade.score_status === "partial"
       ? `Partial ${Math.round(aiGrade.percent)}%`
@@ -1642,6 +1668,75 @@ function ProblemGradeRow({
           </div>
         </div>
       </div>
+
+      {/* Student's work — full step-by-step extraction for this
+          problem. Sits between the answer mini-grid and the AI hero
+          so the natural eye flow is: compare final answers, scan the
+          process, then check the AI's verdict. Hidden when the
+          student left this problem blank or extraction never ran for
+          this submission. */}
+      {stepCount > 0 && (
+        <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
+          <p className="flex items-baseline gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Student&apos;s work
+            <span className="font-normal normal-case tracking-normal text-text-muted/80">
+              · {stepCount} {stepCount === 1 ? "step" : "steps"}
+            </span>
+          </p>
+          <div
+            ref={stepsRef}
+            className={`mt-2 space-y-2 text-sm text-text-primary ${
+              stepsExpanded ? "" : "max-h-40 overflow-hidden"
+            }`}
+            style={
+              stepsOverflow && !stepsExpanded
+                ? {
+                    maskImage:
+                      "linear-gradient(to bottom, black 75%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to bottom, black 75%, transparent 100%)",
+                  }
+                : undefined
+            }
+          >
+            {problem.student_steps.map((step, i) => (
+              <div key={i} className="flex gap-2">
+                <span
+                  aria-hidden
+                  className="shrink-0 pt-0.5 text-xs font-semibold text-text-muted tabular-nums"
+                >
+                  {i + 1}.
+                </span>
+                <div className="min-w-0 flex-1">
+                  {step.latex ? (
+                    <MathText text={`$$${step.latex}$$`} />
+                  ) : (
+                    <span className="text-text-secondary">
+                      {step.plain_english}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {stepsOverflow && (
+            <button
+              type="button"
+              onClick={() => setStepsExpanded((v) => !v)}
+              aria-expanded={stepsExpanded}
+              className="mt-2 inline-flex items-center rounded-[--radius-sm] text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {stepsExpanded ? (
+                <>Hide steps <span aria-hidden>▴</span></>
+              ) : (
+                <>
+                  Show all {stepCount} steps <span aria-hidden>▾</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When
