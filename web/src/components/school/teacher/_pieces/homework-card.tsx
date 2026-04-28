@@ -68,9 +68,13 @@ export function HomeworkCard({
         <h3 className="min-w-0 flex-1 truncate text-base font-bold text-text-primary">
           {hw.title}
         </h3>
-        {isDraft && (
+        {isDraft ? (
           <span className="shrink-0 rounded-full border border-text-muted/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
             draft
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 dark:bg-green-500/20 dark:text-green-300">
+            published
           </span>
         )}
         {overdueDays > 0 && (

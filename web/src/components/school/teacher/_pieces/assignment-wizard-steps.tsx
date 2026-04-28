@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { TeacherDocument } from "@/lib/api";
 import type { PendingUpload } from "@/hooks/use-document-uploads";
 import { UnitMultiSelect } from "./unit-multi-select";
@@ -17,9 +17,9 @@ import { SourceMaterialPicker } from "./source-material-picker";
  */
 
 export const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "penalty_per_day", label: "10% per day" },
-  { value: "no_credit", label: "No credit after due" },
+  { value: "none", label: "Accept any time, no penalty" },
+  { value: "penalty_per_day", label: "−10% per day after due" },
+  { value: "no_credit", label: "Closed after due date" },
 ];
 
 export const QUANTITY_CHIPS = [5, 10, 15, 20] as const;
@@ -183,12 +183,13 @@ export function AssignmentProblemsStep({
 }) {
   // Local draft so the teacher can transiently clear the input (e.g.
   // delete "5" and type "12") without the controlled value snapping
-  // back mid-edit. Commit to parent on any valid parse, fall back to
-  // the last committed count on blur if left empty.
-  const [countDraft, setCountDraft] = useState(String(count));
-  useEffect(() => {
-    setCountDraft(String(count));
-  }, [count]);
+  // back mid-edit. Empty whenever the committed count matches a preset
+  // chip — the chip already shows that value, so doubling it in the
+  // input reads as a bug. Step 3 mounts/unmounts on Back/Continue, so
+  // the initial value derives correctly from the latest committed
+  // count without needing a sync effect.
+  const isPreset = (QUANTITY_CHIPS as readonly number[]).includes(count);
+  const [countDraft, setCountDraft] = useState(isPreset ? "" : String(count));
 
   const clamp = (v: number) => Math.min(50, Math.max(1, Math.round(v)));
 
@@ -203,10 +204,17 @@ export function AssignmentProblemsStep({
   const handleCountBlur = () => {
     const v = parseInt(countDraft, 10);
     if (Number.isNaN(v)) {
-      setCountDraft(String(count));
-    } else {
-      setCountDraft(String(clamp(v)));
+      // Empty/invalid — fall back to the current count, but stay
+      // blank when that count is one of the chips (the chip is
+      // already showing it).
+      setCountDraft(
+        (QUANTITY_CHIPS as readonly number[]).includes(count)
+          ? ""
+          : String(count),
+      );
+      return;
     }
+    setCountDraft(String(clamp(v)));
   };
 
   return (
@@ -222,7 +230,12 @@ export function AssignmentProblemsStep({
             <button
               key={n}
               type="button"
-              onClick={() => onCountChange(n)}
+              onClick={() => {
+                onCountChange(n);
+                // Clear the input so the chip and the custom field
+                // don't both display the same number.
+                setCountDraft("");
+              }}
               disabled={disabled}
               className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                 count === n
@@ -233,15 +246,18 @@ export function AssignmentProblemsStep({
               {n}
             </button>
           ))}
+          <span className="text-[11px] text-text-muted">or</span>
           <input
             type="number"
             value={countDraft}
             min={1}
             max={50}
+            placeholder="custom"
+            aria-label="Custom problem count"
             onChange={(e) => handleCountChange(e.target.value)}
             onBlur={handleCountBlur}
             disabled={disabled}
-            className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+            className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
           />
         </div>
       </div>

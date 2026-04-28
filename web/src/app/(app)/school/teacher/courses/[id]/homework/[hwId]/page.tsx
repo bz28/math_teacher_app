@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MathText } from "@/components/shared/math-text";
+import { formatDue } from "@/lib/utils";
 import {
   teacher,
   enterPreviewMode,
@@ -40,9 +41,9 @@ interface AssignmentProblem {
 }
 
 const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "penalty_per_day", label: "10% per day" },
-  { value: "no_credit", label: "No credit after due" },
+  { value: "none", label: "Accept any time, no penalty" },
+  { value: "penalty_per_day", label: "−10% per day after due" },
+  { value: "no_credit", label: "Closed after due date" },
 ];
 
 // Inline-editable fields with their own SaveState — a saving units
@@ -670,6 +671,33 @@ export default function HomeworkDetailPage({
 
       </header>
 
+      {/* Read-only metadata strip — surfaces due / sections / problem
+          count without making the teacher expand the Configuration
+          accordion below. Editing still happens there; this is the
+          scan line. Practice has no due-date concept, so it's omitted
+          for that type. */}
+      {hw && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
+          {hw.type !== "practice" && (
+            <>
+              <span className={hw.due_at ? "" : "italic"}>
+                {hw.due_at ? formatDue(hw.due_at) : "No due date"}
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          <span className={hw.section_names.length === 0 ? "italic" : ""}>
+            {hw.section_names.length === 0
+              ? "No sections"
+              : hw.section_names.join(", ")}
+          </span>
+          <span aria-hidden>·</span>
+          <span>
+            {problems.length} {problems.length === 1 ? "problem" : "problems"}
+          </span>
+        </div>
+      )}
+
       {/* Instructions students will see (e.g. "Show all work, no
           calculators"). Editable inline; lives just below the title so
           teachers see it as a first-class part of the HW, not buried in
@@ -703,8 +731,8 @@ export default function HomeworkDetailPage({
       ) : (
         <>
           {isPublished && (
-            <div className="mt-4 rounded-[--radius-md] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              🔒 Published — students can see this. Rubric and
+            <div className="mt-4 rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 p-3 text-xs text-text-secondary">
+              Published — students can see this. Rubric and
               instructions stay editable; unpublish to change the
               problem list, title, due date, or sections.
             </div>
@@ -751,14 +779,9 @@ export default function HomeworkDetailPage({
           {/* Problems — the hero of the page */}
           <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
             <div className="flex items-center justify-between border-b border-border-light pb-3">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">
-                  Problems
-                </h2>
-                <p className="mt-0.5 text-2xl font-extrabold text-text-primary">
-                  {problems.length}
-                </p>
-              </div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">
+                Problems · {problems.length}
+              </h2>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1883,12 +1906,21 @@ function InstructionsBlock({
     if (!value) {
       return (
         <div className="mt-3">
+          <div className="mb-1 flex items-baseline gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+              Instructions for students
+            </span>
+            <span className="text-[11px] font-normal normal-case tracking-normal text-text-muted">
+              · optional
+            </span>
+          </div>
           <button
             type="button"
             onClick={startEditing}
-            className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-primary"
+            className="block w-full rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle/40 px-3 py-2 text-left text-sm text-text-muted transition-colors hover:border-primary/40 hover:bg-bg-subtle hover:text-text-primary"
           >
-            + Add instructions for students
+            + Add instructions students will see (e.g. &ldquo;Show all
+            work, no calculators.&rdquo;)
           </button>
         </div>
       );
