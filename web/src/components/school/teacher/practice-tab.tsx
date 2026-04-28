@@ -318,7 +318,7 @@ function PracticeCard({
             draft
           </span>
         ) : (
-          <span className="shrink-0 rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 dark:bg-green-500/20 dark:text-green-300">
+          <span className="shrink-0 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white dark:bg-green-500">
             published
           </span>
         )}
