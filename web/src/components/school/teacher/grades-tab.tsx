@@ -300,32 +300,25 @@ export function GradesTab({ courseId }: { courseId: string }) {
 // ────────────────────────────────────────────────────────────────────
 
 function ClassSummary({ summary }: { summary: SummaryStats }) {
-  const { total, withAvg, classAvg, strong, ok, struggling } = summary;
-  if (total === 0) {
-    return null;
-  }
-  const ungraded = total - withAvg;
+  const { total, withAvg, strong, ok, struggling } = summary;
+  // Always render even at total === 0 — keeps the layout from
+  // jumping when the teacher switches to an empty section, and the
+  // "0 students" label gives explicit feedback ("yes, this section
+  // is empty") instead of the strip silently disappearing.
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 shadow-sm">
+      {/* No headline avg here. The active section's avg is already
+          inline on its tab below, and pooling across sections in
+          "All sections" mode produces a "course avg" — not the
+          "class avg" teachers actually mean (one class = one
+          period in K-12 lingo), so a single labeled number would be
+          misleading. Distribution bar carries the visual gestalt;
+          per-section comparisons live on the tabs. Also deliberately
+          NOT showing an "X not yet graded" callout here — that's
+          grading-queue framing and lives on the Submissions tab. */}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-sm font-bold text-text-primary">
-          Class avg{" "}
-          {classAvg === null ? (
-            <span className="text-text-muted">—</span>
-          ) : (
-            <span className={percentTone(classAvg)}>{Math.round(classAvg)}%</span>
-          )}
-        </span>
-        <span className="text-xs text-text-muted">
           {total} student{total === 1 ? "" : "s"}
-          {ungraded > 0 && (
-            <>
-              {" · "}
-              <span title="Students with no graded HWs yet">
-                {ungraded} not yet graded
-              </span>
-            </>
-          )}
         </span>
       </div>
       {/* Distribution bar — segmented horizontal bar showing how
@@ -609,9 +602,8 @@ interface SummaryStats {
   total: number;
   /** Number of students with at least one published grade (i.e.
    *  avg_percent !== null). Drives the distribution-bar denominator
-   *  and the "X not yet graded" callout. */
+   *  — the bar shows the spread of *graded* students. */
   withAvg: number;
-  classAvg: number | null;
   strong: number;
   ok: number;
   struggling: number;
@@ -621,12 +613,10 @@ function computeSummary(rows: GradesRosterRow[]): SummaryStats {
   let strong = 0;
   let ok = 0;
   let struggling = 0;
-  let sum = 0;
   let withAvg = 0;
   for (const r of rows) {
     if (r.avg_percent === null) continue;
     withAvg += 1;
-    sum += r.avg_percent;
     if (r.avg_percent >= STRONG_THRESHOLD) strong += 1;
     else if (r.avg_percent >= STRUGGLING_THRESHOLD) ok += 1;
     else struggling += 1;
@@ -634,7 +624,6 @@ function computeSummary(rows: GradesRosterRow[]): SummaryStats {
   return {
     total: rows.length,
     withAvg,
-    classAvg: withAvg > 0 ? sum / withAvg : null,
     strong,
     ok,
     struggling,
