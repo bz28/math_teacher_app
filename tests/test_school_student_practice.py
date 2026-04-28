@@ -544,6 +544,64 @@ async def test_teacher_submission_detail(client: AsyncClient, world: dict[str, A
     assert out["image_data"]
 
 
+async def test_teacher_submission_detail_surfaces_student_edits(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When the student corrected a Vision misread on the confirm
+    screen, the teacher review payload renders the edited text as the
+    canonical step and ferries the original Vision read in
+    `original_*` so the UI can offer a "view original" disclosure.
+    Unedited steps render unchanged with edited=False."""
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+    await drain_integrity_background_tasks()
+
+    # Stage a richer extraction (real problem_position / step_num) and
+    # a sparse edit overlay matching the position the test world's
+    # primary problem occupies (1).
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext, "
+                "extraction_edits = :ed WHERE id = :id"
+            ),
+            {
+                "id": submission_id,
+                "ext": (
+                    '{"steps": ['
+                    '{"step_num": 1, "problem_position": 1, '
+                    '"latex": "x=5", "plain_english": "x equals five"},'
+                    '{"step_num": 2, "problem_position": 1, '
+                    '"latex": "y=10", "plain_english": "y equals ten"}'
+                    '], "final_answers": [], "confidence": 0.9}'
+                ),
+                "ed": '{"1:1": "x = 5/2"}',
+            },
+        )
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    steps = r.json()["problems"][0]["student_steps"]
+    assert len(steps) == 2
+    edited, unedited = steps[0], steps[1]
+    assert edited["edited"] is True
+    assert edited["plain_english"] == "x = 5/2"
+    assert edited["latex"] == ""
+    assert edited["original_plain_english"] == "x equals five"
+    assert edited["original_latex"] == "x=5"
+    assert unedited["edited"] is False
+    assert unedited["original_latex"] is None
+    assert unedited["plain_english"] == "y equals ten"
+
+
 async def test_teacher_submission_detail_403_for_other_teacher(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
@@ -781,6 +839,7 @@ async def test_confirm_with_edits_persists_overlay(
         assert sub.extraction_edits == {"1:1": "x = 5/2"}
         assert sub.extraction_edited_at is not None
         # Original extraction preserved
+        assert sub.extraction is not None
         assert sub.extraction["steps"][0]["plain_english"] == "x equals five"
 
 

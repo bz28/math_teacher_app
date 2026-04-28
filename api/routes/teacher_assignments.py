@@ -1637,15 +1637,23 @@ async def generate_assignment_solutions(
 # image + per-problem typed answers + answer key side-by-side). ──
 
 class TeacherSubmissionStep(BaseModel):
-    """One Vision-extracted line of student work, attributed to a
-    specific HW problem. Shape mirrors IntegrityExtractionStep; we ship
-    only the fields the teacher grading view needs (latex + plain
-    English) and drop step_num / problem_position which are housekeeping
-    used during attribution upstream.
+    """One line of student work, attributed to a specific HW problem.
+
+    `latex` and `plain_english` carry the *current* (edited if the
+    student corrected it, else original Vision) view — so the teacher
+    grading row renders the same content the AI grader saw.
+
+    When the student edited this step on the post-submit confirm
+    screen, `edited` is True and `original_plain_english` /
+    `original_latex` carry the Vision read so the review page can
+    surface a "view original" disclosure on demand.
     """
 
     latex: str
     plain_english: str
+    edited: bool = False
+    original_latex: str | None = None
+    original_plain_english: str | None = None
 
 
 class TeacherSubmissionDetailProblem(BaseModel):
@@ -1748,18 +1756,58 @@ async def get_submission_detail(
     # rather than a re-scan. None = extraction never ran (pipeline off
     # or failed); empty buckets are normal for blank problems and the
     # response carries an empty list for them.
+    #
+    # Apply any student-supplied corrections from the post-submit
+    # confirm screen on top of the Vision read. The teacher grading
+    # row should reflect what the AI graded against (the overlaid
+    # view); the original Vision read travels alongside as
+    # `original_*` so the UI can surface a "view original AI read"
+    # disclosure on edited steps.
+    edits = sub.extraction_edits or {}
     steps_by_position: dict[int, list[TeacherSubmissionStep]] = {}
     if sub.extraction:
         for step in sub.extraction.get("steps", []) or []:
             position = step.get("problem_position")
             if not isinstance(position, int):
                 continue  # cross-problem scratchwork — skip
-            latex = step.get("latex") or ""
-            plain_english = step.get("plain_english") or ""
-            if not latex and not plain_english:
+            step_num = step.get("step_num")
+            edit_key = (
+                f"{position}:{step_num}"
+                if isinstance(step_num, int) and not isinstance(step_num, bool)
+                else None
+            )
+            original_latex = step.get("latex") or ""
+            original_plain = step.get("plain_english") or ""
+            edited_text = (
+                edits.get(edit_key, "").strip()
+                if edit_key and edit_key in edits
+                else None
+            )
+            if edited_text == "":
+                # Student cleared the row — drop it entirely so the
+                # grader's view and the teacher's view stay in sync.
+                continue
+            if edited_text is not None:
+                # Student replaced this step's content. We surface the
+                # edit as the canonical text and ferry the Vision read
+                # in original_* for the disclosure.
+                steps_by_position.setdefault(position, []).append(
+                    TeacherSubmissionStep(
+                        latex="",
+                        plain_english=edited_text,
+                        edited=True,
+                        original_latex=original_latex,
+                        original_plain_english=original_plain,
+                    )
+                )
+                continue
+            if not original_latex and not original_plain:
                 continue
             steps_by_position.setdefault(position, []).append(
-                TeacherSubmissionStep(latex=latex, plain_english=plain_english)
+                TeacherSubmissionStep(
+                    latex=original_latex,
+                    plain_english=original_plain,
+                )
             )
 
     problems: list[TeacherSubmissionDetailProblem] = []
