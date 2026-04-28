@@ -130,6 +130,21 @@ class Submission(Base):
     # groups steps by problem_position. Null when extraction hasn't run
     # or failed.
     extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Sparse overlay of student-supplied corrections to the Vision
+    # extraction, captured at confirm time. Map keyed by
+    # "{problem_position}:{step_num}" for steps and
+    # "{problem_position}:final" for final answers; value is the
+    # student's plain-English replacement text. Empty string = student
+    # cleared the row (treated as deletion of that step / answer).
+    # Applied as an overlay onto `extraction` at grading + teacher-review
+    # render time so the original Vision read stays preserved for audit.
+    # Null when the student didn't edit anything.
+    extraction_edits: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Stamped at confirm time when any edits were saved alongside the
+    # confirmation. Null when the student confirmed without editing.
+    extraction_edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     # Stamped when the student hits Confirm (or Flag) on the post-submit
     # confirm screen. Integrity sampling + the AI grading call are
     # gated on this — neither fires until the student has explicitly

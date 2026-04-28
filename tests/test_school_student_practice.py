@@ -737,3 +737,84 @@ async def test_confirm_403_for_other_student(
         headers=_auth(world["outsider_token"]),
     )
     assert r.status_code == 403
+
+
+async def test_confirm_with_edits_persists_overlay(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Edits posted with confirm land on extraction_edits + stamp
+    extraction_edited_at. Original extraction stays untouched. Stale
+    keys are silently dropped (the helper validates server-side)."""
+    submission_id = await _submit_and_extract(client, world)
+    # Replace the mock extraction with one that has real
+    # problem_position / step_num so edit keys can target a row.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext WHERE id = :id"
+            ),
+            {
+                "id": submission_id,
+                "ext": (
+                    '{"steps": [{"step_num": 1, "problem_position": 1, '
+                    '"latex": "x=5", "plain_english": "x equals five"}], '
+                    '"final_answers": [{"problem_position": 1, '
+                    '"answer_latex": "5", "answer_plain": "five"}], '
+                    '"confidence": 0.9}'
+                ),
+            },
+        )
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+        json={"edits": {"1:1": "x = 5/2", "99:99": "stale key"}},
+    )
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        # Stale key dropped, only the real edit persisted
+        assert sub.extraction_edits == {"1:1": "x = 5/2"}
+        assert sub.extraction_edited_at is not None
+        # Original extraction preserved
+        assert sub.extraction["steps"][0]["plain_english"] == "x equals five"
+
+
+async def test_confirm_without_edits_leaves_overlay_null(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When the student confirms with no body (or empty edits map),
+    extraction_edits + extraction_edited_at stay null. Confirms the
+    overlay is opt-in, not always populated."""
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+        json={"edits": {}},
+    )
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_edits is None
+        assert sub.extraction_edited_at is None
+
+
+async def test_confirm_rejects_oversized_edit_value(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """An edit value above the 2,000-char cap is a 400. Guards against
+    a malicious / runaway client stuffing the column with a novel."""
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+        json={"edits": {"1:1": "x" * 2_001}},
+    )
+    assert r.status_code == 400
