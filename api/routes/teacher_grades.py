@@ -5,16 +5,20 @@ It never shows drafts: a grade appears here only once the teacher has
 clicked "Publish grades" on the HW (i.e. SubmissionGrade.grade_published_at
 is not null).
 
-Two endpoints:
+Three endpoints:
   GET /teacher/courses/{course_id}/grades                                        → roster
   GET /teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/grades → detail
+  GET /teacher/courses/{course_id}/grades/export.csv                             → CSV export
 """
 
+import csv
+import io
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -352,3 +356,158 @@ async def get_student_grades(
         "published_hws": published_hws,
         "missing_hws": missing_hws,
     }
+
+
+def _split_name(name: str | None) -> tuple[str, str]:
+    """Best-effort first / last split for CSV column conventions used
+    by Canvas, Schoology, PowerTeacher Pro, etc. We only have a single
+    `name` field on User, so split on the last whitespace and take the
+    tail as the last name. Single-token names go in `first` with an
+    empty `last` so the CSV stays well-formed."""
+    if not name:
+        return ("", "")
+    parts = name.strip().split()
+    if len(parts) == 1:
+        return (parts[0], "")
+    return (" ".join(parts[:-1]), parts[-1])
+
+
+# Strip non-alphanumerics down to dashes for filename hygiene (avoids
+# spaces / quotes / slashes in Content-Disposition that some clients
+# misinterpret).
+_FILENAME_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _slug(text: str) -> str:
+    out = _FILENAME_SLUG_RE.sub("-", text.lower()).strip("-")
+    return out or "course"
+
+
+@router.get("/courses/{course_id}/grades/export.csv")
+async def export_course_grades_csv(
+    course_id: uuid.UUID,
+    section_id: uuid.UUID | None = None,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download published HW grades as CSV. One row per enrolled
+    student, one column per published HW (ordered by due_at), cells
+    contain the published final score. Blank cells for HWs the
+    student didn't submit or that aren't graded yet.
+
+    Generic format that imports into Canvas / Schoology / PowerSchool
+    grade-import flows — First Name / Last Name / Email / Section /
+    per-assignment columns / Average. The `(YYYY-MM-DD)` due-date
+    suffix on each assignment column makes re-imports stable across
+    HW renames.
+
+    Respects the same section filter the roster endpoint accepts so
+    a teacher viewing one period exports just that period.
+    """
+    course = await get_teacher_course(db, course_id, current_user.user_id)
+
+    # Roster (re-using the same shape as /grades for consistency).
+    enrollments_q = (
+        select(
+            User.id,
+            User.name,
+            User.email,
+            Section.id.label("section_id"),
+            Section.name.label("section_name"),
+        )
+        .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
+        .join(Section, Section.id == SectionEnrollment.section_id)
+        .where(Section.course_id == course_id, User.is_preview.is_(False))
+    )
+    if section_id is not None:
+        enrollments_q = enrollments_q.where(Section.id == section_id)
+    # Sort by section then last name so the CSV opens already grouped
+    # the way a teacher reads a gradebook.
+    enrollments = (await db.execute(
+        enrollments_q.order_by(Section.name, User.name)
+    )).all()
+
+    assigned_by_section, _ = await _published_and_past_due(db, course_id)
+    all_assigned_aids: set[uuid.UUID] = set().union(*assigned_by_section.values()) \
+        if assigned_by_section else set()
+
+    # Pull assignment metadata for column headers, ordered by due_at
+    # (oldest first). due_at NULLs land last so dateless HWs trail
+    # the dated ones rather than splitting them.
+    assignments = (await db.execute(
+        select(Assignment.id, Assignment.title, Assignment.due_at)
+        .where(Assignment.id.in_(all_assigned_aids))
+        .order_by(Assignment.due_at.asc().nulls_last(), Assignment.title)
+    )).all() if all_assigned_aids else []
+
+    # Per-(student, assignment) published score map for O(1) cell
+    # lookup in the row build below.
+    student_ids = [e.id for e in enrollments]
+    scores: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+    if student_ids and all_assigned_aids:
+        rows = (await db.execute(
+            select(
+                Submission.student_id,
+                Submission.assignment_id,
+                SubmissionGrade.published_final_score.label("final_score"),
+            )
+            .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+            .where(
+                Submission.student_id.in_(student_ids),
+                Submission.assignment_id.in_(all_assigned_aids),
+                SubmissionGrade.grade_published_at.is_not(None),
+                SubmissionGrade.published_final_score.is_not(None),
+            )
+        )).all()
+        for r in rows:
+            scores[(r.student_id, r.assignment_id)] = r.final_score
+
+    # Per-student set of assignments scoped to their section, used to
+    # compute the per-student average over the right denominator.
+    enrollment_assigned: dict[uuid.UUID, set[uuid.UUID]] = {
+        e.id: assigned_by_section.get(e.section_id, set()) for e in enrollments
+    }
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    header = ["First Name", "Last Name", "Email", "Section"]
+    for a in assignments:
+        suffix = a.due_at.date().isoformat() if a.due_at else "no-due-date"
+        header.append(f"{a.title} ({suffix})")
+    header.append("Average")
+    writer.writerow(header)
+
+    for e in enrollments:
+        first, last = _split_name(e.name)
+        row: list[str] = [first, last, e.email or "", e.section_name]
+        student_assigned = enrollment_assigned.get(e.id, set())
+        graded_scores: list[float] = []
+        for a in assignments:
+            score = scores.get((e.id, a.id))
+            if score is None:
+                # Blank for unsubmitted / ungraded — most LMS importers
+                # treat blank as "no grade yet" rather than zero, which
+                # is the right default. Teachers who want zeros for
+                # missing work can fill them in manually.
+                row.append("")
+            else:
+                row.append(str(round(score, 1)))
+                if a.id in student_assigned:
+                    graded_scores.append(score)
+        avg = round(sum(graded_scores) / len(graded_scores), 1) if graded_scores else ""
+        row.append(str(avg))
+        writer.writerow(row)
+
+    csv_text = output.getvalue()
+    filename = f"grades-{_slug(course.title)}-{datetime.now(UTC).date().isoformat()}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # Tell the browser/AT this is a fresh download every time
+            # rather than letting an old export get cached.
+            "Cache-Control": "no-store",
+        },
+    )

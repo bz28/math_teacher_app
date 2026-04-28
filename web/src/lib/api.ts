@@ -1028,6 +1028,40 @@ export const teacher = {
       `/teacher/courses/${courseId}/grades${qs}`,
     );
   },
+  /** Trigger a CSV download of the gradebook. Pulls the bytes via
+   *  authenticated fetch, then builds an in-page anchor and clicks it
+   *  to drop the file into the user's Downloads. Bearer auth on the
+   *  request precludes the simpler `<a href>` approach since `<a>`
+   *  can't carry custom headers.
+   *
+   *  `sectionId` is optional and respected when provided so the
+   *  download matches the active section filter on the Grades tab. */
+  async exportGradesCSV(courseId: string, sectionId?: string): Promise<void> {
+    const qs = sectionId ? `?section_id=${sectionId}` : "";
+    const path = `/teacher/courses/${courseId}/grades/export.csv${qs}`;
+    const token = getAccessToken();
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await res.json().catch(() => ({})));
+    }
+    const blob = await res.blob();
+    // Server sends a content-disposition with a date-stamped filename;
+    // parse it back out so the saved file matches what the backend
+    // produced rather than picking a generic frontend default.
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const match = cd.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] ?? "grades.csv";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   /** Full published-grade record for one student in one section. */
   studentGrades(courseId: string, sectionId: string, studentId: string) {
     return apiFetch<StudentGradesResponse>(
