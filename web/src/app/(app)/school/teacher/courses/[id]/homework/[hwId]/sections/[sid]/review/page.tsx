@@ -1508,7 +1508,7 @@ function ProblemGradeRow({
       ? `Partial ${Math.round(aiGrade.percent)}%`
       : aiGrade.score_status === "full"
         ? "Full"
-        : "Zero"
+        : "No credit"
     : null;
 
   return (
@@ -1559,7 +1559,7 @@ function ProblemGradeRow({
         <div className="mt-3 rounded-[--radius-md] border border-primary/25 bg-primary-bg px-3 py-2">
           <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-text-primary">
             <span className="text-primary" aria-hidden>🤖</span>
-            <span className="text-primary">AI&apos;s call:</span>
+            <span className="text-primary">Suggestion:</span>
             <span>{aiGradeLabel}</span>
             {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
               <span
@@ -1629,7 +1629,7 @@ function ProblemGradeRow({
           onClick={() => onChange("zero")}
           aiPick={aiGrade?.score_status === "zero"}
         >
-          Zero
+          No credit
         </GradeBtn>
       </div>
 
@@ -1673,7 +1673,7 @@ function ProblemGradeRow({
           rows={3}
           placeholder={
             feedbackDisabled
-              ? "Pick Full / Partial / Zero first — then you can leave feedback."
+              ? "Pick Full / Partial / No credit first — then you can leave feedback."
               : "Add a sentence the student will see…"
           }
           className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
@@ -1722,7 +1722,7 @@ function GradeBtn({
           className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold leading-none ${
             active ? "bg-white/30 text-white" : "bg-primary/15 text-primary"
           }`}
-          aria-label="AI's suggestion"
+          aria-label="AI suggestion"
         >
           AI
         </span>
