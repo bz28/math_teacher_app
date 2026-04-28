@@ -1289,9 +1289,10 @@ function SubmissionDetailPanel({
           type="button"
           onClick={onSelectNext}
           disabled={!nextStudent}
+          title={!nextStudent ? "No more students to review" : undefined}
           className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
         >
-          Next student →
+          {nextStudent ? "Next student →" : "No more students"}
         </button>
       </div>
 
@@ -1873,14 +1874,14 @@ function IntegrityBanner({
     <>
       <div className="space-y-2">
         <div
-          className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-4 shadow-sm`}
+          className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-3`}
           role="status"
           aria-live="polite"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${style.iconBg}`}
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
                 aria-hidden
               >
                 {style.icon}
@@ -1892,7 +1893,7 @@ function IntegrityBanner({
                  * focused detail view the disposition label and the
                  * Activity panel below already convey understanding +
                  * behavior; an extra pill here was redundant. */}
-                <p className="text-base font-bold text-text-primary">
+                <p className="text-sm font-semibold text-text-primary">
                   {style.label}
                 </p>
                 {summary && (
