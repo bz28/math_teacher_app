@@ -499,7 +499,13 @@ async def export_course_grades_csv(
         row.append(str(avg))
         writer.writerow(row)
 
-    csv_text = output.getvalue()
+    # Prepend a UTF-8 BOM. Excel on Windows assumes legacy codepage
+    # (CP-1252) for unmarked CSVs and mojibakes accented characters
+    # in student names ("José" → "JosÃ©") on import. The BOM forces
+    # Excel to read the file as UTF-8. Modern apps (Numbers, Google
+    # Sheets, Schoology/Canvas import flows) tolerate the BOM
+    # transparently, so it's net-positive across the board.
+    csv_text = "﻿" + output.getvalue()
     # Course exposes `name`, not `title` — different convention from
     # Assignment.title. Slug it for filename safety.
     filename = f"grades-{_slug(course.name)}-{datetime.now(UTC).date().isoformat()}.csv"
