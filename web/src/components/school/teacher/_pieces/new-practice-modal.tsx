@@ -244,9 +244,14 @@ export function NewPracticeModal({
             <h2 className="text-base font-bold text-text-primary">
               New Practice
             </h2>
-            <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-[11px] font-semibold text-text-muted">
-              Step {step} of {totalSteps} · {stepLabel}
-            </span>
+            {/* Wizard chrome only makes sense for the multi-step path —
+                clone is single-screen, so the counter would always read
+                "Step 1 of 1" and look broken. */}
+            {totalSteps > 1 && (
+              <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+                Step {step} of {totalSteps} · {stepLabel}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -323,9 +328,16 @@ export function NewPracticeModal({
         <div className="flex items-center justify-between gap-3 border-t border-border-light px-6 py-3">
           {step === 1 ? (
             <>
-              <span className="text-xs text-text-muted">
-                Step 1 of {totalSteps}
-              </span>
+              {/* Step counter only when there's more than one step.
+                  Empty span keeps justify-between alignment so the
+                  primary action stays right-anchored. */}
+              {totalSteps > 1 ? (
+                <span className="text-xs text-text-muted">
+                  Step 1 of {totalSteps}
+                </span>
+              ) : (
+                <span />
+              )}
               <button
                 type="button"
                 onClick={onStep1Continue}
