@@ -1285,15 +1285,28 @@ function SubmissionDetailPanel({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onSelectNext}
-          disabled={!nextStudent}
-          title={!nextStudent ? "No more students to review" : undefined}
-          className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
-        >
-          {nextStudent ? "Next student →" : "No more students"}
-        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          {/* Image stays one click away — promoted to the page header
+              so it's findable without scrolling to the problems card.
+              Lightbox markup lives inside the button component. The
+              gap-3 (vs the default gap-2 elsewhere in the strip) buys
+              breathing room between this modal-popping affordance and
+              the adjacent "Next student →" navigation, since teachers
+              click Next student rapidly and we don't want the View
+              work button absorbing accidental hits. */}
+          {detail.image_data && (
+            <StudentWorkThumbButton imageData={detail.image_data} />
+          )}
+          <button
+            type="button"
+            onClick={onSelectNext}
+            disabled={!nextStudent}
+            title={!nextStudent ? "No more students to review" : undefined}
+            className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
+          >
+            {nextStudent ? "Next student →" : "No more students"}
+          </button>
+        </div>
       </div>
 
       {/* Integrity verdict — the #1 trust signal. First full content
@@ -1315,17 +1328,13 @@ function SubmissionDetailPanel({
         onRegrade={onRegradeRequest}
       />
 
-      {/* Per-problem grading — the main scan-unit. Image thumbnail
-          lives inline in the header as a reference at point-of-use. */}
+      {/* Per-problem grading — the main scan-unit. The student-work
+          lightbox lives in the page header (one click away from any
+          problem). */}
       <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            Problems · {totalProblems}
-          </p>
-          {detail.image_data && (
-            <StudentWorkThumbButton imageData={detail.image_data} />
-          )}
-        </div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Problems · {totalProblems}
+        </p>
         <div className="mt-3">
           <RubricSection
             rubric={rubric}
@@ -1336,7 +1345,12 @@ function SubmissionDetailPanel({
         <div className="mt-3 space-y-3">
           {detail.problems.map((p) => (
             <ProblemGradeRow
-              key={p.bank_item_id}
+              // Compose the key with submission_id so the row remounts
+              // per student. Without this, React reuses the same
+              // ProblemGradeRow instance across students that share
+              // bank items, and local UI state (e.g. the question
+              // expand toggle) leaks from one student into the next.
+              key={`${detail.submission_id}-${p.bank_item_id}`}
               problem={p}
               entry={breakdownByProblem.get(p.bank_item_id) ?? null}
               aiGrade={aiByPosition.get(p.position) ?? null}
@@ -1503,6 +1517,42 @@ function ProblemGradeRow({
   // thrown away.
   const teacherOverrode =
     aiGrade !== null && current !== null && !isAiMatch;
+
+  // Question truncation. Long prompts (multi-paragraph word problems,
+  // big LaTeX matrices) push the actually-useful content (student
+  // work + answer key + AI verdict) below the fold and slow the
+  // teacher's per-problem scan. Default to a 3-line clamp; surface a
+  // "Show full prompt" toggle only when the rendered text actually
+  // overflows so short questions stay frictionless.
+  const [questionExpanded, setQuestionExpanded] = useState(false);
+  const [questionOverflows, setQuestionOverflows] = useState(false);
+  const questionRef = useRef<HTMLDivElement>(null);
+  // Mirror the expanded flag into a ref so the ResizeObserver
+  // callback (which closes over a stable element) can short-circuit
+  // measurement while the user has the prompt expanded — otherwise
+  // an unclamped element measures scrollHeight === clientHeight and
+  // we'd erroneously hide the "Hide full prompt" toggle.
+  const questionExpandedRef = useRef(questionExpanded);
+  useEffect(() => {
+    questionExpandedRef.current = questionExpanded;
+  }, [questionExpanded]);
+  useEffect(() => {
+    const el = questionRef.current;
+    if (!el) return;
+    const measure = () => {
+      if (questionExpandedRef.current) return;
+      setQuestionOverflows(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    // ResizeObserver re-fires when MathText's lazy-loaded diagrams
+    // (ChemDiagram, MathGraph via React.lazy + Suspense) mount and
+    // bump the rendered height past the clamp. A single rAF would
+    // miss them. Cross-student state leaks are handled by composing
+    // submission_id into the row's React key (see SubmissionDetailPanel).
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [problem.question]);
   const aiGradeLabel = aiGrade
     ? aiGrade.score_status === "partial"
       ? `Partial ${Math.round(aiGrade.percent)}%`
@@ -1515,8 +1565,52 @@ function ProblemGradeRow({
     <div className="rounded-[--radius-md] border border-border-light bg-bg-base/40 p-4">
       <div className="flex items-baseline gap-2">
         <span className="text-xs font-bold text-text-muted">{problem.position}.</span>
-        <div className="min-w-0 flex-1 text-sm text-text-primary">
-          <MathText text={problem.question} />
+        <div className="min-w-0 flex-1">
+          <div
+            ref={questionRef}
+            // max-h + overflow-hidden (vs line-clamp-3) because the
+            // -webkit-box layout that line-clamp relies on reports
+            // scrollHeight unreliably when the prompt contains
+            // block-level KaTeX (matrices, display equations) — the
+            // visual clamp would happen but our scrollHeight ===
+            // clientHeight check would miss the overflow and the
+            // "Show full question" toggle wouldn't appear. Standard
+            // overflow-hidden uses normal flow so scrollHeight
+            // correctly accounts for math blocks.
+            className={`text-sm text-text-primary ${
+              questionExpanded ? "" : "max-h-[5rem] overflow-hidden"
+            }`}
+            style={
+              questionOverflows && !questionExpanded
+                ? {
+                    // Soft fade at the bottom so a mid-row clamp on a
+                    // matrix or display equation reads as "intentionally
+                    // cut off" rather than broken. Gradient mask works
+                    // in WebKit and modern Firefox.
+                    maskImage:
+                      "linear-gradient(to bottom, black 70%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to bottom, black 70%, transparent 100%)",
+                  }
+                : undefined
+            }
+          >
+            <MathText text={problem.question} />
+          </div>
+          {questionOverflows && (
+            <button
+              type="button"
+              onClick={() => setQuestionExpanded((v) => !v)}
+              aria-expanded={questionExpanded}
+              className="mt-1 inline-flex items-center rounded-[--radius-sm] text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {questionExpanded ? (
+                <>Hide full question <span aria-hidden>▴</span></>
+              ) : (
+                <>Show full question <span aria-hidden>▾</span></>
+              )}
+            </button>
+          )}
         </div>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2070,8 +2164,9 @@ function TranscriptTurn({
 /**
  * Student's handwritten work: compact thumbnail + label that opens
  * the full photo in a modal. The image is a reference the teacher
- * consults WHILE grading, so it lives inline in the Problems card
- * header — not as its own scan-path block.
+ * consults WHILE grading, so it lives in the page header strip — one
+ * click away from any scroll position — rather than as its own
+ * scan-path block.
  */
 function StudentWorkThumbButton({ imageData }: { imageData: string }) {
   const [open, setOpen] = useState(false);
