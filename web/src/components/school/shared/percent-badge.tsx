@@ -5,10 +5,16 @@
  * struggling" is one knob to turn.
  *
  * - percent === null  → muted em-dash (roster case: no graded HWs yet)
- * - percent >= 85     → green
- * - percent >= 70     → neutral
- * - percent < 70      → red
+ * - percent >= STRONG_THRESHOLD     → green
+ * - percent >= STRUGGLING_THRESHOLD → neutral
+ * - percent < STRUGGLING_THRESHOLD  → red
  */
+
+/** Above this is "strong" (green). */
+export const STRONG_THRESHOLD = 85;
+/** At or above this is "ok"; below is "struggling" (red). */
+export const STRUGGLING_THRESHOLD = 70;
+
 export function PercentBadge({
   percent,
   size = "sm",
@@ -30,8 +36,11 @@ export function PercentBadge({
   );
 }
 
-function percentTone(percent: number): string {
-  if (percent >= 85) return "text-green-700 dark:text-green-400";
-  if (percent >= 70) return "text-text-primary";
+/** Tailwind color classes for a percent score. Exported so other
+ *  surfaces (Grades tab class summary, distribution chips) match
+ *  PercentBadge's tone thresholds without redefining them. */
+export function percentTone(percent: number): string {
+  if (percent >= STRONG_THRESHOLD) return "text-green-700 dark:text-green-400";
+  if (percent >= STRUGGLING_THRESHOLD) return "text-text-primary";
   return "text-red-700 dark:text-red-400";
 }
