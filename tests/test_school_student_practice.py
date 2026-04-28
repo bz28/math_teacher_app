@@ -924,3 +924,173 @@ async def test_confirm_rejects_oversized_edit_value(
         json={"edits": {"1:1": "x" * 2_001}},
     )
     assert r.status_code == 400
+
+
+async def test_confirm_persists_final_answer_edit(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A `:final` edit (most-likely OCR-fix case — single-token answer)
+    flows through the validate + persist path the same way step edits
+    do. Previously only step edits had a regression test."""
+    submission_id = await _submit_and_extract(client, world)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext WHERE id = :id"
+            ),
+            {
+                "id": submission_id,
+                "ext": (
+                    '{"steps": [], "final_answers": ['
+                    '{"problem_position": 1, "answer_latex": "5", '
+                    '"answer_plain": "five"}], "confidence": 0.9}'
+                ),
+            },
+        )
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+        json={"edits": {"1:final": "5/2"}},
+    )
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_edits == {"1:final": "5/2"}
+
+
+async def test_confirm_persists_empty_string_edit_as_deletion(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """An empty-string edit is the deletion semantic: it lands in the
+    column as `""` and `apply_extraction_edits` drops the corresponding
+    row at overlay time. The integration test pins the persistence
+    half; the helper unit tests cover the apply half."""
+    from api.core.extraction_edits import apply_extraction_edits
+
+    submission_id = await _submit_and_extract(client, world)
+    extraction_json = (
+        '{"steps": [{"step_num": 1, "problem_position": 1, '
+        '"latex": "x=5", "plain_english": "x equals five"}], '
+        '"final_answers": [], "confidence": 0.9}'
+    )
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext WHERE id = :id"
+            ),
+            {"id": submission_id, "ext": extraction_json},
+        )
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+        json={"edits": {"1:1": ""}},
+    )
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_edits == {"1:1": ""}
+        # Overlay applied: the cleared step is dropped from the view
+        # the grader and teacher see.
+        overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
+        assert overlaid is not None
+        assert overlaid["steps"] == []
+
+
+async def test_grading_pipeline_consumes_overlaid_extraction(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Pin the contract that `_run_integrity_and_grading_background`
+    applies `extraction_edits` over `extraction` BEFORE handing off
+    to integrity + grading. Without this, B1 (integrity sampling
+    silently ignored edited final answers) could re-regress as a
+    one-line removal of `apply_extraction_edits`. The unit test in
+    test_integrity_pipeline.py covers the consumer; this pins the
+    seam."""
+    from unittest.mock import AsyncMock, patch
+
+    from api.routes.school_student_practice import (
+        _run_integrity_and_grading_background,
+    )
+
+    submission_id = await _submit_and_extract(client, world)
+    # Stage a submission ready for the background task: extraction +
+    # an edit on a final answer + confirmed_at stamp (so the runner
+    # treats it as past-confirm rather than bailing).
+    extraction_json = (
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "five"}], "confidence": 0.9}'
+    )
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext, "
+                "extraction_edits = :ed, "
+                "extraction_confirmed_at = NOW() WHERE id = :id"
+            ),
+            {
+                "id": submission_id,
+                "ext": extraction_json,
+                "ed": '{"1:final": "5/2"}',
+            },
+        )
+        await s.commit()
+
+    captured: dict[str, Any] = {}
+
+    async def fake_start(submission_id: Any, db: Any, *, extraction: Any) -> None:
+        _ = submission_id, db
+        captured["extraction"] = extraction
+
+    with (
+        patch(
+            "api.routes.school_student_practice.start_integrity_check",
+            side_effect=fake_start,
+        ),
+        patch(
+            "api.core.grading_ai.run_ai_grading_for_submission",
+            new=AsyncMock(),
+        ),
+    ):
+        await _run_integrity_and_grading_background(uuid.UUID(submission_id))
+
+    assert "extraction" in captured, (
+        "start_integrity_check was never called — the runner short-circuited"
+    )
+    finals = captured["extraction"]["final_answers"]
+    assert len(finals) == 1
+    assert finals[0]["answer_plain"] == "5/2"
+    assert finals[0]["answer_latex"] == ""
+
+
+async def test_flag_does_not_disturb_extraction_edits(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The flag-extraction endpoint accepts no body and shouldn't touch
+    extraction_edits in any direction. A submission flagged before
+    confirm should keep extraction_edits null. Pins the contract so a
+    future flag-with-edits feature doesn't accidentally land via this
+    path (which would skip grading and silently lose edits)."""
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flagged_at is not None
+        assert sub.extraction_edits is None
+        assert sub.extraction_edited_at is None
