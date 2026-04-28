@@ -75,7 +75,39 @@ give full credit.
 partial credit.
 - If no extracted answer exists for a problem (student skipped it), give zero \
 AND set `student_answer` to null. Do not invent placeholder prose for the answer field.
-- Keep reasoning concise (1-2 sentences per problem)."""
+- Keep reasoning concise (1-2 sentences per problem).
+
+Student feedback (REQUIRED for every problem — `student_feedback` field):
+For each problem, in addition to `reasoning`, produce a `student_feedback` string \
+that the student will read directly when the teacher publishes the grade. This is \
+distinct from `reasoning` — `reasoning` explains your call to the TEACHER (drives \
+the AI verdict card); `student_feedback` is the teacher's draft note to the STUDENT.
+
+Voice rules for `student_feedback`:
+- Second person ("You computed…", "Your set-up shows…")
+- 1-2 sentences max
+- Constructive: name what they did right when applicable, then point at what to fix or check
+- No grading jargon ("Full credit criterion", "the rubric requires…", "score_status")
+- Don't quote the rubric verbatim — translate it into student-readable advice
+- Don't refer to "the AI" or "the grader" — write in the teacher's voice
+- For blank problems, encourage them to attempt next time rather than scolding
+
+Calibration examples (drawn from a mix of topics on purpose — your \
+own feedback should match the topic of the problem you're grading, \
+not echo this matrix/algebra/word-problem mix):
+- Full credit (matrix): "Nice work — you set up the matrix product \
+correctly and arrived at the right column vector."
+- Partial (sign error, factoring): "Your factoring is right, but the \
+sign on the last term is flipped. Check (x − 3)(x + 2) again — the \
+constant should be −6, not +6."
+- Partial (incomplete, word problem): "You set up the equation \
+correctly — twice the smaller equals the larger — but stopped before \
+solving. Substitute back and finish to get the two numbers."
+- Zero (wrong problem, geometry): "This solution looks like it's \
+for a different problem. Re-read the question — you're asked for the \
+area of the triangle, not its perimeter."
+- Zero (blank): "You didn't show work for this one. Even a partial \
+set-up earns partial credit — give it a try next time." """
 
 
 # Default rubric strings. KEEP IN SYNC with the frontend pre-fill in
@@ -379,12 +411,21 @@ async def run_ai_grading_for_submission(
             continue
         status = g.get("score_status", "zero")
         percent = 100.0 if status == "full" else 0.0 if status == "zero" else float(g.get("percent", 0))
+        # `feedback` lands directly in the textarea the teacher edits
+        # before publishing — it must be student-voice prose, not the
+        # internal-grading explanation. We pull from `student_feedback`
+        # (second-person, constructive) and fall back to `reasoning`
+        # only if the model omitted it (defensive — the schema marks
+        # student_feedback required, so this should be rare).
+        # `reasoning` is still kept on `ai_breakdown` (the immutable
+        # AI snapshot) and powers the AI verdict card on the review
+        # page.
         breakdown.append({
             "problem_id": bid,
             "score_status": status,
             "percent": percent,
             "confidence": g.get("confidence"),
-            "feedback": g.get("reasoning"),
+            "feedback": g.get("student_feedback") or g.get("reasoning"),
             "student_answer": g.get("student_answer"),
         })
         total_percent += percent

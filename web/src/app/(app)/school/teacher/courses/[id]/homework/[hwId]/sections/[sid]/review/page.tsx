@@ -1488,15 +1488,22 @@ function ProblemGradeRow({
 
   // Student-facing feedback. When an entry exists we honor its value
   // verbatim — including explicit null, which means "teacher cleared
-  // this on purpose". We only fall back to the AI's reasoning when
+  // this on purpose". We only fall back to the AI's draft when
   // there's no entry at all (disabled state, below). Same local-buffer
   // pattern as the partial input: `null` means "show the external
   // value", a string means "user is typing". Persisted on blur; the
   // parent's setProblemFeedback dedupes no-op saves.
+  //
+  // Prefer `aiGrade.student_feedback` (second-person, student-voice)
+  // over `aiGrade.reasoning` (teacher-voice grading explanation) for
+  // the fallback — the textarea is "shown to student when published"
+  // so the draft should already read like teacher-to-student prose.
+  // Older AI grades from before student_feedback shipped fall back
+  // to reasoning so historical rows still pre-fill.
   const [feedbackBuffer, setFeedbackBuffer] = useState<string | null>(null);
   const externalFeedback =
     entry === null
-      ? aiGrade?.reasoning ?? ""
+      ? aiGrade?.student_feedback ?? aiGrade?.reasoning ?? ""
       : entry.feedback ?? "";
   const feedbackDraft = feedbackBuffer ?? externalFeedback;
   const feedbackDisabled = entry === null;
