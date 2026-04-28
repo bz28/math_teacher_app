@@ -430,6 +430,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           type="button"
           onClick={() => setShowNewUnit({ parentId: null })}
           disabled={busy}
+          title="Create an empty unit folder"
           className="inline-flex min-h-[44px] items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-2 text-sm font-semibold text-text-secondary shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-strong hover:bg-bg-subtle hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
         >
           <PlusIcon className="h-4 w-4" />
@@ -708,12 +709,13 @@ function SplitUploadButton({
   return (
     <div ref={containerRef} className="relative inline-flex">
       <label
+        title="Upload files into the selected unit"
         className={`inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-l-[--radius-md] bg-primary pl-4 pr-3 py-2 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${
           busy ? "pointer-events-none opacity-60" : ""
         }`}
       >
         <UploadIcon className="h-4 w-4" strokeWidth={2.25} />
-        Upload
+        Upload Files
         <input
           ref={fileInputRef}
           type="file"
@@ -731,6 +733,7 @@ function SplitUploadButton({
       <button
         type="button"
         aria-label="More upload options"
+        title="Upload an entire folder as a new unit"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         disabled={busy}

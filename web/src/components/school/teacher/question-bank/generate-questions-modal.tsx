@@ -16,9 +16,9 @@ import { QUANTITY_CHIPS } from "./constants";
 /**
  * "Generate more" modal opened from the HW detail page.
  *
- * Aligns with the slim New Homework modal's shape: explicit topic
+ * Aligns with the slim New Homework modal's shape: explicit unit
  * (here: "Save to") first, then count, then a focus hint, then a
- * topic-filtered SourceMaterialPicker. Generated questions are
+ * unit-filtered SourceMaterialPicker. Generated questions are
  * stamped with `originating_assignment_id = assignmentId` and saved
  * under the picked unit's bank. Save-to is required — the
  * Uncategorized bucket was removed, so every generated item lives
@@ -126,7 +126,7 @@ export function GenerateQuestionsModal({
     }
     if (onlyPdfsSelected) {
       setError(
-        "Selected documents are all PDFs (skipped). Pick at least one image, or unselect all to generate from the topic name only.",
+        "Selected documents are all PDFs (skipped). Pick at least one image, or unselect all to generate from the unit name only.",
       );
       return;
     }
@@ -190,7 +190,7 @@ export function GenerateQuestionsModal({
               organized under it in the question bank.
             </p>
             {units === null ? (
-              <p className="mt-2 text-xs text-text-muted">Loading topics…</p>
+              <p className="mt-2 text-xs text-text-muted">Loading units…</p>
             ) : tops.length === 0 ? (
               <p className="mt-2 text-xs italic text-text-muted">
                 No units yet. Create one in the Materials tab first.
@@ -271,7 +271,7 @@ export function GenerateQuestionsModal({
               onChange={(e) => setConstraint(e.target.value)}
               rows={3}
               maxLength={500}
-              placeholder='e.g. "word problems with friendly numbers, mostly medium difficulty"'
+              placeholder="e.g. word problems, real-world contexts, no calculators"
               disabled={submitting}
               className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
             />

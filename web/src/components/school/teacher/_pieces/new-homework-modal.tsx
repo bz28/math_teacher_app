@@ -12,7 +12,7 @@ import { SourceMaterialPicker } from "./source-material-picker";
  * Single-screen creation modal for a draft homework.
  *
  * The modal collects only what the AI generator actually consumes —
- * title, topic, problem count, focus hint, and reference files. Due
+ * title, unit, problem count, focus hint, and reference files. Due
  * date, late policy, and section assignment are intentionally absent;
  * they aren't read by generation and are editable on the HW detail
  * page where the teacher lands next, so asking them here is double
@@ -21,7 +21,7 @@ import { SourceMaterialPicker } from "./source-material-picker";
  *
  * Two CTAs:
  *   - Generate problems  → kicks off a bank gen job for the selected
- *     topic, routes to the review queue (its skeleton handles the wait).
+ *     unit, routes to the review queue (its skeleton handles the wait).
  *   - Create empty draft → creates the HW with no problems and routes
  *     straight to the detail page.
  */
@@ -35,7 +35,7 @@ export function NewHomeworkModal({
   onCreated,
 }: {
   courseId: string;
-  /** Pre-select this topic (e.g. the unit currently filtered in the
+  /** Pre-select this unit (e.g. the unit currently filtered in the
    *  HW list). Single-select — only the first id is honored. */
   defaultUnitIds?: string[];
   onClose: () => void;
@@ -63,11 +63,11 @@ export function NewHomeworkModal({
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
 
   // Inline document uploads. Owned at the modal so the pending rows
-  // survive the picker remounting when the topic switches. Uploads
-  // land in the currently-picked topic; the picker only renders
-  // after a topic is picked, so unitId is non-null whenever Upload
-  // is reachable. Upload-during-topic-switch race is closed by
-  // disabling the topic chips while `hasInflightUploads` is true.
+  // survive the picker remounting when the unit switches. Uploads
+  // land in the currently-picked unit; the picker only renders
+  // after a unit is picked, so unitId is non-null whenever Upload
+  // is reachable. Upload-during-unit-switch race is closed by
+  // disabling the unit chips while `hasInflightUploads` is true.
   const uploads = useDocumentUploads({
     courseId,
     getUnitId: () => unitId ?? "",
@@ -77,7 +77,7 @@ export function NewHomeworkModal({
 
   // Load units + docs eagerly on mount. Both are tiny lists scoped to
   // the course; pre-loading avoids a flash of empty UI when the
-  // teacher picks a topic and expects materials to appear instantly.
+  // teacher picks a unit and expects materials to appear instantly.
   useEffect(() => {
     let cancelled = false;
     teacher
@@ -105,12 +105,12 @@ export function NewHomeworkModal({
     };
   }, [courseId]);
 
-  const onPickTopic = (id: string) => {
+  const onPickUnit = (id: string) => {
     if (id === unitId) return;
     setUnitId(id);
-    // Switching topic invalidates any selected reference files —
-    // forwarding files from another topic to the AI generator would
-    // ignore the topic the teacher just picked. Cheaper than a confirm
+    // Switching unit invalidates any selected reference files —
+    // forwarding files from another unit to the AI generator would
+    // ignore the unit the teacher just picked. Cheaper than a confirm
     // dialog and matches the picker's filter-mode default view.
     setSelectedDocs(new Set());
   };
@@ -132,7 +132,7 @@ export function NewHomeworkModal({
   const createDraft = async (): Promise<string> => {
     // Both submit buttons are `disabled` until title + unitId are
     // present (see button props below), so unitId is non-null here.
-    if (!unitId) throw new Error("Pick a topic");
+    if (!unitId) throw new Error("Pick a unit");
     const created = await teacher.createAssignment(courseId, {
       title: title.trim(),
       type: "homework",
@@ -225,13 +225,13 @@ export function NewHomeworkModal({
 
           <div>
             <label className="block text-sm font-bold text-text-primary">
-              Topic
+              Unit
             </label>
             {units === null ? (
-              <p className="mt-2 text-xs text-text-muted">Loading topics…</p>
+              <p className="mt-2 text-xs text-text-muted">Loading units…</p>
             ) : tops.length === 0 ? (
               <p className="mt-2 text-xs italic text-text-muted">
-                No topics yet. Create one in the Materials tab first.
+                No units yet. Create one in the Materials tab first.
               </p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -240,13 +240,13 @@ export function NewHomeworkModal({
                     key={u.id}
                     label={u.name}
                     selected={unitId === u.id}
-                    // Block topic switches while uploads are in flight.
+                    // Block unit switches while uploads are in flight.
                     // Otherwise an in-flight upload's auto-select can land
                     // AFTER our switch's selectedDocs clear, leaving a
                     // freshly-uploaded doc id selected under a different
-                    // topic and silently forwarded on submit.
+                    // unit and silently forwarded on submit.
                     disabled={busy || uploads.hasInflightUploads}
-                    onToggle={() => onPickTopic(u.id)}
+                    onToggle={() => onPickUnit(u.id)}
                   />
                 ))}
               </div>

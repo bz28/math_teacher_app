@@ -45,13 +45,13 @@ interface Props {
   disabled: boolean;
   /** When true, only the picked-unit groups (+ Unsorted) are shown by
    *  default; other top-level units are hidden behind a "Show all
-   *  materials" toggle. Used by the slim HW modal where the topic
+   *  materials" toggle. Used by the slim HW modal where the unit
    *  picker scopes the relevant materials. Default false preserves
    *  the multi-step wizard's full-list view. */
   filterToSelectedUnits?: boolean;
   /** Pre-loaded units from the parent modal. When provided, the picker
    *  skips its own fetch — avoids a duplicate round-trip when the
-   *  parent already needed the list (e.g. for its own topic picker).
+   *  parent already needed the list (e.g. for its own unit picker).
    *  Pass `null` while the parent is still loading. Omit entirely to
    *  let the picker manage its own load. */
   units?: TeacherUnit[] | null;
@@ -88,7 +88,7 @@ export function SourceMaterialPicker({
   >(new Map());
   // Filter-mode escape hatch: switches the picker from "selected-unit
   // groups only" back to the full grouped list. Reset whenever the
-  // selection changes so switching topic always returns to the focused
+  // selection changes so switching unit always returns to the focused
   // view. Derived during render (not in an effect) to avoid the
   // cascading-render lint and an extra paint.
   const [showAll, setShowAll] = useState(false);
@@ -224,14 +224,14 @@ export function SourceMaterialPicker({
   // a flat list with a unit badge per row.
   // In filter mode the search pool matches the visible groups —
   // searching while filtered to "Matrices" shouldn't surface hits from
-  // hidden topics, otherwise the teacher could pick a file that
+  // hidden units, otherwise the teacher could pick a file that
   // disappears from view the moment they clear the search box.
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
     // In filter mode we can't compute the allowed pool until units
     // load — surface an empty result rather than silently showing
-    // hits from currently-hidden topics that would disappear once
+    // hits from currently-hidden units that would disappear once
     // groups appear.
     if (inFilterMode && !units) return [];
     let pool = docs;
@@ -410,7 +410,7 @@ export function SourceMaterialPicker({
                     className="flex w-full items-center justify-center border-t border-border-light px-3 py-2 text-[11px] font-semibold text-primary hover:bg-bg-subtle disabled:opacity-50"
                   >
                     Show all materials ({hiddenGroupsCount} more{" "}
-                    {hiddenGroupsCount === 1 ? "topic" : "topics"})
+                    {hiddenGroupsCount === 1 ? "unit" : "units"})
                   </button>
                 )}
               </>

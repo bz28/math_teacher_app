@@ -226,14 +226,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           ← My Courses
         </Link>
         <div className="mt-2 flex items-baseline justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{course.name}</h1>
-            <p className="mt-1 text-sm text-text-secondary">
-              {course.grade_level ? `Grade ${course.grade_level} · ` : ""}
-              {course.section_count} section{course.section_count === 1 ? "" : "s"} ·{" "}
-              {course.doc_count} document{course.doc_count === 1 ? "" : "s"}
-            </p>
-          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{course.name}</h1>
           <button
             type="button"
             onClick={() => setTab("settings")}
