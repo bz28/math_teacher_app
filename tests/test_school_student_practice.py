@@ -602,6 +602,53 @@ async def test_teacher_submission_detail_surfaces_student_edits(
     assert unedited["plain_english"] == "y equals ten"
 
 
+async def test_teacher_submission_detail_surfaces_edited_final_pre_grading(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """An edited `:final` answer must be visible to the teacher view
+    even before AI grading completes (or with ai_grading_enabled=false).
+    Without this, the edit only surfaces once the AI grader writes its
+    breakdown, which leaves a confusing UI window where the student's
+    correction looks lost. Mirrors the priority order documented at
+    teacher_assignments.py: edited > AI-extracted > typed > None."""
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"image_base64": TINY_PNG},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+    await drain_integrity_background_tasks()
+
+    # Stage an extraction with a final-answer entry, then a sparse
+    # edit overriding it. No SubmissionGrade row will exist (we don't
+    # confirm here) — exactly the pre-grading window we care about.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext, "
+                "extraction_edits = :ed WHERE id = :id"
+            ),
+            {
+                "id": submission_id,
+                "ext": (
+                    '{"steps": [], "final_answers": ['
+                    '{"problem_position": 1, "answer_latex": "5", '
+                    '"answer_plain": "five"}], "confidence": 0.9}'
+                ),
+                "ed": '{"1:final": "16 apples"}',
+            },
+        )
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    p = r.json()["problems"][0]
+    assert p["student_answer"] == "16 apples"
+
+
 async def test_teacher_submission_detail_403_for_other_teacher(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:

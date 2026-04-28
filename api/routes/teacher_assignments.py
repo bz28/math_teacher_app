@@ -1815,11 +1815,21 @@ async def get_submission_detail(
         item = items_by_id.get(str(pid))
         if not item:
             continue
-        # Prefer the AI-extracted answer (from handwriting) over the
-        # student's optional typed answer — the extraction is the
-        # source of truth for "what the student actually wrote."
+        # Priority order for the answer the teacher sees:
+        #   1. The student's confirm-screen edit (the most explicit
+        #      claim about what they wrote — also what AI grading uses
+        #      once it runs).
+        #   2. The AI-extracted answer from `grade.breakdown` (which
+        #      already reflects the edit, since the grader reads the
+        #      overlaid extraction). Available only post-grading.
+        #   3. The student's optional typed answer at submit time.
+        # Without (1), an edited :final wouldn't surface to the
+        # teacher view in the window between confirm and AI grading
+        # completion (or at all if `ai_grading_enabled=false`).
+        edited_final = (edits.get(f"{pos}:final") or "").strip()
         student_answer = (
-            ai_answers.get(str(pid))
+            edited_final
+            or ai_answers.get(str(pid))
             or answers_map.get(str(pid))
             or None
         )
