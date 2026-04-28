@@ -1301,12 +1301,24 @@ export interface TeacherSubmissionRow {
   extraction_flagged_at: string | null;
 }
 
+/** One Vision-extracted line of student work, attributed by the
+ *  backend to a specific HW problem. Same shape the student sees on
+ *  the post-submit confirm screen, sliced server-side per problem so
+ *  the teacher view doesn't re-filter. */
+export interface TeacherSubmissionStep {
+  latex: string;
+  plain_english: string;
+}
+
 export interface TeacherSubmissionDetailProblem {
   bank_item_id: string;
   position: number;
   question: string;
   final_answer: string | null;
   student_answer: string | null;
+  /** Step-by-step extracted work for this problem. Empty when the
+   *  student left this problem blank or extraction never ran. */
+  student_steps: TeacherSubmissionStep[];
 }
 
 export interface TeacherSubmissionDetail {
