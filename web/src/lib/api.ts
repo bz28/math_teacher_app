@@ -1760,11 +1760,23 @@ export const schoolStudent = {
   },
   /** Student signs off on Vision's reading. Server stamps
    *  extraction_confirmed_at and spawns the integrity + grading
-   *  background pipeline — neither fires until this is called. */
-  confirmExtraction(submissionId: string) {
+   *  background pipeline — neither fires until this is called.
+   *
+   *  Optional `edits`: a sparse map of student corrections to the
+   *  Vision extraction (OCR misreads). Keys are
+   *  `"{problem_position}:{step_num}"` for steps and
+   *  `"{problem_position}:final"` for final answers; values are the
+   *  student's plain-English replacement text. Empty string clears
+   *  that row. The server overlays edits onto the stored extraction
+   *  before grading runs, and preserves the Vision original on the
+   *  submission row for the teacher review view. */
+  confirmExtraction(submissionId: string, edits?: Record<string, string>) {
+    const hasEdits = edits && Object.keys(edits).length > 0;
     return apiFetch<{ status: string; already_confirmed?: boolean }>(
       `/school/student/submissions/${submissionId}/confirm-extraction`,
-      { method: "POST" },
+      hasEdits
+        ? { method: "POST", body: JSON.stringify({ edits }) }
+        : { method: "POST" },
     );
   },
   /** Student said "Reader got something wrong" — routes submission

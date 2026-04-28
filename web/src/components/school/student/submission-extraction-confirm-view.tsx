@@ -20,8 +20,8 @@ interface Props {
    *  and the student goes straight to chat. */
   submittedImageDataUrl: string;
   extraction: IntegrityExtraction;
-  /** Student confirmed the reader got it right. Parent transitions
-   *  to the chat / submitted view. */
+  /** Student confirmed the reader got it right (with optional edits
+   *  applied). Parent transitions to the chat / submitted view. */
   onContinue: () => void;
   /** Student said the reader got something wrong. We fire the flag
    *  endpoint here and hand control back to the parent, which
@@ -35,14 +35,13 @@ interface Props {
  * extraction (all steps + per-problem final answers) grouped by
  * problem_position, side-by-side with the submitted photo.
  *
- * Replaces the old IntegrityConfirmView, which only rendered the
- * integrity-sampled slice (one problem). Now the student sees
- * everything Vision read on their page — matching the mental model
- * of "does this match my whole submission?".
- *
- * Read-only — the student can flag but not edit. Editing would let
- * them rewrite their own work to dodge follow-ups.
+ * The student can fix individual OCR misreads by tapping a step or
+ * final answer; their edits are sent with the confirm POST and the
+ * server overlays them on top of the stored Vision read before AI
+ * grading runs. The original Vision extraction stays on the
+ * submission row for the teacher review view to surface as evidence.
  */
+
 // Soft time budget matches the chat header. Mobile typing is ~2x
 // slower, so mobile students see a longer expectation.
 const BUDGET_COPY: Record<"desktop" | "mobile", string> = {
@@ -51,7 +50,9 @@ const BUDGET_COPY: Record<"desktop" | "mobile", string> = {
 };
 
 type ProblemGroup = {
-  /** Null = unattributed scratchwork / cross-problem setup. */
+  /** Null = unattributed scratchwork / cross-problem setup.
+   *  Unattributed steps cannot be edited — there's no
+   *  problem_position to key the edit by. They render read-only. */
   position: number | null;
   steps: IntegrityExtractionStep[];
   /** Every final answer Vision attributed to this problem. The
@@ -109,11 +110,19 @@ function groupByProblem(extraction: IntegrityExtraction): ProblemGroup[] {
   });
 }
 
-/** Render a single step. Prefer LaTeX wrapped as display math so
- *  matrices and fractions render as proper blocks; fall back to the
- *  plain-English description when no LaTeX is available (e.g. a
- *  written sentence like "let x = apples"). */
-function StepRow({ step }: { step: IntegrityExtractionStep }) {
+function stepKey(position: number, stepNum: number): string {
+  return `${position}:${stepNum}`;
+}
+
+function finalKey(position: number): string {
+  return `${position}:final`;
+}
+
+/** What the student sees for an unedited step: rendered LaTeX block
+ *  when present, else the plain-English fallback. Mirrors the read-
+ *  only display so an edited row reverts to identical typography
+ *  after a "View original" expand. */
+function ReadOnlyStepText({ step }: { step: IntegrityExtractionStep }) {
   if (step.latex) {
     return (
       <div className="text-text-primary">
@@ -126,25 +135,162 @@ function StepRow({ step }: { step: IntegrityExtractionStep }) {
   );
 }
 
-/** Render a problem's final answer row. Prefer LaTeX; fall back to
- *  plain when the student wrote prose. Returns null when both fields
- *  are empty — the schema allows an empty-string pair (extractor
- *  bug / misread) and a labeled-but-blank box is worse than nothing. */
-function FinalAnswerRow({ fa }: { fa: IntegrityExtractionFinalAnswer }) {
+function ReadOnlyFinalAnswerText({
+  fa,
+}: {
+  fa: IntegrityExtractionFinalAnswer;
+}) {
   const latex = fa.answer_latex?.trim() ?? "";
   const plain = fa.answer_plain?.trim() ?? "";
-  if (!latex && !plain) return null;
-  const content = latex ? (
-    <MathText text={`$$${latex}$$`} />
-  ) : (
-    <span>{plain}</span>
-  );
-  return (
-    <div className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-        Final answer
+  if (latex) {
+    return <MathText text={`$$${latex}$$`} />;
+  }
+  return <span>{plain}</span>;
+}
+
+/** Inline editor shell shared by step + final-answer rows. The
+ *  caller chooses what the read-only display looks like; this owns
+ *  edit-mode state, the textarea, Save/Cancel buttons, and the
+ *  edited / view-original disclosure. */
+function EditableRow({
+  editKey,
+  originalText,
+  editedText,
+  readOnlyDisplay,
+  originalDisplay,
+  onSaveEdit,
+  onClearEdit,
+  ariaLabel,
+}: {
+  editKey: string;
+  /** Plain-text fallback used to seed the textarea. Vision returns
+   *  empty plain_english for steps that arrived as pure LaTeX —
+   *  fall back to the latex source so the student can edit it as
+   *  text instead of starting from a blank field. */
+  originalText: string;
+  /** Saved edit, if any. When set, the row is "edited"; the
+   *  read-only display shows this text and the original is hidden
+   *  behind a disclosure. */
+  editedText: string | null;
+  /** What the row shows when not in edit mode. Caller passes the
+   *  rendered LaTeX block / plain-text span so this component
+   *  doesn't have to know about the underlying schema. */
+  readOnlyDisplay: React.ReactNode;
+  /** What the "View original AI read" disclosure expands to —
+   *  caller passes the *original* rendered display so the student
+   *  sees it the same way the AI saw it. Only consumed when edited. */
+  originalDisplay: React.ReactNode;
+  onSaveEdit: (key: string, text: string) => void;
+  onClearEdit: (key: string) => void;
+  ariaLabel: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const isEdited = editedText !== null;
+
+  function startEdit() {
+    setDraft(editedText ?? originalText);
+    setEditing(true);
+  }
+  function cancelEdit() {
+    setEditing(false);
+    setDraft("");
+  }
+  function commit() {
+    const trimmed = draft.trim();
+    setEditing(false);
+    setDraft("");
+    if (!trimmed) {
+      // Empty save = no-op. v1 keeps deletion out of the UI; if a
+      // step is wholly wrong the student flags the whole submission.
+      return;
+    }
+    if (trimmed === originalText.trim()) {
+      // Edited back to the original — clear the edit so we don't
+      // ship a no-op overlay.
+      onClearEdit(editKey);
+      return;
+    }
+    onSaveEdit(editKey, trimmed);
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2">
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          aria-label={`Edit ${ariaLabel}`}
+          className="block w-full min-h-[44px] rounded-[--radius-sm] border border-border bg-surface px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+          rows={2}
+          autoFocus
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={commit}
+            className="min-h-[44px] rounded-[--radius-sm] bg-primary px-3 text-xs font-bold text-white hover:bg-primary/90 sm:min-h-[32px]"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={cancelEdit}
+            className="min-h-[44px] rounded-[--radius-sm] border border-border px-3 text-xs font-medium text-text-secondary hover:border-text-muted sm:min-h-[32px]"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
-      <div className="mt-1 text-sm text-text-primary">{content}</div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">{readOnlyDisplay}</div>
+        <button
+          type="button"
+          onClick={startEdit}
+          aria-label={`Edit ${ariaLabel}`}
+          title="Looks wrong? Tap to fix."
+          className="shrink-0 inline-flex h-[32px] min-w-[32px] items-center justify-center rounded-[--radius-sm] border border-border-light text-xs text-text-muted hover:border-primary hover:text-primary"
+        >
+          <span aria-hidden>✎</span>
+        </button>
+      </div>
+      {isEdited && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary-bg px-2 py-0.5 font-semibold text-primary">
+            <span aria-hidden>✎</span> edited
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowOriginal((v) => !v)}
+            aria-expanded={showOriginal}
+            className="text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
+          >
+            {showOriginal ? "Hide original" : "View original AI read"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onClearEdit(editKey)}
+            className="text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
+          >
+            Undo edit
+          </button>
+        </div>
+      )}
+      {isEdited && showOriginal && (
+        <div className="mt-1.5 rounded-[--radius-sm] border border-border-light bg-bg-subtle/40 px-2 py-1.5 text-xs text-text-secondary">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            AI originally read
+          </div>
+          <div className="mt-0.5">{originalDisplay}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -157,20 +303,39 @@ export function SubmissionExtractionConfirmView({
   onFlagged,
 }: Props) {
   // Two mutually-exclusive terminal actions on the confirm screen:
-  //   Continue → server stamps extraction_confirmed_at, spawns
-  //              integrity + AI grading.
+  //   Continue → server stamps extraction_confirmed_at, applies any
+  //              `edits` overlay, spawns integrity + AI grading.
   //   Flag     → server stamps extraction_flagged_at, submission goes
-  //              to the teacher for manual grading. No AI calls run.
+  //              to the teacher for manual grading. No AI calls run
+  //              and any in-progress edits are discarded — flagging
+  //              is the stronger signal.
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sparse map of student corrections keyed by step / final-answer
+  // identity. POSTed alongside the confirm call.
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const editCount = Object.keys(edits).length;
   const device = useDeviceType();
   const groups = useMemo(() => groupByProblem(extraction), [extraction]);
+
+  function saveEdit(key: string, text: string) {
+    setEdits((prev) => ({ ...prev, [key]: text }));
+  }
+
+  function clearEdit(key: string) {
+    setEdits((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
 
   async function handleContinue() {
     setSubmitting(true);
     setError(null);
     try {
-      await schoolStudent.confirmExtraction(submissionId);
+      await schoolStudent.confirmExtraction(submissionId, edits);
       onContinue();
     } catch (e) {
       // 409 means server state moved (someone else flagged in another
@@ -208,17 +373,13 @@ export function SubmissionExtractionConfirmView({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      {/* Lead with the question the student is being asked. The
-          previous "Here's what we read…" headline named the screen
-          but didn't tell the student what to *do* — they would scan
-          and wonder what response was expected. A direct question
-          makes the action immediate. */}
       <h1 className="text-2xl font-bold text-text-primary">
         Does this match what you wrote?
       </h1>
       <p className="mt-2 text-sm text-text-secondary">
-        We just read your homework photo. Look it over — if the reader
-        got something wrong, flag it so your teacher knows.
+        Check that the AI read your work correctly. Tap{" "}
+        <span aria-hidden>✎</span> on any step to fix mistakes — the
+        AI will grade what you confirm here.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -259,17 +420,103 @@ export function SubmissionExtractionConfirmView({
                       No steps extracted for this problem.
                     </p>
                   ) : (
-                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-text-secondary">
-                      {g.steps.map((s, i) => (
-                        <li key={`${s.step_num}-${i}`}>
-                          <StepRow step={s} />
-                        </li>
-                      ))}
+                    <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-text-secondary">
+                      {g.steps.map((s, i) => {
+                        // "Other work" steps (position=null) can't be
+                        // edited — there's no problem_position to key
+                        // the overlay by. They render read-only.
+                        if (g.position === null) {
+                          return (
+                            <li key={`${s.step_num}-${i}`}>
+                              <ReadOnlyStepText step={s} />
+                            </li>
+                          );
+                        }
+                        const key = stepKey(g.position, s.step_num);
+                        const edited = edits[key] ?? null;
+                        return (
+                          <li key={`${s.step_num}-${i}`}>
+                            <EditableRow
+                              editKey={key}
+                              originalText={s.plain_english || s.latex}
+                              editedText={edited}
+                              ariaLabel={`step ${s.step_num} of problem ${g.position}`}
+                              onSaveEdit={saveEdit}
+                              onClearEdit={clearEdit}
+                              readOnlyDisplay={
+                                edited !== null ? (
+                                  <span className="font-medium text-text-primary">
+                                    {edited}
+                                  </span>
+                                ) : (
+                                  <ReadOnlyStepText step={s} />
+                                )
+                              }
+                              originalDisplay={<ReadOnlyStepText step={s} />}
+                            />
+                          </li>
+                        );
+                      })}
                     </ol>
                   )}
-                  {g.finalAnswers.map((fa, i) => (
-                    <FinalAnswerRow key={`fa-${i}`} fa={fa} />
-                  ))}
+                  {g.finalAnswers.map((fa, i) => {
+                    if (g.position === null) {
+                      // No editable key for unattributed answers.
+                      const latex = fa.answer_latex?.trim() ?? "";
+                      const plain = fa.answer_plain?.trim() ?? "";
+                      if (!latex && !plain) return null;
+                      return (
+                        <div
+                          key={`fa-${i}`}
+                          className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2"
+                        >
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                            Final answer
+                          </div>
+                          <div className="mt-1 text-sm text-text-primary">
+                            <ReadOnlyFinalAnswerText fa={fa} />
+                          </div>
+                        </div>
+                      );
+                    }
+                    const key = finalKey(g.position);
+                    const edited = edits[key] ?? null;
+                    const latex = fa.answer_latex?.trim() ?? "";
+                    const plain = fa.answer_plain?.trim() ?? "";
+                    // Skip when both blank AND no edit — nothing to
+                    // show and nothing to edit yet.
+                    if (!latex && !plain && edited === null) return null;
+                    return (
+                      <div
+                        key={`fa-${i}`}
+                        className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2"
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                          Final answer
+                        </div>
+                        <div className="mt-1 text-sm text-text-primary">
+                          <EditableRow
+                            editKey={key}
+                            originalText={plain || latex}
+                            editedText={edited}
+                            ariaLabel={`final answer for problem ${g.position}`}
+                            onSaveEdit={saveEdit}
+                            onClearEdit={clearEdit}
+                            readOnlyDisplay={
+                              edited !== null ? (
+                                <span>{edited}</span>
+                              ) : (
+                                <ReadOnlyFinalAnswerText fa={fa} />
+                              )
+                            }
+                            originalDisplay={
+                              <ReadOnlyFinalAnswerText fa={fa} />
+                            }
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </section>
               ))}
             </div>
@@ -278,11 +525,7 @@ export function SubmissionExtractionConfirmView({
       </div>
 
       {/* "What's next" panel sits right above the buttons so the
-          student reads it the moment before they choose. The previous
-          version put rules at the top, where they were attentionally
-          stranded — students were focused on reviewing the extraction,
-          not memorizing rules for a chat that hadn't started. Here the
-          rules land at the moment they become relevant. */}
+          student reads it the moment before they choose. */}
       <div className="mt-8 rounded-[--radius-md] border border-primary/30 bg-primary-bg/40 px-4 py-3.5">
         <p className="text-sm font-semibold text-text-primary">
           Next: a quick chat about your work
@@ -293,6 +536,13 @@ export function SubmissionExtractionConfirmView({
         </p>
       </div>
 
+      {editCount > 0 && (
+        <p className="mt-4 text-xs text-text-secondary">
+          You edited {editCount} {editCount === 1 ? "row" : "rows"}.
+          The AI will grade your edited work; your teacher can see the
+          original AI read.
+        </p>
+      )}
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
       <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-end">
@@ -310,7 +560,7 @@ export function SubmissionExtractionConfirmView({
           disabled={submitting}
           className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
         >
-          {submitting ? "Saving…" : "Looks right — start chat"}
+          {submitting ? "Saving…" : "Confirm — this is my work"}
         </button>
       </div>
     </div>
