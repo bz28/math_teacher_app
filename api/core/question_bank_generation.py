@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
+from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
 from api.core.practice import generate_distractors
@@ -84,10 +85,10 @@ async def _run_job(job_id: uuid.UUID) -> None:
 _EXTRACT_WORKSHEET_TEMPLATE = """\
 You are a {professor_role} extracting problems from a teacher's worksheet.
 
-The teacher has uploaded images of an existing worksheet or problem set.
-Extract every individual problem exactly as written — do NOT rewrite,
-simplify, or invent new problems. Preserve the original wording and
-any LaTeX notation.
+The teacher has uploaded pages of an existing worksheet or problem set
+(photos or a PDF). Extract every individual problem exactly as written
+— do NOT rewrite, simplify, or invent new problems. Preserve the
+original wording and any LaTeX notation.
 
 Rules:
 - Extract each problem as a separate item
@@ -103,13 +104,13 @@ Rules:
 """
 
 
-async def _extract_from_images(
-    images: list[dict[str, str]],
+async def _extract_from_files(
+    files: list[dict[str, str]],
     *,
     subject: str,
     user_id: str,
 ) -> list[dict[str, str]]:
-    """Extract problems from worksheet images via Claude Vision.
+    """Extract problems from worksheet pages (images or PDFs) via Claude.
 
     Returns list of {"title", "text", "difficulty"} — same shape as
     generate_questions() so the downstream pipeline is unchanged.
@@ -119,21 +120,14 @@ async def _extract_from_images(
         professor_role=cfg["professor_role"],
     )
 
-    content: list[dict[str, Any]] = []
-    for img in images:
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": img["media_type"],
-                "data": img["data"],
-            },
-        })
+    content: list[dict[str, Any]] = [
+        to_content_block(f["media_type"], f["data"]) for f in files
+    ]
     content.append({
         "type": "text",
         "text": (
             f"{system_prompt}\n\n"
-            "Extract all problems from the worksheet images above."
+            "Extract all problems from the worksheet pages above."
         ),
     })
 
@@ -185,20 +179,20 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     # 1. Get question texts — either extract from uploaded images or
     # generate via AI, depending on job mode.
     if job.mode == "upload":
-        # Upload mode: extract problems from worksheet images stored on
-        # the job row. Images are [{data, media_type}].
-        raw_images = job.uploaded_images or []
-        if not raw_images:
-            raise RuntimeError("No images found on upload job")
-        question_dicts = await _extract_from_images(
-            raw_images,
+        # Upload mode: extract problems from worksheet pages stored on
+        # the job row. Files are [{data, media_type}] — JPEG, PNG, or PDF.
+        raw_files = job.uploaded_images or []
+        if not raw_files:
+            raise RuntimeError("No files found on upload job")
+        question_dicts = await _extract_from_files(
+            raw_files,
             subject=course.subject,
             user_id=str(job.created_by_id),
         )
         if not question_dicts:
             raise RuntimeError(
-                "No problems could be extracted from the uploaded images. "
-                "Make sure the images are clear and contain readable problems."
+                "No problems could be extracted from the uploaded pages. "
+                "Make sure the photos or PDF are clear and contain readable problems."
             )
         # Set requested_count to actual extracted count (was 0 at creation)
         job.requested_count = len(question_dicts)

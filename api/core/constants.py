@@ -28,9 +28,12 @@ DECOMPOSITION_CACHE_MAX_SIZE = 200
 WORK_SUBMISSION_TTL_MINUTES = 30  # Discard work diagnosis after this window
 
 # ---------------------------------------------------------------------------
-# Image handling
+# Image / file upload handling
 # ---------------------------------------------------------------------------
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
+# PDFs are larger by nature (multi-page scans); 25 MB matches the
+# teacher_documents.py upload cap and Anthropic's document-block limit.
+MAX_PDF_BYTES = 25 * 1024 * 1024
 
 # ---------------------------------------------------------------------------
 # Logging / storage

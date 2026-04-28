@@ -11,7 +11,9 @@ from api.models.course import Document
 
 logger = logging.getLogger(__name__)
 
-# JPEG/PNG only — PDFs not supported by Claude Vision
+# Source-document forwarding to the generate flow only sends raster
+# images today. PDFs would need a separate code path (Anthropic accepts
+# them as `document` blocks, not `image` blocks); not in scope here.
 _VISION_MEDIA_TYPES = {"image/jpeg", "image/png"}
 
 # Cap images per vision call to avoid token limits
