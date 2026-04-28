@@ -1788,18 +1788,30 @@ async def get_submission_detail(
                 # grader's view and the teacher's view stay in sync.
                 continue
             if edited_text is not None:
-                # Student replaced this step's content. We surface the
-                # edit as the canonical text and ferry the Vision read
-                # in original_* for the disclosure.
-                steps_by_position.setdefault(position, []).append(
-                    TeacherSubmissionStep(
+                # Student replaced this step's content. Route the edit
+                # to the field that carried the original work: math
+                # steps stay math (latex), text steps stay text. Mirrors
+                # the apply_extraction_edits helper so the teacher view
+                # renders with the same fidelity as the grader saw.
+                # Vision read is preserved on original_* for the
+                # disclosure regardless.
+                if original_latex:
+                    edited_step = TeacherSubmissionStep(
+                        latex=edited_text,
+                        plain_english="",
+                        edited=True,
+                        original_latex=original_latex,
+                        original_plain_english=original_plain,
+                    )
+                else:
+                    edited_step = TeacherSubmissionStep(
                         latex="",
                         plain_english=edited_text,
                         edited=True,
                         original_latex=original_latex,
                         original_plain_english=original_plain,
                     )
-                )
+                steps_by_position.setdefault(position, []).append(edited_step)
                 continue
             if not original_latex and not original_plain:
                 continue

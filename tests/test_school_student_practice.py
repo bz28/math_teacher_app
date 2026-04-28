@@ -593,10 +593,13 @@ async def test_teacher_submission_detail_surfaces_student_edits(
     assert len(steps) == 2
     edited, unedited = steps[0], steps[1]
     assert edited["edited"] is True
-    assert edited["plain_english"] == "x = 5/2"
-    assert edited["latex"] == ""
-    assert edited["original_plain_english"] == "x equals five"
+    # Original step 1:1 had populated `latex` ("x=5"), so the edit
+    # routes back into latex — not plain_english — so the teacher's
+    # rendering stays in math mode and reflects the source field.
+    assert edited["latex"] == "x = 5/2"
+    assert edited["plain_english"] == ""
     assert edited["original_latex"] == "x=5"
+    assert edited["original_plain_english"] == "x equals five"
     assert unedited["edited"] is False
     assert unedited["original_latex"] is None
     assert unedited["plain_english"] == "y equals ten"
@@ -1069,8 +1072,11 @@ async def test_grading_pipeline_consumes_overlaid_extraction(
     )
     finals = captured["extraction"]["final_answers"]
     assert len(finals) == 1
-    assert finals[0]["answer_plain"] == "5/2"
-    assert finals[0]["answer_latex"] == ""
+    # Original final answer had populated answer_latex ("5"), so the
+    # edit overlays back into answer_latex — keeping the math source
+    # field as the canonical content.
+    assert finals[0]["answer_latex"] == "5/2"
+    assert finals[0]["answer_plain"] == ""
 
 
 async def test_flag_does_not_disturb_extraction_edits(

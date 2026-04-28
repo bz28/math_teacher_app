@@ -74,13 +74,26 @@ def apply_extraction_edits(
         if not edited_text:
             # Student cleared this step → drop from overlay.
             continue
-        new_steps.append({
-            **step,
-            "plain_english": edited_text,
-            # Clear latex: the student-typed plain-English text is the
-            # new source. Vision's latex no longer matches.
-            "latex": "",
-        })
+        # Route the edit to the field that carried the original
+        # student work. Vision's `latex` is a transcription of what
+        # the student wrote on the page; `plain_english` is a
+        # narration *about* the step ("Student wrote the two matrices
+        # to be multiplied…"). Storing the edit in the source field
+        # keeps the read-only display rendering at the same fidelity
+        # after edit — math steps stay math.
+        original_latex = (step.get("latex") or "").strip()
+        if original_latex:
+            new_steps.append({
+                **step,
+                "latex": edited_text,
+                "plain_english": "",
+            })
+        else:
+            new_steps.append({
+                **step,
+                "latex": "",
+                "plain_english": edited_text,
+            })
 
     new_finals: list[dict[str, Any]] = []
     for fa in extraction.get("final_answers") or []:
@@ -91,11 +104,19 @@ def apply_extraction_edits(
         edited_text = (edits.get(key) or "").strip()
         if not edited_text:
             continue
-        new_finals.append({
-            **fa,
-            "answer_plain": edited_text,
-            "answer_latex": "",
-        })
+        original_answer_latex = (fa.get("answer_latex") or "").strip()
+        if original_answer_latex:
+            new_finals.append({
+                **fa,
+                "answer_latex": edited_text,
+                "answer_plain": "",
+            })
+        else:
+            new_finals.append({
+                **fa,
+                "answer_latex": "",
+                "answer_plain": edited_text,
+            })
 
     return {
         **extraction,

@@ -176,9 +176,10 @@ function EditableRow({
    *  rendered LaTeX block / plain-text span so this component
    *  doesn't have to know about the underlying schema. */
   readOnlyDisplay: React.ReactNode;
-  /** What the "View original AI read" disclosure expands to —
+  /** What the "View what we originally read" disclosure expands to —
    *  caller passes the *original* rendered display so the student
-   *  sees it the same way the AI saw it. Only consumed when edited. */
+   *  sees what was on the page before they corrected it. Only
+   *  consumed when edited. */
   originalDisplay: React.ReactNode;
   onSaveEdit: (key: string, text: string) => void;
   onClearEdit: (key: string) => void;
@@ -277,7 +278,7 @@ function EditableRow({
             aria-expanded={showOriginal}
             className="text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
           >
-            {showOriginal ? "Hide original" : "View original AI read"}
+            {showOriginal ? "Hide original" : "View what we originally read"}
           </button>
           <button
             type="button"
@@ -291,7 +292,7 @@ function EditableRow({
       {isEdited && showOriginal && (
         <div className="mt-1.5 rounded-[--radius-sm] border border-border-light bg-bg-subtle/40 px-2 py-1.5 text-xs text-text-secondary">
           <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-            AI originally read
+            We originally read
           </div>
           <div className="mt-0.5">{originalDisplay}</div>
         </div>
@@ -359,7 +360,7 @@ export function SubmissionExtractionConfirmView({
           return;
         }
         setError(
-          "This submission already moved on, so your edits weren't applied — your teacher will see the original AI read. Tap Confirm to continue.",
+          "This submission already moved on, so your edits weren't applied — your teacher will see what we originally read. Tap Confirm to continue.",
         );
         setSubmitting(false);
         return;
@@ -395,9 +396,9 @@ export function SubmissionExtractionConfirmView({
         Does this match what you wrote?
       </h1>
       <p className="mt-2 text-sm text-text-secondary">
-        Check that the AI read your work correctly. Tap{" "}
-        <span aria-hidden>✎</span> on any step to fix mistakes — the
-        AI will grade what you confirm here.
+        Check that we read your work correctly. Tap{" "}
+        <span aria-hidden>✎</span> on any step to fix mistakes — your
+        teacher will grade what you confirm here.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -452,20 +453,34 @@ export function SubmissionExtractionConfirmView({
                         }
                         const key = stepKey(g.position, s.step_num);
                         const edited = edits[key] ?? null;
+                        // The student is correcting what they wrote on
+                        // the page — that's `latex` (Vision's
+                        // transcription), not `plain_english` (which is
+                        // a *narration about* the step, like "Student
+                        // wrote the two matrices to be multiplied").
+                        // Pre-fill and render the edit in the same mode
+                        // as the source so the math stays math.
+                        const sourceIsLatex = !!(s.latex && s.latex.trim());
                         return (
                           <li key={`${s.step_num}-${i}`}>
                             <EditableRow
                               editKey={key}
-                              originalText={s.plain_english || s.latex}
+                              originalText={
+                                sourceIsLatex ? s.latex : s.plain_english
+                              }
                               editedText={edited}
                               ariaLabel={`step ${s.step_num} of problem ${g.position}`}
                               onSaveEdit={saveEdit}
                               onClearEdit={clearEdit}
                               readOnlyDisplay={
                                 edited !== null ? (
-                                  <span className="font-medium text-text-primary">
-                                    {edited}
-                                  </span>
+                                  sourceIsLatex ? (
+                                    <MathText text={`$$${edited}$$`} />
+                                  ) : (
+                                    <span className="font-medium text-text-primary">
+                                      {edited}
+                                    </span>
+                                  )
                                 ) : (
                                   <ReadOnlyStepText step={s} />
                                 )
@@ -504,6 +519,10 @@ export function SubmissionExtractionConfirmView({
                     // Skip when both blank AND no edit — nothing to
                     // show and nothing to edit yet.
                     if (!latex && !plain && edited === null) return null;
+                    // Same routing as steps: prefer the LaTeX source
+                    // so the student edits the actual answer rather
+                    // than its English description.
+                    const sourceIsLatex = !!latex;
                     return (
                       <div
                         key={`fa-${i}`}
@@ -515,14 +534,18 @@ export function SubmissionExtractionConfirmView({
                         <div className="mt-1 text-sm text-text-primary">
                           <EditableRow
                             editKey={key}
-                            originalText={plain || latex}
+                            originalText={sourceIsLatex ? latex : plain}
                             editedText={edited}
                             ariaLabel={`final answer for problem ${g.position}`}
                             onSaveEdit={saveEdit}
                             onClearEdit={clearEdit}
                             readOnlyDisplay={
                               edited !== null ? (
-                                <span>{edited}</span>
+                                sourceIsLatex ? (
+                                  <MathText text={`$$${edited}$$`} />
+                                ) : (
+                                  <span>{edited}</span>
+                                )
                               ) : (
                                 <ReadOnlyFinalAnswerText fa={fa} />
                               )
@@ -557,8 +580,8 @@ export function SubmissionExtractionConfirmView({
       {editCount > 0 && (
         <p className="mt-4 text-xs text-text-secondary">
           You edited {editCount} {editCount === 1 ? "row" : "rows"}.
-          The AI will grade your edited work; your teacher can see the
-          original AI read.
+          Your teacher will grade your edited work and can still see
+          what we originally read.
         </p>
       )}
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
@@ -570,7 +593,7 @@ export function SubmissionExtractionConfirmView({
           disabled={submitting}
           className="min-h-[44px] w-full rounded-[--radius-sm] border border-border px-4 py-3 text-sm font-medium text-text-secondary hover:border-amber-500 hover:text-amber-600 disabled:opacity-50 sm:w-auto sm:py-2"
         >
-          {submitting ? "Saving…" : "Reader got something wrong"}
+          {submitting ? "Saving…" : "This reading is completely wrong"}
         </button>
         <button
           type="button"

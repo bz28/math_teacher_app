@@ -28,25 +28,57 @@ def extraction() -> dict:
             {"step_num": 99, "problem_position": None, "latex": "", "plain_english": "scratch"},
         ],
         "final_answers": [
+            # Math answer: Vision populates answer_latex, narration in plain.
             {"problem_position": 1, "answer_latex": "5", "answer_plain": "five"},
-            {"problem_position": 2, "answer_latex": "16", "answer_plain": ""},
+            # Text answer (e.g. word problem) — Vision populates only plain.
+            {"problem_position": 2, "answer_latex": "", "answer_plain": "16 apples"},
         ],
         "confidence": 0.9,
     }
 
 
-def test_apply_edits_replaces_step_text_and_clears_latex(extraction):
+def test_apply_edits_routes_math_step_to_latex(extraction):
+    # Step 1:1 has populated `latex`, so the student's edit replaces
+    # the latex source — not the plain-English narration. This keeps
+    # the student-facing display rendering as math after edit and
+    # avoids putting student-typed text into the field meant for
+    # AI-written descriptions.
     edits = {"1:1": "x = 5/2"}
     out = apply_extraction_edits(extraction, edits)
     assert out is not None
     edited = out["steps"][0]
-    assert edited["plain_english"] == "x = 5/2"
-    assert edited["latex"] == ""
+    assert edited["latex"] == "x = 5/2"
+    assert edited["plain_english"] == ""
     # Other steps unchanged
     assert out["steps"][1] == extraction["steps"][1]
 
 
-def test_apply_edits_replaces_final_answer_and_clears_latex(extraction):
+def test_apply_edits_routes_text_step_to_plain_english(extraction):
+    # Step 2:1 has empty `latex` and only `plain_english` (the "let n
+    # be the number" pattern Vision uses for non-math prose). The
+    # edit replaces plain_english because that's the source field.
+    edits = {"2:1": "let n be the number of apples"}
+    out = apply_extraction_edits(extraction, edits)
+    assert out is not None
+    edited = next(
+        s for s in out["steps"]
+        if s["problem_position"] == 2 and s["step_num"] == 1
+    )
+    assert edited["plain_english"] == "let n be the number of apples"
+    assert edited["latex"] == ""
+
+
+def test_apply_edits_routes_math_final_answer_to_latex(extraction):
+    # Final answer 1 has populated answer_latex — edit replaces it.
+    out = apply_extraction_edits(extraction, {"1:final": "5/2"})
+    assert out is not None
+    fa = out["final_answers"][0]
+    assert fa["answer_latex"] == "5/2"
+    assert fa["answer_plain"] == ""
+
+
+def test_apply_edits_routes_text_final_answer_to_plain(extraction):
+    # Final answer 2 has empty answer_latex — edit replaces plain.
     out = apply_extraction_edits(extraction, {"2:final": "16 apples"})
     assert out is not None
     fa = out["final_answers"][1]
@@ -122,4 +154,5 @@ def test_apply_silently_drops_bad_keys(extraction):
     # helper shouldn't trust its inputs).
     out = apply_extraction_edits(extraction, {"99:99": "x", "1:1": "fixed"})
     assert out is not None
-    assert out["steps"][0]["plain_english"] == "fixed"
+    # Step 1:1 has latex in the fixture, so the edit lands in latex.
+    assert out["steps"][0]["latex"] == "fixed"

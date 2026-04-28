@@ -1466,7 +1466,7 @@ function StudentStepRow({
                 aria-expanded={showOriginal}
                 className="text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
               >
-                {showOriginal ? "Hide original" : "View original AI read"}
+                {showOriginal ? "Hide original" : "View what was originally read"}
               </button>
             )}
           </div>
@@ -1474,7 +1474,7 @@ function StudentStepRow({
         {step.edited && hasOriginal && showOriginal && (
           <div className="mt-1 rounded-[--radius-sm] border border-border-light bg-bg-subtle/40 px-2 py-1.5 text-xs">
             <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              AI originally read
+              Originally read
             </div>
             <div className="mt-0.5 text-text-secondary">
               {originalLatex ? (
