@@ -607,8 +607,8 @@ export default function HomeworkDetailPage({
               <span
                 className={`inline-block rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                   isPublished
-                    ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
-                    : "bg-gray-100 text-gray-600 dark:bg-gray-500/10 dark:text-gray-300"
+                    ? "bg-green-600 text-white dark:bg-green-500"
+                    : "border border-gray-300 text-gray-700 dark:border-gray-500/40 dark:text-gray-300"
                 }`}
               >
                 {hw.status}
