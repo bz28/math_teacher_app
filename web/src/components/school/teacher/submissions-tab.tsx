@@ -148,12 +148,13 @@ function InboxRow({
   // republish-pending subset of published rows.
   const toReview = (row.submitted - row.published) + row.dirty;
   const hasOutstanding = toReview + row.flagged > 0;
+  const isAwaiting = row.submitted === 0;
 
-  return (
-    <Link
-      href={href}
-      className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
-    >
+  // Body content is identical between the link and waiting variants —
+  // only the outer wrapper and the right-side CTA differ. Pulling it
+  // out keeps the two branches scannable side-by-side.
+  const body = (
+    <>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="truncate text-sm font-bold text-text-primary">
@@ -181,38 +182,69 @@ function InboxRow({
             </>
           )}
         </div>
-        {row.submitted === 0 ? (
-          // No submissions yet — three empty bars would be visual noise.
-          // One honest line beats three zeroed bars.
+        {isAwaiting ? (
           <p className="mt-2 text-[11px] italic text-text-muted">
             No work to review yet
           </p>
         ) : (
-          <div className="mt-2 space-y-1">
+          // Single summary line + a single bar showing overall grading
+          // progress (published out of the whole class). Replaces the
+          // earlier three-bar stack which was visually noisy and forced
+          // the teacher to mentally combine three numbers to know "am I
+          // done with this HW?"
+          <div className="mt-2 space-y-1.5">
+            <p className="text-[11px] text-text-muted">
+              <span className="font-semibold text-text-primary">
+                {row.submitted}
+              </span>{" "}
+              of {row.total_students} submitted ·{" "}
+              {toReview > 0 ? (
+                <span className="font-semibold text-amber-600 dark:text-amber-400">
+                  {toReview} to review
+                </span>
+              ) : (
+                <span>all reviewed</span>
+              )}{" "}
+              · {row.published} published
+            </p>
             <ProgressBar
-              label="Submitted"
-              current={row.submitted}
-              total={row.total_students}
-              color="blue"
-            />
-            <ProgressBar
-              label="To review"
-              current={toReview}
-              total={row.submitted}
-              color="amber"
-            />
-            <ProgressBar
-              label="Published"
+              label="Graded"
               current={row.published}
-              total={row.submitted}
+              total={row.total_students}
               color="green"
             />
           </div>
         )}
       </div>
-      <span className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white group-hover:bg-primary-dark">
-        Review →
-      </span>
+      {isAwaiting ? (
+        <span className="shrink-0 rounded-[--radius-md] border border-border-light bg-bg-subtle px-4 py-2 text-xs font-semibold text-text-muted">
+          Awaiting submissions
+        </span>
+      ) : (
+        <span className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white group-hover:bg-primary-dark">
+          Review →
+        </span>
+      )}
+    </>
+  );
+
+  // Awaiting rows aren't clickable — there's no work to review, so a
+  // link to the empty review page would be a dead end. Render as a
+  // plain container without the hover affordance.
+  if (isAwaiting) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
+    >
+      {body}
     </Link>
   );
 }
