@@ -53,6 +53,10 @@ export function GradesTab({ courseId }: { courseId: string }) {
     dir: "asc",
   });
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  // CSV export state. Tied to the active section filter so the
+  // download matches what the teacher's currently looking at.
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,7 +212,8 @@ export function GradesTab({ courseId }: { courseId: string }) {
       {/* Search + filter chips — chips replace the old single sort
           toggle and turn "find strugglers" into one click. Counts on
           the chips are scoped to the active section so chip count and
-          table length agree. */}
+          table length agree. Export button sits alongside since both
+          act on the currently-visible section scope. */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <SearchIcon
@@ -223,7 +228,32 @@ export function GradesTab({ courseId }: { courseId: string }) {
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
+        <button
+          type="button"
+          onClick={async () => {
+            setExportError(null);
+            setExporting(true);
+            try {
+              await teacher.exportGradesCSV(
+                courseId,
+                sectionFilter !== "all" ? sectionFilter : undefined,
+              );
+            } catch (e) {
+              setExportError(e instanceof Error ? e.message : "Export failed");
+            } finally {
+              setExporting(false);
+            }
+          }}
+          disabled={exporting || data.students.length === 0}
+          title="Download grades as CSV (imports into Canvas, Schoology, PowerSchool)"
+          className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {exporting ? "Exporting…" : "Export CSV ↓"}
+        </button>
       </div>
+      {exportError && (
+        <p className="text-xs text-red-600 dark:text-red-400">{exportError}</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         <FilterChip
