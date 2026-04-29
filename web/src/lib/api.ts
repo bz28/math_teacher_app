@@ -1189,9 +1189,14 @@ export const teacher = {
     });
   },
   uploadWorksheet(courseId: string, data: {
+    /** Base64-encoded JPEG/PNG/PDF — magic bytes verified server-side. */
     images: string[];
     assignment_id: string;
     unit_id: string;
+    /** Optional natural-language scope hint, e.g. "Q1-13 odd" or
+     *  "skip word problems". Mirrors the constraint field used by the
+     *  generate flow. Forwarded into the extraction prompt. */
+    constraint?: string | null;
   }) {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/upload`, {
       method: "POST",
