@@ -79,7 +79,7 @@ async def _create_submission(
             student_id=student_id,
             section_id=section_id,
             status="submitted",
-            image_data=None,
+            files=None,
             final_answers=None,
             is_late=False,
         )

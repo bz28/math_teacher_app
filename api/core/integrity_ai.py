@@ -21,6 +21,7 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.image_utils import to_content_block
 from api.core.llm_client import (
     MODEL_REASON,
     LLMMode,
@@ -46,15 +47,21 @@ UNREADABLE_THRESHOLD = 0.3
 AGENT_MAX_TOKENS_PER_TURN = 400
 
 
-def _strip_data_url_prefix(data: str) -> tuple[str, str]:
+def _strip_data_url_prefix(data: str, fallback_media_type: str) -> tuple[str, str]:
     """Strip the data URL prefix and return (base64, media_type).
 
     Handles:
     - "data:image/png;base64,iVBOR..."  → ("iVBOR...", "image/png")
+    - "data:application/pdf;base64,..." → ("...", "application/pdf")
     - "iVBOR..." (raw base64, PNG)      → ("iVBOR...", "image/png")
     - "/9j/..." (raw base64, JPEG)      → ("/9j/...", "image/jpeg")
+    - anything else                     → (data, fallback_media_type)
+
+    `fallback_media_type` is what the database row recorded for this
+    file when it was validated at submit time. We trust that over a
+    raw-bytes guess if no data-URL prefix is present.
     """
-    m = re.match(r"^data:(image/(?:png|jpeg|jpg));base64,", data)
+    m = re.match(r"^data:([\w/+.\-]+);base64,", data)
     if m:
         media_type = m.group(1)
         if media_type == "image/jpg":
@@ -62,7 +69,9 @@ def _strip_data_url_prefix(data: str) -> tuple[str, str]:
         return data[m.end():], media_type
     if data.startswith("iVBOR"):
         return data, "image/png"
-    return data, "image/jpeg"
+    if data.startswith("/9j/"):
+        return data, "image/jpeg"
+    return data, fallback_media_type
 
 
 # ── Extraction ──────────────────────────────────────────────────────
@@ -143,40 +152,36 @@ async def extract_student_work(
     dashboard can attribute Vision calls to the student instead of
     showing "Deleted User".
     """
-    image_data: str | None = (await db.execute(
-        select(Submission.image_data).where(Submission.id == submission_id)
+    files: list[Any] | None = (await db.execute(
+        select(Submission.files).where(Submission.id == submission_id)
     )).scalar_one_or_none()
 
-    if not image_data:
+    if not files:
         logger.warning(
-            "extract_student_work: no image for submission %s", submission_id,
+            "extract_student_work: no files for submission %s", submission_id,
         )
         return {"steps": [], "final_answers": [], "confidence": 0.0}
-
-    base64_data, media_type = _strip_data_url_prefix(image_data)
 
     briefing = _format_problems_briefing(problems)
     instruction = (
         "Extract the student's handwritten work from this homework submission. "
-        "List each step they wrote, in order, and tag each step with the "
-        "problem_position it belongs to. Extract each problem's final answer "
-        "when the student wrote one."
+        "Pages are sent in order — treat them as one document so work that "
+        "spans pages stitches across cleanly. List each step the student "
+        "wrote, in order, and tag each step with the problem_position it "
+        "belongs to. Extract each problem's final answer when the student "
+        "wrote one."
     )
 
-    content: list[dict[str, Any]] = [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type,
-                "data": base64_data,
-            },
-        },
-        {
-            "type": "text",
-            "text": briefing + instruction if briefing else instruction,
-        },
-    ]
+    content: list[dict[str, Any]] = []
+    for f in files:
+        raw = f.get("data", "")
+        recorded_media = f.get("media_type", "image/jpeg")
+        base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
+        content.append(to_content_block(media_type, base64_data))
+    content.append({
+        "type": "text",
+        "text": briefing + instruction if briefing else instruction,
+    })
 
     # 1024 was too tight for real HW submissions: a multi-problem HW
     # with dense handwriting pushes the tool-use JSON (per-step

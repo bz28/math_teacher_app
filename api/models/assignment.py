@@ -118,7 +118,12 @@ class Submission(Base):
         UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"), nullable=False,
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")
-    image_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # base64, S3 later
+    # The student's submitted work — list of {data, media_type, filename?}
+    # where `data` is base64-encoded JPEG/PNG/PDF. Multi-file because
+    # students often work across pages. Validated server-side via
+    # api.core.image_utils.validate_and_decode_upload (magic bytes +
+    # per-format size cap). S3 migration is the next planned move.
+    files: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     # Per-HW-primary final answers the student typed alongside the
     # whole-HW image upload. Flat {bank_item_id: text} map. Optional
     # per problem; the image is the source of truth, the typed

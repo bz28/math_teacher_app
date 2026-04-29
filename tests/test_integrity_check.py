@@ -53,7 +53,7 @@ async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
     response = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     if response.status_code != 200:
         return response
@@ -335,7 +335,7 @@ async def test_get_state_returns_extracting_before_pipeline_writes(
                 text("SELECT id FROM sections LIMIT 1"),
             )).scalar_one(),
             status="submitted",
-            image_data=TINY_PNG,
+            files=[{"data": TINY_PNG, "media_type": "image/png"}],
             final_answers=None,
             is_late=False,
         )

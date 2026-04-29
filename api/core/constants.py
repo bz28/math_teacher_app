@@ -34,6 +34,16 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # PDFs are larger by nature (multi-page scans); 25 MB matches the
 # teacher_documents.py upload cap and Anthropic's document-block limit.
 MAX_PDF_BYTES = 25 * 1024 * 1024
+# Whole-submission cap. With ≤10 files at up to 25 MB each the worst
+# case is 250 MB, which we don't want hitting the row store. 50 MB is
+# generous for real homework (a 10-photo phone submission tops out
+# around 30 MB after client-side resize) and saves the DB from
+# pathological payloads.
+MAX_SUBMISSION_TOTAL_BYTES = 50 * 1024 * 1024
+# Hard cap on number of files per submission. Mirrors the teacher
+# upload cap. Real homework submissions are 1-3 pages; 10 leaves
+# headroom for multi-page worksheets.
+MAX_SUBMISSION_FILES = 10
 
 # ---------------------------------------------------------------------------
 # Logging / storage
