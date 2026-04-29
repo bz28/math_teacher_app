@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   schoolStudent,
   type SubmitHomeworkResponse,
@@ -10,7 +10,9 @@ import {
   ImageResizeError,
   resizeImageForUpload,
 } from "@/lib/image-resize";
+import { fileToBase64, formatFileSize } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
 
 interface Props {
   assignmentId: string;
@@ -21,61 +23,179 @@ interface Props {
 }
 
 /**
- * The "Submit Homework" section that appears at the bottom of the
- * locked HW page. Required: a single image upload of the whole
- * completed homework. The image is the source of truth — the
- * upcoming integrity checker (next PR) will read it to extract per-
- * problem answers and run the understanding-check chat.
+ * "Submit your homework" panel at the bottom of the locked HW page.
+ *
+ * Multi-file: a student can stage up to 10 photos (JPEG/PNG) or a PDF.
+ * The work is the source of truth for the teacher view and the
+ * integrity-check + AI grading pipelines, which read all pages as one
+ * sequential document so cross-page work stitches naturally.
+ *
+ * Per-file resizing for images runs client-side (resizeImageForUpload)
+ * so a 12 MP phone photo doesn't get rejected at the 5 MB server cap.
+ * PDFs go through untouched up to 25 MB.
  */
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const MAX_FILES = 10;
+const ACCEPT = "image/jpeg,image/png,application/pdf";
+
+interface StagedFile {
+  id: string;
+  filename: string;
+  size: number;
+  mediaType: "image/jpeg" | "image/png" | "application/pdf";
+  /** Raw base64 (no data: prefix). What the API expects in `files`. */
+  base64: string;
+  /** data: URL preview for image rows. Null for PDFs and error rows. */
+  previewUrl: string | null;
+  /** Per-row error message; valid files stay alongside. */
+  error?: string;
+}
+
 export function SubmissionPanel({
   assignmentId,
   dueAt,
   onSubmitted,
 }: Props) {
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [imageFilename, setImageFilename] = useState<string | null>(null);
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
-  const canSubmit = imageBase64 !== null;
+  const validCount = stagedFiles.filter((f) => !f.error && f.base64).length;
+  const canSubmit = validCount > 0 && !submitting && !preparing;
 
-  async function handleFile(file: File) {
-    setError(null);
-    if (!file.type.startsWith("image/")) {
-      setError("File must be an image (PNG or JPEG).");
-      return;
+  const newRowId = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const errorRow = (file: File, message: string): StagedFile => ({
+    id: newRowId(),
+    filename: file.name,
+    size: file.size,
+    mediaType: "image/jpeg", // unused on error rows
+    base64: "",
+    previewUrl: null,
+    error: message,
+  });
+
+  async function stageOne(file: File): Promise<StagedFile> {
+    const accepted = ["image/jpeg", "image/png", "application/pdf"];
+    if (!accepted.includes(file.type)) {
+      return errorRow(file, "Only JPEG, PNG, and PDF are accepted");
     }
-    // Resize on the client before base64 encoding so a 10 MP phone
-    // photo lands well under the 5 MB server cap. The preview shown
-    // below is the resized output — what the teacher + integrity
-    // check will actually see.
+    const isPdf = file.type === "application/pdf";
+
+    if (isPdf) {
+      if (file.size > MAX_PDF_BYTES) {
+        return errorRow(file, "Too large (max 25MB)");
+      }
+      try {
+        const base64 = await fileToBase64(file);
+        return {
+          id: newRowId(),
+          filename: file.name,
+          size: file.size,
+          mediaType: "application/pdf",
+          base64,
+          previewUrl: null,
+        };
+      } catch {
+        return errorRow(file, "Could not read file");
+      }
+    }
+
+    // Images: resize before staging so a 10 MP phone photo lands well
+    // under the 5 MB server cap. resizeImageForUpload returns the
+    // original File when already small enough, else a smaller JPEG Blob.
+    try {
+      const blob = await resizeImageForUpload(file);
+      if (blob.size > MAX_IMAGE_BYTES) {
+        return errorRow(file, "Too large (max 5MB)");
+      }
+      const dataUrl = await blobToDataUrl(blob);
+      const comma = dataUrl.indexOf(",");
+      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      const mediaType: StagedFile["mediaType"] =
+        blob === file ? (file.type as StagedFile["mediaType"]) : "image/jpeg";
+      return {
+        id: newRowId(),
+        filename: file.name,
+        size: blob.size,
+        mediaType,
+        base64,
+        previewUrl: dataUrl,
+      };
+    } catch (err) {
+      if (err instanceof ImageResizeError) {
+        return errorRow(file, err.message);
+      }
+      // FileReader / encoding failure — give the student a friendly
+      // message instead of a blank screen.
+      return errorRow(file, "Could not read file");
+    }
+  }
+
+  async function handleFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setError(null);
     setPreparing(true);
     try {
-      const resized = await resizeImageForUpload(file);
-      const dataUrl = await blobToDataUrl(resized);
-      setImageBase64(dataUrl);
-      setImageFilename(file.name);
-    } catch (e) {
-      const msg =
-        e instanceof ImageResizeError
-          ? e.message
-          : "Couldn't prepare that image — try a different photo.";
-      setError(msg);
+      // Use functional setState below so concurrent calls (drop +
+      // picker) can't both close over the same length and overflow
+      // the cap. Each call slices off `remaining` based on the live
+      // staged list, then commits.
+      const staged: StagedFile[] = [];
+      let allowed = list;
+      setStagedFiles((prev) => {
+        const remaining = Math.max(0, MAX_FILES - prev.length);
+        allowed = list.slice(0, remaining);
+        return prev;
+      });
+      for (const file of allowed) {
+        const row = await stageOne(file);
+        staged.push(row);
+      }
+      setStagedFiles((prev) => {
+        const remaining = Math.max(0, MAX_FILES - prev.length);
+        return [...prev, ...staged.slice(0, remaining)];
+      });
     } finally {
       setPreparing(false);
     }
   }
 
+  function removeStagedFile(id: string) {
+    setStagedFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function moveStaged(id: string, dir: -1 | 1) {
+    setStagedFiles((prev) => {
+      const i = prev.findIndex((f) => f.id === id);
+      if (i < 0) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
   async function doSubmit() {
-    if (!canSubmit || submitting || imageBase64 === null) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
+      const valid = stagedFiles.filter((f) => !f.error && f.base64);
       const resp = await schoolStudent.submitHomework(assignmentId, {
-        image_base64: imageBase64,
+        files: valid.map((f) => f.base64),
       });
       onSubmitted(resp);
     } catch (err) {
@@ -86,12 +206,31 @@ export function SubmissionPanel({
     }
   }
 
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    if (!dragActive) setDragActive(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files?.length) {
+      void handleFiles(e.dataTransfer.files);
+    }
+  }
+
+  const atCap = stagedFiles.length >= MAX_FILES;
+
   return (
     <div className="mt-8 rounded-[--radius-md] border-2 border-dashed border-primary bg-primary-bg/20 p-6">
       <h2 className="text-lg font-bold text-text-primary">Submit your homework</h2>
       <p className="mt-1 text-sm text-text-secondary">
-        Upload one clear picture of your completed work. Your teacher will see exactly what
-        you turn in.
+        Upload photos or a PDF of your completed work. Up to {MAX_FILES} files —
+        if your work spans pages, snap each one in order. Your teacher will see
+        exactly what you turn in.
       </p>
 
       {isLate && (
@@ -100,52 +239,121 @@ export function SubmissionPanel({
         </div>
       )}
 
-      <div className="mt-6">
-        <div className="text-sm font-semibold text-text-primary">Upload your work</div>
-        <p className="text-xs text-text-muted">
-          One picture of your full completed homework. PNG or JPEG — large
-          photos are shrunk automatically.
-        </p>
+      <div className="mt-6 space-y-3">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          disabled={atCap || submitting || preparing}
+          aria-label="Add files"
+          className={cn(
+            "flex w-full flex-col items-center justify-center gap-1.5 rounded-[--radius-md] border border-dashed px-4 py-6 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            dragActive
+              ? "border-primary bg-primary/5"
+              : "border-border bg-surface hover:border-primary",
+          )}
+        >
+          <UploadIcon className="h-5 w-5 text-text-muted" />
+          <span className="text-sm font-semibold text-text-primary">
+            Drop photos or a PDF, or tap to add
+          </span>
+          <span className="text-xs text-text-muted">
+            up to {MAX_FILES} files · JPEG, PNG, PDF · large photos shrink automatically
+          </span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) void handleFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+
         {preparing && (
-          <p className="mt-2 text-xs text-text-muted">Preparing your image…</p>
+          <p className="text-xs text-text-muted">Preparing your files…</p>
         )}
-        {imageBase64 ? (
-          // Visual preview so the kid can verify the right file
-          // before committing — the image is the only thing they're
-          // turning in, so they should see it.
-          <div className="mt-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageBase64}
-              alt="Preview of your work"
-              className="max-h-[400px] w-full rounded-[--radius-sm] border border-border object-contain"
-            />
-            <div className="mt-2 flex items-center justify-between text-xs">
-              <span className="text-green-600">✓ {imageFilename}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setImageBase64(null);
-                  setImageFilename(null);
-                }}
-                disabled={submitting}
-                className="rounded-[--radius-sm] border border-border px-2 py-1 font-medium text-text-secondary hover:border-error hover:text-error disabled:opacity-50"
+
+        {stagedFiles.length > 0 && (
+          <ul className="space-y-2" aria-label="Staged files">
+            {stagedFiles.map((f, i) => (
+              <li
+                key={f.id}
+                className="flex min-h-[44px] items-center gap-3 rounded-[--radius-md] border border-border bg-surface px-3 py-2"
               >
-                Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <input
-            type="file"
-            accept="image/png,image/jpeg"
-            disabled={preparing}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void handleFile(f);
-            }}
-            className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-[--radius-sm] file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-white hover:file:bg-primary/90 disabled:opacity-50"
-          />
+                {f.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={f.previewUrl}
+                    alt=""
+                    className="h-12 w-12 flex-shrink-0 rounded object-cover"
+                  />
+                ) : f.mediaType === "application/pdf" ? (
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-bg-subtle text-text-muted">
+                    <FileTextIcon className="h-5 w-5" />
+                  </div>
+                ) : (
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-bg-subtle text-text-muted">
+                    <ImageIcon className="h-5 w-5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-text-primary">
+                    Page {i + 1} · {f.filename}
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {formatFileSize(f.size)}
+                    {f.mediaType === "application/pdf" ? " · PDF" : ""}
+                  </p>
+                  {f.error && (
+                    <p className="mt-0.5 text-xs text-error">{f.error}</p>
+                  )}
+                </div>
+                {/* ↑ / ↓ reorder: page order matters because the
+                    extraction sees pages as a sequential document. */}
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => moveStaged(f.id, -1)}
+                    disabled={i === 0 || submitting}
+                    aria-label={`Move ${f.filename} up`}
+                    className="inline-flex h-5 w-11 items-center justify-center rounded text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-30"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveStaged(f.id, 1)}
+                    disabled={i === stagedFiles.length - 1 || submitting}
+                    aria-label={`Move ${f.filename} down`}
+                    className="inline-flex h-5 w-11 items-center justify-center rounded text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-30"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeStagedFile(f.id)}
+                  disabled={submitting}
+                  aria-label={`Remove ${f.filename}`}
+                  className="-mx-1 inline-flex h-11 w-11 items-center justify-center rounded text-text-muted hover:bg-bg-subtle hover:text-error disabled:opacity-50"
+                >
+                  <XIcon className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {stagedFiles.length > 0 && (
+          <p className="text-xs text-text-muted">
+            {stagedFiles.length} of {MAX_FILES}
+          </p>
         )}
       </div>
 
@@ -156,7 +364,9 @@ export function SubmissionPanel({
       <div className="mt-6 flex items-center justify-end gap-3">
         {confirming ? (
           <>
-            <span className="text-sm text-text-secondary">Submit homework? You can&apos;t edit after this.</span>
+            <span className="text-sm text-text-secondary">
+              Submit homework? You can&apos;t edit after this.
+            </span>
             <button
               onClick={() => setConfirming(false)}
               disabled={submitting}
