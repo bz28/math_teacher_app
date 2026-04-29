@@ -8,6 +8,7 @@ import {
   type IntegrityDisposition,
   type IntegrityOverview,
   type IntegrityRubric,
+  type SubmissionFile,
   type TeacherIntegrityDetail,
   type TeacherIntegrityProblemRow,
   type TeacherIntegrityTranscriptTurn,
@@ -15,6 +16,7 @@ import {
   type TeacherSubmissionRow,
 } from "@/lib/api";
 import { ExtractionView } from "@/components/school/shared/extraction-view";
+import { FileTextIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 // ── Disposition badge ──
@@ -911,40 +913,208 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                 )}
               </div>
 
-              <div>
-                <div className="text-sm font-semibold text-text-primary">
-                  Submitted work
-                </div>
-                {/* PR 3c will replace this with a proper thumbnail
-                    gallery; for now show the first file so the type
-                    swap from `image_data` to `files` compiles. */}
-                {(() => {
-                  const f = detail.files?.[0];
-                  if (!f) return null;
-                  if (f.media_type === "application/pdf") {
-                    return (
-                      <embed
-                        src={`data:${f.media_type};base64,${f.data}`}
-                        type="application/pdf"
-                        className="mt-2 h-[600px] w-full rounded-[--radius-sm] border border-border bg-white"
-                      />
-                    );
-                  }
-                  return (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`data:${f.media_type};base64,${f.data}`}
-                      alt={`${detail.student_name}'s submitted homework`}
-                      className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
-                    />
-                  );
-                })()}
-              </div>
+              <SubmittedWorkGallery
+                files={detail.files ?? []}
+                studentName={detail.student_name}
+              />
 
               <IntegritySection submissionId={openId} />
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Teacher's view of the student's submitted files. Thumbnail grid
+ *  with click-to-zoom. Images render the actual content; PDFs show a
+ *  generic icon and open in a native embed inside the modal. The grid
+ *  collapses to 2 columns on mobile so the side-by-side layout stays
+ *  readable. */
+function SubmittedWorkGallery({
+  files,
+  studentName,
+}: {
+  files: SubmissionFile[];
+  studentName: string;
+}) {
+  const [zoomedIndex, setZoomedIndex] = useState<number | null>(null);
+  const zoomedFile = zoomedIndex !== null ? (files[zoomedIndex] ?? null) : null;
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">
+        Submitted work{" "}
+        <span className="font-normal text-text-muted">
+          ({files.length} {files.length === 1 ? "page" : "pages"})
+        </span>
+      </div>
+      {files.length === 0 ? (
+        <p className="mt-2 italic text-sm text-text-muted">
+          No files on this submission.
+        </p>
+      ) : (
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          {files.map((f, i) => (
+            <GalleryThumb
+              key={i}
+              file={f}
+              index={i}
+              studentName={studentName}
+              onClick={() => setZoomedIndex(i)}
+            />
+          ))}
+        </div>
+      )}
+      {zoomedFile && zoomedIndex !== null && (
+        <GalleryZoomModal
+          file={zoomedFile}
+          index={zoomedIndex}
+          total={files.length}
+          studentName={studentName}
+          onClose={() => setZoomedIndex(null)}
+          onPrev={
+            zoomedIndex > 0 ? () => setZoomedIndex(zoomedIndex - 1) : null
+          }
+          onNext={
+            zoomedIndex < files.length - 1
+              ? () => setZoomedIndex(zoomedIndex + 1)
+              : null
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function GalleryThumb({
+  file,
+  index,
+  studentName,
+  onClick,
+}: {
+  file: SubmissionFile;
+  index: number;
+  studentName: string;
+  onClick: () => void;
+}) {
+  const isPdf = file.media_type === "application/pdf";
+  const dataUrl = `data:${file.media_type};base64,${file.data}`;
+  const label = file.filename ?? `Page ${index + 1}`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`View ${studentName}'s ${label}`}
+      className="overflow-hidden rounded-[--radius-sm] border border-border bg-surface hover:border-primary focus:border-primary focus:outline-none"
+    >
+      {isPdf ? (
+        <div className="flex flex-col items-center gap-1 bg-bg-subtle p-4 text-text-secondary">
+          <FileTextIcon className="h-10 w-10" />
+          <span className="max-w-full truncate text-[10px]">{label}</span>
+          <span className="text-[10px] text-text-muted">PDF</span>
+        </div>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={dataUrl}
+          alt={`${studentName}'s ${label}`}
+          className="h-[160px] w-full object-cover"
+        />
+      )}
+      <div className="bg-bg-subtle px-2 py-0.5 text-center text-[10px] text-text-muted">
+        Page {index + 1}
+      </div>
+    </button>
+  );
+}
+
+/** Lightbox-style zoom for one file at a time, with prev/next within
+ *  the modal so the teacher can flip through every page without going
+ *  back to the grid. PDFs use a native embed sized to the modal. */
+function GalleryZoomModal({
+  file,
+  index,
+  total,
+  studentName,
+  onClose,
+  onPrev,
+  onNext,
+}: {
+  file: SubmissionFile;
+  index: number;
+  total: number;
+  studentName: string;
+  onClose: () => void;
+  onPrev: (() => void) | null;
+  onNext: (() => void) | null;
+}) {
+  const isPdf = file.media_type === "application/pdf";
+  const dataUrl = `data:${file.media_type};base64,${file.data}`;
+  const label = file.filename ?? `Page ${index + 1}`;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Preview of ${studentName}'s ${label}`}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close preview"
+        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
+      >
+        ×
+      </button>
+      {onPrev && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPrev();
+          }}
+          aria-label="Previous page"
+          className="absolute left-4 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
+        >
+          ←
+        </button>
+      )}
+      {onNext && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+          aria-label="Next page"
+          className="absolute right-16 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
+        >
+          →
+        </button>
+      )}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-text-primary">
+        Page {index + 1} of {total}
+      </div>
+      <div
+        className="max-h-[90vh] max-w-[90vw] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isPdf ? (
+          <embed
+            src={dataUrl}
+            type="application/pdf"
+            className="h-[80vh] w-[80vw] rounded-[--radius-md] bg-white"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={dataUrl}
+            alt={`${studentName}'s ${label}`}
+            className="max-h-[90vh] max-w-[90vw] rounded-[--radius-md] object-contain"
+          />
+        )}
       </div>
     </div>
   );

@@ -2324,9 +2324,10 @@ function TranscriptTurn({
  * rather than as its own scan-path block.
  */
 function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
-  // PR 3c will redesign this into a proper thumbnail gallery + zoomed
-  // viewer. For now, surface the first file as the header thumbnail
-  // and label the count if there are more.
+  // Header-strip affordance — small thumb (first page) + page count,
+  // expands on click to a vertical scroll-stack of every submitted
+  // file. The vertical stack is intentional: while grading, teachers
+  // want to scan all pages at once, not click prev/next.
   const [open, setOpen] = useState(false);
   const first = files[0];
   if (!first) return null;
