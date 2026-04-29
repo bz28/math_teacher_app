@@ -14,7 +14,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.image_utils import validate_and_decode_image
+from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
@@ -66,17 +66,23 @@ class GenerateRequest(BaseModel):
 
 
 class UploadWorksheetRequest(BaseModel):
-    images: list[str]  # base64-encoded JPEG/PNG
+    # base64-encoded JPEG/PNG/PDF — magic bytes verified server-side
+    # before extraction.
+    images: list[str]
     assignment_id: uuid.UUID
     unit_id: uuid.UUID
+    # Optional natural-language scope hint forwarded into the extraction
+    # prompt, e.g. "Q1-13 odd" or "skip word problems". Mirrors the
+    # constraint field used by the generate flow.
+    constraint: str | None = None
 
     @field_validator("images")
     @classmethod
     def _validate_images(cls, v: list[str]) -> list[str]:
         if not v:
-            raise ValueError("At least one image is required")
+            raise ValueError("At least one file is required")
         if len(v) > 10:
-            raise ValueError("Maximum 10 images per upload")
+            raise ValueError("Maximum 10 files per upload")
         return v
 
 
@@ -351,17 +357,17 @@ async def upload_worksheet(
             detail="Uploaded questions must save into a top-level unit, not a subfolder",
         )
 
-    # Validate each image and build the stored payload
-    validated_images = []
-    for i, img_b64 in enumerate(body.images):
+    # Validate each file (image or PDF) and build the stored payload.
+    validated_files = []
+    for i, file_b64 in enumerate(body.images):
         try:
-            _, media_type = validate_and_decode_image(img_b64)
+            _, media_type = validate_and_decode_upload(file_b64)
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Image {i + 1}: {e}",
+                detail=f"File {i + 1}: {e}",
             ) from e
-        validated_images.append({"data": img_b64, "media_type": media_type})
+        validated_files.append({"data": file_b64, "media_type": media_type})
 
     # Validate the assignment belongs to this teacher + this course.
     assignment = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)
@@ -380,7 +386,8 @@ async def upload_worksheet(
         status="queued",
         requested_count=0,  # set by worker after extraction
         difficulty="mixed",
-        uploaded_images=validated_images,
+        constraint=body.constraint,
+        uploaded_images=validated_files,
     )
     db.add(job)
     await db.commit()

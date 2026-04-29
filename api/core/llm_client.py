@@ -597,7 +597,8 @@ async def call_claude_vision(
             )
         result, resp_text = _extract_tool_result(response, tool_schema)
 
-        # Build a text summary of the input for logging (images replaced with placeholder)
+        # Build a text summary of the input for logging (binary blocks
+        # replaced with a placeholder so logs stay readable).
         input_parts: list[str] = []
         for block in user_content:
             if isinstance(block, dict):
@@ -605,6 +606,8 @@ async def call_claude_vision(
                     input_parts.append(str(block["text"]))
                 elif block.get("type") == "image":
                     input_parts.append("[image]")
+                elif block.get("type") == "document":
+                    input_parts.append("[document]")
             else:
                 input_parts.append(str(block))
         input_summary = "\n".join(input_parts) if input_parts else None

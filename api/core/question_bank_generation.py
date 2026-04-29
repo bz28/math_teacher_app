@@ -109,16 +109,29 @@ async def _extract_from_files(
     *,
     subject: str,
     user_id: str,
+    constraint: str | None = None,
 ) -> list[dict[str, str]]:
     """Extract problems from worksheet pages (images or PDFs) via Claude.
 
     Returns list of {"title", "text", "difficulty"} — same shape as
     generate_questions() so the downstream pipeline is unchanged.
+
+    `constraint` is an optional natural-language scope hint from the
+    teacher (e.g. "Q1-13 odd"). When set, it's appended to the system
+    prompt so the model only pulls problems matching it.
     """
     cfg = get_config(subject)
     system_prompt = _EXTRACT_WORKSHEET_TEMPLATE.format(
         professor_role=cfg["professor_role"],
     )
+
+    scoped = (constraint or "").strip()
+    if scoped:
+        system_prompt += (
+            "\n\nThe teacher specified which problems to pull — treat this "
+            "as the source of truth and skip everything else:\n"
+            f'"{scoped}"'
+        )
 
     content: list[dict[str, Any]] = [
         to_content_block(f["media_type"], f["data"]) for f in files
@@ -188,6 +201,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             raw_files,
             subject=course.subject,
             user_id=str(job.created_by_id),
+            constraint=job.constraint,
         )
         if not question_dicts:
             raise RuntimeError(
