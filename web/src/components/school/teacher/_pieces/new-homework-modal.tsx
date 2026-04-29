@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
 import { topUnits } from "@/lib/units";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
+import { ImageResizeError, resizeImageForUpload } from "@/lib/image-resize";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
@@ -221,17 +222,89 @@ export function NewHomeworkModal({
 
   // ── Upload mode ──
 
-  const validateFile = (file: File): string | null => {
-    const accepted = ["image/jpeg", "image/png", "application/pdf"];
-    if (!accepted.includes(file.type)) {
-      return "Only JPEG, PNG, and PDF are accepted";
+  const ACCEPTED_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "application/pdf",
+  ]);
+
+  const newRowId = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const errorRow = (file: File, message: string): StagedFile => ({
+    id: newRowId(),
+    filename: file.name,
+    size: file.size,
+    mediaType: "image/jpeg", // unused on error rows
+    base64: "",
+    previewUrl: null,
+    error: message,
+  });
+
+  const stageOne = async (file: File): Promise<StagedFile> => {
+    if (!ACCEPTED_TYPES.has(file.type)) {
+      return errorRow(file, "Only JPEG, PNG, and PDF are accepted");
     }
-    const cap = file.type === "application/pdf" ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
-    if (file.size > cap) {
-      const capLabel = file.type === "application/pdf" ? "25MB" : "5MB";
-      return `Too large (max ${capLabel})`;
+    const isPdf = file.type === "application/pdf";
+
+    // PDFs go through untouched — resizeImageForUpload is image-only.
+    // Cap the raw file size up front to avoid a 50MB base64 round-trip
+    // for an obviously-too-big upload.
+    if (isPdf) {
+      if (file.size > MAX_PDF_BYTES) {
+        return errorRow(file, "Too large (max 25MB)");
+      }
+      try {
+        const base64 = await fileToBase64(file);
+        return {
+          id: newRowId(),
+          filename: file.name,
+          size: file.size,
+          mediaType: "application/pdf",
+          base64,
+          previewUrl: null,
+        };
+      } catch {
+        return errorRow(file, "Could not read file");
+      }
     }
-    return null;
+
+    // Images: resize before staging so a phone photo lands well under
+    // the 5 MB server cap. resizeImageForUpload returns the original
+    // File untouched if it's already small enough; otherwise a smaller
+    // JPEG Blob. Encoding the result of that gives us the same bytes
+    // the server will validate.
+    try {
+      const blob = await resizeImageForUpload(file);
+      // Defense in depth — resize should produce ≤5MB, but a future
+      // change to the util shouldn't silently bypass the server cap.
+      if (blob.size > MAX_IMAGE_BYTES) {
+        return errorRow(file, "Too large (max 5MB)");
+      }
+      const base64 = await fileToBase64(blob as File);
+      // Resize re-encodes as JPEG; preview the actual bytes the server
+      // will see (not the original file's media type).
+      const mediaType: StagedFile["mediaType"] =
+        blob === file ? (file.type as StagedFile["mediaType"]) : "image/jpeg";
+      return {
+        id: newRowId(),
+        filename: file.name,
+        size: blob.size,
+        mediaType,
+        base64,
+        previewUrl: `data:${mediaType};base64,${base64}`,
+      };
+    } catch (err) {
+      // resize-only error — surface the friendly message. Anything
+      // else bubbles (it's an unexpected programmer error, not a
+      // user-actionable case).
+      if (err instanceof ImageResizeError) {
+        return errorRow(file, err.message);
+      }
+      throw err;
+    }
   };
 
   const handleFiles = async (files: FileList | File[]) => {
@@ -240,53 +313,7 @@ export function NewHomeworkModal({
     // Cap total files at MAX_FILES — silently drop the overflow.
     const remaining = Math.max(0, MAX_FILES - stagedFiles.length);
     const next = list.slice(0, remaining);
-
-    const staged: StagedFile[] = [];
-    for (const file of next) {
-      const err = validateFile(file);
-      const id =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      if (err) {
-        staged.push({
-          id,
-          filename: file.name,
-          size: file.size,
-          mediaType: "image/jpeg", // unused on error rows
-          base64: "",
-          previewUrl: null,
-          error: err,
-        });
-        continue;
-      }
-      try {
-        const base64 = await fileToBase64(file);
-        const isPdf = file.type === "application/pdf";
-        // Render a preview for image rows so teachers can verify the
-        // page they grabbed — PDFs get a generic icon (page rendering
-        // would need a parser dep, scope-creep).
-        const previewUrl = isPdf ? null : `data:${file.type};base64,${base64}`;
-        staged.push({
-          id,
-          filename: file.name,
-          size: file.size,
-          mediaType: file.type as StagedFile["mediaType"],
-          base64,
-          previewUrl,
-        });
-      } catch {
-        staged.push({
-          id,
-          filename: file.name,
-          size: file.size,
-          mediaType: "image/jpeg",
-          base64: "",
-          previewUrl: null,
-          error: "Could not read file",
-        });
-      }
-    }
+    const staged = await Promise.all(next.map(stageOne));
     setStagedFiles((prev) => [...prev, ...staged]);
   };
 
