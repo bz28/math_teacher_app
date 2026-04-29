@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Modal } from "@/components/ui/modal";
 import {
   teacher,
   type IntegrityActivityReason,
@@ -1031,7 +1032,11 @@ function GalleryThumb({
 
 /** Lightbox-style zoom for one file at a time, with prev/next within
  *  the modal so the teacher can flip through every page without going
- *  back to the grid. PDFs use a native embed sized to the modal. */
+ *  back to the grid. PDFs use a native embed sized to the modal with
+ *  an "Open in new tab" fallback for browsers (mobile Safari,
+ *  sandboxed iframes) where inline embeds render blank. Uses the
+ *  shared Modal so Esc, focus trap, body-scroll-lock, and
+ *  return-focus all work; ←/→ keys advance pages. */
 function GalleryZoomModal({
   file,
   index,
@@ -1052,70 +1057,93 @@ function GalleryZoomModal({
   const isPdf = file.media_type === "application/pdf";
   const dataUrl = `data:${file.media_type};base64,${file.data}`;
   const label = file.filename ?? `Page ${index + 1}`;
+  // ←/→ flip pages without leaving the modal. Modal's own keydown
+  // handler owns Esc + Tab; we attach our arrows alongside.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight" && onNext) {
+        e.preventDefault();
+        onNext();
+      } else if (e.key === "ArrowLeft" && onPrev) {
+        e.preventDefault();
+        onPrev();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onPrev, onNext]);
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Preview of ${studentName}'s ${label}`}
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      className="max-h-[90vh] w-full max-w-5xl bg-surface p-3"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close preview"
-        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
-      >
-        ×
-      </button>
-      {onPrev && (
+      <div className="flex items-center justify-between gap-2 pb-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          {studentName}&apos;s {label}
+        </p>
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onPrev();
-          }}
-          aria-label="Previous page"
-          className="absolute left-4 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
+          onClick={onClose}
+          aria-label="Close preview"
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
         >
-          ←
+          Close ✕
         </button>
-      )}
-      {onNext && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNext();
-          }}
-          aria-label="Next page"
-          className="absolute right-16 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
-        >
-          →
-        </button>
-      )}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-text-primary">
-        Page {index + 1} of {total}
       </div>
-      <div
-        className="max-h-[90vh] max-w-[90vw] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative overflow-auto">
         {isPdf ? (
-          <embed
-            src={dataUrl}
-            type="application/pdf"
-            className="h-[80vh] w-[80vw] rounded-[--radius-md] bg-white"
-          />
+          <>
+            <embed
+              src={dataUrl}
+              type="application/pdf"
+              className="h-[70vh] w-full rounded-[--radius-md] bg-white"
+            />
+            <a
+              href={dataUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              Open PDF in new tab ↗
+            </a>
+          </>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={dataUrl}
             alt={`${studentName}'s ${label}`}
-            className="max-h-[90vh] max-w-[90vw] rounded-[--radius-md] object-contain"
+            className="mx-auto max-h-[75vh] w-auto rounded-[--radius-md] object-contain"
           />
         )}
       </div>
-    </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => onPrev?.()}
+          disabled={!onPrev}
+          aria-label="Previous page"
+          className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary hover:border-primary disabled:opacity-30"
+        >
+          ← Previous
+        </button>
+        <span
+          aria-live="polite"
+          aria-atomic="true"
+          className="text-xs font-semibold text-text-muted"
+        >
+          Page {index + 1} of {total}
+        </span>
+        <button
+          type="button"
+          onClick={() => onNext?.()}
+          disabled={!onNext}
+          aria-label="Next page"
+          className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary hover:border-primary disabled:opacity-30"
+        >
+          Next →
+        </button>
+      </div>
+    </Modal>
   );
 }
