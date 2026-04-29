@@ -915,12 +915,30 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                 <div className="text-sm font-semibold text-text-primary">
                   Submitted work
                 </div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={detail.image_data ?? ""}
-                  alt={`${detail.student_name}'s submitted homework`}
-                  className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
-                />
+                {/* PR 3c will replace this with a proper thumbnail
+                    gallery; for now show the first file so the type
+                    swap from `image_data` to `files` compiles. */}
+                {(() => {
+                  const f = detail.files?.[0];
+                  if (!f) return null;
+                  if (f.media_type === "application/pdf") {
+                    return (
+                      <embed
+                        src={`data:${f.media_type};base64,${f.data}`}
+                        type="application/pdf"
+                        className="mt-2 h-[600px] w-full rounded-[--radius-sm] border border-border bg-white"
+                      />
+                    );
+                  }
+                  return (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`data:${f.media_type};base64,${f.data}`}
+                      alt={`${detail.student_name}'s submitted homework`}
+                      className="mt-2 max-h-[600px] w-full rounded-[--radius-sm] border border-border object-contain"
+                    />
+                  );
+                })()}
               </div>
 
               <IntegritySection submissionId={openId} />

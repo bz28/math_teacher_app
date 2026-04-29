@@ -16,6 +16,7 @@ import {
   type AiGradeEntry,
   type GradeBreakdownEntry,
   type IntegrityDisposition,
+  type SubmissionFile,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
   type TeacherRubric,
@@ -26,12 +27,6 @@ import {
 } from "@/lib/api";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
-
-function imageDataUrl(raw: string): string {
-  if (raw.startsWith("data:")) return raw;
-  const mime = raw.startsWith("iVBOR") ? "image/png" : "image/jpeg";
-  return `data:${mime};base64,${raw}`;
-}
 
 // Rubric drift — does the grade's frozen rubric snapshot differ from
 // the assignment's current rubric? Normalizes both sides to the same
@@ -1295,8 +1290,8 @@ function SubmissionDetailPanel({
               the adjacent "Next student →" navigation, since teachers
               click Next student rapidly and we don't want the View
               work button absorbing accidental hits. */}
-          {detail.image_data && (
-            <StudentWorkThumbButton imageData={detail.image_data} />
+          {detail.files && detail.files.length > 0 && (
+            <StudentWorkThumbButton files={detail.files} />
           )}
           <button
             type="button"
@@ -2326,9 +2321,15 @@ function TranscriptTurn({
  * click away from any scroll position — rather than as its own
  * scan-path block.
  */
-function StudentWorkThumbButton({ imageData }: { imageData: string }) {
+function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
+  // PR 3c will redesign this into a proper thumbnail gallery + zoomed
+  // viewer. For now, surface the first file as the header thumbnail
+  // and label the count if there are more.
   const [open, setOpen] = useState(false);
-  const src = imageDataUrl(imageData);
+  const first = files[0];
+  if (!first) return null;
+  const firstSrc = `data:${first.media_type};base64,${first.data}`;
+  const firstIsPdf = first.media_type === "application/pdf";
   return (
     <>
       <button
@@ -2338,19 +2339,24 @@ function StudentWorkThumbButton({ imageData }: { imageData: string }) {
         aria-label="View student's handwritten work full size"
       >
         <span className="relative block h-7 w-10 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-bg-subtle">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={src}
-            alt=""
-            className="h-full w-full object-cover"
-          />
+          {firstIsPdf ? (
+            <span className="flex h-full w-full items-center justify-center text-[9px] font-bold text-text-muted">
+              PDF
+            </span>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={firstSrc} alt="" className="h-full w-full object-cover" />
+          )}
         </span>
-        <span>View work ↗</span>
+        <span>
+          View work{files.length > 1 ? ` · ${files.length} pages` : ""} ↗
+        </span>
       </button>
       <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
         <div className="flex items-center justify-between pb-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Student&apos;s work
+            {files.length > 1 ? ` · ${files.length} pages` : ""}
           </p>
           <button
             type="button"
@@ -2361,12 +2367,30 @@ function StudentWorkThumbButton({ imageData }: { imageData: string }) {
             Close ✕
           </button>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt="Student handwritten submission, full size"
-          className="mx-auto max-h-[80vh] w-auto rounded-[--radius-md] border border-border-light object-contain"
-        />
+        <div className="mx-auto flex max-h-[80vh] flex-col gap-3 overflow-y-auto">
+          {files.map((f, i) => {
+            const src = `data:${f.media_type};base64,${f.data}`;
+            if (f.media_type === "application/pdf") {
+              return (
+                <embed
+                  key={i}
+                  src={src}
+                  type="application/pdf"
+                  className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
+                />
+              );
+            }
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={src}
+                alt={`Student handwritten submission, page ${i + 1}`}
+                className="rounded-[--radius-md] border border-border-light object-contain"
+              />
+            );
+          })}
+        </div>
       </Modal>
     </>
   );
