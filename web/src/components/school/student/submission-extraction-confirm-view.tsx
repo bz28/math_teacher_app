@@ -7,18 +7,20 @@ import {
   type IntegrityExtraction,
   type IntegrityExtractionFinalAnswer,
   type IntegrityExtractionStep,
+  type SubmissionFile,
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
+import { FileTextIcon } from "@/components/ui/icons";
 import { useDeviceType } from "./use-device-type";
 
 interface Props {
   submissionId: string;
-  /** Full data-URL of the submitted work, shown alongside the
-   *  extraction so the student can eyeball "is that really what I
-   *  wrote?". The parent guarantees this is present before routing
-   *  here — if the photo fetch failed, the confirm screen is skipped
-   *  and the student goes straight to chat. */
-  submittedImageDataUrl: string;
+  /** Every file the student submitted, in upload order. Rendered as
+   *  a persistent strip so the student can visually match each
+   *  problem against its source page (the model handles cross-page
+   *  stitching natively when files are sent in order — we don't ask
+   *  it to tag a `source_page`, the strip handles that). */
+  submittedFiles: SubmissionFile[];
   extraction: IntegrityExtraction;
   /** Student confirmed the reader got it right (with optional edits
    *  applied). Parent transitions to the chat / submitted view. */
@@ -303,7 +305,7 @@ function EditableRow({
 
 export function SubmissionExtractionConfirmView({
   submissionId,
-  submittedImageDataUrl,
+  submittedFiles,
   extraction,
   onContinue,
   onFlagged,
@@ -323,6 +325,25 @@ export function SubmissionExtractionConfirmView({
   const editCount = Object.keys(edits).length;
   const device = useDeviceType();
   const groups = useMemo(() => groupByProblem(extraction), [extraction]);
+  // Free navigation between problems — every group the student has
+  // landed on gets a ✓. Forced walk-through felt condescending in
+  // testing; the pagination still nudges them through naturally.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [visited, setVisited] = useState<Set<number>>(() => new Set([0]));
+  const [zoomedFile, setZoomedFile] = useState<SubmissionFile | null>(null);
+  const totalProblems = groups.length;
+  const isLast = activeIndex >= totalProblems - 1;
+  const goTo = (i: number) => {
+    if (i < 0 || i >= totalProblems) return;
+    setActiveIndex(i);
+    setVisited((prev) =>
+      prev.has(i) ? prev : new Set(prev).add(i),
+    );
+  };
+  // Empty-page banner: extraction returned fewer attributable problems
+  // than files uploaded. Doesn't block confirm — just informs.
+  const attributedProblems = groups.filter((g) => g.position !== null).length;
+  const blankPageCount = Math.max(0, submittedFiles.length - Math.max(attributedProblems, 1));
 
   function saveEdit(key: string, text: string) {
     setEdits((prev) => ({ ...prev, [key]: text }));
@@ -390,180 +411,101 @@ export function SubmissionExtractionConfirmView({
     }
   }
 
+  const activeGroup = groups[activeIndex];
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="text-2xl font-bold text-text-primary">
         Does this match what you wrote?
       </h1>
       <p className="mt-2 text-sm text-text-secondary">
-        Check that we read your work correctly. Tap{" "}
-        <span aria-hidden>✎</span> on any step to fix mistakes — your
-        teacher will grade what you confirm here.
+        Walk through each problem. Tap <span aria-hidden>✎</span> on any
+        step to fix mistakes — your teacher will grade what you confirm
+        here. All your pages stay visible on the side so you can match
+        each problem against the right page of your work.
       </p>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Your photo
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={submittedImageDataUrl}
-            alt="Your submitted homework"
-            className="mt-2 max-h-[520px] w-full rounded-[--radius-md] border border-border bg-surface object-contain"
+      {blankPageCount > 0 && (
+        <div className="mt-4 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-500/10">
+          We couldn&apos;t read problems on{" "}
+          {blankPageCount === 1 ? "1 of your pages" : `${blankPageCount} of your pages`}
+          . Make sure each photo is clear and your work is visible.
+        </div>
+      )}
+
+      {totalProblems === 0 ? (
+        <p className="mt-6 italic text-sm text-text-muted">
+          No legible work was extracted from your photos. Flag so your
+          teacher knows, or continue if this looks right.
+        </p>
+      ) : (
+        <div className="mt-6 grid gap-4 md:grid-cols-[180px_1fr]">
+          {/* Persistent file strip — vertical on desktop, horizontal
+              scroll on mobile. Every page stays visible so the student
+              can match the active problem to its source page. */}
+          <FileStrip
+            files={submittedFiles}
+            onZoom={setZoomedFile}
           />
-        </div>
 
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            What we read
-          </div>
+          <div>
+            <ProblemPagination
+              total={totalProblems}
+              active={activeIndex}
+              visited={visited}
+              onSelect={goTo}
+            />
 
-          {groups.length === 0 ? (
-            <p className="mt-3 italic text-sm text-text-muted">
-              No legible work was extracted from your photo. Flag so your
-              teacher knows, or continue if this looks right.
-            </p>
-          ) : (
-            <div className="mt-3 space-y-4">
-              {groups.map((g) => (
-                <section
-                  key={g.position ?? "other"}
-                  className="rounded-[--radius-md] border border-border-light bg-background p-3"
-                >
-                  <h2 className="text-sm font-bold text-text-primary">
-                    {g.position !== null ? `Problem ${g.position}` : "Other work"}
-                  </h2>
-                  {g.steps.length === 0 ? (
-                    <p className="mt-1 text-xs italic text-text-muted">
-                      No steps extracted for this problem.
-                    </p>
-                  ) : (
-                    <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-text-secondary">
-                      {g.steps.map((s, i) => {
-                        // "Other work" steps (position=null) can't be
-                        // edited — there's no problem_position to key
-                        // the overlay by. They render read-only.
-                        if (g.position === null) {
-                          return (
-                            <li key={`${s.step_num}-${i}`}>
-                              <ReadOnlyStepText step={s} />
-                            </li>
-                          );
-                        }
-                        const key = stepKey(g.position, s.step_num);
-                        const edited = edits[key] ?? null;
-                        // The student is correcting what they wrote on
-                        // the page — that's `latex` (Vision's
-                        // transcription), not `plain_english` (which is
-                        // a *narration about* the step, like "Student
-                        // wrote the two matrices to be multiplied").
-                        // Pre-fill and render the edit in the same mode
-                        // as the source so the math stays math.
-                        const sourceIsLatex = !!(s.latex && s.latex.trim());
-                        return (
-                          <li key={`${s.step_num}-${i}`}>
-                            <EditableRow
-                              editKey={key}
-                              originalText={
-                                sourceIsLatex ? s.latex : s.plain_english
-                              }
-                              editedText={edited}
-                              ariaLabel={`step ${s.step_num} of problem ${g.position}`}
-                              onSaveEdit={saveEdit}
-                              onClearEdit={clearEdit}
-                              readOnlyDisplay={
-                                edited !== null ? (
-                                  sourceIsLatex ? (
-                                    <MathText text={`$$${edited}$$`} />
-                                  ) : (
-                                    <span className="font-medium text-text-primary">
-                                      {edited}
-                                    </span>
-                                  )
-                                ) : (
-                                  <ReadOnlyStepText step={s} />
-                                )
-                              }
-                              originalDisplay={<ReadOnlyStepText step={s} />}
-                            />
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                  {g.finalAnswers.map((fa, i) => {
-                    if (g.position === null) {
-                      // No editable key for unattributed answers.
-                      const latex = fa.answer_latex?.trim() ?? "";
-                      const plain = fa.answer_plain?.trim() ?? "";
-                      if (!latex && !plain) return null;
-                      return (
-                        <div
-                          key={`fa-${i}`}
-                          className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2"
-                        >
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                            Final answer
-                          </div>
-                          <div className="mt-1 text-sm text-text-primary">
-                            <ReadOnlyFinalAnswerText fa={fa} />
-                          </div>
-                        </div>
-                      );
-                    }
-                    const key = finalKey(g.position);
-                    const edited = edits[key] ?? null;
-                    const latex = fa.answer_latex?.trim() ?? "";
-                    const plain = fa.answer_plain?.trim() ?? "";
-                    // Skip when both blank AND no edit — nothing to
-                    // show and nothing to edit yet.
-                    if (!latex && !plain && edited === null) return null;
-                    // Same routing as steps: prefer the LaTeX source
-                    // so the student edits the actual answer rather
-                    // than its English description.
-                    const sourceIsLatex = !!latex;
-                    return (
-                      <div
-                        key={`fa-${i}`}
-                        className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2"
-                      >
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                          Final answer
-                        </div>
-                        <div className="mt-1 text-sm text-text-primary">
-                          <EditableRow
-                            editKey={key}
-                            originalText={sourceIsLatex ? latex : plain}
-                            editedText={edited}
-                            ariaLabel={`final answer for problem ${g.position}`}
-                            onSaveEdit={saveEdit}
-                            onClearEdit={clearEdit}
-                            readOnlyDisplay={
-                              edited !== null ? (
-                                sourceIsLatex ? (
-                                  <MathText text={`$$${edited}$$`} />
-                                ) : (
-                                  <span>{edited}</span>
-                                )
-                              ) : (
-                                <ReadOnlyFinalAnswerText fa={fa} />
-                              )
-                            }
-                            originalDisplay={
-                              <ReadOnlyFinalAnswerText fa={fa} />
-                            }
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </section>
-              ))}
+            {activeGroup && (
+              <section
+                key={activeGroup.position ?? "other"}
+                className="mt-3 rounded-[--radius-md] border border-border-light bg-background p-3"
+              >
+                <h2 className="text-sm font-bold text-text-primary">
+                  {activeGroup.position !== null
+                    ? `Problem ${activeGroup.position}`
+                    : "Other work"}
+                </h2>
+                <ProblemBlock
+                  group={activeGroup}
+                  edits={edits}
+                  onSaveEdit={saveEdit}
+                  onClearEdit={clearEdit}
+                />
+              </section>
+            )}
+
+            <div className="mt-4 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => goTo(activeIndex - 1)}
+                disabled={activeIndex === 0 || submitting}
+                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary hover:border-primary disabled:opacity-30"
+              >
+                ← Previous
+              </button>
+              <span className="text-xs text-text-muted">
+                Problem {activeIndex + 1} of {totalProblems}
+              </span>
+              <button
+                type="button"
+                onClick={() => goTo(activeIndex + 1)}
+                disabled={isLast || submitting}
+                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary hover:border-primary disabled:opacity-30"
+              >
+                Next →
+              </button>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {zoomedFile && (
+        <FileZoomModal
+          file={zoomedFile}
+          onClose={() => setZoomedFile(null)}
+        />
+      )}
 
       {/* "What's next" panel sits right above the buttons so the
           student reads it the moment before they choose. */}
@@ -595,14 +537,358 @@ export function SubmissionExtractionConfirmView({
         >
           {submitting ? "Saving…" : "This reading is completely wrong"}
         </button>
-        <button
-          type="button"
-          onClick={handleContinue}
-          disabled={submitting}
-          className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
-        >
-          {submitting ? "Saving…" : "Confirm — this is my work"}
-        </button>
+        {/* "Looks good →" advances on non-final problems, terminates
+            on the last. Always enabled — the pagination already nudges
+            students through; forcing every problem to be visited
+            before Confirm felt condescending in review. */}
+        {!isLast && totalProblems > 0 ? (
+          <button
+            type="button"
+            onClick={() => goTo(activeIndex + 1)}
+            disabled={submitting}
+            className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
+          >
+            Looks good →
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleContinue}
+            disabled={submitting}
+            className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
+          >
+            {submitting ? "Saving…" : "Confirm — this is my work"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Persistent file panel — sticky vertical strip on desktop, horizontal
+ *  scroll on mobile. Each thumbnail opens a zoom modal so the student
+ *  can pinch / read fine print without leaving the confirm screen. */
+function FileStrip({
+  files,
+  onZoom,
+}: {
+  files: SubmissionFile[];
+  onZoom: (f: SubmissionFile) => void;
+}) {
+  return (
+    <div className="md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto">
+      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-text-muted">
+        Your pages
+      </div>
+      <div className="flex gap-2 overflow-x-auto md:flex-col md:overflow-x-visible">
+        {files.map((f, i) => (
+          <FileThumbnail
+            key={i}
+            file={f}
+            index={i}
+            onClick={() => onZoom(f)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FileThumbnail({
+  file,
+  index,
+  onClick,
+}: {
+  file: SubmissionFile;
+  index: number;
+  onClick: () => void;
+}) {
+  const isPdf = file.media_type === "application/pdf";
+  const dataUrl = `data:${file.media_type};base64,${file.data}`;
+  const label = file.filename ?? `Page ${index + 1}`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`View ${label}`}
+      className="shrink-0 w-[120px] overflow-hidden rounded-[--radius-sm] border border-border-light hover:border-primary focus:border-primary focus:outline-none md:w-full"
+    >
+      {isPdf ? (
+        <div className="flex flex-col items-center gap-1 bg-bg-subtle p-3 text-text-secondary">
+          <FileTextIcon className="h-8 w-8" />
+          <span className="max-w-full truncate text-[10px]">{label}</span>
+          <span className="text-[10px] text-text-muted">PDF</span>
+        </div>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={dataUrl}
+          alt={label}
+          className="h-[120px] w-full bg-surface object-cover"
+        />
+      )}
+      <div className="bg-bg-subtle px-2 py-0.5 text-center text-[10px] text-text-muted">
+        Page {index + 1}
+      </div>
+    </button>
+  );
+}
+
+/** Free-navigation problem nav. Dots for ≤7 problems, a thin progress
+ *  bar broken into segments for 8+. Visited problems get a ✓; the
+ *  active one is highlighted regardless. Tablist semantics so screen
+ *  readers can announce "tab 3 of 14, selected". */
+function ProblemPagination({
+  total,
+  active,
+  visited,
+  onSelect,
+}: {
+  total: number;
+  active: number;
+  visited: Set<number>;
+  onSelect: (i: number) => void;
+}) {
+  if (total <= 1) return null;
+  const useDots = total <= 7;
+  if (useDots) {
+    return (
+      <div
+        role="tablist"
+        aria-label="Problems"
+        className="flex flex-wrap items-center gap-2"
+      >
+        {Array.from({ length: total }, (_, i) => {
+          const isActive = i === active;
+          const wasVisited = visited.has(i);
+          return (
+            <button
+              key={i}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-label={`Problem ${i + 1}${wasVisited ? ", visited" : ""}`}
+              onClick={() => onSelect(i)}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors hover:ring-2 hover:ring-primary/40 ${
+                isActive
+                  ? "bg-primary text-white"
+                  : wasVisited
+                    ? "bg-primary-bg text-primary"
+                    : "bg-bg-subtle text-text-muted"
+              }`}
+            >
+              {wasVisited && !isActive ? "✓" : i + 1}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <div role="tablist" aria-label="Problems" className="flex items-center gap-1">
+      {Array.from({ length: total }, (_, i) => {
+        const isActive = i === active;
+        const wasVisited = visited.has(i);
+        return (
+          <button
+            key={i}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-label={`Problem ${i + 1}${wasVisited ? ", visited" : ""}`}
+            onClick={() => onSelect(i)}
+            className={`h-2 flex-1 rounded-full transition-colors hover:ring-2 hover:ring-primary/40 ${
+              isActive
+                ? "bg-primary"
+                : wasVisited
+                  ? "bg-primary/50"
+                  : "bg-bg-subtle"
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** One problem's body — extracted from the previous monolithic
+ *  per-problem rendering loop, unchanged in semantics. The pagination
+ *  passes a single group through; the editing flow per step / final
+ *  answer is identical to the all-problems-at-once layout this
+ *  component replaced. */
+function ProblemBlock({
+  group,
+  edits,
+  onSaveEdit,
+  onClearEdit,
+}: {
+  group: ProblemGroup;
+  edits: Record<string, string>;
+  onSaveEdit: (key: string, text: string) => void;
+  onClearEdit: (key: string) => void;
+}) {
+  return (
+    <>
+      {group.steps.length === 0 ? (
+        <p className="mt-1 text-xs italic text-text-muted">
+          No steps extracted for this problem.
+        </p>
+      ) : (
+        <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-text-secondary">
+          {group.steps.map((s, i) => {
+            // "Other work" steps (position=null) can't be edited —
+            // there's no problem_position to key the overlay by.
+            if (group.position === null) {
+              return (
+                <li key={`${s.step_num}-${i}`}>
+                  <ReadOnlyStepText step={s} />
+                </li>
+              );
+            }
+            const key = stepKey(group.position, s.step_num);
+            const edited = edits[key] ?? null;
+            // Edit the LaTeX source when present (what the student
+            // actually wrote on the page), not plain_english (Vision's
+            // narration *about* the step).
+            const sourceIsLatex = !!(s.latex && s.latex.trim());
+            return (
+              <li key={`${s.step_num}-${i}`}>
+                <EditableRow
+                  editKey={key}
+                  originalText={sourceIsLatex ? s.latex : s.plain_english}
+                  editedText={edited}
+                  ariaLabel={`step ${s.step_num} of problem ${group.position}`}
+                  onSaveEdit={onSaveEdit}
+                  onClearEdit={onClearEdit}
+                  readOnlyDisplay={
+                    edited !== null ? (
+                      sourceIsLatex ? (
+                        <MathText text={`$$${edited}$$`} />
+                      ) : (
+                        <span className="font-medium text-text-primary">
+                          {edited}
+                        </span>
+                      )
+                    ) : (
+                      <ReadOnlyStepText step={s} />
+                    )
+                  }
+                  originalDisplay={<ReadOnlyStepText step={s} />}
+                />
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {group.finalAnswers.map((fa, i) => {
+        if (group.position === null) {
+          const latex = fa.answer_latex?.trim() ?? "";
+          const plain = fa.answer_plain?.trim() ?? "";
+          if (!latex && !plain) return null;
+          return (
+            <div
+              key={`fa-${i}`}
+              className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2"
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                Final answer
+              </div>
+              <div className="mt-1 text-sm text-text-primary">
+                <ReadOnlyFinalAnswerText fa={fa} />
+              </div>
+            </div>
+          );
+        }
+        const key = finalKey(group.position);
+        const edited = edits[key] ?? null;
+        const latex = fa.answer_latex?.trim() ?? "";
+        const plain = fa.answer_plain?.trim() ?? "";
+        if (!latex && !plain && edited === null) return null;
+        const sourceIsLatex = !!latex;
+        return (
+          <div
+            key={`fa-${i}`}
+            className="mt-2 rounded-[--radius-sm] border border-border-light bg-bg-subtle/50 px-3 py-2"
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              Final answer
+            </div>
+            <div className="mt-1 text-sm text-text-primary">
+              <EditableRow
+                editKey={key}
+                originalText={sourceIsLatex ? latex : plain}
+                editedText={edited}
+                ariaLabel={`final answer for problem ${group.position}`}
+                onSaveEdit={onSaveEdit}
+                onClearEdit={onClearEdit}
+                readOnlyDisplay={
+                  edited !== null ? (
+                    sourceIsLatex ? (
+                      <MathText text={`$$${edited}$$`} />
+                    ) : (
+                      <span>{edited}</span>
+                    )
+                  ) : (
+                    <ReadOnlyFinalAnswerText fa={fa} />
+                  )
+                }
+                originalDisplay={<ReadOnlyFinalAnswerText fa={fa} />}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Click-to-zoom modal. Image: object-contain so aspect ratio holds.
+ *  PDF: native browser embed at near-fullscreen so the student can
+ *  scroll through pages. Backdrop click and × button both close. */
+function FileZoomModal({
+  file,
+  onClose,
+}: {
+  file: SubmissionFile;
+  onClose: () => void;
+}) {
+  const isPdf = file.media_type === "application/pdf";
+  const dataUrl = `data:${file.media_type};base64,${file.data}`;
+  const label = file.filename ?? "Submitted page";
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Preview of ${label}`}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close preview"
+        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
+      >
+        ×
+      </button>
+      <div
+        className="max-h-[90vh] max-w-[90vw] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isPdf ? (
+          <embed
+            src={dataUrl}
+            type="application/pdf"
+            className="h-[80vh] w-[80vw] rounded-[--radius-md] bg-white"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={dataUrl}
+            alt={label}
+            className="max-h-[90vh] max-w-[90vw] rounded-[--radius-md] object-contain"
+          />
+        )}
       </div>
     </div>
   );

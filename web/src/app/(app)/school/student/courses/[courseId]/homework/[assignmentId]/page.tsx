@@ -8,6 +8,7 @@ import {
   type StudentHomeworkDetail,
   type StudentProblemFeedback,
   type StudentSubmission,
+  type SubmissionFile,
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
@@ -26,7 +27,7 @@ type Mode =
   | {
       kind: "integrity_confirm";
       extraction: IntegrityExtraction;
-      imageDataUrl: string;
+      files: SubmissionFile[];
     }
   | { kind: "integrity_chat" }
   /** Student flagged "reader got something wrong" on the confirm
@@ -105,13 +106,14 @@ export default function HomeworkPage() {
           sub &&
           sub.extraction_confirmed_at == null &&
           sub.extraction != null &&
-          sub.image_data != null &&
+          sub.files != null &&
+          sub.files.length > 0 &&
           !confirmedThisSession
         ) {
           setMode({
             kind: "integrity_confirm",
             extraction: sub.extraction,
-            imageDataUrl: sub.image_data,
+            files: sub.files,
           });
           return;
         }
@@ -215,7 +217,7 @@ export default function HomeworkPage() {
     return (
       <SubmissionExtractionConfirmView
         submissionId={submissionId}
-        submittedImageDataUrl={mode.imageDataUrl}
+        submittedFiles={mode.files}
         extraction={mode.extraction}
         onContinue={async () => {
           setConfirmedThisSession(true);
