@@ -1371,7 +1371,9 @@ export interface TeacherSubmissionDetail {
   student_email: string;
   submitted_at: string;
   is_late: boolean;
-  image_data: string | null;
+  /** All files the student submitted, in upload order. Null only on
+   *  rows that pre-date the multi-file column. */
+  files: SubmissionFile[] | null;
   problems: TeacherSubmissionDetailProblem[];
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
@@ -1584,11 +1586,22 @@ export interface StudentHomeworkDetail {
   breakdown: StudentProblemFeedback[] | null;
 }
 
+export interface SubmissionFile {
+  /** Base64-encoded payload (no `data:` prefix). */
+  data: string;
+  /** Detected media type — image/jpeg, image/png, application/pdf. */
+  media_type: string;
+  /** Original filename, when the client supplied it. */
+  filename?: string | null;
+}
+
 export interface StudentSubmission {
   submission_id: string;
   submitted_at: string;
   is_late: boolean;
-  image_data: string | null;
+  /** All files the student submitted, in upload order. Null only on
+   *  rows that pre-date the multi-file column (no real users yet). */
+  files: SubmissionFile[] | null;
   final_answers: Record<string, string>;
   /** Full Vision extraction (all steps + per-problem final answers +
    *  overall confidence). Null when extraction hasn't run, failed,
@@ -1731,11 +1744,12 @@ export const schoolStudent = {
   },
   submitHomework(
     assignmentId: string,
-    body: { image_base64: string },
+    body: { files: string[] },
   ) {
     return apiFetch<SubmitHomeworkResponse>(`/school/student/homework/${assignmentId}/submit`, {
       method: "POST",
       body: JSON.stringify(body),
+      timeout: 30_000,
     });
   },
   getMySubmission(assignmentId: string) {
