@@ -1162,10 +1162,11 @@ function rowStatusLabel(entry: RosterEntry): {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Submission detail — right pane. Handwritten image is the source of
-// truth; typed answers sit alongside the answer key so the teacher
-// can compare without switching contexts. Per-problem Full/Partial/
-// Zero picks auto-save on click.
+// Submission detail — right pane. The student's submitted pages
+// (images + PDFs) are the source of truth; typed answers sit
+// alongside the answer key so the teacher can compare without
+// switching contexts. Per-problem Full/Partial/Zero picks auto-save
+// on click.
 // ────────────────────────────────────────────────────────────────────
 
 function SubmissionDetailPanel({
@@ -1282,14 +1283,15 @@ function SubmissionDetailPanel({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {/* Image stays one click away — promoted to the page header
-              so it's findable without scrolling to the problems card.
-              Lightbox markup lives inside the button component. The
-              gap-3 (vs the default gap-2 elsewhere in the strip) buys
-              breathing room between this modal-popping affordance and
-              the adjacent "Next student →" navigation, since teachers
-              click Next student rapidly and we don't want the View
-              work button absorbing accidental hits. */}
+          {/* Submitted pages stay one click away — promoted to the
+              page header so they're findable without scrolling to
+              the problems card. Lightbox markup lives inside the
+              button component. The gap-3 (vs the default gap-2
+              elsewhere in the strip) buys breathing room between
+              this modal-popping affordance and the adjacent "Next
+              student →" navigation, since teachers click Next
+              student rapidly and we don't want the View work button
+              absorbing accidental hits. */}
           {detail.files && detail.files.length > 0 && (
             <StudentWorkThumbButton files={detail.files} />
           )}
@@ -2315,11 +2317,11 @@ function TranscriptTurn({
 }
 
 /**
- * Student's handwritten work: compact thumbnail + label that opens
- * the full photo in a modal. The image is a reference the teacher
- * consults WHILE grading, so it lives in the page header strip — one
- * click away from any scroll position — rather than as its own
- * scan-path block.
+ * Student's submitted pages (images + PDFs): compact thumbnail +
+ * page count that opens every file in a modal. The work is a
+ * reference the teacher consults WHILE grading, so it lives in the
+ * page header strip — one click away from any scroll position —
+ * rather than as its own scan-path block.
  */
 function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
   // PR 3c will redesign this into a proper thumbnail gallery + zoomed

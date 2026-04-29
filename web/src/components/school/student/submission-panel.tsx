@@ -65,6 +65,12 @@ export function SubmissionPanel({
   const [confirming, setConfirming] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Concurrent-batch counter so two overlapping handleFiles calls
+  // (drop + picker, or two drops in flight) don't have the first
+  // call's `finally` flip `preparing` off while the second is still
+  // resizing. Increment on entry, decrement in finally; flip the
+  // flag off only when nothing is in flight.
+  const inFlightRef = useRef(0);
 
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
   const validCount = stagedFiles.filter((f) => !f.error && f.base64).length;
@@ -146,20 +152,16 @@ export function SubmissionPanel({
     const list = Array.from(files);
     if (list.length === 0) return;
     setError(null);
+    inFlightRef.current += 1;
     setPreparing(true);
     try {
-      // Use functional setState below so concurrent calls (drop +
-      // picker) can't both close over the same length and overflow
-      // the cap. Each call slices off `remaining` based on the live
-      // staged list, then commits.
+      // Resize/encode every file in the batch first, then commit in a
+      // single functional setState that re-reads the live `prev` list
+      // and slices to the cap. This honors MAX_FILES even when two
+      // batches commit out-of-order (drop + picker race), without the
+      // earlier read-only updater anti-pattern.
       const staged: StagedFile[] = [];
-      let allowed = list;
-      setStagedFiles((prev) => {
-        const remaining = Math.max(0, MAX_FILES - prev.length);
-        allowed = list.slice(0, remaining);
-        return prev;
-      });
-      for (const file of allowed) {
+      for (const file of list) {
         const row = await stageOne(file);
         staged.push(row);
       }
@@ -168,7 +170,8 @@ export function SubmissionPanel({
         return [...prev, ...staged.slice(0, remaining)];
       });
     } finally {
-      setPreparing(false);
+      inFlightRef.current -= 1;
+      if (inFlightRef.current === 0) setPreparing(false);
     }
   }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { StudentSubmission, SubmissionFile } from "@/lib/api";
 import { FileTextIcon } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/modal";
 
 interface Props {
   submission: StudentSubmission;
@@ -104,6 +105,10 @@ function SubmissionThumb({
   );
 }
 
+/** Uses the shared Modal so Esc, focus trap, body-scroll-lock, and
+ *  return-focus all behave per the rest of the app. PDF embed has an
+ *  "Open in new tab" fallback for browsers (mobile Safari, sandboxed
+ *  iframes) that don't render inline PDFs. */
 function ZoomModal({
   file,
   onClose,
@@ -115,40 +120,50 @@ function ZoomModal({
   const dataUrl = `data:${file.media_type};base64,${file.data}`;
   const label = file.filename ?? "Submitted page";
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Preview of ${label}`}
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      className="max-h-[90vh] w-full max-w-5xl bg-surface p-3"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close preview"
-        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
-      >
-        ×
-      </button>
-      <div
-        className="max-h-[90vh] max-w-[90vw] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex items-center justify-between pb-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          {label}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close preview"
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+        >
+          Close ✕
+        </button>
+      </div>
+      <div className="overflow-auto">
         {isPdf ? (
-          <embed
-            src={dataUrl}
-            type="application/pdf"
-            className="h-[80vh] w-[80vw] rounded-[--radius-md] bg-white"
-          />
+          <>
+            <embed
+              src={dataUrl}
+              type="application/pdf"
+              className="h-[75vh] w-full rounded-[--radius-md] bg-white"
+            />
+            <a
+              href={dataUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              Open PDF in new tab ↗
+            </a>
+          </>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={dataUrl}
             alt={label}
-            className="max-h-[90vh] max-w-[90vw] rounded-[--radius-md] object-contain"
+            className="mx-auto max-h-[80vh] w-auto rounded-[--radius-md] object-contain"
           />
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

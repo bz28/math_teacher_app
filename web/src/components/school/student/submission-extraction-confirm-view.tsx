@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   schoolStudent,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
 import { FileTextIcon } from "@/components/ui/icons";
+import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
 
 interface Props {
@@ -163,6 +164,7 @@ function EditableRow({
   onSaveEdit,
   onClearEdit,
   ariaLabel,
+  registerPendingCommit,
 }: {
   editKey: string;
   /** Plain-text fallback used to seed the textarea. Vision returns
@@ -186,6 +188,12 @@ function EditableRow({
   onSaveEdit: (key: string, text: string) => void;
   onClearEdit: (key: string) => void;
   ariaLabel: string;
+  /** Parent passes a setter that captures "the function I should call
+   *  if the student navigates away with the editor open". We register
+   *  our `commit` while editing and clear it on cancel/commit. The
+   *  parent invokes it from goTo / handleContinue so an in-flight
+   *  draft survives pagination instead of being silently dropped. */
+  registerPendingCommit: (fn: (() => void) | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -200,11 +208,13 @@ function EditableRow({
   function cancelEdit() {
     setEditing(false);
     setDraft("");
+    registerPendingCommit(null);
   }
   function commit() {
     const trimmed = draft.trim();
     setEditing(false);
     setDraft("");
+    registerPendingCommit(null);
     if (!trimmed) {
       // Empty save: on an already-edited row this is the student's
       // "wipe my edit" gesture — drop it so the original Vision read
@@ -222,6 +232,27 @@ function EditableRow({
     }
     onSaveEdit(editKey, trimmed);
   }
+
+  // Re-register `commit` with the parent so its snapshot closes over
+  // the latest `draft`. The parent invokes it from goTo /
+  // handleContinue so an in-flight edit survives navigation.
+  // Unmount-while-editing (pagination remounts the active section)
+  // also flushes the draft via the cleanup branch.
+  const commitRef = useRef(commit);
+  const editingRef = useRef(editing);
+  useEffect(() => {
+    commitRef.current = commit;
+    editingRef.current = editing;
+  });
+  useEffect(() => {
+    if (editing) registerPendingCommit(() => commitRef.current());
+    else registerPendingCommit(null);
+  }, [editing, registerPendingCommit]);
+  useEffect(() => {
+    return () => {
+      if (editingRef.current) commitRef.current();
+    };
+  }, []);
 
   if (editing) {
     return (
@@ -321,7 +352,14 @@ export function SubmissionExtractionConfirmView({
   const [error, setError] = useState<string | null>(null);
   // Sparse map of student corrections keyed by step / final-answer
   // identity. POSTed alongside the confirm call.
+  //
+  // Mirrored to a ref so a final-keystroke flush from `commitPending()`
+  // — which lands inside the same handleContinue tick — can be POSTed
+  // in this same call. React state updates are batched; reading
+  // `edits` after a setEdits(...) would still see the pre-flush value
+  // and silently drop the student's last edit.
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const editsRef = useRef<Record<string, string>>({});
   const editCount = Object.keys(edits).length;
   const device = useDeviceType();
   const groups = useMemo(() => groupByProblem(extraction), [extraction]);
@@ -331,10 +369,24 @@ export function SubmissionExtractionConfirmView({
   const [activeIndex, setActiveIndex] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(() => new Set([0]));
   const [zoomedFile, setZoomedFile] = useState<SubmissionFile | null>(null);
+  const panelId = useId();
+  // EditableRow registers a "commit my draft" callback here while
+  // edit mode is open. We invoke it on navigation so the student
+  // never loses an in-flight correction by clicking next/prev/dot or
+  // "Looks good →". The active section remounts on activeIndex
+  // change (key={activeGroup.position}), so without this the local
+  // textarea state would be discarded silently.
+  const pendingCommitRef = useRef<(() => void) | null>(null);
+  const commitPending = () => {
+    const fn = pendingCommitRef.current;
+    pendingCommitRef.current = null;
+    fn?.();
+  };
   const totalProblems = groups.length;
   const isLast = activeIndex >= totalProblems - 1;
   const goTo = (i: number) => {
     if (i < 0 || i >= totalProblems) return;
+    commitPending();
     setActiveIndex(i);
     setVisited((prev) =>
       prev.has(i) ? prev : new Set(prev).add(i),
@@ -342,27 +394,38 @@ export function SubmissionExtractionConfirmView({
   };
   // Empty-page banner: extraction returned fewer attributable problems
   // than files uploaded. Doesn't block confirm — just informs.
+  // When zero problems were attributed, every uploaded page is "blank"
+  // from the extractor's perspective; surface that honestly instead
+  // of subtracting a phantom "1 group" floor.
   const attributedProblems = groups.filter((g) => g.position !== null).length;
-  const blankPageCount = Math.max(0, submittedFiles.length - Math.max(attributedProblems, 1));
+  const blankPageCount =
+    attributedProblems === 0
+      ? submittedFiles.length
+      : Math.max(0, submittedFiles.length - attributedProblems);
 
   function saveEdit(key: string, text: string) {
-    setEdits((prev) => ({ ...prev, [key]: text }));
+    editsRef.current = { ...editsRef.current, [key]: text };
+    setEdits(editsRef.current);
   }
 
   function clearEdit(key: string) {
-    setEdits((prev) => {
-      if (!(key in prev)) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+    if (!(key in editsRef.current)) return;
+    const next = { ...editsRef.current };
+    delete next[key];
+    editsRef.current = next;
+    setEdits(next);
   }
 
   async function handleContinue() {
+    // Flush any open editor draft so the last keystrokes ride along
+    // on this confirm. commit() updates editsRef synchronously even
+    // though setEdits is batched, so we POST editsRef.current rather
+    // than the stale `edits` snapshot.
+    commitPending();
     setSubmitting(true);
     setError(null);
     try {
-      await schoolStudent.confirmExtraction(submissionId, edits);
+      await schoolStudent.confirmExtraction(submissionId, editsRef.current);
       onContinue();
     } catch (e) {
       // 409 means server state moved (someone else flagged in another
@@ -376,7 +439,7 @@ export function SubmissionExtractionConfirmView({
       // they can re-confirm (the second call hits already_confirmed
       // and routes them naturally).
       if (e instanceof ApiError && e.status === 409) {
-        if (Object.keys(edits).length === 0) {
+        if (Object.keys(editsRef.current).length === 0) {
           onContinue();
           return;
         }
@@ -453,13 +516,18 @@ export function SubmissionExtractionConfirmView({
               total={totalProblems}
               active={activeIndex}
               visited={visited}
+              panelId={panelId}
               onSelect={goTo}
             />
 
             {activeGroup && (
               <section
                 key={activeGroup.position ?? "other"}
-                className="mt-3 rounded-[--radius-md] border border-border-light bg-background p-3"
+                id={panelId}
+                role="tabpanel"
+                aria-labelledby={`${panelId}-tab-${activeIndex}`}
+                tabIndex={0}
+                className="mt-3 rounded-[--radius-md] border border-border-light bg-background p-3 focus:outline-none"
               >
                 <h2 className="text-sm font-bold text-text-primary">
                   {activeGroup.position !== null
@@ -471,6 +539,9 @@ export function SubmissionExtractionConfirmView({
                   edits={edits}
                   onSaveEdit={saveEdit}
                   onClearEdit={clearEdit}
+                  registerPendingCommit={(fn) => {
+                    pendingCommitRef.current = fn;
+                  }}
                 />
               </section>
             )}
@@ -642,20 +713,38 @@ function ProblemPagination({
   total,
   active,
   visited,
+  panelId,
   onSelect,
 }: {
   total: number;
   active: number;
   visited: Set<number>;
+  /** ID of the `<section role="tabpanel">` the active tab controls.
+   *  Lets screen readers announce "tab 3 of 14, controls Problem 3". */
+  panelId: string;
   onSelect: (i: number) => void;
 }) {
   if (total <= 1) return null;
   const useDots = total <= 7;
+  // ←/→/Home/End move focus and selection between tabs (APG tablist
+  // pattern). Wraps at edges so a long list of dots stays navigable.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    let next = active;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (active + 1) % total;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (active - 1 + total) % total;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = total - 1;
+    else return;
+    e.preventDefault();
+    onSelect(next);
+  };
+  const tabId = (i: number) => `${panelId}-tab-${i}`;
   if (useDots) {
     return (
       <div
         role="tablist"
         aria-label="Problems"
+        onKeyDown={onKeyDown}
         className="flex flex-wrap items-center gap-2"
       >
         {Array.from({ length: total }, (_, i) => {
@@ -664,12 +753,15 @@ function ProblemPagination({
           return (
             <button
               key={i}
+              id={tabId(i)}
               type="button"
               role="tab"
               aria-selected={isActive}
+              aria-controls={panelId}
               aria-label={`Problem ${i + 1}${wasVisited ? ", visited" : ""}`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => onSelect(i)}
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors hover:ring-2 hover:ring-primary/40 ${
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors hover:ring-2 hover:ring-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 isActive
                   ? "bg-primary text-white"
                   : wasVisited
@@ -685,19 +777,27 @@ function ProblemPagination({
     );
   }
   return (
-    <div role="tablist" aria-label="Problems" className="flex items-center gap-1">
+    <div
+      role="tablist"
+      aria-label="Problems"
+      onKeyDown={onKeyDown}
+      className="flex items-center gap-1"
+    >
       {Array.from({ length: total }, (_, i) => {
         const isActive = i === active;
         const wasVisited = visited.has(i);
         return (
           <button
             key={i}
+            id={tabId(i)}
             type="button"
             role="tab"
             aria-selected={isActive}
+            aria-controls={panelId}
             aria-label={`Problem ${i + 1}${wasVisited ? ", visited" : ""}`}
+            tabIndex={isActive ? 0 : -1}
             onClick={() => onSelect(i)}
-            className={`h-2 flex-1 rounded-full transition-colors hover:ring-2 hover:ring-primary/40 ${
+            className={`h-2 flex-1 rounded-full transition-colors hover:ring-2 hover:ring-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               isActive
                 ? "bg-primary"
                 : wasVisited
@@ -721,11 +821,13 @@ function ProblemBlock({
   edits,
   onSaveEdit,
   onClearEdit,
+  registerPendingCommit,
 }: {
   group: ProblemGroup;
   edits: Record<string, string>;
   onSaveEdit: (key: string, text: string) => void;
   onClearEdit: (key: string) => void;
+  registerPendingCommit: (fn: (() => void) | null) => void;
 }) {
   return (
     <>
@@ -760,6 +862,7 @@ function ProblemBlock({
                   ariaLabel={`step ${s.step_num} of problem ${group.position}`}
                   onSaveEdit={onSaveEdit}
                   onClearEdit={onClearEdit}
+                  registerPendingCommit={registerPendingCommit}
                   readOnlyDisplay={
                     edited !== null ? (
                       sourceIsLatex ? (
@@ -821,6 +924,7 @@ function ProblemBlock({
                 ariaLabel={`final answer for problem ${group.position}`}
                 onSaveEdit={onSaveEdit}
                 onClearEdit={onClearEdit}
+                registerPendingCommit={registerPendingCommit}
                 readOnlyDisplay={
                   edited !== null ? (
                     sourceIsLatex ? (
@@ -844,7 +948,10 @@ function ProblemBlock({
 
 /** Click-to-zoom modal. Image: object-contain so aspect ratio holds.
  *  PDF: native browser embed at near-fullscreen so the student can
- *  scroll through pages. Backdrop click and × button both close. */
+ *  scroll through pages, with an "Open in new tab" fallback for
+ *  browsers (mobile Safari, sandboxed iframes) where the embed
+ *  renders blank. Uses the shared Modal so Esc, focus trap,
+ *  body-scroll-lock, and return-focus are handled. */
 function FileZoomModal({
   file,
   onClose,
@@ -856,40 +963,50 @@ function FileZoomModal({
   const dataUrl = `data:${file.media_type};base64,${file.data}`;
   const label = file.filename ?? "Submitted page";
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Preview of ${label}`}
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      className="max-h-[90vh] w-full max-w-5xl bg-surface p-3"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close preview"
-        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg text-text-primary hover:bg-bg-subtle"
-      >
-        ×
-      </button>
-      <div
-        className="max-h-[90vh] max-w-[90vw] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex items-center justify-between pb-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          {label}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close preview"
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+        >
+          Close ✕
+        </button>
+      </div>
+      <div className="overflow-auto">
         {isPdf ? (
-          <embed
-            src={dataUrl}
-            type="application/pdf"
-            className="h-[80vh] w-[80vw] rounded-[--radius-md] bg-white"
-          />
+          <>
+            <embed
+              src={dataUrl}
+              type="application/pdf"
+              className="h-[75vh] w-full rounded-[--radius-md] bg-white"
+            />
+            <a
+              href={dataUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              Open PDF in new tab ↗
+            </a>
+          </>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={dataUrl}
             alt={label}
-            className="max-h-[90vh] max-w-[90vw] rounded-[--radius-md] object-contain"
+            className="mx-auto max-h-[80vh] w-auto rounded-[--radius-md] object-contain"
           />
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
