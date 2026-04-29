@@ -230,7 +230,7 @@ async def test_submit_homework_happy_path(client: AsyncClient, world: dict[str, 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -255,12 +255,13 @@ async def test_submit_homework_happy_path(client: AsyncClient, world: dict[str, 
     assert r.status_code == 200
     out = r.json()
     assert out["final_answers"] == {}
-    assert out["image_data"]
+    assert out["files"] and len(out["files"]) == 1
+    assert out["files"][0]["media_type"] == "image/png"
     assert out["is_late"] is False
 
 
 async def test_submit_homework_409_on_resubmit(client: AsyncClient, world: dict[str, Any]) -> None:
-    body = {"image_base64": TINY_PNG}
+    body = {"files": [TINY_PNG]}
     r1 = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
@@ -275,10 +276,10 @@ async def test_submit_homework_409_on_resubmit(client: AsyncClient, world: dict[
     assert r2.status_code == 409
 
 
-async def test_submit_homework_400_missing_image(
+async def test_submit_homework_400_missing_files(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # No image at all → 422 from pydantic (image_base64 is required)
+    # No body field at all → 422 from pydantic (files is required).
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
@@ -286,48 +287,40 @@ async def test_submit_homework_400_missing_image(
     )
     assert r.status_code == 422
 
-    # Empty string → 400 from our explicit check
+    # Empty list → 422 from the field validator on SubmitHomeworkRequest.
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": ""},
+        json={"files": []},
     )
-    assert r.status_code == 400
-
-
-async def test_submit_homework_413_oversized_image(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    huge = "iVBOR" + ("A" * 8_000_000)
-    r = await client.post(
-        f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=_auth(world["student_token"]),
-        json={"image_base64": huge},
-    )
-    assert r.status_code == 413
+    assert r.status_code == 422
 
 
 async def test_submit_homework_400_bad_image_format(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
+    # Magic-byte check rejects payloads that aren't JPEG, PNG, or PDF.
+    # The error names which file failed so the frontend can highlight
+    # the offending row instead of "your upload failed".
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": "ZmFrZWltYWdl"},
+        json={"files": ["ZmFrZWltYWdl"]},
     )
     assert r.status_code == 400
+    assert "File 1" in r.json()["detail"]
 
 
 async def test_submit_homework_400_rejects_svg(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
     # Even though browsers don't execute scripts in SVGs loaded via
-    # <img src=...>, we tighten the magic check to PNG/JPEG only so
-    # nothing exotic ends up in the storage path.
+    # <img src=...>, the upload validator keeps the storage path tight
+    # — only JPEG/PNG/PDF magic bytes pass.
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="},
+        json={"files": ["data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="]},
     )
     assert r.status_code == 400
 
@@ -335,12 +328,13 @@ async def test_submit_homework_400_rejects_svg(
 async def test_submit_homework_accepts_data_url_png(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    # Confirm the data URL form (what the frontend now sends after the
-    # MIME-preservation fix) is accepted alongside raw base64.
+    # Data-URL prefix is optional — the route strips it and validates
+    # the underlying base64 by magic bytes. Belt-and-suspenders for
+    # clients that prefer to send the canonical data URL form.
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": f"data:image/png;base64,{TINY_PNG}"},
+        json={"files": [f"data:image/png;base64,{TINY_PNG}"]},
     )
     assert r.status_code == 200
 
@@ -349,7 +343,7 @@ async def test_submit_homework_403_for_outsider(client: AsyncClient, world: dict
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["outsider_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     assert r.status_code == 403
 
@@ -381,7 +375,7 @@ async def test_homework_list_status_reflects_submission(
     await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
 
     r = await client.get(
@@ -404,7 +398,7 @@ async def test_submit_homework_late_marks_is_late(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     assert r.status_code == 200
     assert r.json()["is_late"] is True
@@ -505,7 +499,7 @@ async def test_teacher_list_submissions_uses_existing_endpoint(
     await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     r = await client.get(
         f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
@@ -521,7 +515,7 @@ async def test_teacher_submission_detail(client: AsyncClient, world: dict[str, A
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
 
@@ -541,7 +535,7 @@ async def test_teacher_submission_detail(client: AsyncClient, world: dict[str, A
     assert p["student_answer"] is None
     # Teacher view DOES include the answer key (the teacher needs it)
     assert p["final_answer"] == "x = 2 or x = 3"
-    assert out["image_data"]
+    assert out["files"] and len(out["files"]) == 1
 
 
 async def test_teacher_submission_detail_surfaces_student_edits(
@@ -555,7 +549,7 @@ async def test_teacher_submission_detail_surfaces_student_edits(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
     await drain_integrity_background_tasks()
@@ -617,7 +611,7 @@ async def test_teacher_submission_detail_surfaces_edited_final_pre_grading(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
     await drain_integrity_background_tasks()
@@ -659,7 +653,7 @@ async def test_teacher_submission_detail_403_for_other_teacher(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
 
@@ -709,7 +703,7 @@ async def _submit_and_extract(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"image_base64": TINY_PNG},
+        json={"files": [TINY_PNG]},
     )
     assert r.status_code == 200, r.text
     await drain_integrity_background_tasks()

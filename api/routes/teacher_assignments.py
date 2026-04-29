@@ -1679,7 +1679,10 @@ class TeacherSubmissionDetail(BaseModel):
     student_email: str
     submitted_at: datetime
     is_late: bool
-    image_data: str | None
+    # List of {data, media_type} the student submitted — multi-page
+    # support landed in PR 3. Null only on rows pre-dating the
+    # multi-file column.
+    files: list[dict[str, str]] | None
     problems: list[TeacherSubmissionDetailProblem]
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
@@ -1869,7 +1872,7 @@ async def get_submission_detail(
         student_email=student.email,
         submitted_at=sub.submitted_at,
         is_late=sub.is_late,
-        image_data=sub.image_data,
+        files=sub.files,
         problems=problems,
         breakdown=grade.breakdown if grade else None,
         ai_breakdown=ai_breakdown_grades,

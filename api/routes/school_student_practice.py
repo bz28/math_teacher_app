@@ -32,11 +32,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.image_utils import validate_and_decode_upload
 from api.core.integrity_pipeline import start_integrity_check
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
@@ -48,11 +50,6 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from api.services.bank import problem_ids_in_content
-
-# Sanity cap on the base64 image payload. ~5 MB raw image →
-# ~6.7 MB base64; we round up so PNG screenshots from a phone aren't
-# rejected. Real abuse protection lives at the rate-limit / S3 layer.
-MAX_IMAGE_BASE64_LEN = 7_000_000
 
 logger = logging.getLogger(__name__)
 
@@ -378,11 +375,22 @@ class StudentHomeworkDetail(BaseModel):
 
 
 class SubmitHomeworkRequest(BaseModel):
-    # base64-encoded image of the completed homework. Required —
-    # the work is the source of truth for both the teacher view and
-    # the upcoming integrity-checker pipeline (which will extract
-    # per-problem answers from the image).
-    image_base64: str
+    # Base64-encoded JPEG/PNG/PDF files of the student's completed
+    # work. Multi-file because real homework spans pages — a worksheet
+    # PDF, three photos of notebook work, etc. Per-file caps + total
+    # payload cap are enforced in the route handler via
+    # validate_and_decode_upload (image_utils). The work is the source
+    # of truth for the teacher view and the integrity-checker pipeline.
+    files: list[str]
+
+    @field_validator("files")
+    @classmethod
+    def _validate_files(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("At least one file is required")
+        if len(v) > MAX_SUBMISSION_FILES:
+            raise ValueError(f"Maximum {MAX_SUBMISSION_FILES} files per submission")
+        return v
 
 
 class SubmitHomeworkResponse(BaseModel):
@@ -395,7 +403,10 @@ class StudentSubmissionDetail(BaseModel):
     submission_id: str
     submitted_at: datetime
     is_late: bool
-    image_data: str | None
+    # List of {data, media_type} the student submitted. Null only when
+    # the row pre-dates the multi-file column (no real users yet so
+    # this is more about graceful read than a real branch).
+    files: list[dict[str, str]] | None
     final_answers: dict[str, str]
     # Full Vision extraction (steps + final_answers + confidence).
     # Null when extraction hasn't run yet, failed, or the HW has both
@@ -1266,27 +1277,35 @@ async def submit_homework(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Already submitted")
 
-    # The image is required and is the source of truth — the work is
-    # what the teacher reviews and what the integrity checker will
-    # eventually read for per-problem answer extraction.
-    if not body.image_base64:
-        raise HTTPException(status_code=400, detail="An image of your work is required")
-    if len(body.image_base64) > MAX_IMAGE_BASE64_LEN:
-        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB)")
-    # Accept PNG or JPEG only — both as raw base64 magic bytes or as
-    # an explicit data URL. Tighter than `data:image/*` to keep SVG
-    # (and any other image type that might land later) out of the
-    # storage path. The frontend file picker filters to these two
-    # types but a tampered client could bypass that.
-    head = body.image_base64[:32]
-    if not (
-        head.startswith("data:image/png;base64,")
-        or head.startswith("data:image/jpeg;base64,")
-        or head.startswith("data:image/jpg;base64,")
-        or head.startswith("iVBOR")  # PNG raw
-        or head.startswith("/9j/")    # JPEG raw
-    ):
-        raise HTTPException(status_code=400, detail="Image must be PNG or JPEG")
+    # The work is required and is the source of truth — what the
+    # teacher reviews and what the integrity checker reads for per-
+    # problem answer extraction. Each file is validated by magic bytes
+    # against per-format size caps; we also enforce a whole-submission
+    # cap so a 10-PDF payload can't blow up the row store.
+    validated_files: list[dict[str, str]] = []
+    total_bytes = 0
+    for i, raw in enumerate(body.files):
+        # Strip an optional `data:<media>;base64,` prefix before
+        # validation. The prefix is informational; magic bytes inside
+        # the decoded payload are the source of truth.
+        b64 = raw.split(",", 1)[1] if raw.startswith("data:") else raw
+        try:
+            decoded, media_type = validate_and_decode_upload(b64)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File {i + 1}: {e}",
+            ) from e
+        total_bytes += len(decoded)
+        validated_files.append({"data": b64, "media_type": media_type})
+    if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
+                f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
+            ),
+        )
 
     # Find which section this student is enrolled in for this assignment.
     # We need a section_id on the row; the existing schema requires it.
@@ -1310,7 +1329,7 @@ async def submit_homework(
         student_id=user.id,
         section_id=section_id,
         status="submitted",
-        image_data=body.image_base64,
+        files=validated_files,
         # final_answers is left null on new submissions; the next PR
         # (integrity checker) populates it from a Vision-extracted
         # confirm-and-edit step. The column is preserved so legacy
@@ -1585,7 +1604,7 @@ async def get_my_submission(
         submission_id=str(sub.id),
         submitted_at=sub.submitted_at,
         is_late=sub.is_late,
-        image_data=sub.image_data,
+        files=sub.files,
         final_answers=dict(sub.final_answers or {}),
         extraction=sub.extraction,
         extraction_confirmed_at=sub.extraction_confirmed_at,
