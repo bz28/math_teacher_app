@@ -10,7 +10,7 @@ import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
 import MetadataChips from "../components/MetadataChips";
 import { Pagination } from "../components/Pagination";
-import { useScope } from "../lib/scope";
+import { useScope } from "../lib/scope-context";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 

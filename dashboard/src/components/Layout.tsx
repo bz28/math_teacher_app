@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { getToken, setToken } from "../lib/api";
-import { INTERNAL_SCHOOL_ID, useScope } from "../lib/scope";
+import { INTERNAL_SCHOOL_ID, useScope } from "../lib/scope-context";
 import ScopePicker from "./ScopePicker";
 
 interface NavItem {

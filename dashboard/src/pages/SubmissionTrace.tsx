@@ -10,7 +10,7 @@ import {
 } from "../lib/format";
 import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
-import { useScope } from "../lib/scope";
+import { useScope } from "../lib/scope-context";
 
 // Per-submission flight recorder. Pulls every LLM call stamped with
 // the given submission_id and renders them as a vertical chronological
