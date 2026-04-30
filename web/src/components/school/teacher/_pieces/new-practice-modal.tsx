@@ -165,11 +165,15 @@ export function NewPracticeModal({
         courseId,
         selectedHwId,
       );
-      // Stash the most recent job id so the course page's pulsing
-      // dot + existing job polling can pick it up. Keyed by the new
-      // practice assignment id so concurrent clones don't clobber.
-      if (resp.job_ids[0]) {
-        sessionStorage.setItem(`hw-gen-${resp.id}`, resp.job_ids[0]);
+      // Stash every job id so the editor's hero count reflects the
+      // full clone fan-out (one job per source problem) rather than
+      // just the first job's count. Keyed by the new practice
+      // assignment id so concurrent clones don't clobber.
+      if (resp.job_ids.length > 0) {
+        sessionStorage.setItem(
+          `hw-gen-${resp.id}`,
+          JSON.stringify(resp.job_ids),
+        );
       }
       onCreated(resp.id, { startedGeneration: resp.job_ids.length > 0 });
     });
@@ -210,7 +214,7 @@ export function NewPracticeModal({
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
+        sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch {
         startedGeneration = false;
       }
