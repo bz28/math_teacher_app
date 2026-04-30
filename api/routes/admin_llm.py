@@ -1,8 +1,9 @@
 """Admin LLM call analytics endpoint."""
 
+import uuid as uuid_lib
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
 from api.models.user import User
-from api.routes.admin_helpers import time_range
+from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
 
 router = APIRouter()
 
@@ -29,6 +30,29 @@ async def llm_calls(
 ) -> dict[str, Any]:
     since = time_range(hours)
 
+    # Reject malformed UUIDs up front so a typo in the URL surfaces
+    # as a clean 400 rather than asyncpg's invalid-text-representation
+    # bubbling out as a 500. Same defensive pattern admin_school_overview
+    # uses on its own school_id path segment.
+    for label, value in (
+        ("user_id", user_id),
+        ("submission_id", submission_id),
+    ):
+        if value:
+            try:
+                uuid_lib.UUID(value)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400, detail=f"invalid {label}",
+                ) from e
+    if school_id and school_id != INTERNAL_SCHOOL_SENTINEL:
+        try:
+            uuid_lib.UUID(school_id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="invalid school_id",
+            ) from e
+
     # Build base filter conditions
     base_filters = [LLMCall.created_at >= since]
     if user_id:
@@ -39,7 +63,7 @@ async def llm_calls(
         # admin dashboard can render the full pipeline trace in one
         # place. Indexed on submission_id, instant.
         base_filters.append(LLMCall.submission_id == submission_id)
-    if school_id == "internal":
+    if school_id == INTERNAL_SCHOOL_SENTINEL:
         # The "Internal" pseudo-school — calls from users with
         # school_id IS NULL (founder, test accounts, non-school
         # learners). Drives the school-scope picker's Internal entry.
@@ -144,7 +168,7 @@ async def llm_calls(
         LLMCall.created_at >= since,
         LLMCall.user_id.isnot(None),
     ]
-    if school_id == "internal":
+    if school_id == INTERNAL_SCHOOL_SENTINEL:
         user_dropdown_filters.append(LLMCall.school_id.is_(None))
     elif school_id:
         user_dropdown_filters.append(LLMCall.school_id == school_id)

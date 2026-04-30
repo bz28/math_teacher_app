@@ -267,13 +267,17 @@ h3 {
   border-radius: 10px 0 0 10px;
 }
 
-.stat-card:nth-child(2)::before { background: #10b981; }  /* Total Cost — green */
-.stat-card:nth-child(3)::before { background: #3b82f6; }  /* Active Users — blue */
-.stat-card:nth-child(4)::before { background: #f59e0b; }  /* New Users — amber */
-.stat-card:nth-child(5)::before { background: #0ea5e9; }  /* Total Users — sky */
-.stat-card:nth-child(6)::before { background: #64748b; }  /* Deleted Accounts — slate */
-.stat-card:nth-child(7)::before { background: #8b5cf6; }  /* Avg Latency — violet */
-.stat-card:nth-child(8)::before { background: #ef4444; }  /* Error Rate — red */
+/* Platform Overview's stat cards use a per-position color rotation
+   that encodes specific metric semantics (green=cost, amber=new
+   users, etc). Scoped to the page so other stat-grid pages get a
+   uniform indigo accent instead of inheriting an unrelated meaning. */
+.platform-overview .stat-card:nth-child(2)::before { background: #10b981; }
+.platform-overview .stat-card:nth-child(3)::before { background: #3b82f6; }
+.platform-overview .stat-card:nth-child(4)::before { background: #f59e0b; }
+.platform-overview .stat-card:nth-child(5)::before { background: #0ea5e9; }
+.platform-overview .stat-card:nth-child(6)::before { background: #64748b; }
+.platform-overview .stat-card:nth-child(7)::before { background: #8b5cf6; }
+.platform-overview .stat-card:nth-child(8)::before { background: #ef4444; }
 
 .stat-label {
   font-size: 11px;
@@ -295,6 +299,178 @@ h3 {
   font-size: 12px;
   color: #94a3b8;
   margin-top: 4px;
+}
+
+/* School Overview tiles */
+.overview-section {
+  font-size: 16px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 28px 0 12px;
+}
+
+.overview-card-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.overview-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.overview-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+
+.stack-bar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.stack-bar-seg {
+  display: block;
+  height: 100%;
+}
+
+.stack-bar-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  color: #475569;
+  flex: 1;
+}
+
+.legend-value {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.empty-mini {
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 18px 0;
+  text-align: center;
+}
+
+.sparkline {
+  width: 100%;
+  height: 60px;
+}
+
+.sparkline-table {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.sparkline-table summary {
+  color: #64748b;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sparkline-table summary:hover {
+  color: #6366f1;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mini-table td,
+.mini-table th {
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.mini-table tr:last-child td {
+  border-bottom: none;
+}
+
+.mini-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.mini-table-name {
+  width: 100%;
+}
+
+.mini-table-value {
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  text-align: right;
+  padding-left: 12px;
+}
+
+.delta {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.delta-up {
+  color: #10b981;
+}
+
+.delta-down {
+  color: #ef4444;
+}
+
+.delta-neutral {
+  color: #94a3b8;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #6366f1;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 
 /* Charts */

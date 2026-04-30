@@ -59,7 +59,7 @@ export default function Overview() {
     : `${Math.round(data.avg_latency_ms)}ms`;
 
   return (
-    <div>
+    <div className="platform-overview">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
           <h1 style={{ marginBottom: 4 }}>Overview</h1>
