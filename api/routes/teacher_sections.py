@@ -228,12 +228,6 @@ async def invite_student(
         )).scalar_one_or_none() is not None
         if already_enrolled:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student already in section")
-        # Note: the IntegrityError handler below catches the
-        # uq_section_student "duplicate within this section" race. It also
-        # absorbs the rarer "raced into a *different* section of the same
-        # course" race (per-course unique index) as success — the
-        # user-visible state is still "in some section of this course",
-        # which is roughly what the teacher wanted.
         # Block if the student is in a different section of this same course.
         other_section_name = (await db.execute(
             select(Section.name)
@@ -257,10 +251,25 @@ async def invite_student(
         try:
             await db.commit()
         except IntegrityError:
-            # Raced with another invite — the uq_section_student constraint
-            # caught a duplicate. Treat as success: the student is in the
-            # section, which is all the caller needed.
+            # Raced with another invite. Two constraints can fire:
+            # - uq_section_student: another invite enrolled them into THIS
+            #   section. Student is where we want them — treat as success.
+            # - uq_section_enrollments_student_course: another invite
+            #   enrolled them into a DIFFERENT section of the same course.
+            #   Surface the same 409 the pre-check would have raised so the
+            #   audit + response don't lie about which section won.
             await db.rollback()
+            landed_in_requested_section = (await db.execute(
+                select(SectionEnrollment.id).where(
+                    SectionEnrollment.section_id == section_id,
+                    SectionEnrollment.student_id == existing_user.id,
+                )
+            )).scalar_one_or_none() is not None
+            if not landed_in_requested_section:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Student is already enrolled in another section of this class.",
+                ) from None
         logger.info(
             "AUDIT: teacher=%s enrolled existing user=%s into section=%s",
             current_user.user_id, existing_user.id, section_id,
