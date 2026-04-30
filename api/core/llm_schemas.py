@@ -685,11 +685,28 @@ INTEGRITY_SUBMIT_VERDICT_SCHEMA: ToolSchema = {
 INTEGRITY_GENERATE_VARIANT_SCHEMA: ToolSchema = {
     "name": "generate_variant",
     "description": (
-        "Generate a fresh isomorphic problem to disambiguate an "
-        "ambiguous case (correct work on paper, blank verbal, clean "
-        "behavioral). Present it in-chat and ask how the student would "
-        "APPROACH it — not to solve it fully. Call at most once per "
-        "session."
+        "Generate a fresh isomorphic problem to disambiguate the "
+        "'correct work on paper but cannot articulate it' case when "
+        "behavioral signal is clean (not obviously cheating). The "
+        "student may be ESL/anxious/bad-at-verbalizing rather than "
+        "dishonest. Single use per session.\n\n"
+        "Usage protocol:\n"
+        "1. Call generate_variant(problem_id). The tool returns the "
+        "variant text.\n"
+        "2. Present the variant in-chat: \"Here's a similar problem: "
+        "[variant]. How would you approach this one?\" Do NOT ask them "
+        "to solve it fully.\n"
+        "3. Score the response when calling finish_check via "
+        "inline_variant_result:\n"
+        "   - 'specific_approach': student referenced concrete structure "
+        "(features, numbers, setup) of the variant — upgrade to pass.\n"
+        "   - 'approach_after_followup': gave a generic answer, then a "
+        "follow-up 'what's the first thing you'd write down?' got a "
+        "reasonable first step — upgrade to pass.\n"
+        "   - 'blank_or_wrong': still blank or wrong after the follow-up "
+        "— confirm flag_for_review.\n\n"
+        "Set inline_variant_result='not_applicable' on finish_check when "
+        "you didn't use this tool."
     ),
     "input_schema": {
         "type": "object",
