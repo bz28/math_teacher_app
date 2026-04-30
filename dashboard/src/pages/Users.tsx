@@ -348,7 +348,7 @@ export default function Users() {
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${u.id}`); }}>
+                      <button onClick={() => { setOpenMenu(null); navigate(`/admin/llm-calls?user=${u.id}`); }}>
                         View Calls
                       </button>
                       <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>

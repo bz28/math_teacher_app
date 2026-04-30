@@ -182,7 +182,7 @@ export default function Leads() {
                   {lead.status === "converted" && lead.school_id && (
                     <div>
                       <button
-                        onClick={() => navigate(`/schools?detail=${lead.school_id}`)}
+                        onClick={() => navigate(`/admin/schools?detail=${lead.school_id}`)}
                         style={{ fontSize: 11, color: "#6366f1", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}
                       >
                         View School &rarr;
