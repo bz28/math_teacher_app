@@ -1,5 +1,8 @@
 import { teacher } from "@/lib/api";
-import { MATERIAL_UPLOAD_MAX_BYTES } from "@/lib/constants";
+import {
+  MATERIAL_UPLOAD_MAX_IMAGE_BYTES,
+  MATERIAL_UPLOAD_MAX_PDF_BYTES,
+} from "@/lib/constants";
 import { fileToBase64 } from "@/lib/utils";
 
 /**
@@ -18,7 +21,15 @@ export async function uploadDocument(
   file: File,
   unitId: string,
 ): Promise<string> {
-  if (file.size > MATERIAL_UPLOAD_MAX_BYTES) throw new Error("exceeds 25MB");
+  // Per-format caps mirror the backend's magic-byte validation: 5MB for
+  // images, 25MB for PDFs. file.type is the browser-detected MIME — good
+  // enough for fast-fail; the server's magic-byte check is the source of truth.
+  const isPdf = file.type === "application/pdf";
+  const cap = isPdf ? MATERIAL_UPLOAD_MAX_PDF_BYTES : MATERIAL_UPLOAD_MAX_IMAGE_BYTES;
+  if (file.size > cap) {
+    const capMb = cap / 1024 / 1024;
+    throw new Error(isPdf ? `PDF exceeds ${capMb}MB` : `Image exceeds ${capMb}MB`);
+  }
   const base64 = await fileToBase64(file);
   const resp = await teacher.uploadDocument(courseId, {
     file_base64: base64,
