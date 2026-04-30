@@ -5,7 +5,6 @@ from api.models import (  # noqa: F401
     contact_lead,
     course,
     llm_call,
-    promo,
     quality_score,
     school,
     section,

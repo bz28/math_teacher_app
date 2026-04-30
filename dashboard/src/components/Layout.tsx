@@ -16,7 +16,6 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/admin/llm-calls", label: "LLM Calls", icon: "🤖" },
   { to: "/admin/users", label: "Users", icon: "👥" },
   { to: "/admin/quality", label: "Quality", icon: "✅" },
-  { to: "/admin/promo-codes", label: "Promo Codes", icon: "🎟️" },
   { to: "/admin/schools", label: "Schools", icon: "🏫" },
   { to: "/admin/leads", label: "Leads", icon: "📩" },
 ];

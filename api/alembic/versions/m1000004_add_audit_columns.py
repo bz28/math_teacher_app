@@ -1,4 +1,4 @@
-"""add audit columns (updated_at, updated_by_id, updated_by_name) to leads, schools, promo_codes, users
+"""add audit columns (updated_at, updated_by_id, updated_by_name) to leads, schools, users
 
 Revision ID: m1000004
 Revises: l1000003
@@ -28,12 +28,6 @@ def upgrade() -> None:
     op.add_column("schools", sa.Column("updated_by_name", sa.String(200), nullable=True))
     op.create_foreign_key("fk_schools_updated_by", "schools", "users", ["updated_by_id"], ["id"], ondelete="SET NULL")
 
-    # promo_codes — has no updated_at yet
-    op.add_column("promo_codes", sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("promo_codes", sa.Column("updated_by_id", sa.Uuid(), nullable=True))
-    op.add_column("promo_codes", sa.Column("updated_by_name", sa.String(200), nullable=True))
-    op.create_foreign_key("fk_promo_codes_updated_by", "promo_codes", "users", ["updated_by_id"], ["id"], ondelete="SET NULL")
-
     # users — already has updated_at, just add updated_by_*
     op.add_column("users", sa.Column("updated_by_id", sa.Uuid(), nullable=True))
     op.add_column("users", sa.Column("updated_by_name", sa.String(200), nullable=True))
@@ -44,11 +38,6 @@ def downgrade() -> None:
     op.drop_constraint("fk_users_updated_by", "users", type_="foreignkey")
     op.drop_column("users", "updated_by_name")
     op.drop_column("users", "updated_by_id")
-
-    op.drop_constraint("fk_promo_codes_updated_by", "promo_codes", type_="foreignkey")
-    op.drop_column("promo_codes", "updated_by_name")
-    op.drop_column("promo_codes", "updated_by_id")
-    op.drop_column("promo_codes", "updated_at")
 
     op.drop_constraint("fk_schools_updated_by", "schools", type_="foreignkey")
     op.drop_column("schools", "updated_by_name")

@@ -1,7 +1,7 @@
 """add school platform tables: courses, sections, section_enrollments, documents
 
 Revision ID: j1000001
-Revises: i9d0e1f2g3h4
+Revises: h8c9d0e1f2g3
 Create Date: 2026-03-31 23:30:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 
 revision: str = 'j1000001'
-down_revision: Union[str, None] = 'i9d0e1f2g3h4'
+down_revision: Union[str, None] = 'h8c9d0e1f2g3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

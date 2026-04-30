@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -16,7 +15,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { PurchasesPackage } from "react-native-purchases";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { getOfferings, purchasePackage, restorePurchases } from "../services/revenuecat";
-import { redeemPromoCode } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
@@ -71,17 +69,12 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loadingOfferings, setLoadingOfferings] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
-  const [promoCode, setPromoCode] = useState("");
-  const [promoExpanded, setPromoExpanded] = useState(false);
-  const [promoLoading, setPromoLoading] = useState(false);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   useEffect(() => {
     if (!visible) return;
     setLoadingOfferings(true);
     setSelectedPlan("annual");
-    setPromoCode("");
-    setPromoExpanded(false);
 
     getOfferings()
       .then((offerings) => {
@@ -142,20 +135,6 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
     } catch (err) {
       setPurchasing(false);
       Alert.alert("Restore Failed", (err as Error).message ?? "Something went wrong. Please try again.");
-    }
-  };
-
-  const handleRedeemPromo = async () => {
-    setPromoLoading(true);
-    try {
-      const result = await redeemPromoCode(promoCode.trim());
-      await fetchEntitlements();
-      setPromoLoading(false);
-      Alert.alert("Success", result.message);
-      onPurchaseComplete();
-    } catch (err) {
-      setPromoLoading(false);
-      Alert.alert("Invalid Code", (err as Error).message ?? "Could not redeem this code.");
     }
   };
 
@@ -301,37 +280,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
           <TouchableOpacity onPress={handleRestore} disabled={purchasing} style={styles.secondaryButton}>
             <Text style={styles.secondaryText}>Restore purchases</Text>
           </TouchableOpacity>
-          <Text style={styles.secondaryDot}>{" · "}</Text>
-          <TouchableOpacity onPress={() => setPromoExpanded(!promoExpanded)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryText}>Promo code</Text>
-          </TouchableOpacity>
         </View>
-
-        {/* Promo code input */}
-        {promoExpanded && (
-          <View style={styles.promoRow}>
-            <TextInput
-              style={styles.promoInput}
-              placeholder="Enter code"
-              placeholderTextColor={colors.textMuted}
-              value={promoCode}
-              onChangeText={setPromoCode}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-            <TouchableOpacity
-              onPress={handleRedeemPromo}
-              disabled={promoLoading || !promoCode.trim()}
-              style={[styles.promoButton, (!promoCode.trim() || promoLoading) && { opacity: 0.5 }]}
-            >
-              {promoLoading ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.promoButtonText}>Redeem</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Legal */}
         <View style={styles.legalRow}>
@@ -636,42 +585,6 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     color: colors.textSecondary,
     fontSize: 13,
-  },
-  secondaryDot: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-
-  // Promo
-  promoRow: {
-    flexDirection: "row",
-    alignSelf: "stretch",
-    paddingHorizontal: spacing.xxl,
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  promoInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    ...typography.body,
-    color: colors.text,
-  },
-  promoButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  promoButtonText: {
-    ...typography.button,
-    color: colors.white,
-    fontSize: 14,
   },
 
   // Legal

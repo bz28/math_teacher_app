@@ -95,11 +95,6 @@ export const api = {
     mutate<{ status: string; teachers_unlinked: number; invites_deleted: number }>(`/admin/schools/${id}`, "DELETE"),
   cancelInvite: (schoolId: string, inviteId: string) =>
     mutate<{ status: string }>(`/admin/schools/${schoolId}/invites/${inviteId}`, "DELETE"),
-  // Promo codes
-  promoCodes: (params?: Record<string, string>) => request<PromoCodeData[]>("/promo/codes", params),
-  createPromoCode: (body: CreatePromoCodeBody) => mutate<PromoCodeData>("/promo/codes", "POST", body),
-  updatePromoCode: (codeId: string, body: UpdatePromoCodeBody) => mutate<PromoCodeData>(`/promo/codes/${codeId}`, "PATCH", body),
-  promoRedemptions: (codeId: string) => request<PromoRedemptionData[]>(`/promo/codes/${codeId}/redemptions`),
   login: async (email: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
@@ -211,39 +206,6 @@ export interface QualityData {
     created_at: string;
   }[];
   total_count: number;
-}
-
-export interface PromoCodeData {
-  id: string;
-  code: string;
-  duration_days: number;
-  max_redemptions: number;
-  times_redeemed: number;
-  expires_at: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string | null;
-  updated_by: string | null;
-}
-
-export interface CreatePromoCodeBody {
-  code: string;
-  duration_days: number;
-  max_redemptions: number;
-  expires_at?: string | null;
-}
-
-export interface UpdatePromoCodeBody {
-  is_active?: boolean;
-  max_redemptions?: number;
-  expires_at?: string | null;
-}
-
-export interface PromoRedemptionData {
-  user_id: string;
-  user_email: string;
-  redeemed_at: string;
-  expires_at: string | null;
 }
 
 // Lead types
