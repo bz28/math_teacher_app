@@ -29,9 +29,6 @@
 ## Code quality
 
 - DRY: don't extract abstractions beyond what the task requires. Three similar lines is better than a premature abstraction. Inverse — extract a helper when at least 2 of these are true: (1) duplicated 3+ times, (2) the logic is complex enough that a name conveys real insight, (3) the call sites are likely to evolve together, (4) the duplication is where bugs cluster historically. If the only argument is "it's repeated," leave it inline.
-- Predicate-named variables (`is_X`, `has_X`, `already_X`, `should_X`) must hold actual booleans, not ORM rows or other objects relying on truthy/falsy. If you find yourself in this pattern, select an id-only column and use `is not None` so the variable's type matches its name.
-- AUDIT log consistency within a router: if any mutation endpoint writes a structured `logger.info("AUDIT: teacher=%s ...")` line, all mutation endpoints in that router should write one. Silent mutations among logged siblings is an inconsistency, not a feature.
-- Pydantic validation: prefer `Annotated[T, AfterValidator(_validate_x)]` types over per-model `@field_validator` decorator blocks. Optional fields skip the validator naturally via union resolution, so the `if v is not None else v` boilerplate disappears. Keep the validator function at module level for unit-testability.
 
 ## Skills
 
