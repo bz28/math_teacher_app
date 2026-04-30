@@ -200,15 +200,15 @@ async def invite_student(
     existing_user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if existing_user is not None:
         already_enrolled = (await db.execute(
-            select(SectionEnrollment).where(
+            select(SectionEnrollment.id).where(
                 SectionEnrollment.section_id == section_id,
                 SectionEnrollment.student_id == existing_user.id,
             )
-        )).scalar_one_or_none()
+        )).scalar_one_or_none() is not None
         if already_enrolled:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student already in section")
         # Block if the student is in a different section of this same course.
-        other_section = (await db.execute(
+        other_section_name = (await db.execute(
             select(Section.name)
             .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
             .where(
@@ -216,10 +216,10 @@ async def invite_student(
                 SectionEnrollment.course_id == course_id,
             )
         )).scalar_one_or_none()
-        if other_section:
+        if other_section_name:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Student is already enrolled in {other_section} for this class.",
+                detail=f"Student is already enrolled in {other_section_name} for this class.",
             )
         db.add(SectionEnrollment(
             section_id=section_id,
@@ -361,13 +361,17 @@ async def remove_student(
     )).scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in this course")
-    result = await db.execute(
+    deleted = await db.execute(
         delete(SectionEnrollment).where(
             SectionEnrollment.section_id == section_id, SectionEnrollment.student_id == student_id)
     )
-    if result.rowcount == 0:  # type: ignore[attr-defined]
+    if deleted.rowcount == 0:  # type: ignore[attr-defined]
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not in section")
     await db.commit()
+    logger.info(
+        "AUDIT: teacher=%s removed student=%s from section=%s",
+        current_user.user_id, student_id, section_id,
+    )
     return {"status": "ok"}
 
 
@@ -410,7 +414,7 @@ async def join_section(
     # One enrollment per (student, course) — a student who's already in
     # another section of this course can't join a second one. Gives a
     # cleaner error than hitting the DB unique constraint.
-    other_section = (await db.execute(
+    other_section_name = (await db.execute(
         select(Section.name)
         .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
         .where(
@@ -418,10 +422,10 @@ async def join_section(
             SectionEnrollment.course_id == section.course_id,
         )
     )).scalar_one_or_none()
-    if other_section:
+    if other_section_name:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"You're already enrolled in {other_section} for this class.",
+            detail=f"You're already enrolled in {other_section_name} for this class.",
         )
     db.add(SectionEnrollment(
         section_id=section.id,
@@ -461,7 +465,7 @@ async def _create_or_refresh_invite(
     db: AsyncSession, section_id: uuid.UUID, email: str, invited_by: uuid.UUID,
 ) -> SectionInvite:
     """Create a new pending invite or refresh an existing one (idempotent resend)."""
-    existing = (await db.execute(
+    existing_invite = (await db.execute(
         select(SectionInvite).where(
             SectionInvite.section_id == section_id,
             SectionInvite.email == email,
@@ -469,11 +473,11 @@ async def _create_or_refresh_invite(
         )
     )).scalar_one_or_none()
     expires = datetime.now(UTC) + timedelta(days=INVITE_EXPIRY_DAYS)
-    if existing:
-        existing.token = secrets.token_urlsafe(32)
-        existing.expires_at = expires
-        existing.invited_by = invited_by
-        return existing
+    if existing_invite:
+        existing_invite.token = secrets.token_urlsafe(32)
+        existing_invite.expires_at = expires
+        existing_invite.invited_by = invited_by
+        return existing_invite
     invite = SectionInvite(
         section_id=section_id,
         email=email,
@@ -523,8 +527,14 @@ def _send_invite_email(
         f'font-weight:600;">Accept Invite</a></p>'
         f'<p style="color:#64748b;font-size:13px;">This invite expires in {INVITE_EXPIRY_DAYS} days.</p>'
     )
-    asyncio.create_task(send_email(
-        to=[email],
-        subject=f"You're invited to join {course_name} on Veradic AI",
-        html=body_html,
-    ))
+    async def _send_with_logging() -> None:
+        try:
+            await send_email(
+                to=[email],
+                subject=f"You're invited to join {course_name} on Veradic AI",
+                html=body_html,
+            )
+        except Exception:
+            logger.exception("Failed to send invite email to %s", email)
+
+    asyncio.create_task(_send_with_logging())
