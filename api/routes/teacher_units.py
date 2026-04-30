@@ -5,37 +5,40 @@ optional subfolders one level deep. The depth limit is enforced here in
 the route layer; the schema is permissive."""
 
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, field_validator
+from pydantic import AfterValidator, BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.course import Document
+from api.models.question_bank import QuestionBankItem
 from api.models.unit import Unit
 from api.routes.teacher_courses import get_teacher_course
 
 router = APIRouter()
 
 
-class CreateUnitRequest(BaseModel):
-    name: str
-    parent_id: uuid.UUID | None = None
+def _validate_unit_name(v: str) -> str:
+    v = v.strip()
+    if not v or len(v) > 200:
+        raise ValueError("Name must be 1-200 characters")
+    return v
 
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v or len(v) > 200:
-            raise ValueError("Name must be 1-200 characters")
-        return v
+
+UnitName = Annotated[str, AfterValidator(_validate_unit_name)]
+
+
+class CreateUnitRequest(BaseModel):
+    name: UnitName
+    parent_id: uuid.UUID | None = None
 
 
 class UpdateUnitRequest(BaseModel):
-    name: str | None = None
+    name: UnitName | None = None
     position: int | None = None
     parent_id: uuid.UUID | None = None
     clear_parent: bool = False  # Set to True to move a subfolder back to top level
@@ -56,7 +59,6 @@ async def list_units(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    from api.models.question_bank import QuestionBankItem
     await get_teacher_course(db, course_id, current_user.user_id)
 
     # Per-unit counts power the delete-folder dialog (and any future
@@ -148,10 +150,7 @@ async def update_unit(
     unit = await _get_unit_in_course(db, unit_id, course_id)
 
     if body.name is not None:
-        name = body.name.strip()
-        if not name or len(name) > 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name must be 1-200 characters")
-        unit.name = name
+        unit.name = body.name
 
     if body.position is not None:
         unit.position = body.position
@@ -159,10 +158,10 @@ async def update_unit(
     # Handle move (parent change)
     if body.clear_parent:
         # Moving back to top level — only allowed if this unit has no children itself
-        child_count = (await db.execute(
+        has_children = (await db.execute(
             select(Unit.id).where(Unit.parent_unit_id == unit_id).limit(1)
-        )).scalar_one_or_none()
-        if child_count is not None:
+        )).scalar_one_or_none() is not None
+        if has_children:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot move a folder with subfolders",
@@ -178,10 +177,10 @@ async def update_unit(
                 detail="Subfolders cannot contain subfolders (max 2 levels)",
             )
         # Block moving a parent (which has children) into another folder — would exceed depth
-        child_count = (await db.execute(
+        has_children = (await db.execute(
             select(Unit.id).where(Unit.parent_unit_id == unit_id).limit(1)
-        )).scalar_one_or_none()
-        if child_count is not None:
+        )).scalar_one_or_none() is not None
+        if has_children:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot move a folder with subfolders into another folder",
@@ -205,15 +204,12 @@ async def delete_unit(
     have a real unit. Subfolders themselves are still removed via
     ON DELETE CASCADE on parent_unit_id, but only after we confirm
     they're empty too."""
-    from api.models.question_bank import QuestionBankItem
     await get_teacher_course(db, course_id, current_user.user_id)
     unit = await _get_unit_in_course(db, unit_id, course_id)
 
-    subfolder_ids = [
-        r[0] for r in (await db.execute(
-            select(Unit.id).where(Unit.parent_unit_id == unit_id)
-        )).all()
-    ]
+    subfolder_ids = (await db.execute(
+        select(Unit.id).where(Unit.parent_unit_id == unit_id)
+    )).scalars().all()
     affected_unit_ids = [unit_id, *subfolder_ids]
 
     doc_count = (await db.execute(
