@@ -206,7 +206,24 @@ export default function HomeworkDetailPage({
     const key = `hw-gen-${assignmentId}`;
     const raw = sessionStorage.getItem(key);
     if (!raw) return;
-    const jobIds = JSON.parse(raw) as string[];
+    // Validate before fetching — a malformed/legacy value would
+    // either throw on parse or, worse, pass an `as string[]` cast
+    // and quietly iterate characters of a bare string.
+    let jobIds: string[];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((x) => typeof x === "string")
+      ) {
+        sessionStorage.removeItem(key);
+        return;
+      }
+      jobIds = parsed;
+    } catch {
+      sessionStorage.removeItem(key);
+      return;
+    }
     if (jobIds.length === 0) return;
     Promise.all(jobIds.map((id) => teacher.bankJob(courseId, id)))
       .then((jobs) => {
