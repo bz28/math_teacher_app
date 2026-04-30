@@ -282,6 +282,7 @@ async def grade_submission_with_ai(
     rubric: dict[str, Any] | None,
     *,
     user_id: str | None = None,
+    submission_id: str | None = None,
 ) -> dict[str, Any]:
     """Grade a submission using the already-extracted student work.
 
@@ -292,6 +293,7 @@ async def grade_submission_with_ai(
             from the HW's bank items.
         rubric: Teacher's rubric from Assignment.rubric (optional).
         user_id: For cost-tracking attribution.
+        submission_id: For LLM-call log correlation across the pipeline.
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
@@ -317,6 +319,8 @@ async def grade_submission_with_ai(
         max_tokens=4096,
         thinking_budget=2048,
         user_id=user_id,
+        submission_id=submission_id,
+        call_metadata={"phase": "ai_grading"},
     )
     return result
 
@@ -382,7 +386,8 @@ async def run_ai_grading_for_submission(
         return
 
     result = await grade_submission_with_ai(
-        extraction, problems, assignment.rubric, user_id=user_id,
+        extraction, problems, assignment.rubric,
+        user_id=user_id, submission_id=str(submission_id),
     )
     grades = result.get("grades", [])
     if not grades:

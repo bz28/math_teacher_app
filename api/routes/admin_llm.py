@@ -20,6 +20,7 @@ async def llm_calls(
     hours: int = Query(default=168, ge=1, le=2160),
     function: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
+    submission_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -31,6 +32,12 @@ async def llm_calls(
     base_filters = [LLMCall.created_at >= since]
     if user_id:
         base_filters.append(LLMCall.user_id == user_id)
+    if submission_id:
+        # Per-submission flight-recorder filter — pulls every Vision +
+        # equivalence + agent + grading call for one homework so the
+        # admin dashboard can render the full pipeline trace in one
+        # place. Indexed on submission_id, instant.
+        base_filters.append(LLMCall.submission_id == submission_id)
 
     # Aggregated stats
     stats_query = (
@@ -199,6 +206,9 @@ async def llm_calls(
                 "session_id": str(c.session_id) if c.session_id else None,
                 "user_id": str(c.user_id) if c.user_id else None,
                 "user_name": user_name or user_email or "Deleted User",
+                "school_id": str(c.school_id) if c.school_id else None,
+                "submission_id": str(c.submission_id) if c.submission_id else None,
+                "metadata": c.call_metadata,
                 "created_at": c.created_at.isoformat(),
             }
             for c, user_email, user_name in calls

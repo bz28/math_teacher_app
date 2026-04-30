@@ -200,6 +200,8 @@ async def extract_student_work(
         model=MODEL_REASON,
         max_tokens=4096,
         user_id=user_id,
+        submission_id=str(submission_id),
+        call_metadata={"phase": "vision_extract"},
     )
     return result
 
@@ -469,6 +471,8 @@ async def run_agent_turn(
     messages: list[dict[str, Any]],
     *,
     user_id: str | None = None,
+    submission_id: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> list[Any]:
     """One Claude round trip for the conversational integrity agent.
 
@@ -477,6 +481,11 @@ async def run_agent_turn(
     apply side effects, and reply with tool_result messages; then
     call this again until the model returns text without any
     tool_use.
+
+    `submission_id` and `call_metadata` are forwarded to the LLM-call
+    log so the admin dashboard can correlate the agent's calls with
+    the rest of the submission's pipeline (Vision, equivalence,
+    grading) and surface posture/turn context as debug chips.
     """
     return await call_claude_conversation(
         system_prompt,
@@ -486,4 +495,6 @@ async def run_agent_turn(
         user_id=user_id,
         model=MODEL_REASON,
         max_tokens=AGENT_MAX_TOKENS_PER_TURN,
+        submission_id=submission_id,
+        call_metadata=call_metadata,
     )

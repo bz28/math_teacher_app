@@ -16,11 +16,12 @@ type Tab = "all" | "failures";
 const PAGE_SIZE = 25;
 
 export default function LLMCalls() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
+  const submissionFilter = searchParams.get("submission") ?? "";
   const [tab, setTab] = useState<Tab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -30,15 +31,28 @@ export default function LLMCalls() {
       hours,
       function: fnFilter,
       user_id: userFilter,
+      submission_id: submissionFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then(setData);
-  }, [hours, fnFilter, userFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
 
   // Reset to first page when filters change
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
   const handleUserFilter = (v: string) => { setUserFilter(v); setOffset(0); };
   const handleFnFilter = (v: string) => { setFnFilter(fnFilter === v ? "" : v); setOffset(0); };
+  const clearSubmissionFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("submission");
+    setSearchParams(next);
+    setOffset(0);
+  };
+  const handleSubmissionChipClick = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("submission", id);
+    setSearchParams(next);
+    setOffset(0);
+  };
 
   if (!data) return <p>Loading...</p>;
 
@@ -70,6 +84,16 @@ export default function LLMCalls() {
         {userFilter && (
           <button className="filter-badge" onClick={() => handleUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
             Filtered by user ✕
+          </button>
+        )}
+        {submissionFilter && (
+          <button
+            className="filter-badge"
+            onClick={clearSubmissionFilter}
+            style={{ cursor: "pointer", border: "none" }}
+            title={submissionFilter}
+          >
+            Submission: {submissionFilter.slice(0, 8)}… ✕
           </button>
         )}
       </div>
@@ -301,13 +325,24 @@ export default function LLMCalls() {
                   <tr key={`${c.id}-detail`}>
                     <td colSpan={9} style={{ padding: 0 }}>
                       <div className="call-detail">
-                        <div className="call-detail-section">
-                          <strong>Input</strong>
-                          <pre>{c.input_text || "(not captured)"}</pre>
+                        <div className="call-detail-row">
+                          <div className="call-detail-section">
+                            <strong>Input</strong>
+                            <pre>{c.input_text || "(not captured)"}</pre>
+                          </div>
+                          <div className="call-detail-section">
+                            <strong>{c.success ? "Output" : "Error"}</strong>
+                            <pre>{c.output_text || "(not captured)"}</pre>
+                          </div>
                         </div>
-                        <div className="call-detail-section">
-                          <strong>{c.success ? "Output" : "Error"}</strong>
-                          <pre>{c.output_text || "(not captured)"}</pre>
+                        <div className="call-detail-metadata">
+                          <strong>Metadata</strong>
+                          <MetadataChips
+                            metadata={c.metadata}
+                            schoolId={c.school_id}
+                            submissionId={c.submission_id}
+                            onSubmissionClick={handleSubmissionChipClick}
+                          />
                         </div>
                       </div>
                     </td>
@@ -340,5 +375,119 @@ function shortModel(model: string): string {
   if (model.includes("opus")) return "Opus 4";
   // Fallback: strip date suffix and vendor prefix
   return model.replace(/-\d{8}$/, "").replace(/^claude-/, "");
+}
+
+
+// Render the metadata blob plus the promoted school_id / submission_id
+// columns as a compact chip grid. Clicking the submission_id chip
+// deep-links into the per-submission flight-recorder filter (sets
+// ?submission=<id> on the URL); other chips are read-only labels.
+function MetadataChips({
+  metadata,
+  schoolId,
+  submissionId,
+  onSubmissionClick,
+}: {
+  metadata: Record<string, unknown> | null;
+  schoolId: string | null;
+  submissionId: string | null;
+  onSubmissionClick: (id: string) => void;
+}) {
+  // Deduplicate metadata keys against the promoted columns we render
+  // explicitly. Some callers also stamp submission_id inside metadata
+  // for redundancy; the indexed column is the source of truth.
+  const skipKeys = new Set(["submission_id", "school_id"]);
+  const entries = metadata
+    ? Object.entries(metadata).filter(([k]) => !skipKeys.has(k))
+    : [];
+
+  if (!schoolId && !submissionId && entries.length === 0) {
+    return <span className="metadata-empty">(none)</span>;
+  }
+
+  return (
+    <div className="metadata-chips">
+      {schoolId ? (
+        <Chip label="school" value={shortId(schoolId)} title={schoolId} />
+      ) : (
+        // No school = "internal" bucket. Render with a different
+        // pill shape (no label segment, distinct color) so it
+        // can't be visually confused with a normal school chip
+        // when scanning a column of expanded rows.
+        <span
+          className="metadata-chip metadata-chip-internal"
+          title="school_id IS NULL — founder, test, or non-school user"
+        >
+          🏷️ internal
+        </span>
+      )}
+      {submissionId && (
+        <Chip
+          label="submission"
+          value={shortId(submissionId)}
+          title={`Click to filter to this submission's calls\n${submissionId}`}
+          onClick={() => onSubmissionClick(submissionId)}
+        />
+      )}
+      {entries.map(([k, v]) => (
+        <Chip key={k} label={k} value={renderChipValue(v)} />
+      ))}
+    </div>
+  );
+}
+
+function Chip({
+  label,
+  value,
+  title,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+  onClick?: () => void;
+}) {
+  // 30-char visual cap with ellipsis. Same threshold as the JS
+  // truncation so the CSS max-width doesn't double-clip a value
+  // that the JS already shortened.
+  const truncated = value.length > 30 ? `${value.slice(0, 29)}…` : value;
+  const className = `metadata-chip${onClick ? " metadata-chip-clickable" : ""}`;
+  const fullTitle = title ?? value;
+  return (
+    <span
+      className={className}
+      title={fullTitle}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+    >
+      <span className="metadata-chip-label">{label}</span>
+      <span className="metadata-chip-value">{truncated}</span>
+    </span>
+  );
+}
+
+function shortId(id: string): string {
+  // First segment of a UUID (before the first hyphen) — unique enough
+  // to scan visually while keeping chips compact.
+  const idx = id.indexOf("-");
+  return idx > 0 ? id.slice(0, idx) : id.slice(0, 8);
+}
+
+function renderChipValue(v: unknown): string {
+  // Stringify nested objects/arrays as JSON so the chip never shows
+  // "[object Object]" for a structured metadata value (e.g. a future
+  // caller stamping {tool_calls: {...}}). Primitives go through
+  // String() unchanged.
+  if (v === null || v === undefined) return String(v);
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return "[unserializable]";
+    }
+  }
+  return String(v);
 }
 

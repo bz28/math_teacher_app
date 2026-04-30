@@ -412,6 +412,7 @@ async def check_answer_correctness(
     hw_position_by_id: dict[uuid.UUID, int],
     *,
     user_id: str | None = None,
+    submission_id: str | None = None,
 ) -> dict[uuid.UUID, bool]:
     """Per-bank-item correctness, anchored on Vision's extracted final
     answers vs the bank items' `final_answer`.
@@ -463,6 +464,7 @@ async def check_answer_correctness(
     user_message = _build_equivalence_user_message(
         [(pos, student, key) for _, pos, student, key in uncertain],
     )
+    n_trivial_matches = sum(1 for v in is_correct_by_bank_id.values() if v)
     try:
         result = await call_claude_json(
             system_prompt=(
@@ -476,6 +478,12 @@ async def check_answer_correctness(
             tool_schema=INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
             user_id=user_id,
             model=MODEL_HAIKU,
+            submission_id=submission_id,
+            call_metadata={
+                "phase": "answer_equivalence",
+                "n_trivial_matches": n_trivial_matches,
+                "n_llm_asked": len(uncertain),
+            },
         )
     except Exception:
         logger.exception(
@@ -796,7 +804,8 @@ async def start_integrity_check(
         return
 
     is_correct_by_bank_id = await check_answer_correctness(
-        extraction, items_by_id, hw_position_by_id, user_id=user_id,
+        extraction, items_by_id, hw_position_by_id,
+        user_id=user_id, submission_id=str(submission_id),
     )
     selection = select_probe_problem(
         items_by_id, candidate_uuids, is_correct_by_bank_id,
@@ -861,6 +870,16 @@ async def start_integrity_check(
             build_agent_system_prompt(posture),
             [{"role": "user", "content": kickoff_user_message}],
             user_id=user_id,
+            submission_id=str(submission_id),
+            call_metadata={
+                "phase": "kickoff",
+                "check_id": str(check.id),
+                "posture": posture,
+                "tier": selection.tier,
+                "selection_reason": selection.selection_reason,
+                "student_turn": 0,
+                "loop_iter": 0,
+            },
         )
         opening_text = _first_text_block(content_blocks)
     except Exception:
@@ -946,9 +965,10 @@ async def process_student_turn(
     # uses a consistent system prompt.
     posture = await _agent_posture_for_check(check, db)
     system_prompt = build_agent_system_prompt(posture)
+    tier = _tier_from_reason(check.probe_selection_reason)
 
     # Agent loop.
-    for _ in range(MAX_AGENT_LOOPS_PER_TURN):
+    for loop_iter in range(MAX_AGENT_LOOPS_PER_TURN):
         problems = await _load_problems_for_prompt(check.id, db)
         turns = await _load_turns(check.id, db)
         briefing = build_problems_briefing(problems)
@@ -957,6 +977,16 @@ async def process_student_turn(
         try:
             content_blocks = await run_agent_turn(
                 system_prompt, messages, user_id=user_id,
+                submission_id=str(check.submission_id),
+                call_metadata={
+                    "phase": "agent_turn",
+                    "check_id": str(check.id),
+                    "posture": posture,
+                    "tier": tier,
+                    "selection_reason": check.probe_selection_reason,
+                    "student_turn": student_turn_count,
+                    "loop_iter": loop_iter,
+                },
             )
         except Exception:
             logger.exception(
