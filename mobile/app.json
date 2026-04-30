@@ -28,7 +28,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.veradicai.app",
-      "buildNumber": "4",
+      "buildNumber": "6",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
