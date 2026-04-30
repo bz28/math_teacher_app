@@ -25,6 +25,13 @@ import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
  * primary, not primary HW content.
  */
 
+// Auto-append polling: refresh pending every few seconds while a
+// gen job is still feeding items into the queue. The ceiling caps
+// the polling lifespan in case a job stalls without ever reaching
+// "done"/"failed".
+const QUEUE_AUTOAPPEND_INTERVAL_MS = 4_000;
+const QUEUE_AUTOAPPEND_CEILING_MS = 5 * 60_000;
+
 type Phase =
   | { kind: "loading" }
   | { kind: "ready"; items: BankItem[] }
@@ -43,6 +50,9 @@ export default function HomeworkReviewPage({
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [hwTitle, setHwTitle] = useState<string>("");
+  // Cached so the auto-append polling effect can re-run fetchPending
+  // without re-fetching the assignment each tick.
+  const [assignmentType, setAssignmentType] = useState<string | null>(null);
 
   const fetchPending = useCallback(
     async (assignmentType: string): Promise<BankItem[]> => {
@@ -75,6 +85,7 @@ export default function HomeworkReviewPage({
       .then(async (a) => {
         if (cancelled) return;
         setHwTitle(a.title);
+        setAssignmentType(a.type);
         const items = await fetchPending(a.type);
         if (cancelled) return;
         setPhase(items.length > 0 ? { kind: "ready", items } : { kind: "empty" });
@@ -90,6 +101,48 @@ export default function HomeworkReviewPage({
       cancelled = true;
     };
   }, [assignmentId, fetchPending]);
+
+  // Auto-append: while a gen job seeded by the wizard is still in
+  // flight, poll pending and feed any new items to WorkshopModal so
+  // the queue grows behind the teacher as they review. Reads job ids
+  // from the same sessionStorage key the editor populates; stops the
+  // moment every job reaches a terminal state.
+  useEffect(() => {
+    if (phase.kind !== "ready" || !assignmentType) return;
+    const raw = sessionStorage.getItem(`hw-gen-${assignmentId}`);
+    if (!raw) return;
+    let jobIds: string[] = [];
+    try {
+      jobIds = JSON.parse(raw) as string[];
+    } catch {
+      return;
+    }
+    if (jobIds.length === 0) return;
+
+    const startedAt = Date.now();
+    const interval = window.setInterval(async () => {
+      if (Date.now() - startedAt > QUEUE_AUTOAPPEND_CEILING_MS) {
+        window.clearInterval(interval);
+        return;
+      }
+      try {
+        const jobs = await Promise.all(
+          jobIds.map((id) => teacher.bankJob(courseId, id)),
+        );
+        const stillRunning = jobs.some(
+          (j) => j.status !== "done" && j.status !== "failed",
+        );
+        const items = await fetchPending(assignmentType);
+        setPhase((p) => (p.kind === "ready" ? { ...p, items } : p));
+        if (!stillRunning) {
+          window.clearInterval(interval);
+        }
+      } catch {
+        // Transient — keep polling.
+      }
+    }, QUEUE_AUTOAPPEND_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [phase.kind, assignmentId, courseId, fetchPending, assignmentType]);
 
   return (
     <div className="min-h-screen">
