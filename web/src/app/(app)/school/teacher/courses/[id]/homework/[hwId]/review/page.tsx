@@ -122,10 +122,11 @@ export default function HomeworkReviewPage({
       {phase.kind === "empty" && (
         <div className="mx-auto mt-8 max-w-3xl px-4">
           <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center">
-            <p className="text-sm font-bold text-text-primary">Nothing to review.</p>
+            <p className="text-sm font-bold text-text-primary">Nothing to review yet.</p>
             <p className="mt-1 text-xs text-text-muted">
-              No problems showed up — the generation may have failed or produced
-              no usable questions.
+              Problems may still be generating, or you&apos;ve already reviewed
+              them. Head back to the homework page to check status — the
+              generating indicator there shows live progress.
             </p>
             <Link
               href={backHref}
