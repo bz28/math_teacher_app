@@ -8,9 +8,12 @@ import StatCard from "../components/StatCard";
 // future per-function drill-down. Hues picked to stay distinguishable
 // for deutan/protan color vision: integrity_agent and
 // integrity_answer_equivalence don't sit on adjacent indigo/violet
-// values that are commonly confused.
+// values that are commonly confused. Function names match LLMMode
+// in api/core/llm_client.py.
 const FUNCTION_COLORS: Record<string, string> = {
-  vision_extract: "#0ea5e9",
+  image_extract: "#0ea5e9",
+  integrity_extract: "#22d3ee",
+  bank_extract: "#06b6d4",
   ai_grading: "#10b981",
   integrity_agent: "#6366f1",
   integrity_answer_equivalence: "#ec4899",
@@ -379,12 +382,13 @@ export default function SchoolOverview() {
                       <tr key={s.submission_id}>
                         <td className="mini-table-name">
                           <Link
-                            to={`/school/${schoolId}/llm-calls?submission=${s.submission_id}`}
+                            to={`/school/${schoolId}/submissions/${s.submission_id}/trace`}
                             style={{
                               fontWeight: 600,
                               color: "#6366f1",
                               fontFamily: "ui-monospace, monospace",
                             }}
+                            title="Open flight-recorder timeline"
                           >
                             {s.submission_id.slice(0, 8)}
                           </Link>

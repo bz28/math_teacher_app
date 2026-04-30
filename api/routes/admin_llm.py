@@ -18,7 +18,7 @@ router = APIRouter()
 
 @router.get("/llm-calls")
 async def llm_calls(
-    hours: int = Query(default=168, ge=1, le=2160),
+    hours: int = Query(default=168, ge=1, le=8760),
     function: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
     submission_id: str | None = Query(default=None),
