@@ -42,7 +42,12 @@ def _validate_section_name(v: str) -> str:
     return v
 
 
+def _validate_join_code(v: str) -> str:
+    return v.strip().upper()
+
+
 SectionName = Annotated[str, AfterValidator(_validate_section_name)]
+JoinCode = Annotated[str, AfterValidator(_validate_join_code)]
 
 
 class CreateSectionRequest(BaseModel):
@@ -58,7 +63,7 @@ class InviteStudentRequest(BaseModel):
 
 
 class JoinSectionRequest(BaseModel):
-    join_code: str
+    join_code: JoinCode
 
 
 async def _generate_unique_join_code(db: AsyncSession) -> str:
@@ -399,17 +404,20 @@ async def join_section(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Any authenticated user can join a section by code."""
-    code = body.join_code.strip().upper()
-    section = (await db.execute(select(Section).where(Section.join_code == code))).scalar_one_or_none()
+    section = (await db.execute(
+        select(Section).where(Section.join_code == body.join_code)
+    )).scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid join code")
     if section.join_code_expires_at and section.join_code_expires_at < datetime.now(UTC):
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Join code expired")
-    existing = (await db.execute(
-        select(SectionEnrollment).where(
-            SectionEnrollment.section_id == section.id, SectionEnrollment.student_id == current_user.user_id)
-    )).scalar_one_or_none()
-    if existing:
+    already_in_section = (await db.execute(
+        select(SectionEnrollment.id).where(
+            SectionEnrollment.section_id == section.id,
+            SectionEnrollment.student_id == current_user.user_id,
+        )
+    )).scalar_one_or_none() is not None
+    if already_in_section:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already in this section")
     # One enrollment per (student, course) — a student who's already in
     # another section of this course can't join a second one. Gives a
