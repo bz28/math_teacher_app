@@ -22,6 +22,7 @@
 - Feature-by-feature workflow. Work incrementally — after each logical chunk, summarize what/how/why and wait for the user to test before continuing.
 - Verify and test changes. Trace through code, check edge cases (count=0, boundaries), read surrounding code before presenting work.
 - Run `/review` on every PR before declaring it ready to merge. For larger or higher-stakes PRs, also spawn a fresh independent review agent without conversation context — a self-review done inside the same session is biased toward the work you just did.
+- After every `/autopilot` run that pushes to a PR (open or update), immediately spawn a fresh independent review agent in the background — do not pause to ask. Same protocol as above: cold context, two-pass, confirmed/suspected labels. Skip only for non-PR-pushing autopilot runs or when the user explicitly opts out.
 - When reviewing, do two passes. First pass: jot every concern. Second pass: re-verify each by reading actual code; discard anything you can't confirm. Label survivors as **confirmed** (traced, real) or **suspected** (plausible, couldn't fully verify). Don't propose fixes until the user approves.
 - Shipping checklist. Before saying work is done, summarize: what was done, how, why, and how it was tested.
 
