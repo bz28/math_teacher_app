@@ -589,17 +589,6 @@ export const work = {
   },
 };
 
-// ── Promo endpoints ──
-
-export const promo = {
-  redeem(code: string) {
-    return apiFetch<{ status: string; message: string; expires_at: string | null }>(
-      "/promo/redeem",
-      { method: "POST", body: JSON.stringify({ code }) },
-    );
-  },
-};
-
 // ── Student endpoints ──
 
 export const student = {

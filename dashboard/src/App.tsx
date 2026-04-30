@@ -7,7 +7,6 @@ import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
 import Quality from "./pages/Quality";
 import Users from "./pages/Users";
-import PromoCodes from "./pages/PromoCodes";
 import Leads from "./pages/Leads";
 import Schools from "./pages/Schools";
 import SchoolOverview from "./pages/SchoolOverview";
@@ -38,7 +37,6 @@ export default function App() {
           <Route path="/admin/llm-calls" element={<LLMCalls />} />
           <Route path="/admin/quality" element={<Quality />} />
           <Route path="/admin/users" element={<Users />} />
-          <Route path="/admin/promo-codes" element={<PromoCodes />} />
           <Route path="/admin/schools" element={<Schools />} />
           <Route path="/admin/leads" element={<Leads />} />
           <Route

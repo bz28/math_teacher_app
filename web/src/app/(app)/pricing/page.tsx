@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { promo as promoApi } from "@/lib/api";
 import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
 
@@ -183,83 +182,6 @@ export default function PricingPage() {
         </div>
       </div>
 
-      <PromoCodeSection />
-    </div>
-  );
-}
-
-function PromoCodeSection() {
-  const [expanded, setExpanded] = useState(false);
-  const [code, setCode] = useState("");
-  const [redeeming, setRedeeming] = useState(false);
-  const [promoError, setPromoError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
-  const loadUser = useAuthStore((s) => s.loadUser);
-
-  async function handleRedeem(e: React.FormEvent) {
-    e.preventDefault();
-    if (!code.trim()) return;
-    setRedeeming(true);
-    setPromoError(null);
-    try {
-      const result = await promoApi.redeem(code.trim());
-      setSuccess(result.message);
-      await fetchEntitlements();
-      await loadUser();
-      setCode("");
-    } catch (err) {
-      setPromoError((err as Error).message ?? "Could not redeem this code.");
-    } finally {
-      setRedeeming(false);
-    }
-  }
-
-  if (success) {
-    return (
-      <div className="mt-10 rounded-[--radius-xl] border border-success/30 bg-success/5 p-6 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
-          <CheckIcon className="inline h-6 w-6 shrink-0 text-success" />
-        </div>
-        <p className="text-lg font-bold text-text-primary">{success}</p>
-        <p className="mt-1 text-sm text-text-secondary">Enjoy your Pro features!</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-10 text-center">
-      {!expanded ? (
-        <button
-          onClick={() => setExpanded(true)}
-          className="text-sm font-semibold text-text-secondary hover:text-primary transition-colors"
-        >
-          Have a promo code?
-        </button>
-      ) : (
-        <div className="mx-auto max-w-sm">
-          <form onSubmit={handleRedeem} className="flex gap-3">
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => { setCode(e.target.value.toUpperCase()); setPromoError(null); }}
-              placeholder="Enter promo code"
-              autoFocus
-              className="flex-1 rounded-[--radius-md] border border-border-light bg-surface px-4 py-2.5 text-sm font-medium text-text-primary placeholder:text-text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-            />
-            <button
-              type="submit"
-              disabled={redeeming || !code.trim()}
-              className="rounded-[--radius-md] bg-primary px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
-            >
-              {redeeming ? "Redeeming..." : "Redeem"}
-            </button>
-          </form>
-          {promoError && (
-            <p className="mt-2 text-sm text-error">{promoError}</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

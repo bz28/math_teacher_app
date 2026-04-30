@@ -40,7 +40,6 @@ from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
-from api.models.promo import PromoRedemption
 from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -420,7 +419,6 @@ async def delete_account(
     await db.execute(update(LLMCall).where(LLMCall.user_id == user.id).values(user_id=None))
 
     # Hard delete PII and user-specific data
-    await db.execute(delete(PromoRedemption).where(PromoRedemption.user_id == user.id))
     await db.execute(delete(WorkSubmission).where(WorkSubmission.user_id == user.id))
     await db.execute(delete(SectionEnrollment).where(SectionEnrollment.student_id == user.id))
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
