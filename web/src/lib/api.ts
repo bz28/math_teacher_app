@@ -858,6 +858,12 @@ export const teacher = {
   deleteSection(courseId: string, sectionId: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}`, { method: "DELETE" });
   },
+  renameSection(courseId: string, sectionId: string, name: string) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+  },
   inviteStudent(courseId: string, sectionId: string, email: string) {
     return apiFetch<InviteStudentResult>(
       `/teacher/courses/${courseId}/sections/${sectionId}/invites`,
