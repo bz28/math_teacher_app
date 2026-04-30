@@ -49,6 +49,10 @@ class CreateSectionRequest(BaseModel):
     name: SectionName
 
 
+class UpdateSectionRequest(BaseModel):
+    name: SectionName | None = None
+
+
 class InviteStudentRequest(BaseModel):
     email: EmailStr
 
@@ -155,6 +159,20 @@ async def delete_section(
     # submissions for assignments in this section. Student accounts survive —
     # only their work in this section is lost.
     await db.delete(section)
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.patch("/courses/{course_id}/sections/{section_id}")
+async def update_section(
+    course_id: uuid.UUID, section_id: uuid.UUID, body: UpdateSectionRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    await get_teacher_course(db, course_id, current_user.user_id)
+    section = await _get_section_in_course(db, section_id, course_id)
+    if body.name is not None:
+        section.name = body.name
     await db.commit()
     return {"status": "ok"}
 
