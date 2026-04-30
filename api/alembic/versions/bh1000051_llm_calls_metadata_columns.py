@@ -1,8 +1,8 @@
 """add school_id, submission_id, metadata to llm_calls
 
-Revision ID: bf1000049
-Revises: be1000048
-Create Date: 2026-04-27 19:30:00.000000
+Revision ID: bh1000051
+Revises: bg1000050
+Create Date: 2026-04-30 13:30:00.000000
 
 Three additive columns for per-school filtering + structured debugging:
 
@@ -28,8 +28,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "bf1000049"
-down_revision: str | None = "be1000048"
+revision: str = "bh1000051"
+down_revision: str | None = "bg1000050"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

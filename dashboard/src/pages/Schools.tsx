@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { useScope } from "../lib/scope";
+import { useScope } from "../lib/scope-context";
 import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
 import StatCard from "../components/StatCard";
 

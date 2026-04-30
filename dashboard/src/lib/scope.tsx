@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -9,6 +7,12 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
+import {
+  ScopeContext,
+  parseScopeFromPath,
+  type SchoolOption,
+  type ScopeContextValue,
+} from "./scope-context";
 
 // The dashboard runs in one of two scopes at any time. Admin = the
 // god-view (every school + leads + cross-platform stuff + the
@@ -18,46 +22,10 @@ import { api } from "./api";
 //
 // The scope is derived from the URL (`/admin/...` or
 // `/school/:id/...`) so it survives reload, deep-links, and shares.
-
-export type Scope =
-  | { kind: "admin" }
-  | { kind: "school"; schoolId: string };
-
-export const INTERNAL_SCHOOL_ID = "internal";
-
-export interface SchoolOption {
-  id: string;
-  name: string;
-}
-
-interface ScopeContextValue {
-  scope: Scope;
-  schools: SchoolOption[];
-  /** Switch to the Admin scope at /admin/... */
-  enterAdmin: () => void;
-  /** Switch to a specific school's scope at /school/:id/... */
-  enterSchool: (schoolId: string) => void;
-  /**
-   * The school_id query param value to send to the backend for the
-   * current scope. Returns:
-   *  - undefined for Admin (no filter; show everything)
-   *  - the school UUID for a real school
-   *  - the literal "internal" sentinel for school_id IS NULL
-   */
-  apiSchoolFilter: () => string | undefined;
-}
-
-const ScopeContext = createContext<ScopeContextValue | null>(null);
-
-function parseScopeFromPath(pathname: string): Scope {
-  // Match /school/<id>/... where id can be a UUID or the special
-  // "internal" sentinel for the school_id IS NULL bucket.
-  const m = pathname.match(/^\/school\/([^/]+)/);
-  if (m) {
-    return { kind: "school", schoolId: m[1] };
-  }
-  return { kind: "admin" };
-}
+//
+// Types, constants, the context object, and the useScope hook live
+// in scope-context.ts so this file (a .tsx) only exports the
+// ScopeProvider component — keeps react-refresh happy.
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -110,12 +78,4 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
   return (
     <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>
   );
-}
-
-export function useScope(): ScopeContextValue {
-  const ctx = useContext(ScopeContext);
-  if (!ctx) {
-    throw new Error("useScope must be used inside a ScopeProvider");
-  }
-  return ctx;
 }

@@ -1,4 +1,4 @@
-import { useScope, INTERNAL_SCHOOL_ID } from "../lib/scope";
+import { useScope, INTERNAL_SCHOOL_ID } from "../lib/scope-context";
 
 // Single dropdown that drives the entire dashboard's scope. Three
 // shapes:
