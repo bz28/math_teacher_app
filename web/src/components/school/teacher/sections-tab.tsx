@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherSection, type TeacherSectionDetail } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
@@ -111,7 +111,16 @@ function SectionCard({
   const [nameDraft, setNameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
+  const renameTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const wasEditingNameRef = useRef(false);
   const { busy, error, setError, run } = useAsyncAction();
+
+  useEffect(() => {
+    if (wasEditingNameRef.current && !editingName) {
+      renameTriggerRef.current?.focus();
+    }
+    wasEditingNameRef.current = editingName;
+  }, [editingName]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -259,6 +268,9 @@ function SectionCard({
                 autoFocus
                 disabled={renaming}
                 maxLength={200}
+                aria-label="Section name"
+                aria-invalid={renameError ? true : undefined}
+                aria-describedby={renameError ? `rename-error-${section.id}` : undefined}
                 className="rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm font-bold text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
               />
               <button
@@ -280,6 +292,7 @@ function SectionCard({
           ) : (
             <h3 className="font-bold text-text-primary">
               <button
+                ref={renameTriggerRef}
                 type="button"
                 onClick={startRename}
                 title="Click to rename"
@@ -289,7 +302,15 @@ function SectionCard({
               </button>
             </h3>
           )}
-          {renameError && <p className="mt-1 text-xs text-red-600">{renameError}</p>}
+          {renameError && (
+            <p
+              id={`rename-error-${section.id}`}
+              role="alert"
+              className="mt-1 text-xs text-red-600"
+            >
+              {renameError}
+            </p>
+          )}
           <p className="mt-0.5 text-xs text-text-muted">
             {section.student_count} student{section.student_count === 1 ? "" : "s"}
           </p>
