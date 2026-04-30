@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type LLMCallsData } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
+import {
+  fmtCost,
+  fmtRelativeMs,
+  fmtWallTime,
+  formatRelativeDate,
+  shortModel,
+} from "../lib/format";
+import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
+import MetadataChips from "../components/MetadataChips";
 import { useScope } from "../lib/scope";
 
 // Per-submission flight recorder. Pulls every LLM call stamped with
@@ -11,52 +19,6 @@ import { useScope } from "../lib/scope";
 // preview inlined per row. Designed for debugging weird sessions or
 // individual cost outliers without scrolling through the global LLM
 // Calls list.
-
-// Function names match LLMMode in api/core/llm_client.py. Keep this
-// in sync with that source of truth — adding a new mode there
-// without listing it here would silently drop every call into the
-// "Other" bucket on this page.
-const PIPELINE_BUCKETS: { label: string; functions: string[] }[] = [
-  { label: "Vision", functions: ["image_extract", "integrity_extract", "bank_extract"] },
-  { label: "Integrity", functions: ["integrity_agent", "integrity_answer_equivalence"] },
-  { label: "Grading", functions: ["ai_grading"] },
-];
-
-function bucketFor(fnName: string): string {
-  for (const b of PIPELINE_BUCKETS) {
-    if (b.functions.includes(fnName)) return b.label;
-  }
-  return "Other";
-}
-
-function fmtCost(n: number): string {
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  return `$${n.toFixed(4)}`;
-}
-
-function fmtRelativeMs(ms: number): string {
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function fmtWallTime(ms: number): string {
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 3_600_000) {
-    const m = Math.floor(ms / 60_000);
-    const s = Math.round((ms % 60_000) / 1000);
-    return `${m}m ${s}s`;
-  }
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.round((ms % 3_600_000) / 60_000);
-  return `${h}h ${m}m`;
-}
-
-function shortModel(model: string): string {
-  if (model.includes("sonnet")) return "Sonnet 4";
-  if (model.includes("haiku")) return "Haiku 4.5";
-  if (model.includes("opus")) return "Opus 4";
-  return model.replace(/-\d{8}$/, "").replace(/^claude-/, "");
-}
 
 export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
@@ -146,6 +108,10 @@ export default function SubmissionTrace() {
   const otherCount = bucketCounts.get("Other");
   if (otherCount) orderedBuckets.push({ label: "Other", count: otherCount });
 
+  // Backend caps at limit=200; surface truncation explicitly so a
+  // pathological 200+-call submission isn't silently clipped.
+  const truncated = data.total_count > calls.length;
+
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
@@ -153,6 +119,12 @@ export default function SubmissionTrace() {
         <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
           <code>{submissionId}</code>
         </p>
+        {truncated && (
+          <p style={{ color: "#b45309", fontSize: 12, marginTop: 6 }}>
+            ⚠️ Showing {calls.length} of {data.total_count} calls — only
+            the most recent slice is rendered.
+          </p>
+        )}
       </div>
 
       <div className="trace-summary">
@@ -172,7 +144,9 @@ export default function SubmissionTrace() {
         </div>
         <div className="trace-summary-cell">
           <div className="trace-summary-label">Wall time</div>
-          <div className="trace-summary-value">{fmtWallTime(wallMs)}</div>
+          <div className="trace-summary-value">
+            {calls.length === 1 ? "—" : fmtWallTime(wallMs)}
+          </div>
         </div>
         <div
           className={`trace-summary-cell ${
@@ -250,7 +224,13 @@ export default function SubmissionTrace() {
                     <span style={{ color: "#dc2626", fontWeight: 700 }}>FAILED</span>
                   )}
                 </div>
-                <TraceMetadata metadata={c.metadata} />
+                <div className="trace-row-meta">
+                  <MetadataChips
+                    metadata={c.metadata}
+                    hidePromoted
+                    extraSkipKeys={["posture"]}
+                  />
+                </div>
                 <details className="trace-row-detail">
                   <summary>Show input / output</summary>
                   <div className="trace-row-detail-grid">
@@ -279,41 +259,3 @@ export default function SubmissionTrace() {
   );
 }
 
-function TraceMetadata({
-  metadata,
-}: {
-  metadata: Record<string, unknown> | null;
-}) {
-  // We render only the high-signal keys here (posture is already
-  // shown on the header). Other keys go into the chip strip in their
-  // raw form; debugging value > tidiness.
-  const skipKeys = new Set(["submission_id", "school_id", "posture"]);
-  const entries = metadata
-    ? Object.entries(metadata).filter(([k]) => !skipKeys.has(k))
-    : [];
-  if (entries.length === 0) {
-    return <div className="trace-row-meta-empty">no metadata</div>;
-  }
-  return (
-    <div className="trace-row-meta">
-      {entries.map(([k, v]) => (
-        <span key={k} className="metadata-chip">
-          <span className="metadata-chip-label">{k}</span>
-          <span className="metadata-chip-value">{renderChipValue(v)}</span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function renderChipValue(v: unknown): string {
-  if (v === null || v === undefined) return String(v);
-  if (typeof v === "object") {
-    try {
-      return JSON.stringify(v);
-    } catch {
-      return "[unserializable]";
-    }
-  }
-  return String(v);
-}
