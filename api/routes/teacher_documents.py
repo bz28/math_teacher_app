@@ -23,7 +23,7 @@ MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
 class UploadDocumentRequest(BaseModel):
-    image_base64: str
+    file_base64: str
     filename: str = "upload.jpg"
     unit_id: uuid.UUID
 
@@ -38,7 +38,7 @@ async def upload_document(
 
     # Validate base64 and size
     try:
-        raw = base64.b64decode(body.image_base64)
+        raw = base64.b64decode(body.file_base64)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 data")
     if len(raw) > MAX_FILE_SIZE:
@@ -59,7 +59,7 @@ async def upload_document(
     doc = Document(
         course_id=course_id, teacher_id=current_user.user_id,
         filename=body.filename, file_type=file_type,
-        file_size=len(raw), image_data=body.image_base64,
+        file_size=len(raw), image_data=body.file_base64,
         unit_id=body.unit_id,
     )
     db.add(doc)
