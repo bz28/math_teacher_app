@@ -67,6 +67,9 @@ class JoinSectionRequest(BaseModel):
 
 
 async def _generate_unique_join_code(db: AsyncSession) -> str:
+    # Tiny race window: another teacher could grab the same code between
+    # SELECT and INSERT. With 32^6 ≈ 1B codes it's negligible; the unique
+    # index on Section.join_code would surface a 500 the teacher retries.
     for _ in range(5):
         code = "".join(secrets.choice(JOIN_CODE_CHARS) for _ in range(JOIN_CODE_LENGTH))
         if not (await db.execute(select(Section.id).where(Section.join_code == code))).scalar_one_or_none():
@@ -93,6 +96,10 @@ async def create_section(
     db.add(section)
     await db.commit()
     await db.refresh(section)
+    logger.info(
+        "AUDIT: teacher=%s created section=%s in course=%s",
+        current_user.user_id, section.id, course_id,
+    )
     return {"id": str(section.id), "name": section.name, "join_code": section.join_code}
 
 
@@ -104,15 +111,15 @@ async def list_sections(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
     # Exclude preview (shadow) students so the count reflects real enrollment.
-    enrollment_count = (
+    enrollment_counts = (
         select(SectionEnrollment.section_id, func.count().label("student_count"))
         .join(User, User.id == SectionEnrollment.student_id)
         .where(User.is_preview.is_(False))
         .group_by(SectionEnrollment.section_id).subquery()
     )
     rows = (await db.execute(
-        select(Section, func.coalesce(enrollment_count.c.student_count, 0).label("student_count"))
-        .outerjoin(enrollment_count, enrollment_count.c.section_id == Section.id)
+        select(Section, func.coalesce(enrollment_counts.c.student_count, 0).label("student_count"))
+        .outerjoin(enrollment_counts, enrollment_counts.c.section_id == Section.id)
         .where(Section.course_id == course_id)
         .order_by(Section.created_at)
     )).all()
@@ -165,6 +172,10 @@ async def delete_section(
     # only their work in this section is lost.
     await db.delete(section)
     await db.commit()
+    logger.info(
+        "AUDIT: teacher=%s deleted section=%s from course=%s",
+        current_user.user_id, section_id, course_id,
+    )
     return {"status": "ok"}
 
 
@@ -176,9 +187,14 @@ async def update_section(
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
     section = await _get_section_in_course(db, section_id, course_id)
-    if body.name is not None:
-        section.name = body.name
+    if body.name is None:
+        return {"status": "ok"}
+    section.name = body.name
     await db.commit()
+    logger.info(
+        "AUDIT: teacher=%s renamed section=%s",
+        current_user.user_id, section_id,
+    )
     return {"status": "ok"}
 
 
@@ -235,10 +251,25 @@ async def invite_student(
         try:
             await db.commit()
         except IntegrityError:
-            # Raced with another invite — the uq_section_student constraint
-            # caught a duplicate. Treat as success: the student is in the
-            # section, which is all the caller needed.
+            # Raced with another invite. Two constraints can fire:
+            # - uq_section_student: another invite enrolled them into THIS
+            #   section. Student is where we want them — treat as success.
+            # - uq_section_enrollments_student_course: another invite
+            #   enrolled them into a DIFFERENT section of the same course.
+            #   Surface the same 409 the pre-check would have raised so the
+            #   audit + response don't lie about which section won.
             await db.rollback()
+            landed_in_requested_section = (await db.execute(
+                select(SectionEnrollment.id).where(
+                    SectionEnrollment.section_id == section_id,
+                    SectionEnrollment.student_id == existing_user.id,
+                )
+            )).scalar_one_or_none() is not None
+            if not landed_in_requested_section:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Student is already enrolled in another section of this class.",
+                ) from None
         logger.info(
             "AUDIT: teacher=%s enrolled existing user=%s into section=%s",
             current_user.user_id, existing_user.id, section_id,
@@ -394,6 +425,10 @@ async def generate_join_code(
     section.join_code = await _generate_unique_join_code(db)
     section.join_code_expires_at = datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS)
     await db.commit()
+    logger.info(
+        "AUDIT: teacher=%s rotated join_code on section=%s",
+        current_user.user_id, section_id,
+    )
     return {"join_code": section.join_code, "expires_at": section.join_code_expires_at.isoformat()}
 
 
