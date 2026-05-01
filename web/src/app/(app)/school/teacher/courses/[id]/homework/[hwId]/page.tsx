@@ -817,10 +817,10 @@ export default function HomeworkDetailPage({
             </div>
 
             {/* State-driven body */}
-            {activeGenerating && problems.length === 0 ? (
+            {activeGenerating && activeJob && problems.length === 0 ? (
               <ProblemsGeneratingHero
-                requestedCount={activeJob?.requested_count ?? 0}
-                producedCount={activeJob?.produced_count ?? 0}
+                requestedCount={activeJob.requested_count}
+                producedCount={activeJob.produced_count}
               />
             ) : problems.length === 0 ? (
               <ProblemsEmptyHero
@@ -1101,8 +1101,14 @@ function ProblemsGeneratingHero({
   producedCount: number;
 }) {
   const noun = requestedCount === 1 ? "problem" : "problems";
+  // role="status" announces text changes politely — drives the "X of Y
+  // ready" subcopy update so screen-reader users hear progress.
   return (
-    <div className="mt-5 rounded-[--radius-xl] border border-dashed border-primary/40 bg-primary-bg/20 px-8 py-12 text-center">
+    <div
+      role="status"
+      aria-live="polite"
+      className="mt-5 rounded-[--radius-xl] border border-dashed border-primary/40 bg-primary-bg/20 px-8 py-12 text-center"
+    >
       <div className="animate-pulse text-5xl" aria-hidden="true">✨</div>
       <h3 className="mt-4 text-lg font-bold text-text-primary">
         Generating {requestedCount} {noun}…
