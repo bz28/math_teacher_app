@@ -1,10 +1,10 @@
 """Teacher course management — CRUD."""
 
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, field_validator
+from pydantic import AfterValidator, BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,9 +36,7 @@ def _validate_subject(v: str) -> str:
     return v
 
 
-def _validate_grade(v: int | None) -> int | None:
-    if v is None:
-        return v
+def _validate_grade(v: int) -> int:
     if not 1 <= v <= 12:
         raise ValueError("Grade level must be between 1 and 12")
     return v
@@ -50,54 +48,25 @@ def _validate_status(v: str) -> str:
     return v
 
 
+CourseName = Annotated[str, AfterValidator(_validate_name)]
+CourseSubject = Annotated[str, AfterValidator(_validate_subject)]
+CourseGrade = Annotated[int, AfterValidator(_validate_grade)]
+CourseStatus = Annotated[str, AfterValidator(_validate_status)]
+
+
 class CreateCourseRequest(BaseModel):
-    name: str
-    subject: str = "math"
-    grade_level: int | None = None
+    name: CourseName
+    subject: CourseSubject = "math"
+    grade_level: CourseGrade | None = None
     description: str | None = None
-
-    @field_validator("name")
-    @classmethod
-    def _v_name(cls, v: str) -> str:
-        return _validate_name(v)
-
-    @field_validator("subject")
-    @classmethod
-    def _v_subject(cls, v: str) -> str:
-        return _validate_subject(v)
-
-    @field_validator("grade_level")
-    @classmethod
-    def _v_grade(cls, v: int | None) -> int | None:
-        return _validate_grade(v)
 
 
 class UpdateCourseRequest(BaseModel):
-    name: str | None = None
-    subject: str | None = None
-    grade_level: int | None = None
+    name: CourseName | None = None
+    subject: CourseSubject | None = None
+    grade_level: CourseGrade | None = None
     description: str | None = None
-    status: str | None = None
-
-    @field_validator("name")
-    @classmethod
-    def _v_name(cls, v: str | None) -> str | None:
-        return _validate_name(v) if v is not None else v
-
-    @field_validator("subject")
-    @classmethod
-    def _v_subject(cls, v: str | None) -> str | None:
-        return _validate_subject(v) if v is not None else v
-
-    @field_validator("grade_level")
-    @classmethod
-    def _v_grade(cls, v: int | None) -> int | None:
-        return _validate_grade(v)
-
-    @field_validator("status")
-    @classmethod
-    def _v_status(cls, v: str | None) -> str | None:
-        return _validate_status(v) if v is not None else v
+    status: CourseStatus | None = None
 
 
 async def get_teacher_course(db: AsyncSession, course_id: uuid.UUID, teacher_id: uuid.UUID) -> Course:
