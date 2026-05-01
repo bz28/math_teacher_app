@@ -268,13 +268,15 @@ export default function HomeworkDetailPage({
     };
   }, [hw?.status, courseId, assignmentId]);
 
-  // Poll any in-flight generation job so the banner updates when it
-  // completes. Stops polling on done/failed or after a ceiling; same
-  // pattern as the course workspace page's active-job polling.
+  // Poll any in-flight generation job so the hero/strip counts climb
+  // live and the pending banner pops up the moment the first item
+  // lands (not just on job done). Stops polling on done/failed or
+  // after a ceiling; same pattern as the course workspace page.
   useEffect(() => {
     if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
     const startedAt = Date.now();
     const jobId = activeJob.id;
+    let lastProducedCount = activeJob.produced_count;
     const interval = setInterval(async () => {
       if (Date.now() - startedAt > BANK_JOB_POLL_LIMIT_MS) {
         setActiveJob((j) => (j ? { ...j, status: "failed" } : j));
@@ -283,7 +285,14 @@ export default function HomeworkDetailPage({
       try {
         const updated = await teacher.bankJob(courseId, jobId);
         setActiveJob(updated);
-        if (updated.status === "done") {
+        // Refresh pending whenever a new item lands so the review
+        // banner appears live and its count climbs without waiting
+        // for the whole job to finish.
+        if (
+          updated.produced_count > lastProducedCount ||
+          updated.status === "done"
+        ) {
+          lastProducedCount = updated.produced_count;
           await reloadPending();
         }
       } catch {
@@ -830,15 +839,25 @@ export default function HomeworkDetailPage({
             ) : (
               <>
                 {/* Inline generating strip when we already have
-                    problems but the teacher kicked off more */}
-                {activeGenerating && (
-                  <div className="mt-4 flex items-center gap-3 rounded-[--radius-md] border border-primary/30 bg-primary-bg/30 px-3 py-2 text-xs text-text-primary dark:border-primary/40 dark:bg-primary/10">
+                    problems but the teacher kicked off more.
+                    role=status announces the live count to screen
+                    readers, mirroring the empty-state hero. */}
+                {activeGenerating && activeJob && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mt-4 flex items-center gap-3 rounded-[--radius-md] border border-primary/30 bg-primary-bg/30 px-3 py-2 text-xs text-text-primary dark:border-primary/40 dark:bg-primary/10"
+                  >
                     <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
                     </span>
                     <span>
-                      <span className="font-semibold">Generating more…</span>{" "}
+                      <span className="font-semibold">
+                        {activeJob.produced_count > 0
+                          ? `Generating ${activeJob.requested_count} more… · ${activeJob.produced_count} of ${activeJob.requested_count} ready`
+                          : `Generating ${activeJob.requested_count} more…`}
+                      </span>{" "}
                       <span className="text-text-secondary">new ones land in the review queue when ready.</span>
                     </span>
                   </div>
