@@ -129,6 +129,21 @@ export function WorkshopModal({
     });
   }, [queue]);
 
+  // If the queue grew while the teacher was sitting on the
+  // completion screen (every prior item resolved), jump them onto
+  // the first newly-appended item. Without this, queueIndex stays
+  // pinned to the last resolved item and the workshop renders an
+  // already-approved view with no path forward.
+  const prevQueueLengthRef = useRef(queueState.length);
+  useEffect(() => {
+    const prevLen = prevQueueLengthRef.current;
+    prevQueueLengthRef.current = queueState.length;
+    if (queueState.length <= prevLen) return;
+    if (Object.keys(resolved).length >= prevLen && prevLen > 0) {
+      setQueueIndex(prevLen);
+    }
+  }, [queueState.length, resolved]);
+
   // ── Item sync ────────────────────────────────────────────────────
   // Reset liveItem whenever the source item identity changes (queue
   // advance or initial load) or a fresher version arrives from the

@@ -104,16 +104,28 @@ export default function HomeworkReviewPage({
 
   // Auto-append: while a gen job seeded by the wizard is still in
   // flight, poll pending and feed any new items to WorkshopModal so
-  // the queue grows behind the teacher as they review. Reads job ids
-  // from the same sessionStorage key the editor populates; stops the
-  // moment every job reaches a terminal state.
+  // the queue grows behind the teacher as they review. Also runs in
+  // the empty phase so a teacher who landed before any item produced
+  // (e.g., refresh / bookmark / direct-URL during gen) sees the
+  // queue auto-upgrade to "ready" the moment the first item lands —
+  // not stuck on the empty-state copy until manual refresh. Reads
+  // job ids from the same sessionStorage key the editor populates;
+  // stops the moment every job reaches a terminal state.
   useEffect(() => {
-    if (phase.kind !== "ready" || !assignmentType) return;
+    if (phase.kind !== "ready" && phase.kind !== "empty") return;
+    if (!assignmentType) return;
     const raw = sessionStorage.getItem(`hw-gen-${assignmentId}`);
     if (!raw) return;
-    let jobIds: string[] = [];
+    let jobIds: string[];
     try {
-      jobIds = JSON.parse(raw) as string[];
+      const parsed = JSON.parse(raw) as unknown;
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((x) => typeof x === "string")
+      ) {
+        return;
+      }
+      jobIds = parsed;
     } catch {
       return;
     }
@@ -133,7 +145,13 @@ export default function HomeworkReviewPage({
           (j) => j.status !== "done" && j.status !== "failed",
         );
         const items = await fetchPending(assignmentType);
-        setPhase((p) => (p.kind === "ready" ? { ...p, items } : p));
+        setPhase((p) => {
+          if (p.kind === "ready") return { ...p, items };
+          if (p.kind === "empty" && items.length > 0) {
+            return { kind: "ready", items };
+          }
+          return p;
+        });
         if (!stillRunning) {
           window.clearInterval(interval);
         }
