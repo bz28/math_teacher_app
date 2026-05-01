@@ -203,12 +203,12 @@ async def decompose_problem(
             return cached
 
     problem_type = "word_problem" if _is_word_problem(problem, subject) else subject
-    prompt = f"Problem: {problem}"
+    user_message = f"Problem: {problem}"
 
     if work_diagnosis:
         import json
         diagnosis_text = json.dumps(work_diagnosis, indent=2)
-        prompt += (
+        user_message += (
             "\n\nIMPORTANT: The student has already attempted this problem. "
             "Their work has been analyzed:\n"
             f"{diagnosis_text}\n\n"
@@ -239,10 +239,10 @@ async def decompose_problem(
             },
             {
                 "type": "text",
-                "text": _build_system_prompt(subject) + "\n\n" + prompt,
+                "text": _build_system_prompt(subject) + "\n\n" + user_message,
             },
         ]
-        data = await call_claude_vision(
+        result = await call_claude_vision(
             user_content,
             mode=llm_mode,
             tool_schema=DECOMPOSITION_SCHEMA,
@@ -252,9 +252,9 @@ async def decompose_problem(
             user_id=user_id,
         )
     else:
-        data = await call_claude_json(
+        result = await call_claude_json(
             _build_system_prompt(subject),
-            prompt,
+            user_message,
             mode=llm_mode,
             tool_schema=DECOMPOSITION_SCHEMA,
             model=MODEL_REASON,
@@ -263,7 +263,7 @@ async def decompose_problem(
             user_id=user_id,
         )
 
-    steps, final_answer, answer_type = _parse_decomposition(data)
+    steps, final_answer, answer_type = _parse_decomposition(result)
     if not steps:
         raise RuntimeError("Empty steps returned from decomposition")
     if not final_answer:
