@@ -113,6 +113,22 @@ export function WorkshopModal({
 
   const { busy, error, setError, run } = useAsyncAction();
 
+  // ── Queue auto-append ────────────────────────────────────────────
+  // The /review page polls pending while a gen job is in flight and
+  // refreshes the queue prop with new items as they land. Append
+  // anything new onto the end of queueState — never re-shape or
+  // re-order the existing items, which would shift queueIndex and
+  // throw off the teacher's review-in-progress.
+  useEffect(() => {
+    if (!queue) return;
+    setQueueState((prev) => {
+      const existing = new Set(prev.map((q) => q.id));
+      const additions = queue.filter((q) => !existing.has(q.id));
+      if (additions.length === 0) return prev;
+      return [...prev, ...additions];
+    });
+  }, [queue]);
+
   // ── Item sync ────────────────────────────────────────────────────
   // Reset liveItem whenever the source item identity changes (queue
   // advance or initial load) or a fresher version arrives from the
@@ -122,8 +138,8 @@ export function WorkshopModal({
   //     updated_at (we got it from the API response that produced the
   //     new liveItem). Same id + same timestamp → no setLiveItem call.
   //   - When the parent calls onChanged(), the bank list reloads but
-  //     the queue snapshot is frozen, so the queue prop never changes
-  //     mid-session.
+  //     the auto-append effect above only adds items, never replaces,
+  //     so existing queue entries keep their identity.
   // The eslint-disable is intentional: we deliberately depend only on
   // the identity + timestamp of the source, not on liveItem itself
   // (which would loop).
