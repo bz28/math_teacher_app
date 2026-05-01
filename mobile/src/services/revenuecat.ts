@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import Purchases, {
+  INTRO_ELIGIBILITY_STATUS,
   type PurchasesOfferings,
   type PurchasesPackage,
   type CustomerInfo,
@@ -51,4 +52,27 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<CustomerIn
  */
 export async function restorePurchases(): Promise<CustomerInfo> {
   return Purchases.restorePurchases();
+}
+
+/**
+ * Returns the subset of product IDs the current Apple ID / Play account is
+ * actually eligible to redeem an introductory offer (free trial) for.
+ *
+ * Critical: a product having `introPrice` populated does NOT mean *this user*
+ * gets it — Apple/Google ship offer metadata on every SKProduct regardless of
+ * eligibility. Without this check, the paywall promises a trial that the
+ * StoreKit payment sheet won't honor (App Store Guideline 2.1(b)).
+ *
+ * UNKNOWN status is treated as not-eligible so we never over-promise.
+ */
+export async function getEligibleProductIds(productIds: string[]): Promise<Set<string>> {
+  if (productIds.length === 0) return new Set();
+  const result = await Purchases.checkTrialOrIntroductoryPriceEligibility(productIds);
+  const eligible = new Set<string>();
+  for (const [id, info] of Object.entries(result)) {
+    if (info.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE) {
+      eligible.add(id);
+    }
+  }
+  return eligible;
 }

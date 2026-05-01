@@ -14,7 +14,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import type { PurchasesIntroPrice, PurchasesPackage } from "react-native-purchases";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { getOfferings, purchasePackage, restorePurchases } from "../services/revenuecat";
+import {
+  getEligibleProductIds,
+  getOfferings,
+  purchasePackage,
+  restorePurchases,
+} from "../services/revenuecat";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
@@ -78,14 +83,23 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
     setSelectedPlan("annual");
 
     getOfferings()
-      .then((offerings) => {
+      .then(async (offerings) => {
         const current = offerings.current;
         const annualPkg = current?.annual ?? null;
         const weeklyPkg = current?.weekly ?? null;
-        setPlans(buildPlans(annualPkg, weeklyPkg));
+        const productIds = [annualPkg?.product.identifier, weeklyPkg?.product.identifier]
+          .filter((id): id is string => !!id);
+        let eligibleProductIds: Set<string>;
+        try {
+          eligibleProductIds = await getEligibleProductIds(productIds);
+        } catch {
+          // Defensive: never advertise a trial we can't verify the user gets.
+          eligibleProductIds = new Set();
+        }
+        setPlans(buildPlans(annualPkg, weeklyPkg, eligibleProductIds));
       })
       .catch(() => {
-        setPlans(buildPlans(null, null));
+        setPlans(buildPlans(null, null, new Set()));
       })
       .finally(() => setLoadingOfferings(false));
   }, [visible]);
@@ -298,9 +312,21 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 
 // ── Helpers ──
 
-function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPackage | null): PlanOption[] {
-  const annualIntro = formatIntroOffer(annualPkg?.product?.introPrice);
-  const weeklyIntro = formatIntroOffer(weeklyPkg?.product?.introPrice);
+function buildPlans(
+  annualPkg: PurchasesPackage | null,
+  weeklyPkg: PurchasesPackage | null,
+  eligibleProductIds: Set<string>,
+): PlanOption[] {
+  const annualIntro = formatIntroOffer(
+    annualPkg && eligibleProductIds.has(annualPkg.product.identifier)
+      ? annualPkg.product.introPrice
+      : null,
+  );
+  const weeklyIntro = formatIntroOffer(
+    weeklyPkg && eligibleProductIds.has(weeklyPkg.product.identifier)
+      ? weeklyPkg.product.introPrice
+      : null,
+  );
   return [
     {
       id: "annual",
@@ -326,10 +352,10 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
   ];
 }
 
-// Derives trial copy strictly from the StoreKit/Play introductory offer so the
-// paywall can never advertise a trial that the payment sheet won't honor
-// (Apple Guideline 2.1(b)). Returns empty strings when no intro offer is
-// available — e.g. user is ineligible, or no intro is configured.
+// Derives trial copy from the introductory offer payload. Callers must pass
+// `null` when the user is not eligible — buildPlans handles that gating using
+// Purchases.checkTrialOrIntroductoryPriceEligibility. The helper itself only
+// covers the "no intro configured" case (Apple Guideline 2.1(b)).
 function formatIntroOffer(intro: PurchasesIntroPrice | null | undefined): {
   trialText: string;
   ctaTrialLabel: string;
