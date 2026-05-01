@@ -68,20 +68,20 @@ async def list_units(
     # course because the outer query is — unit_id is globally unique, so a
     # cross-course join row is impossible.
     doc_counts = (
-        select(Document.unit_id, func.count().label("n"))
+        select(Document.unit_id, func.count().label("count"))
         .group_by(Document.unit_id)
         .subquery()
     )
     item_counts = (
-        select(QuestionBankItem.unit_id, func.count().label("n"))
+        select(QuestionBankItem.unit_id, func.count().label("count"))
         .group_by(QuestionBankItem.unit_id)
         .subquery()
     )
     rows = (await db.execute(
         select(
             Unit.id, Unit.name, Unit.position, Unit.parent_unit_id, Unit.created_at,
-            func.coalesce(doc_counts.c.n, 0).label("document_count"),
-            func.coalesce(item_counts.c.n, 0).label("question_count"),
+            func.coalesce(doc_counts.c.count, 0).label("document_count"),
+            func.coalesce(item_counts.c.count, 0).label("question_count"),
         )
         .outerjoin(doc_counts, doc_counts.c.unit_id == Unit.id)
         .outerjoin(item_counts, item_counts.c.unit_id == Unit.id)
