@@ -145,9 +145,10 @@ class TestBuildBriefing:
         assert "Correct final answer (answer key): x = 2 or x = 3" in briefing
 
     def test_omits_answer_line_when_final_answer_missing(self) -> None:
-        # Legacy bank items have null final_answer. We should not emit
-        # an empty "Correct final answer:" line — the agent would treat
-        # the empty string as a real (and absurd) ground truth.
+        # Pending bank items can have empty final_answer (column defaults
+        # to ''); the briefing builder shouldn't emit a blank "Correct
+        # final answer:" line for those — the agent would treat an empty
+        # string as a real (and absurd) ground truth.
         for missing in (None, "", "   "):
             briefing = build_problems_briefing([
                 {
