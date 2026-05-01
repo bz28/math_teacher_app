@@ -293,12 +293,28 @@ export default function HomeworkDetailPage({
   // each tick — usually 1, but clone-as-practice can have many.
   // Stops polling once all reach a terminal state or the ceiling
   // trips; same pattern as the course workspace page.
+  //
+  // Ceiling tracking via ref because the effect re-runs every poll
+  // tick (setActiveJobs always produces a new array reference, so
+  // the [activeJobs] dep array re-fires). A local startedAt would
+  // reset every re-run and the BANK_JOB_POLL_LIMIT_MS check would
+  // never trip. The ref starts the timer on the empty→inflight
+  // transition and clears on inflight→empty — partial completes
+  // (some jobs done, others still running) keep the original
+  // timestamp so the failsafe applies to the long-tail job.
+  const pollStartRef = useRef<number | null>(null);
   useEffect(() => {
     const inflightIds = activeJobs
       .filter((j) => j.status !== "done" && j.status !== "failed")
       .map((j) => j.id);
-    if (inflightIds.length === 0) return;
-    const startedAt = Date.now();
+    if (inflightIds.length === 0) {
+      pollStartRef.current = null;
+      return;
+    }
+    if (pollStartRef.current === null) {
+      pollStartRef.current = Date.now();
+    }
+    const startedAt = pollStartRef.current;
     // Snapshot per-job produced counts at effect setup so we can
     // detect "did anything climb" without a stale closure read.
     const lastProduced = new Map(activeJobs.map((j) => [j.id, j.produced_count]));
