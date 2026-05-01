@@ -21,7 +21,7 @@ export async function uploadDocument(
   if (file.size > MATERIAL_UPLOAD_MAX_BYTES) throw new Error("exceeds 25MB");
   const base64 = await fileToBase64(file);
   const resp = await teacher.uploadDocument(courseId, {
-    image_base64: base64,
+    file_base64: base64,
     filename: file.name,
     unit_id: unitId,
   });
