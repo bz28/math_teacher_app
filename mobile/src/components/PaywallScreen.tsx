@@ -12,9 +12,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import type { PurchasesPackage } from "react-native-purchases";
+import type { PurchasesIntroPrice, PurchasesPackage } from "react-native-purchases";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { getOfferings, purchasePackage, restorePurchases } from "../services/revenuecat";
+import {
+  getEligibleProductIds,
+  getOfferings,
+  purchasePackage,
+  restorePurchases,
+} from "../services/revenuecat";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
@@ -32,6 +37,7 @@ interface PlanOption {
   id: PlanId;
   label: string;
   trialText: string;
+  ctaTrialLabel: string;
   priceText: string;
   perWeek?: string;
   pkg: PurchasesPackage | null;
@@ -77,22 +83,29 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
     setSelectedPlan("annual");
 
     getOfferings()
-      .then((offerings) => {
+      .then(async (offerings) => {
         const current = offerings.current;
         const annualPkg = current?.annual ?? null;
         const weeklyPkg = current?.weekly ?? null;
-        setPlans(buildPlans(annualPkg, weeklyPkg));
+        const productIds = [annualPkg?.product.identifier, weeklyPkg?.product.identifier]
+          .filter((id): id is string => !!id);
+        let eligibleProductIds: Set<string>;
+        try {
+          eligibleProductIds = await getEligibleProductIds(productIds);
+        } catch {
+          // Defensive: never advertise a trial we can't verify the user gets.
+          eligibleProductIds = new Set();
+        }
+        setPlans(buildPlans(annualPkg, weeklyPkg, eligibleProductIds));
       })
       .catch(() => {
-        setPlans(buildPlans(null, null));
+        setPlans(buildPlans(null, null, new Set()));
       })
       .finally(() => setLoadingOfferings(false));
   }, [visible]);
 
   const selectedPlanOption = plans.find((p) => p.id === selectedPlan);
-  const ctaLabel = selectedPlanOption?.trialText
-    ? "Try 3 Days Free"
-    : "Subscribe Now";
+  const ctaLabel = selectedPlanOption?.ctaTrialLabel || "Subscribe Now";
   const ctaSublabel = selectedPlanOption?.trialText
     ? `then ${selectedPlanOption.priceText}`
     : selectedPlanOption?.priceText ?? "";
@@ -299,14 +312,27 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 
 // ── Helpers ──
 
-function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPackage | null): PlanOption[] {
+function buildPlans(
+  annualPkg: PurchasesPackage | null,
+  weeklyPkg: PurchasesPackage | null,
+  eligibleProductIds: Set<string>,
+): PlanOption[] {
+  const annualIntro = formatIntroOffer(
+    annualPkg && eligibleProductIds.has(annualPkg.product.identifier)
+      ? annualPkg.product.introPrice
+      : null,
+  );
+  const weeklyIntro = formatIntroOffer(
+    weeklyPkg && eligibleProductIds.has(weeklyPkg.product.identifier)
+      ? weeklyPkg.product.introPrice
+      : null,
+  );
   return [
     {
       id: "annual",
       label: "Annual",
-      trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
-        ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-        : "3-day free trial",
+      trialText: annualIntro.trialText,
+      ctaTrialLabel: annualIntro.ctaTrialLabel,
       priceText: annualPkg
         ? `${annualPkg.product.priceString}/yr`
         : "$79.99/yr",
@@ -316,15 +342,34 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
     {
       id: "weekly",
       label: "Weekly",
-      trialText: weeklyPkg?.product?.introPrice?.periodNumberOfUnits
-        ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-        : "",
+      trialText: weeklyIntro.trialText,
+      ctaTrialLabel: weeklyIntro.ctaTrialLabel,
       priceText: weeklyPkg
         ? `${weeklyPkg.product.priceString}/wk`
         : "$2.99/wk",
       pkg: weeklyPkg,
     },
   ];
+}
+
+// Derives trial copy from the introductory offer payload. Callers must pass
+// `null` when the user is not eligible — buildPlans handles that gating using
+// Purchases.checkTrialOrIntroductoryPriceEligibility. The helper itself only
+// covers the "no intro configured" case (Apple Guideline 2.1(b)).
+function formatIntroOffer(intro: PurchasesIntroPrice | null | undefined): {
+  trialText: string;
+  ctaTrialLabel: string;
+} {
+  const n = intro?.periodNumberOfUnits;
+  const unit = intro?.periodUnit;
+  if (!n || !unit) return { trialText: "", ctaTrialLabel: "" };
+  const lowerUnit = unit.toLowerCase();
+  const titleUnit = lowerUnit.charAt(0).toUpperCase() + lowerUnit.slice(1);
+  const plural = n === 1 ? "" : "s";
+  return {
+    trialText: `${n}-${lowerUnit} free trial`,
+    ctaTrialLabel: `Try ${n} ${titleUnit}${plural} Free`,
+  };
 }
 
 // ── Styles ──

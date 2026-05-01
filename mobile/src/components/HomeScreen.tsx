@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { PaywallScreen } from "./PaywallScreen";
 import { getUserName } from "../services/api";
+import { getEligibleProductIds, getOfferings } from "../services/revenuecat";
 import { useEntitlementStore } from "../stores/entitlements";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
@@ -20,6 +21,32 @@ export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
   const greeting = name ? `Hi, ${name}!` : "Hi there!";
   const isPro = useEntitlementStore((s) => s.isPro);
   const [paywallVisible, setPaywallVisible] = useState(false);
+  const [trialEligible, setTrialEligible] = useState(false);
+
+  // The CTA below promises a trial only when StoreKit confirms this Apple ID
+  // can actually redeem one — otherwise we'd re-trigger Apple Guideline 2.1(b)
+  // (paywall says "Try Free", payment sheet shows full charge).
+  useEffect(() => {
+    if (isPro) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const offerings = await getOfferings();
+        const productIds = [
+          offerings.current?.annual?.product.identifier,
+          offerings.current?.weekly?.product.identifier,
+        ].filter((id): id is string => !!id);
+        if (productIds.length === 0) return;
+        const eligible = await getEligibleProductIds(productIds);
+        if (!cancelled) setTrialEligible(eligible.size > 0);
+      } catch {
+        // Stay non-eligible by default — never over-promise a trial.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -149,7 +176,7 @@ export function HomeScreen({ onSelect, onLogout, onAccount }: HomeScreenProps) {
               <Text style={styles.upgradeDesc}>Unlimited sessions, mock tests & more</Text>
             </View>
             <View style={styles.upgradeCta}>
-              <Text style={styles.upgradeCtaText}>Try Free</Text>
+              <Text style={styles.upgradeCtaText}>{trialEligible ? "Try Free" : "Upgrade"}</Text>
               <Ionicons name="arrow-forward" size={14} color={colors.primary} />
             </View>
           </View>
