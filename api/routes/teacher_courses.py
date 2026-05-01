@@ -105,12 +105,13 @@ async def get_teacher_course(db: AsyncSession, course_id: uuid.UUID, teacher_id:
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
-    is_teacher = (await db.execute(
-        select(CourseTeacher).where(
-            CourseTeacher.course_id == course_id, CourseTeacher.teacher_id == teacher_id,
+    teaches_course = (await db.execute(
+        select(CourseTeacher.teacher_id).where(
+            CourseTeacher.course_id == course_id,
+            CourseTeacher.teacher_id == teacher_id,
         )
-    )).scalar_one_or_none()
-    if not is_teacher:
+    )).scalar_one_or_none() is not None
+    if not teaches_course:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your course")
     return course
 
@@ -196,7 +197,7 @@ async def update_course(
 ) -> dict[str, str]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
     if body.name is not None:
-        course.name = body.name.strip()
+        course.name = body.name
     if body.subject is not None:
         course.subject = body.subject
     if body.grade_level is not None:
