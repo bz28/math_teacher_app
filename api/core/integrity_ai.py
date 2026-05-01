@@ -282,13 +282,6 @@ in their work represents. Confidence is NOT earned by assertion ("I understand \
 it"), by correct final answers ("the answer is 5"), or by generic textbook \
 definitions.
 
-Correctness anchor. Decide "right on paper" vs "wrong on paper" by comparing \
-the student's extracted final answer against the answer key in the briefing — \
-NOT by how confident the student sounds verbally. A fluent verbal explanation \
-does not make the work correct; only the answer key does. If the answer key \
-is missing or the comparison is genuinely ambiguous, lean toward "wrong on \
-paper" and probe further before finalizing.
-
 Topic mismatch. If the student's verbal explanation, or the work shown in the \
 extraction, describes a different problem than the one in the briefing — \
 different quantities, different setup, different reasoning entirely — that is \
@@ -427,7 +420,8 @@ def build_problems_briefing(
         (string). The agent compares the student's extracted answer
         against this to decide "right vs wrong on paper" — replaces
         the prior approach where the agent had to mentally re-solve
-        every problem. May be empty for legacy items without an answer.
+        every problem. Always populated for approved items (enforced
+        by the approve endpoint + NOT NULL on QuestionBankItem).
       - extraction: dict with `steps`, `final_answers`, and `confidence`
         (now pre-sliced to just this problem's work)
       - verdict_status: "pending" | "verdict_submitted"
