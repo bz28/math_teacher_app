@@ -217,71 +217,30 @@ export default function HomeworkReviewPage({
 
 // ────────────────────────────────────────────────────────────────────
 // Generating state — shown while pending is empty but a gen job is
-// presumably in flight. Skeleton cards + a friendly header so the
-// teacher knows problems are on the way.
+// presumably in flight. Single hero card matching the homework
+// editor's generating-hero aesthetic so the wait reads as a
+// deliberate "we're on it" state, not a stalled skeleton.
 // ────────────────────────────────────────────────────────────────────
 
 function GeneratingState({ backHref }: { backHref: string }) {
   return (
-    <div className="mx-auto mt-4 max-w-4xl px-4">
-      <div className="rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="relative flex h-3 w-3" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
-          </span>
-          <h2 className="text-base font-bold text-text-primary">
-            Generating your problems…
-          </h2>
-        </div>
+    <div className="mx-auto mt-4 max-w-3xl px-4">
+      <div className="rounded-[--radius-xl] border border-dashed border-primary/40 bg-primary-bg/20 px-8 py-12 text-center">
+        <div className="animate-pulse text-5xl" aria-hidden="true">✨</div>
+        <h2 className="mt-4 text-lg font-bold text-text-primary">
+          Generating your problems…
+        </h2>
         <p className="mt-1 text-xs text-text-muted">
-          The AI is working on this. Problems usually appear in about 30
-          seconds. They&apos;ll show up here the moment the first one is ready.
+          The AI is working on this. Usually about 30 seconds. They&apos;ll
+          show up here the moment the first one is ready.
         </p>
-
-        <div className="mt-5 space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonCard key={i} delay={i} />
-          ))}
-        </div>
-
-        <div className="mt-5 text-right">
+        <div className="mt-5">
           <Link
             href={backHref}
             className="text-xs font-semibold text-text-muted hover:text-text-primary"
           >
             I&apos;ll wait on the homework page →
           </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SkeletonCard({ delay }: { delay: number }) {
-  // Stagger the pulse so the card row feels alive rather than a
-  // monolithic single-pulse block.
-  const style = { animationDelay: `${delay * 120}ms` };
-  return (
-    <div className="rounded-[--radius-md] border border-border-light bg-bg-base/60 p-4">
-      <div className="flex items-start gap-3">
-        <div
-          className="h-6 w-6 shrink-0 animate-pulse rounded-full bg-bg-subtle"
-          style={style}
-        />
-        <div className="min-w-0 flex-1 space-y-2">
-          <div
-            className="h-3 w-5/6 animate-pulse rounded bg-bg-subtle"
-            style={style}
-          />
-          <div
-            className="h-3 w-11/12 animate-pulse rounded bg-bg-subtle"
-            style={style}
-          />
-          <div
-            className="h-3 w-3/5 animate-pulse rounded bg-bg-subtle"
-            style={style}
-          />
         </div>
       </div>
     </div>

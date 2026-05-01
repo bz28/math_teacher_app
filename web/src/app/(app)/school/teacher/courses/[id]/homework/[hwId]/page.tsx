@@ -818,7 +818,10 @@ export default function HomeworkDetailPage({
 
             {/* State-driven body */}
             {activeGenerating && problems.length === 0 ? (
-              <GeneratingSkeleton count={5} />
+              <ProblemsGeneratingHero
+                requestedCount={activeJob?.requested_count ?? 0}
+                producedCount={activeJob?.produced_count ?? 0}
+              />
             ) : problems.length === 0 ? (
               <ProblemsEmptyHero
                 disabled={isPublished}
@@ -1085,50 +1088,30 @@ function ProblemsEmptyHero({
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Skeleton rows — shown in the Problems section while a gen job is in
-// flight and we have zero problems to display. Staggered pulse so the
-// rows feel alive.
+// Generating hero — shown in the Problems section while a gen job is
+// in flight and zero problems have landed yet. Mirrors the empty-hero
+// aesthetic so an in-flight gen reads as a deliberate "we're on it"
+// state, not a stalled skeleton. Live count comes from the polled job.
 // ────────────────────────────────────────────────────────────────────
-function GeneratingSkeleton({ count }: { count: number }) {
+function ProblemsGeneratingHero({
+  requestedCount,
+  producedCount,
+}: {
+  requestedCount: number;
+  producedCount: number;
+}) {
+  const noun = requestedCount === 1 ? "problem" : "problems";
   return (
-    <div className="mt-5 space-y-3">
-      <div className="flex items-center gap-2 text-xs text-text-muted">
-        <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-        </span>
-        <span>Generating problems…</span>
-      </div>
-      {Array.from({ length: count }).map((_, i) => {
-        const style = { animationDelay: `${i * 120}ms` };
-        return (
-          <div
-            key={i}
-            className="rounded-[--radius-md] border border-border-light bg-bg-base/60 p-4"
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className="h-6 w-6 shrink-0 animate-pulse rounded-full bg-bg-subtle"
-                style={style}
-              />
-              <div className="min-w-0 flex-1 space-y-2">
-                <div
-                  className="h-3 w-5/6 animate-pulse rounded bg-bg-subtle"
-                  style={style}
-                />
-                <div
-                  className="h-3 w-11/12 animate-pulse rounded bg-bg-subtle"
-                  style={style}
-                />
-                <div
-                  className="h-3 w-3/5 animate-pulse rounded bg-bg-subtle"
-                  style={style}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })}
+    <div className="mt-5 rounded-[--radius-xl] border border-dashed border-primary/40 bg-primary-bg/20 px-8 py-12 text-center">
+      <div className="animate-pulse text-5xl" aria-hidden="true">✨</div>
+      <h3 className="mt-4 text-lg font-bold text-text-primary">
+        Generating {requestedCount} {noun}…
+      </h3>
+      <p className="mt-1 text-xs text-text-muted">
+        {producedCount > 0
+          ? `${producedCount} of ${requestedCount} ready — they'll land in the review queue as the AI finishes each one.`
+          : "The AI is crafting them from your uploaded materials. Usually about 30 seconds."}
+      </p>
     </div>
   );
 }
