@@ -127,9 +127,11 @@ export default function HomeworkDetailPage({
     null,
   );
   const [showGenerate, setShowGenerate] = useState(false);
-  // Polls bank jobs kicked off from the "Generate more" modal so the
-  // pending-banner count updates live when generation completes.
-  const [activeJob, setActiveJob] = useState<BankJob | null>(null);
+  // Active bank jobs feeding this HW. Usually one (single "Generate
+  // more" call or the homework wizard's single gen job), but
+  // clone-as-practice fans out one job per source problem — the
+  // hero's count is the sum across all jobs in the array.
+  const [activeJobs, setActiveJobs] = useState<BankJob[]>([]);
   // Click-to-edit on an approved problem opens the workshop (single
   // mode) so the teacher can edit the question / chat with AI /
   // regenerate / make similar variations — all the affordances the
@@ -193,28 +195,28 @@ export default function HomeworkDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  // Pick up any gen job the wizard kicked off for this HW. The wizard
-  // stashes the job id in sessionStorage on "Create & generate" and
-  // routes here, so on landing we restore the job and the existing
-  // polling effect drives the generating hero + refreshes pending on
-  // done. The key also survives navigation away and back.
+  // Pick up any gen job(s) the wizard kicked off for this HW. The
+  // wizard stashes a JSON array of job ids in sessionStorage on
+  // "Create & generate" — usually one entry, but clone-as-practice
+  // fans out one job per source problem. On landing we restore them
+  // all and the polling effect drives the generating hero/strip.
+  // The key survives navigation away and back; we clear it once
+  // every job has reached a terminal state.
   useEffect(() => {
     const key = `hw-gen-${assignmentId}`;
-    const jobId = sessionStorage.getItem(key);
-    if (!jobId) return;
-    teacher
-      .bankJob(courseId, jobId)
-      .then((job) => {
-        setActiveJob(job);
-        // Done jobs: clear the key so a refresh after completion
-        // doesn't re-trigger the lookup. In-flight jobs keep the
-        // key around in case the teacher navigates away and back.
-        if (job.status === "done" || job.status === "failed") {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    const jobIds = JSON.parse(raw) as string[];
+    if (jobIds.length === 0) return;
+    Promise.all(jobIds.map((id) => teacher.bankJob(courseId, id)))
+      .then((jobs) => {
+        setActiveJobs(jobs);
+        if (jobs.every((j) => j.status === "done" || j.status === "failed")) {
           sessionStorage.removeItem(key);
         }
       })
       .catch(() => {
-        // Stale key or deleted job — drop it and fall back to the
+        // Stale key or deleted job(s) — drop it and fall back to the
         // manual-banner UX.
         sessionStorage.removeItem(key);
       });
@@ -268,40 +270,57 @@ export default function HomeworkDetailPage({
     };
   }, [hw?.status, courseId, assignmentId]);
 
-  // Poll any in-flight generation job so the hero/strip counts climb
+  // Poll any in-flight generation jobs so the hero/strip counts climb
   // live and the pending banner pops up the moment the first item
-  // lands (not just on job done). Stops polling on done/failed or
-  // after a ceiling; same pattern as the course workspace page.
+  // lands (not just on job done). Iterates every still-running job
+  // each tick — usually 1, but clone-as-practice can have many.
+  // Stops polling once all reach a terminal state or the ceiling
+  // trips; same pattern as the course workspace page.
   useEffect(() => {
-    if (!activeJob || activeJob.status === "done" || activeJob.status === "failed") return;
+    const inflightIds = activeJobs
+      .filter((j) => j.status !== "done" && j.status !== "failed")
+      .map((j) => j.id);
+    if (inflightIds.length === 0) return;
     const startedAt = Date.now();
-    const jobId = activeJob.id;
-    let lastProducedCount = activeJob.produced_count;
+    // Snapshot per-job produced counts at effect setup so we can
+    // detect "did anything climb" without a stale closure read.
+    const lastProduced = new Map(activeJobs.map((j) => [j.id, j.produced_count]));
     const interval = setInterval(async () => {
       if (Date.now() - startedAt > BANK_JOB_POLL_LIMIT_MS) {
-        setActiveJob((j) => (j ? { ...j, status: "failed" } : j));
+        setActiveJobs((prev) =>
+          prev.map((j) =>
+            inflightIds.includes(j.id) ? { ...j, status: "failed" as const } : j,
+          ),
+        );
         return;
       }
-      try {
-        const updated = await teacher.bankJob(courseId, jobId);
-        setActiveJob(updated);
-        // Refresh pending whenever a new item lands so the review
-        // banner appears live and its count climbs without waiting
-        // for the whole job to finish.
-        if (
-          updated.produced_count > lastProducedCount ||
-          updated.status === "done"
-        ) {
-          lastProducedCount = updated.produced_count;
-          await reloadPending();
+      let anyClimbed = false;
+      const updates = await Promise.all(
+        inflightIds.map((id) =>
+          teacher
+            .bankJob(courseId, id)
+            .then((u) => ({ id, updated: u as BankJob | null }))
+            .catch(() => ({ id, updated: null })),
+        ),
+      );
+      for (const { id, updated } of updates) {
+        if (!updated) continue;
+        const prev = lastProduced.get(id) ?? 0;
+        if (updated.produced_count > prev || updated.status === "done") {
+          anyClimbed = true;
         }
-      } catch {
-        // keep polling, transient errors are fine
       }
+      setActiveJobs((prev) =>
+        prev.map((j) => {
+          const u = updates.find((x) => x.id === j.id)?.updated;
+          return u ?? j;
+        }),
+      );
+      if (anyClimbed) await reloadPending();
     }, BANK_JOB_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJob, courseId]);
+  }, [activeJobs, courseId]);
 
   const problems: AssignmentProblem[] =
     hw?.content && typeof hw.content === "object" && "problems" in hw.content
@@ -565,8 +584,20 @@ export default function HomeworkDetailPage({
   }
   const canPublish = !isPublished && missingForPublish.length === 0;
 
-  const activeGenerating =
-    !!activeJob && activeJob.status !== "done" && activeJob.status !== "failed";
+  const activeGenerating = activeJobs.some(
+    (j) => j.status !== "done" && j.status !== "failed",
+  );
+  // Aggregate counts across every job feeding this HW. Drives the
+  // hero and inline strip — clone-as-practice can have N jobs, so
+  // displaying any single job's count would underreport.
+  const aggregateRequested = activeJobs.reduce(
+    (s, j) => s + j.requested_count,
+    0,
+  );
+  const aggregateProduced = activeJobs.reduce(
+    (s, j) => s + j.produced_count,
+    0,
+  );
 
   return (
     <>
@@ -590,7 +621,15 @@ export default function HomeworkDetailPage({
         assignmentId={assignmentId}
         onClose={() => setShowGenerate(false)}
         onStarted={(job) => {
-          setActiveJob(job);
+          // Append rather than replace — a teacher could in
+          // principle queue multiple "Generate more" calls, and we
+          // already track multi-job for clone-as-practice. Drop
+          // any prior terminal jobs so they don't keep inflating
+          // the aggregate count after they finished.
+          setActiveJobs((prev) => [
+            ...prev.filter((j) => j.status !== "done" && j.status !== "failed"),
+            job,
+          ]);
           setShowGenerate(false);
         }}
       />
@@ -826,10 +865,10 @@ export default function HomeworkDetailPage({
             </div>
 
             {/* State-driven body */}
-            {activeGenerating && activeJob && problems.length === 0 ? (
+            {activeGenerating && problems.length === 0 ? (
               <ProblemsGeneratingHero
-                requestedCount={activeJob.requested_count}
-                producedCount={activeJob.produced_count}
+                requestedCount={aggregateRequested}
+                producedCount={aggregateProduced}
               />
             ) : problems.length === 0 ? (
               <ProblemsEmptyHero
@@ -842,7 +881,7 @@ export default function HomeworkDetailPage({
                     problems but the teacher kicked off more.
                     role=status announces the live count to screen
                     readers, mirroring the empty-state hero. */}
-                {activeGenerating && activeJob && (
+                {activeGenerating && (
                   <div
                     role="status"
                     aria-live="polite"
@@ -854,9 +893,9 @@ export default function HomeworkDetailPage({
                     </span>
                     <span>
                       <span className="font-semibold">
-                        {activeJob.produced_count > 0
-                          ? `Generating ${activeJob.requested_count} more… · ${activeJob.produced_count} of ${activeJob.requested_count} ready`
-                          : `Generating ${activeJob.requested_count} more…`}
+                        {aggregateProduced > 0
+                          ? `Generating ${aggregateRequested} more… · ${aggregateProduced} of ${aggregateRequested} ready`
+                          : `Generating ${aggregateRequested} more…`}
                       </span>{" "}
                       <span className="text-text-secondary">new ones land in the review queue when ready.</span>
                     </span>

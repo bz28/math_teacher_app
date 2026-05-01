@@ -213,7 +213,7 @@ export function NewHomeworkModal({
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
         });
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
+        sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch {
         startedGeneration = false;
       }
@@ -334,7 +334,7 @@ export function NewHomeworkModal({
           unit_id: unitId!,
           constraint: scopeHint.trim() || null,
         });
-        sessionStorage.setItem(`hw-gen-${id}`, job.id);
+        sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch {
         startedGeneration = false;
       }
