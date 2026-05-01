@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import type { PurchasesPackage } from "react-native-purchases";
+import type { PurchasesIntroPrice, PurchasesPackage } from "react-native-purchases";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { getOfferings, purchasePackage, restorePurchases } from "../services/revenuecat";
 import { useEntitlementStore } from "../stores/entitlements";
@@ -32,6 +32,7 @@ interface PlanOption {
   id: PlanId;
   label: string;
   trialText: string;
+  ctaTrialLabel: string;
   priceText: string;
   perWeek?: string;
   pkg: PurchasesPackage | null;
@@ -90,9 +91,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
   }, [visible]);
 
   const selectedPlanOption = plans.find((p) => p.id === selectedPlan);
-  const ctaLabel = selectedPlanOption?.trialText
-    ? "Try 3 Days Free"
-    : "Subscribe Now";
+  const ctaLabel = selectedPlanOption?.ctaTrialLabel || "Subscribe Now";
   const ctaSublabel = selectedPlanOption?.trialText
     ? `then ${selectedPlanOption.priceText}`
     : selectedPlanOption?.priceText ?? "";
@@ -300,13 +299,14 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
 // ── Helpers ──
 
 function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPackage | null): PlanOption[] {
+  const annualIntro = formatIntroOffer(annualPkg?.product?.introPrice);
+  const weeklyIntro = formatIntroOffer(weeklyPkg?.product?.introPrice);
   return [
     {
       id: "annual",
       label: "Annual",
-      trialText: annualPkg?.product?.introPrice?.periodNumberOfUnits
-        ? `${annualPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-        : "3-day free trial",
+      trialText: annualIntro.trialText,
+      ctaTrialLabel: annualIntro.ctaTrialLabel,
       priceText: annualPkg
         ? `${annualPkg.product.priceString}/yr`
         : "$79.99/yr",
@@ -316,15 +316,34 @@ function buildPlans(annualPkg: PurchasesPackage | null, weeklyPkg: PurchasesPack
     {
       id: "weekly",
       label: "Weekly",
-      trialText: weeklyPkg?.product?.introPrice?.periodNumberOfUnits
-        ? `${weeklyPkg.product.introPrice.periodNumberOfUnits}-day free trial`
-        : "",
+      trialText: weeklyIntro.trialText,
+      ctaTrialLabel: weeklyIntro.ctaTrialLabel,
       priceText: weeklyPkg
         ? `${weeklyPkg.product.priceString}/wk`
         : "$2.99/wk",
       pkg: weeklyPkg,
     },
   ];
+}
+
+// Derives trial copy strictly from the StoreKit/Play introductory offer so the
+// paywall can never advertise a trial that the payment sheet won't honor
+// (Apple Guideline 2.1(b)). Returns empty strings when no intro offer is
+// available — e.g. user is ineligible, or no intro is configured.
+function formatIntroOffer(intro: PurchasesIntroPrice | null | undefined): {
+  trialText: string;
+  ctaTrialLabel: string;
+} {
+  const n = intro?.periodNumberOfUnits;
+  const unit = intro?.periodUnit;
+  if (!n || !unit) return { trialText: "", ctaTrialLabel: "" };
+  const lowerUnit = unit.toLowerCase();
+  const titleUnit = lowerUnit.charAt(0).toUpperCase() + lowerUnit.slice(1);
+  const plural = n === 1 ? "" : "s";
+  return {
+    trialText: `${n}-${lowerUnit} free trial`,
+    ctaTrialLabel: `Try ${n} ${titleUnit}${plural} Free`,
+  };
 }
 
 // ── Styles ──
