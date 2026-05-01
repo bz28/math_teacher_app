@@ -476,7 +476,7 @@ async def revert_bank_item(
         )
     item.question = item.previous_question
     item.solution_steps = item.previous_solution_steps
-    item.final_answer = item.previous_final_answer
+    item.final_answer = item.previous_final_answer or ""
     if item.previous_status:
         item.status = item.previous_status
     item.previous_question = None
@@ -505,6 +505,14 @@ async def approve_bank_item(
     the item approved for reference.
     """
     _ensure_unlocked(item)
+    # Approved items are the surface the integrity-check agent reads.
+    # Empty final_answer there would surface as "no answer key" in the
+    # briefing — the agent's correctness anchor depends on it.
+    if not (item.final_answer or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Final answer is required before approving",
+        )
     item.status = "approved"
 
     # get_teacher_assignment enforces teacher ownership of the

@@ -314,7 +314,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             title=q.get("title") or None,
             question=q["text"],
             solution_steps=s.get("steps") or None,
-            final_answer=s.get("final_answer"),
+            final_answer=s.get("final_answer") or "",
             distractors=distractor_lists[idx - 1] or None,
             difficulty=q.get("difficulty") or "medium",
             status="pending",
@@ -451,7 +451,7 @@ async def regenerate_one(
         item.title = str(new_title)[:120]
     item.question = str(new_question)
     item.solution_steps = new_steps if isinstance(new_steps, list) else None
-    item.final_answer = str(new_answer) if new_answer else None
+    item.final_answer = str(new_answer) if new_answer else ""
     # Regenerate distractors to match the new question/answer. The old
     # distractors were keyed off the old wrong-answer patterns and would
     # be misleading on the new problem. Failure here is non-fatal —

@@ -47,7 +47,7 @@ class QuestionBankItem(Base):
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     solution_steps: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    final_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    final_answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # 3 MCQ wrong-answer options, generated at the same time as the
     # solution. Populated by question_bank_generation; consumed by the
     # school-student practice loop so it can serve MCQs with zero LLM
