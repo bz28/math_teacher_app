@@ -26,6 +26,10 @@
 - When reviewing, do two passes. First pass: jot every concern. Second pass: re-verify each by reading actual code; discard anything you can't confirm. Label survivors as **confirmed** (traced, real) or **suspected** (plausible, couldn't fully verify). Don't propose fixes until the user approves.
 - Shipping checklist. Before saying work is done, summarize: what was done, how, why, and how it was tested.
 
+## Code quality
+
+- DRY: don't extract abstractions beyond what the task requires. Three similar lines is better than a premature abstraction. Inverse — extract a helper when at least 2 of these are true: (1) duplicated 3+ times, (2) the logic is complex enough that a name conveys real insight, (3) the call sites are likely to evolve together, (4) the duplication is where bugs cluster historically. If the only argument is "it's repeated," leave it inline.
+
 ## Skills
 
 - `/plan` — draft an approach in conversation before starting a non-trivial feature
