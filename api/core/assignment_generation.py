@@ -16,19 +16,29 @@ logger = logging.getLogger(__name__)
 # ── Question generation ──
 
 _GENERATE_QUESTIONS_TEMPLATE = """\
-You are a {professor_role} creating assignment questions for a teacher.
+You are a {professor_role}.
 
-The teacher wants questions about a specific topic for their students.
-Generate original problems that test understanding of the topic.
+The teacher will review and approve each problem before it reaches their
+students; the bar is "would the teacher write this themselves" — not
+AI-flavored filler.
 
-Rules:
-- Generate exactly the requested number of questions
-- Match the requested difficulty level (or mix if "mixed")
-- Questions should be clear, unambiguous, and solvable
-- Use LaTeX with $ delimiters for math expressions (e.g., $2x + 3 = 7$)
-- Vary the question types: computation, word problems, conceptual
-- Do NOT include answers — only the question text
-- Each question should be self-contained (no "use the answer from Q1")"""
+# Sources of truth, in priority order
+
+1. The teacher's instructions in the message — the active intent. What
+   they want, what they don't, the angle. Lead from this.
+2. The reference materials they've attached — notation, grade level,
+   vocabulary, what their students have already seen. Match what's shown.
+3. The unit name — the topic scope.
+
+When a higher-priority source is silent, defer to the next one down.
+When they pull against each other, the higher one wins.
+
+# Output
+
+- Generate exactly the requested number of problems
+- Each problem is self-contained
+- LaTeX with $ delimiters; single backslashes for commands
+- Problem text only — no answers, no hints"""
 
 
 def _build_generate_prompt(subject: str) -> str:
@@ -42,62 +52,53 @@ async def generate_questions(
     unit_name: str,
     count: int,
     *,
-    difficulty: str | None = None,
     course_name: str = "",
     subject: str = Subject.MATH,
     user_id: str | None = None,
     images: list[dict[str, str]] | None = None,
     extra_instructions: str | None = None,
 ) -> list[dict[str, str]]:
-    """Generate assignment questions for a given topic.
+    """Generate problems for a given topic.
 
     Args:
         images: Optional list of {"filename", "base64", "media_type"} from
                 fetch_document_images. When provided, Claude reads the actual
-                document content to generate more relevant questions.
-        extra_instructions: Optional natural-language constraint from the
-                teacher (e.g. "only word problems", "skip trig"). Layered on
-                top of the system prompt.
-        difficulty: Optional. Legacy assignment flow still passes a value
-                ("easy"/"medium"/"hard"/"mixed"). The question bank workshop
-                doesn't — difficulty is no longer a user-facing concept
-                there, so the prompt skips the difficulty line entirely
-                when this is None. New work should rely on the natural-
-                language constraint instead.
+                document content — that's the priority-2 grounding (notation,
+                grade level, what students have already seen).
+        extra_instructions: Optional natural-language brief from the teacher
+                ("only word problems", "no calculator", "skip trig"). This
+                is the priority-1 source of truth — Claude leads from it.
 
-    Returns list of {"text": "...", "difficulty": "..."}.
+    Returns list of {"title", "text", "difficulty"}. The model's
+    auto-labeled difficulty (per the schema enum) flows downstream
+    into BankItem.difficulty — load-bearing for the integrity
+    agent's tier-aware probe selection (`integrity_pipeline.py`).
     """
     if count <= 0:
         return []
 
     system_prompt = _build_generate_prompt(subject)
-    user_message_parts = [
-        f"Course: {course_name}",
-        f"Topic: {unit_name}",
-        f"Number of questions: {count}",
-    ]
-    if difficulty:
+    # Order the user message to match the prompt's priority hierarchy:
+    # teacher's brief first (intent), unit name and count next (scope).
+    user_message_parts: list[str] = []
+    if extra_instructions and extra_instructions.strip():
         user_message_parts.append(
-            f"All questions should be {difficulty} difficulty."
-            if difficulty != "mixed"
-            else "Mix difficulties: roughly 20% easy, 50% medium, 30% hard."
+            f"Teacher's instructions:\n{extra_instructions.strip()}"
         )
-    user_message = "\n".join(user_message_parts)
-    if extra_instructions:
-        user_message += f"\n\nAdditional teacher instructions:\n{extra_instructions.strip()}"
-
-    if images:
-        user_message = (
-            f"{system_prompt}\n\n"
-            "The teacher has attached documents from this unit. "
-            "Read them carefully and generate questions based on the actual content, "
-            "notation style, and difficulty level shown in the materials.\n\n"
-            f"{user_message}"
-        )
+    user_message_parts.append(f"Topic: {unit_name}")
+    if course_name:
+        user_message_parts.append(f"Course: {course_name}")
+    user_message_parts.append(f"Number of problems: {count}")
+    user_message = "\n\n".join(user_message_parts)
 
     try:
         if images:
-            content = build_vision_content(images, user_message)
+            # call_claude_vision doesn't accept a separate system
+            # prompt — bake it into the user message so the priority
+            # hierarchy still applies to vision-mode runs.
+            content = build_vision_content(
+                images, f"{system_prompt}\n\n{user_message}"
+            )
             result = await call_claude_vision(
                 content,
                 mode=LLMMode.GENERATE_QUESTIONS,
@@ -125,7 +126,7 @@ async def generate_questions(
             normalized.append({
                 "title": str(q.get("title") or "")[:120],
                 "text": str(q["text"]),
-                "difficulty": str(q.get("difficulty", difficulty)),
+                "difficulty": str(q.get("difficulty") or "medium"),
             })
 
         return normalized[:count]

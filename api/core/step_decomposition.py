@@ -55,8 +55,17 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "Do NOT include any mention of approaches that are not the final/optimal "
     "solution. Those will only confuse the student.\n\n"
 
+    "A step is one conceptual move. If two adjacent steps make the same move, "
+    "they're one step — merge them.\n\n"
+
+    "Every sentence in a step's description teaches. Cut narration "
+    "(\"now we'll multiply\"), problem restating, and previews of what's "
+    "coming. Just the math and the why.\n\n"
+
     "Given a {domain} problem, solve it step-by-step.\n\n"
-    "Each step needs a short title (2-5 words) and a full description.\n"
+    "Each step needs a short title (2-5 words) and a full description. "
+    "Titles answer \"what does this step do?\" — examples: "
+    "\"Distribute the 3\", \"Substitute x = 5\". Not: \"Now we can solve\".\n"
     "Formatting rules for descriptions:\n"
     "- Do NOT use HTML tags like <br> — use plain newlines (\\n) for line breaks\n"
     "- Use LaTeX with $ delimiters for ALL math, even simple expressions like $2 \\times 3$ or $n = 5$\n"
