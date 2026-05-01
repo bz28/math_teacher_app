@@ -11,7 +11,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.integrity_pipeline import (
     STATUS_COMPLETE as INTEGRITY_COMPLETE,
 )
@@ -1565,70 +1564,6 @@ async def publish_grades(
 
     await db.commit()
     return {"status": "ok", "published_count": len(grades)}
-
-
-# ── AI Generation endpoints ──
-
-
-class GenerateQuestionsRequest(BaseModel):
-    course_id: uuid.UUID
-    unit_name: str
-    difficulty: str = "medium"
-    count: int = 10
-    subject: str = "math"
-    document_ids: list[uuid.UUID] | None = None
-
-
-class GenerateSolutionsRequest(BaseModel):
-    questions: list[dict[str, str]]
-    subject: str = "math"
-
-
-@router.post("/assignments/generate-questions")
-async def generate_assignment_questions(
-    body: GenerateQuestionsRequest,
-    current_user: CurrentUser = Depends(require_teacher),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    course = await get_teacher_course(db, body.course_id, current_user.user_id)
-
-    # Fetch document images if provided
-    images = None
-    if body.document_ids:
-        from api.core.document_vision import MAX_VISION_IMAGES, fetch_document_images
-        images = await fetch_document_images(db, body.document_ids, body.course_id, max_images=MAX_VISION_IMAGES)
-
-    questions = await generate_questions(
-        unit_name=body.unit_name,
-        difficulty=body.difficulty,
-        count=min(body.count, 30),  # cap at 30
-        course_name=course.name,
-        subject=body.subject,
-        user_id=str(current_user.user_id),
-        images=images or None,
-    )
-
-    if not questions:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate questions")
-
-    return {"questions": questions}
-
-
-@router.post("/assignments/generate-solutions")
-async def generate_assignment_solutions(
-    body: GenerateSolutionsRequest,
-    current_user: CurrentUser = Depends(require_teacher),
-) -> dict[str, Any]:
-    if not body.questions or len(body.questions) > 30:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide 1-30 questions")
-
-    solutions = await generate_solutions(
-        questions=body.questions,
-        subject=body.subject,
-        user_id=str(current_user.user_id),
-    )
-
-    return {"solutions": solutions}
 
 
 # ── Submission detail viewing (list endpoint already exists above as
