@@ -69,8 +69,10 @@ async def generate_questions(
                 ("only word problems", "no calculator", "skip trig"). This
                 is the priority-1 source of truth — Claude leads from it.
 
-    Returns list of {"title", "text"}. The bank-item layer assigns
-    its own difficulty default downstream; we don't double up here.
+    Returns list of {"title", "text", "difficulty"}. The model's
+    auto-labeled difficulty (per the schema enum) flows downstream
+    into BankItem.difficulty — load-bearing for the integrity
+    agent's tier-aware probe selection (`integrity_pipeline.py`).
     """
     if count <= 0:
         return []
@@ -124,6 +126,7 @@ async def generate_questions(
             normalized.append({
                 "title": str(q.get("title") or "")[:120],
                 "text": str(q["text"]),
+                "difficulty": str(q.get("difficulty") or "medium"),
             })
 
         return normalized[:count]
