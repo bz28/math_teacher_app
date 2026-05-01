@@ -41,7 +41,7 @@ When they pull against each other, the higher one wins.
 - Problem text only — no answers, no hints"""
 
 
-def _build_generate_prompt(subject: str) -> str:
+def _build_question_generation_prompt(subject: str) -> str:
     cfg = get_config(subject)
     return _GENERATE_QUESTIONS_TEMPLATE.format(
         professor_role=cfg["professor_role"],
@@ -77,7 +77,7 @@ async def generate_questions(
     if count <= 0:
         return []
 
-    system_prompt = _build_generate_prompt(subject)
+    system_prompt = _build_question_generation_prompt(subject)
     # Order the user message to match the prompt's priority hierarchy:
     # teacher's brief first (intent), unit name and count next (scope).
     user_message_parts: list[str] = []

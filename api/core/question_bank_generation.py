@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 # Track in-flight tasks so they aren't garbage-collected mid-flight.
-_inflight: set[asyncio.Task[None]] = set()
+_inflight_jobs: set[asyncio.Task[None]] = set()
 
 # Commit every N persisted questions during bulk generation so the
 # frontend polling banner ticks visibly without N+1 transactions.
@@ -57,8 +57,8 @@ def schedule_generation_job(job_id: uuid.UUID) -> None:
         return
 
     task = loop.create_task(_run_job(job_id))
-    _inflight.add(task)
-    task.add_done_callback(_inflight.discard)
+    _inflight_jobs.add(task)
+    task.add_done_callback(_inflight_jobs.discard)
 
 
 async def _run_job(job_id: uuid.UUID) -> None:
@@ -73,7 +73,7 @@ async def _run_job(job_id: uuid.UUID) -> None:
             return
 
         try:
-            await _execute(db, job)
+            await _run_generation(db, job)
         except Exception as e:
             logger.exception("Generation job %s failed", job_id)
             job.status = "failed"
@@ -166,7 +166,7 @@ async def _extract_from_files(
     return normalized
 
 
-async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
+async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     """Run the actual Claude calls and persist results.
 
     Status transitions: queued -> running -> done (or failed via _run_job).
@@ -254,7 +254,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
             )
 
     # 2. Solve each question in parallel (capped concurrency inside)
-    solved = await generate_solutions(
+    solutions = await generate_solutions(
         question_dicts,
         subject=course.subject,
         user_id=str(job.created_by_id),
@@ -286,7 +286,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
                 return []
 
     distractor_lists = await asyncio.gather(
-        *[make_distractors(i, q, s) for i, (q, s) in enumerate(zip(question_dicts, solved))]
+        *[make_distractors(i, q, s) for i, (q, s) in enumerate(zip(question_dicts, solutions))]
     )
 
     # 3. Persist as bank items (status = pending). Commit in batches of
@@ -303,7 +303,7 @@ async def _execute(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     else:
         item_source = "generated"
 
-    for idx, (q, s) in enumerate(zip(question_dicts, solved), start=1):
+    for idx, (q, s) in enumerate(zip(question_dicts, solutions), start=1):
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
