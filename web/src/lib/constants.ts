@@ -36,5 +36,6 @@ export const BANK_JOB_POLL_LIMIT_MS = 5 * 60 * 1000;
 export const BANK_JOB_TOAST_AUTO_CLEAR_MS = 4000;
 /** Workshop modal undo grace period after an edit lands. */
 export const WORKSHOP_UNDO_GRACE_MS = 30_000;
-/** Materials tab upload size cap (matches backend). */
-export const MATERIAL_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+/** Materials tab upload size caps (match backend MAX_IMAGE_BYTES / MAX_PDF_BYTES). */
+export const MATERIAL_UPLOAD_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const MATERIAL_UPLOAD_MAX_PDF_BYTES = 25 * 1024 * 1024;

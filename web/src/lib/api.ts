@@ -902,7 +902,14 @@ export const teacher = {
     }>(`/teacher/courses/${courseId}/documents/${docId}`);
   },
   uploadDocument(courseId: string, data: { file_base64: string; filename: string; unit_id: string }) {
-    return apiFetch<{ id: string }>(`/teacher/courses/${courseId}/documents`, {
+    return apiFetch<{
+      id: string;
+      filename: string;
+      file_type: string;
+      file_size: number;
+      unit_id: string;
+      created_at: string;
+    }>(`/teacher/courses/${courseId}/documents`, {
       method: "POST",
       body: JSON.stringify(data),
     });

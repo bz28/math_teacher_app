@@ -1,6 +1,5 @@
 """Teacher document management — upload, list, delete."""
 
-import base64
 import uuid
 from typing import Any
 
@@ -10,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.document_vision import fetch_document_images
+from api.core.image_utils import validate_and_decode_upload
 from api.core.unit_suggestions import suggest_units
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -18,8 +18,6 @@ from api.models.unit import Unit
 from api.routes.teacher_courses import get_teacher_course
 
 router = APIRouter()
-
-MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
 class UploadDocumentRequest(BaseModel):
@@ -36,18 +34,12 @@ async def upload_document(
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
 
-    # Validate base64 and size
+    # Magic-byte validation: confirms the bytes are actually JPEG/PNG/PDF
+    # and enforces per-format size caps. Filename extension is only a label.
     try:
-        raw = base64.b64decode(body.file_base64)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 data")
-    if len(raw) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 25MB)")
-
-    # Detect file type from filename
-    ext = body.filename.rsplit(".", 1)[-1].lower() if "." in body.filename else "jpg"
-    type_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "pdf": "application/pdf"}
-    file_type = type_map.get(ext, "image/jpeg")
+        raw, file_type = validate_and_decode_upload(body.file_base64)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     # Validate unit belongs to same course.
     unit = (await db.execute(
@@ -65,7 +57,14 @@ async def upload_document(
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
-    return {"id": str(doc.id), "filename": doc.filename, "file_size": doc.file_size}
+    return {
+        "id": str(doc.id),
+        "filename": doc.filename,
+        "file_type": doc.file_type,
+        "file_size": doc.file_size,
+        "unit_id": str(doc.unit_id),
+        "created_at": doc.created_at.isoformat(),
+    }
 
 
 @router.get("/courses/{course_id}/documents")
