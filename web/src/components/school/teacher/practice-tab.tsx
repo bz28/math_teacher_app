@@ -267,11 +267,12 @@ export function PracticeTab({ courseId }: { courseId: string }) {
           onCreated={(newId, { startedGeneration }) => {
             setShowNew(false);
             if (startedGeneration) {
-              // Route straight into the review queue — the skeleton
-              // state carries the teacher through the ~30s wait while
-              // clone jobs land items.
+              // Route to the homework editor — its generating hero
+              // covers the wait while clone jobs land items. The
+              // pending banner takes the teacher to /review when
+              // there's something to approve.
               router.push(
-                `/school/teacher/courses/${courseId}/homework/${newId}/review`,
+                `/school/teacher/courses/${courseId}/homework/${newId}`,
               );
             } else {
               openDetail(newId);

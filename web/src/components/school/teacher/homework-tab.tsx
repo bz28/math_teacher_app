@@ -272,13 +272,12 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
           onCreated={(newId, { startedGeneration }) => {
             setShowNew(false);
             if (startedGeneration) {
-              // Route the teacher straight into the review queue —
-              // its skeleton state handles the ~30s wait for gen to
-              // produce items. Feels continuous: click "Create &
-              // generate" → land in a queue that fills up in front
-              // of them.
+              // Route to the homework editor — its generating hero
+              // shows the live problem count while gen runs, and the
+              // pending banner takes the teacher into the review
+              // queue once items land. /review handles approval only.
               router.push(
-                `/school/teacher/courses/${courseId}/homework/${newId}/review`,
+                `/school/teacher/courses/${courseId}/homework/${newId}`,
               );
             } else {
               openDetail(newId);

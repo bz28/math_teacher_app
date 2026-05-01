@@ -194,10 +194,10 @@ export default function HomeworkDetailPage({
   }, [assignmentId]);
 
   // Pick up any gen job the wizard kicked off for this HW. The wizard
-  // stashes the job id in sessionStorage on "Create & generate"; if
-  // the teacher navigates here from /review ("I'll wait on the
-  // homework page"), we restore it so the existing polling effect
-  // shows a generating indicator and refreshes pending on done.
+  // stashes the job id in sessionStorage on "Create & generate" and
+  // routes here, so on landing we restore the job and the existing
+  // polling effect drives the generating hero + refreshes pending on
+  // done. The key also survives navigation away and back.
   useEffect(() => {
     const key = `hw-gen-${assignmentId}`;
     const jobId = sessionStorage.getItem(key);
