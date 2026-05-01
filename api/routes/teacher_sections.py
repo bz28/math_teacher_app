@@ -6,10 +6,10 @@ import logging
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import AfterValidator, BaseModel, EmailStr
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,8 +35,18 @@ JOIN_CODE_EXPIRY_DAYS = 7
 INVITE_EXPIRY_DAYS = 14
 
 
+def _validate_section_name(v: str) -> str:
+    v = v.strip()
+    if not v or len(v) > 200:
+        raise ValueError("Name must be 1-200 characters")
+    return v
+
+
+SectionName = Annotated[str, AfterValidator(_validate_section_name)]
+
+
 class CreateSectionRequest(BaseModel):
-    name: str
+    name: SectionName
 
 
 class InviteStudentRequest(BaseModel):
@@ -67,7 +77,7 @@ async def create_section(
     await get_teacher_course(db, course_id, current_user.user_id)
     section = Section(
         course_id=course_id,
-        name=body.name.strip(),
+        name=body.name,
         join_code=await _generate_unique_join_code(db),
         join_code_expires_at=datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS),
     )
@@ -86,13 +96,13 @@ async def list_sections(
     await get_teacher_course(db, course_id, current_user.user_id)
     # Exclude preview (shadow) students so the count reflects real enrollment.
     enrollment_count = (
-        select(SectionEnrollment.section_id, func.count().label("c"))
+        select(SectionEnrollment.section_id, func.count().label("student_count"))
         .join(User, User.id == SectionEnrollment.student_id)
         .where(User.is_preview.is_(False))
         .group_by(SectionEnrollment.section_id).subquery()
     )
     rows = (await db.execute(
-        select(Section, func.coalesce(enrollment_count.c.c, 0).label("student_count"))
+        select(Section, func.coalesce(enrollment_count.c.student_count, 0).label("student_count"))
         .outerjoin(enrollment_count, enrollment_count.c.section_id == Section.id)
         .where(Section.course_id == course_id)
         .order_by(Section.created_at)
@@ -112,7 +122,7 @@ async def get_section(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    section = await _get_section(db, section_id, course_id)
+    section = await _get_section_in_course(db, section_id, course_id)
     students = (await db.execute(
         select(User.id, User.name, User.email)
         .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
@@ -140,7 +150,10 @@ async def delete_section(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    section = await _get_section(db, section_id, course_id)
+    section = await _get_section_in_course(db, section_id, course_id)
+    # Cascades to enrollments, invites, assignment_sections, and ALL student
+    # submissions for assignments in this section. Student accounts survive —
+    # only their work in this section is lost.
     await db.delete(section)
     await db.commit()
     return {"status": "ok"}
@@ -163,7 +176,7 @@ async def invite_student(
     idempotent: we refresh the token + expiry and send a fresh email.
     """
     course = await get_teacher_course(db, course_id, current_user.user_id)
-    section = await _get_section(db, section_id, course_id)
+    section = await _get_section_in_course(db, section_id, course_id)
     email = body.email.lower()
 
     existing_user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
@@ -251,7 +264,7 @@ async def list_invites(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    await _get_section(db, section_id, course_id)
+    await _get_section_in_course(db, section_id, course_id)
     invites = (await db.execute(
         select(SectionInvite)
         .where(SectionInvite.section_id == section_id, SectionInvite.status == "pending")
@@ -267,7 +280,7 @@ async def revoke_invite(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    await _get_section(db, section_id, course_id)
+    await _get_section_in_course(db, section_id, course_id)
     invite = (await db.execute(
         select(SectionInvite).where(
             SectionInvite.id == invite_id, SectionInvite.section_id == section_id)
@@ -289,7 +302,7 @@ async def resend_invite(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
-    section = await _get_section(db, section_id, course_id)
+    section = await _get_section_in_course(db, section_id, course_id)
     invite = (await db.execute(
         select(SectionInvite).where(
             SectionInvite.id == invite_id, SectionInvite.section_id == section_id)
@@ -350,7 +363,7 @@ async def generate_join_code(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await get_teacher_course(db, course_id, current_user.user_id)
-    section = await _get_section(db, section_id, course_id)
+    section = await _get_section_in_course(db, section_id, course_id)
     section.join_code = await _generate_unique_join_code(db)
     section.join_code_expires_at = datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS)
     await db.commit()
@@ -417,7 +430,7 @@ async def join_section(
 # --- Helpers ---
 
 
-async def _get_section(db: AsyncSession, section_id: uuid.UUID, course_id: uuid.UUID) -> Section:
+async def _get_section_in_course(db: AsyncSession, section_id: uuid.UUID, course_id: uuid.UUID) -> Section:
     section = (await db.execute(
         select(Section).where(Section.id == section_id, Section.course_id == course_id)
     )).scalar_one_or_none()
