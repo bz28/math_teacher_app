@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherSection, type TeacherSectionDetail } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
@@ -107,7 +107,20 @@ function SectionCard({
   const [copied, setCopied] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const renameTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const wasEditingNameRef = useRef(false);
   const { busy, error, setError, run } = useAsyncAction();
+
+  useEffect(() => {
+    if (wasEditingNameRef.current && !editingName) {
+      renameTriggerRef.current?.focus();
+    }
+    wasEditingNameRef.current = editingName;
+  }, [editingName]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -184,6 +197,40 @@ function SectionCard({
       onDeleted();
     }, "Failed to delete section");
 
+  const startRename = () => {
+    setEditingName(true);
+    setNameDraft(section.name);
+    setRenameError(null);
+  };
+
+  const cancelRename = () => {
+    setEditingName(false);
+    setRenameError(null);
+  };
+
+  const saveRename = async () => {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed.length > 200) {
+      setRenameError("Name must be 1-200 characters");
+      return;
+    }
+    if (trimmed === section.name) {
+      cancelRename();
+      return;
+    }
+    setRenaming(true);
+    setRenameError(null);
+    try {
+      await teacher.renameSection(courseId, section.id, trimmed);
+      setEditingName(false);
+      onChanged();
+    } catch (e) {
+      setRenameError(e instanceof Error ? e.message : "Failed to rename section");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   const copyCode = async (code: string) => {
     try {
       await navigator.clipboard.writeText(code);
@@ -200,7 +247,70 @@ function SectionCard({
     <div className="rounded-[--radius-lg] border border-border-light bg-surface">
       <div className="flex items-center justify-between p-4">
         <div>
-          <h3 className="font-bold text-text-primary">{section.name}</h3>
+          {editingName ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveRename();
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                type="text"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelRename();
+                  }
+                }}
+                autoFocus
+                disabled={renaming}
+                maxLength={200}
+                aria-label="Section name"
+                aria-invalid={renameError ? true : undefined}
+                aria-describedby={renameError ? `rename-error-${section.id}` : undefined}
+                className="rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm font-bold text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={renaming}
+                className="rounded-[--radius-sm] bg-primary px-2.5 py-1 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={cancelRename}
+                disabled={renaming}
+                className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <h3 className="font-bold text-text-primary">
+              <button
+                ref={renameTriggerRef}
+                type="button"
+                onClick={startRename}
+                title="Click to rename"
+                className="-mx-1 rounded px-1 hover:bg-bg-subtle"
+              >
+                {section.name}
+              </button>
+            </h3>
+          )}
+          {renameError && (
+            <p
+              id={`rename-error-${section.id}`}
+              role="alert"
+              className="mt-1 text-xs text-red-600"
+            >
+              {renameError}
+            </p>
+          )}
           <p className="mt-0.5 text-xs text-text-muted">
             {section.student_count} student{section.student_count === 1 ? "" : "s"}
           </p>
