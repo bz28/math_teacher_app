@@ -69,7 +69,8 @@ async def generate_questions(
                 ("only word problems", "no calculator", "skip trig"). This
                 is the priority-1 source of truth — Claude leads from it.
 
-    Returns list of {"title", "text", "difficulty"}.
+    Returns list of {"title", "text"}. The bank-item layer assigns
+    its own difficulty default downstream; we don't double up here.
     """
     if count <= 0:
         return []
@@ -123,7 +124,6 @@ async def generate_questions(
             normalized.append({
                 "title": str(q.get("title") or "")[:120],
                 "text": str(q["text"]),
-                "difficulty": str(q.get("difficulty") or "medium"),
             })
 
         return normalized[:count]
