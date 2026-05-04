@@ -69,6 +69,12 @@ class IntegrityCheckSubmission(Base):
     # via status alone).
     disposition: Mapped[str | None] = mapped_column(String(32), nullable=True)
     overall_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 4-8 word verdict title the teacher sees in the integrity banner.
+    # Agent-generated in `finish_check` so the title reflects this chat
+    # instead of a generic per-disposition label. Null when no AI verdict
+    # ran (skipped_unreadable, awaiting_student, force-finalize turn cap)
+    # — frontend falls back to the disposition-keyed hardcoded label.
+    headline: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     # Why the pipeline picked the problem it did — one of
     # verified_hardest_correct / struggling_easiest. Drives the
