@@ -452,6 +452,7 @@ async def test_turn_happy_path_verdict_then_finish(
                 {
                     "disposition": "pass",
                     "summary": "Student explained the factoring clearly.",
+                    "headline": "Student understood their own work",
                     "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
@@ -488,6 +489,7 @@ async def test_turn_happy_path_verdict_then_finish(
         assert check.status == "complete"
         assert check.disposition == "pass"
         assert check.overall_summary is not None
+        assert check.headline == "Student understood their own work"
         assert check.inline_variant_result == "not_applicable"
         problem = (await s.execute(
             select(IntegrityCheckProblem)
@@ -516,6 +518,7 @@ async def test_turn_finish_before_all_verdicts_rejected(
                 {
                     "disposition": "pass",
                     "summary": "Trying to finish early.",
+                    "headline": "Student understood their own work",
                     "inline_variant_result": "not_applicable",
                 },
                 use_id="u1",
@@ -749,6 +752,7 @@ async def test_turn_409_when_complete(
                 {
                     "disposition": "pass",
                     "summary": "done",
+                    "headline": "Student understood their own work",
                     "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
@@ -913,6 +917,7 @@ async def test_teacher_dismiss_keeps_disposition_frozen(
                 {
                     "disposition": "flag_for_review",
                     "summary": "Correct work, blank verbal.",
+                    "headline": "Review — correct work but couldn't explain it",
                     "inline_variant_result": "not_applicable",
                 },
                 use_id="u2",
@@ -1548,6 +1553,7 @@ async def test_finish_check_rejects_variant_result_without_variant_used(
                 {
                     "disposition": "pass",
                     "summary": "Good.",
+                    "headline": "Student understood their own work",
                     "inline_variant_result": "specific_approach",
                 },
                 use_id="uv2",
@@ -1627,6 +1633,7 @@ async def test_finish_check_rejects_when_agent_asked_question_same_turn(
                 {
                     "disposition": "pass",
                     "summary": "Looked good.",
+                    "headline": "Student understood their own work",
                     "inline_variant_result": "not_applicable",
                 },
                 use_id="uf1",
@@ -1710,6 +1717,7 @@ async def test_finish_check_rejects_when_agent_asked_question_prior_iteration(
                 {
                     "disposition": "pass",
                     "summary": "Done.",
+                    "headline": "Student understood their own work",
                     "inline_variant_result": "not_applicable",
                 },
                 use_id="uf1",

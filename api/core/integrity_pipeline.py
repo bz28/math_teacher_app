@@ -1388,6 +1388,12 @@ async def _apply_finish_check(
             "pass/needs_practice/tutor_pivot/flag_for_review "
             f"(got {disposition!r})"
         )
+    if not headline:
+        return (
+            "rejected: headline is required — emit a 4-8 word verdict "
+            "title in the same style as the canonical examples in your "
+            "system prompt's finish_check section."
+        )
     if variant_result not in VARIANT_RESULT_VALUES:
         return (
             "rejected: inline_variant_result must be one of "
