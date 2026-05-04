@@ -1365,6 +1365,7 @@ async def _apply_finish_check(
 ) -> str:
     disposition = raw_input.get("disposition")
     summary = raw_input.get("summary") or ""
+    headline = (raw_input.get("headline") or "").strip()
     variant_result = raw_input.get("inline_variant_result")
 
     # Guard against the "ask a question AND finalize" bug — see
@@ -1427,6 +1428,9 @@ async def _apply_finish_check(
     check.status = STATUS_COMPLETE
     check.disposition = disposition
     check.overall_summary = summary
+    # Defensive truncate: schema enforces maxLength=80 but if a future
+    # agent variant emits more, the column would reject. Cheap to clamp.
+    check.headline = headline[:80] if headline else None
     check.inline_variant_result = variant_result
     check.activity_summary = compute_activity_summary(
         await _load_turns(check.id, db),

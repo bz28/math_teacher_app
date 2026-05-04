@@ -762,6 +762,19 @@ INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
                     "check."
                 ),
             },
+            "headline": {
+                "type": "string",
+                "maxLength": 80,
+                "description": (
+                    "4-8 word verdict title — the at-a-glance label the "
+                    "teacher sees on the submission card. Match the style "
+                    "of the canonical examples in the system prompt's "
+                    "finish_check section. Use the canonical phrasing when "
+                    "it accurately describes this chat; adapt only when it "
+                    "doesn't fit. Don't claim a skill, arc, or behavior "
+                    "that didn't appear in this chat."
+                ),
+            },
             "inline_variant_result": {
                 "type": "string",
                 "enum": [
@@ -782,7 +795,9 @@ INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
                 ),
             },
         },
-        "required": ["disposition", "summary", "inline_variant_result"],
+        "required": [
+            "disposition", "summary", "headline", "inline_variant_result",
+        ],
         "additionalProperties": False,
     },
 }
