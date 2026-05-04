@@ -2049,6 +2049,10 @@ export interface TeacherIntegrityDetail {
   overall_status: string;
   disposition: IntegrityDisposition | null;
   overall_summary: string | null;
+  // 4-8 word verdict title the agent emitted in finish_check. Null when
+  // no AI verdict ran (skipped_unreadable / force-finalize) — the banner
+  // falls back to the hardcoded INTEGRITY_STYLE label in those cases.
+  headline: string | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
   activity_summary: IntegrityActivitySummary | null;

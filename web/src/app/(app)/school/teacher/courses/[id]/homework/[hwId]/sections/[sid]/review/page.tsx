@@ -2111,6 +2111,12 @@ function IntegrityBanner({
   })();
   if (!key) return null;
   const style = INTEGRITY_STYLE[key];
+  // Prefer the agent-emitted headline (chat-grounded verdict title) over
+  // the generic per-disposition fallback. AI-emitted is only present
+  // when the agent ran a finish_check; non-AI states (extracting,
+  // awaiting_student, in_progress, skipped_unreadable) and force-finalize
+  // turn-cap rows have a null headline and fall through to style.label.
+  const title = integrity?.headline ?? style.label;
   // Hide "View conversation" until at least one student turn exists.
   // For awaiting_student the transcript may carry the AI opener alone;
   // there's nothing meaningful for the teacher to read yet.
@@ -2143,7 +2149,7 @@ function IntegrityBanner({
                  * Activity panel below already convey understanding +
                  * behavior; an extra pill here was redundant. */}
                 <p className="text-sm font-semibold text-text-primary">
-                  {style.label}
+                  {title}
                 </p>
                 {summary && (
                   <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
