@@ -601,6 +601,10 @@ class TeacherIntegrityDetail(BaseModel):
     # conclude (turn cap or no sampled problems).
     disposition: str | None
     overall_summary: str | None
+    # 4-8 word verdict title the agent emitted in finish_check. Null
+    # when no AI verdict ran (skipped_unreadable / force_finalize_turn_cap)
+    # — frontend falls back to a hardcoded disposition label.
+    headline: str | None
     probe_selection_reason: str | None
     inline_variant_used: bool
     inline_variant_result: str | None
@@ -635,6 +639,7 @@ async def teacher_get_integrity_detail(
             overall_status="no_check",
             disposition=None,
             overall_summary=None,
+            headline=None,
             probe_selection_reason=None,
             inline_variant_used=False,
             inline_variant_result=None,
@@ -700,6 +705,7 @@ async def teacher_get_integrity_detail(
         overall_status=check.status,
         disposition=check.disposition,
         overall_summary=check.overall_summary,
+        headline=check.headline,
         probe_selection_reason=check.probe_selection_reason,
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,
