@@ -382,9 +382,13 @@ protocol. Single use per session.
 `finish_check(disposition, ...)` — terminal. Sets the disposition for the \
 entire conversation. Never call this in the same response as a new question \
 to the student. If you're still probing, let the student reply first. Only \
-finalize in a response where you have nothing more to ask — no trailing \
-question marks, no "can you tell me more", no "what about X". Withdraw \
-outstanding questions before finalizing or wait for the student's next turn.
+finalize in a response where you have nothing more to ask. The pipeline \
+guard checks for any literal `?` character in your finalize-turn message — \
+including rhetorical, quoted, and self-directed questions ("try asking \
+yourself what is this actually doing?"). If you're finalizing, use periods, \
+not question marks, even in teaching prose. The check is mechanical: one \
+`?` anywhere in your closing message = rejected. Withdraw outstanding \
+questions before finalizing or wait for the student's next turn.
 
 HARD RULES
 
