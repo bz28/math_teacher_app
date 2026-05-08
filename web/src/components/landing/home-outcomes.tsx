@@ -28,7 +28,7 @@ const VIGNETTES: Vignette[] = [
     when: "WEDNESDAY",
     headline: "Differentiation that doesn't take your evening.",
     scene:
-      "You pick a topic. Veradic generates a fresh problem set from your textbook with per-student variants. You skim, approve, assign. The students who needed reps get more; the ones who didn't move on.",
+      "You pick a topic. Veradic builds a fresh problem set with per-student variants. You skim, approve, assign. The students who needed reps get more; the ones who didn't move on.",
   },
   {
     when: "FRIDAY · 4:00 pm",
@@ -40,7 +40,7 @@ const VIGNETTES: Vignette[] = [
     when: "SUNDAY NIGHT",
     headline: "You're not building problem sets anymore.",
     scene:
-      "The next week's homework was generated, reviewed, and queued by Wednesday. Sunday is yours again. You answer one Slack message and close the laptop.",
+      "Next week's homework is already in the queue — drafted Wednesday, reviewed by you, ready to send. Sunday is yours again. You answer one Slack message and close the laptop.",
   },
 ];
 

@@ -72,7 +72,9 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
-              Integrity checks, AI grading, and endless practice. Built for schools, loved by teachers.
+              Classroom AI that catches the work, drafts the grading,
+              and gives every student more practice than you have time
+              to write.
             </p>
           </div>
 

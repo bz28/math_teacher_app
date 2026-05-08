@@ -57,7 +57,7 @@ export function HomeProblem() {
           </h3>
         </div>
 
-        <ul className="mt-10">
+        <ul className="mt-10 border-b border-[color:var(--color-invert-border)]">
           {PAIN_POINTS.map((point, i) => (
             <li
               key={point}
