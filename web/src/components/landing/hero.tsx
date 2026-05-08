@@ -31,10 +31,14 @@ export function Hero() {
 
       <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
         <Eyebrow>For school districts</Eyebrow>
+        {/* Two block-level spans (instead of a forced <br />) so each
+            phrase wraps independently on small viewports. At 375px the
+            display-xl clamp lands ~56px and "Your students already have
+            AI." needs to flow over multiple lines without an explicit
+            break splitting the second phrase across the wrap. */}
         <h1 className="mt-8 text-display-xl text-[color:var(--color-text)]">
-          Your students already have AI.
-          <br />
-          <span className="bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
+          <span className="block">Your students already have AI.</span>
+          <span className="block bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
             Give them one that&rsquo;s on your side.
           </span>
         </h1>

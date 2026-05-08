@@ -32,18 +32,23 @@ export function HomeProblem() {
           </p>
           {/* Pull quote — the third paragraph, lifted out and given weight.
               Breaks the visual monotony of three same-size paragraphs and
-              makes the section's argument unmissable on a quick skim. */}
-          <p className="border-l-2 border-[color:var(--color-primary)] pl-6 text-[color:var(--color-invert-text)] font-medium md:text-2xl">
+              makes the section's argument unmissable on a quick skim.
+              Border uses primary-light rather than primary — the dark
+              primary on near-black bg only hits ~2.2:1 contrast, where
+              the lighter green lands at ~4.7:1 and actually reads as a
+              rule. */}
+          <p className="border-l-2 border-[color:var(--color-primary-light)] pl-6 text-[color:var(--color-invert-text)] font-medium md:text-2xl">
             Schools don&rsquo;t need less AI in the classroom. They need an AI
             that&rsquo;s built to be on their side.
           </p>
         </div>
       </div>
 
-      {/* Teacher pain points — rendered as a numbered editorial list
-          with hairline top borders per item, instead of pill cards.
-          Reads like the contents of a journal article, not a feature
-          grid. The 01-04 numerals carry the visual weight. */}
+      {/* Teacher pain points — rendered as a list with hairline top
+          borders per item, instead of pill cards. Reads like the
+          contents of a journal article, not a feature grid. The 01-04
+          numerals carry the visual weight but are decorative — order
+          isn't semantically meaningful, so this is a <ul>, not <ol>. */}
       <div className="mx-auto mt-20 max-w-3xl">
         <div className="text-center">
           <Eyebrow variant="invert">Meanwhile, in your week</Eyebrow>
@@ -52,13 +57,16 @@ export function HomeProblem() {
           </h3>
         </div>
 
-        <ol className="mt-10">
+        <ul className="mt-10">
           {PAIN_POINTS.map((point, i) => (
             <li
               key={point}
               className="flex items-start gap-6 border-t border-[color:var(--color-invert-border)] py-5 first:border-t-0 first:pt-0"
             >
-              <span className="mt-0.5 shrink-0 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-primary-light)]">
+              <span
+                aria-hidden="true"
+                className="mt-0.5 shrink-0 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-primary-light)]"
+              >
                 {String(i + 1).padStart(2, "0")}
               </span>
               <span className="text-base leading-relaxed text-[color:var(--color-invert-text-muted)] md:text-lg">
@@ -66,7 +74,7 @@ export function HomeProblem() {
               </span>
             </li>
           ))}
-        </ol>
+        </ul>
       </div>
     </Section>
   );
