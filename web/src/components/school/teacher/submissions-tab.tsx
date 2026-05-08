@@ -6,6 +6,7 @@ import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { ProgressBar } from "./_pieces/progress-bar";
+import { StatusPill } from "./_pieces/status-pill";
 
 /**
  * Submissions tab — the teacher's grading inbox.
@@ -150,34 +151,61 @@ function InboxRow({
   const hasOutstanding = toReview + row.flagged > 0;
   const isAwaiting = row.submitted === 0;
 
+  // CTA copy escalates with what's actually pending: flagged rows
+  // are the highest-leverage click, ungraded next, then plain Review.
+  // Lets a teacher with 8 HWs in their inbox land on the most-urgent
+  // one without scanning the row body.
+  const ctaLabel =
+    row.flagged > 0
+      ? `Review ${row.flagged} flagged →`
+      : toReview > 0
+        ? `Grade ${toReview} →`
+        : row.dirty > 0
+          ? "Republish →"
+          : "Review →";
+
   // Body content is identical between the link and waiting variants —
   // only the outer wrapper and the right-side CTA differ. Pulling it
   // out keeps the two branches scannable side-by-side.
   const body = (
     <>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate text-sm font-bold text-text-primary">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h3 className="min-w-0 truncate text-sm font-bold text-text-primary">
             {row.assignment_title}
           </h3>
           <span className="text-[11px] text-text-muted">·</span>
           <span className="shrink-0 text-xs text-text-secondary">{row.section_name}</span>
+          {/* Status pills hop onto the title row so the teacher's eye
+              picks up "what about this row?" before the meta line. Same
+              tone vocabulary as the courses dashboard / course header
+              status row — amber = needs me, red = harder failure. */}
+          {toReview > 0 && (
+            <StatusPill tone="amber" label={`${toReview} to grade`} />
+          )}
+          {row.flagged > 0 && (
+            <StatusPill tone="red" label={`${row.flagged} flagged`} icon="⚑" />
+          )}
+          {!hasOutstanding &&
+            row.submitted > 0 &&
+            // "All reviewed" only when EVERYONE who was supposed to
+            // submit has submitted AND every submission is published-
+            // and-clean. Without the total_students gate, a 3-of-28
+            // submitted HW with all 3 published shows a green
+            // "All reviewed" pill while 25 students still owe work —
+            // reads as "done with this HW" when the teacher is mostly
+            // waiting on submitters.
+            row.submitted >= row.total_students && (
+              <StatusPill tone="green" label="All reviewed" icon="✓" />
+            )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
           <span>{dueLabel}</span>
           {overdueDays > 0 && hasOutstanding && (
             <>
-              <span>·</span>
+              <span aria-hidden>·</span>
               <span className="font-semibold text-red-600 dark:text-red-400">
                 {overdueDays === 1 ? "1 day overdue" : `${overdueDays} days overdue`}
-              </span>
-            </>
-          )}
-          {row.flagged > 0 && (
-            <>
-              <span>·</span>
-              <span className="font-semibold text-red-600 dark:text-red-400">
-                ⚑ {row.flagged} flagged
               </span>
             </>
           )}
@@ -188,24 +216,16 @@ function InboxRow({
           </p>
         ) : (
           // Single summary line + a single bar showing overall grading
-          // progress (published out of the whole class). Replaces the
-          // earlier three-bar stack which was visually noisy and forced
-          // the teacher to mentally combine three numbers to know "am I
-          // done with this HW?"
+          // progress (published out of the whole class). Status pills
+          // up top now carry the urgency signal, so this line stays
+          // narrative ("3 of 28 submitted · 2 published") without
+          // needing color emphasis on every number.
           <div className="mt-2 space-y-1.5">
             <p className="text-[11px] text-text-muted">
               <span className="font-semibold text-text-primary">
                 {row.submitted}
               </span>{" "}
-              of {row.total_students} submitted ·{" "}
-              {toReview > 0 ? (
-                <span className="font-semibold text-amber-600 dark:text-amber-400">
-                  {toReview} to review
-                </span>
-              ) : (
-                <span>all reviewed</span>
-              )}{" "}
-              · {row.published} published
+              of {row.total_students} submitted · {row.published} published
             </p>
             <ProgressBar
               label="Graded"
@@ -222,7 +242,7 @@ function InboxRow({
         </span>
       ) : (
         <span className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white group-hover:bg-primary-dark">
-          Review →
+          {ctaLabel}
         </span>
       )}
     </>
