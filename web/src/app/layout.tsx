@@ -5,7 +5,6 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { ToastProvider } from "@/components/ui/toast";
-import { faqJsonLd } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -155,12 +154,9 @@ export default function RootLayout({
             }),
           }}
         />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(faqJsonLd()),
-          }}
-        />
+        {/* FAQ JSON-LD is injected per-page (homepage and /for-districts
+            display different FAQ sets), so it's no longer rendered
+            globally here. Routes without FAQs simply omit the script. */}
       </head>
       <body className="min-h-full flex flex-col font-sans">
         <ToastProvider>

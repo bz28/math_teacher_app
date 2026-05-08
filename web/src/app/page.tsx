@@ -9,10 +9,18 @@ import { HomeDistrictsTeaser } from "@/components/landing/home-districts-teaser"
 import { FAQ } from "@/components/landing/faq";
 import { CtaBand } from "@/components/landing/cta-band";
 import { Footer } from "@/components/landing/footer";
+import { faqJsonLd, faqs } from "@/lib/seo";
 
 export default function Home() {
   return (
     <>
+      {/* FAQ JSON-LD scoped to the homepage's actual question set. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(faqJsonLd(faqs)),
+        }}
+      />
       <Navbar />
       <main>
         <Hero />

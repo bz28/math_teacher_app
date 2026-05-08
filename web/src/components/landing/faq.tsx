@@ -2,25 +2,40 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import { faqs } from "@/lib/seo";
+import { faqs as homepageFaqs } from "@/lib/seo";
 import { Section } from "./section";
 import { Eyebrow } from "./eyebrow";
 
-export function FAQ() {
+type FaqItem = { question: string; answer: string };
+
+interface FAQProps {
+  /** Override the question set. Defaults to the homepage `faqs`. */
+  items?: FaqItem[];
+  /** Override the section heading copy. */
+  heading?: string;
+  /** Override the eyebrow label. */
+  eyebrow?: string;
+}
+
+export function FAQ({
+  items = homepageFaqs,
+  heading = "Questions teachers and admins ask.",
+  eyebrow = "Frequently asked",
+}: FAQProps = {}) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
     <Section variant="alt" id="faq">
       <div className="mx-auto max-w-3xl">
         <div className="mb-14 text-center">
-          <Eyebrow>Frequently asked</Eyebrow>
+          <Eyebrow>{eyebrow}</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-            Questions teachers and admins ask.
+            {heading}
           </h2>
         </div>
 
         <div className="space-y-3">
-          {faqs.map((faq, i) => (
+          {items.map((faq, i) => (
             <div key={faq.question}>
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
