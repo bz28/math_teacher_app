@@ -29,14 +29,20 @@ export function Hero() {
         </svg>
       </div>
 
-      <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
+      <div className="relative mx-auto w-full max-w-5xl px-6 py-12 text-center md:px-8 md:py-16">
         <Eyebrow>For school districts</Eyebrow>
-        {/* Two block-level spans (instead of a forced <br />) so each
-            phrase wraps independently on small viewports. At 375px the
-            display-xl clamp lands ~56px and "Your students already have
-            AI." needs to flow over multiple lines without an explicit
-            break splitting the second phrase across the wrap. */}
-        <h1 className="mt-8 text-display-xl text-[color:var(--color-text)]">
+        {/* Headline uses a tighter clamp than text-display-xl. The
+            standard utility caps at 6rem (96px), which is too large
+            for a two-phrase headline of this length — at desktop
+            widths the upper end forced each phrase to wrap into 2
+            lines, giving a 4-line-tall headline. This clamp tops out
+            at 4.75rem (76px) so each phrase lands on a single line on
+            md+ and balances cleanly via text-wrap on smaller widths.
+            text-wrap-balance distributes wraps evenly when phrases
+            do need to break (e.g. on phones). */}
+        <h1
+          className="mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:'opsz'_120,'SOFT'_0,'WONK'_0] [line-height:1.0] [text-wrap:balance]"
+        >
           <span className="block">Your students already have AI.</span>
           <span className="block bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
             Give them one that&rsquo;s on your side.

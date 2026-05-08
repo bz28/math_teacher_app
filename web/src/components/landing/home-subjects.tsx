@@ -41,7 +41,7 @@ export function HomeSubjects() {
         <div>
           <Eyebrow>Subjects we support</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-            One tutor. Every subject
+            One platform. Every subject
             <br />
             your students need.
           </h2>
