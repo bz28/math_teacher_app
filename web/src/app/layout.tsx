@@ -35,7 +35,7 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: "Veradic AI: AI Tutor for Schools, Teachers, and Students",
+    default: "Veradic AI: Classroom AI for Schools, Teachers, and Students",
     template: "%s | Veradic AI",
   },
   description:
