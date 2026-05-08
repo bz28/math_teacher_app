@@ -29,19 +29,29 @@ const nextConfig: NextConfig = {
         destination: "/demo",
         permanent: true,
       },
-      // /security was renamed to /safety — the page covers student
-      // safety, data privacy, and classroom-specific protections, and
-      // "safety" is the native term for schools. "Security" is narrowly
-      // technical; "safety" matches the page's own headline ("Built to
-      // be safe in schools").
+      // /security and /safety both consolidated into /for-districts,
+      // which now carries the full compliance + safety surface for
+      // school administrators. Old /security and /safety inbound
+      // links redirect to the new home so external bookmarks and
+      // Google's index follow the move.
       {
         source: "/security",
-        destination: "/safety",
+        destination: "/for-districts",
         permanent: true,
       },
       {
         source: "/security/:path*",
-        destination: "/safety",
+        destination: "/for-districts",
+        permanent: true,
+      },
+      {
+        source: "/safety",
+        destination: "/for-districts",
+        permanent: true,
+      },
+      {
+        source: "/safety/:path*",
+        destination: "/for-districts",
         permanent: true,
       },
     ];

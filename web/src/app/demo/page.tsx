@@ -237,7 +237,7 @@ export default function DemoPage() {
                       onChange={(e) =>
                         setForm({ ...form, message: e.target.value })
                       }
-                      placeholder="e.g. how many students, what subjects, timeline..."
+                      placeholder="e.g. how many students, what subjects, timeline…"
                       rows={3}
                       className="mt-1.5 w-full resize-vertical rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
                     />

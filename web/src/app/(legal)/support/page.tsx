@@ -26,7 +26,7 @@ export default function SupportPage() {
           {/* Email */}
           <div className="rounded-[--radius-lg] border border-border-light bg-surface p-6">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect width="20" height="16" x="2" y="4" rx="2" />
                 <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
               </svg>
@@ -40,7 +40,7 @@ export default function SupportPage() {
               className="mt-4 inline-flex items-center gap-2 text-primary font-semibold hover:underline"
             >
               support@veradicai.com
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             </a>
@@ -49,7 +49,7 @@ export default function SupportPage() {
           {/* FAQ */}
           <div className="rounded-[--radius-lg] border border-border-light bg-surface p-6">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[--radius-md] bg-primary-bg text-primary">
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
                 <path d="M12 17h.01" />
@@ -87,7 +87,7 @@ export default function SupportPage() {
           {/* Account deletion note */}
           <div className="rounded-[--radius-lg] border border-border-light bg-surface p-6">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[--radius-md] bg-error-light text-error">
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
               </svg>
             </div>

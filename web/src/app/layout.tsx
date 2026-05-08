@@ -154,9 +154,10 @@ export default function RootLayout({
             }),
           }}
         />
-        {/* FAQ JSON-LD is injected per-page (homepage and /for-districts
-            display different FAQ sets), so it's no longer rendered
-            globally here. Routes without FAQs simply omit the script. */}
+        {/* FAQ JSON-LD is injected per-page on the routes that
+            actually render an FAQ — currently /demo, /for-districts,
+            and the subject pages. The homepage no longer carries one.
+            Routes without an FAQ simply omit the script. */}
       </head>
       <body className="min-h-full flex flex-col font-sans">
         <ToastProvider>

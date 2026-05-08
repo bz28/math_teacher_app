@@ -9,7 +9,8 @@ import { Eyebrow } from "./eyebrow";
 type FaqItem = { question: string; answer: string };
 
 interface FAQProps {
-  /** Override the question set. Defaults to the homepage `faqs`. */
+  /** Override the question set. Defaults to the general
+   *  teacher/admin `faqs` (rendered on /demo and the subject pages). */
   items?: FaqItem[];
   /** Override the section heading copy. */
   heading?: string;
